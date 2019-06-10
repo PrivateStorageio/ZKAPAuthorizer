@@ -25,7 +25,7 @@ jobs:
           name: "Sphinx Documentation Build"
           command: |
             pip install --upgrade pip
-            pip install requirements-doc.txt
+            pip install -r requirements-doc.txt
             sphinx-build docs/source docs/build
 
 
