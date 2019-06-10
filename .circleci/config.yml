@@ -52,8 +52,8 @@ jobs:
       - run:
         name: "Report Coverage"
         command: |
-          . venv/bin/activate
-          CODECOV_TOKEN="cc6e4697-4337-4506-88af-92b8f8ca6b22" codecov
+            . venv/bin/activate
+            CODECOV_TOKEN="cc6e4697-4337-4506-88af-92b8f8ca6b22" codecov
 
 
 workflows:
