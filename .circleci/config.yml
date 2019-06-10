@@ -47,6 +47,7 @@ jobs:
             . venv/bin/activate
             pip install --upgrade pip
             pip install -r requirements.txt -r requirements-tests.txt
+            pip install .
             coverage run -m twisted.trial _secureaccesstokenauthorizer
 
       - run:
