@@ -46,7 +46,7 @@ jobs:
             virtualenv venv
             . venv/bin/activate
             pip install --upgrade pip
-            pip install -r requirements.txt requirements-tests.txt
+            pip install -r requirements.txt -r requirements-tests.txt
             coverage run -m twisted.trial _secureaccesstokenauthorizer
 
       - run:
