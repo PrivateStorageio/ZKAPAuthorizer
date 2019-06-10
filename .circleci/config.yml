@@ -25,3 +25,10 @@ jobs:
           name: "Sphinx Documentation Build"
           command: |
             sphinx-build docs/source docs/build
+
+
+workflows:
+  version: 2
+  everything:
+    jobs:
+      - "documentation"
