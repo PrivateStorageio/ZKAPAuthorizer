@@ -34,9 +34,31 @@ jobs:
           path: "docs/build"
           destination: "docs"
 
+  tests:
+    docker:
+      - image: "circleci/python:3.7"
+    steps:
+      - "checkout"
+
+      - run:
+        name: "Run Test Suite"
+        command: |
+            virtualenv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt requirements-tests.txt
+            coverage run -m twisted.trial _secureaccesstokenauthorizer
+
+      - run:
+        name: "Report Coverage"
+        command: |
+          . venv/bin/activate
+          CODECOV_TOKEN="cc6e4697-4337-4506-88af-92b8f8ca6b22" codecov
+
 
 workflows:
   version: 2
   everything:
     jobs:
       - "documentation"
+      - "tests"

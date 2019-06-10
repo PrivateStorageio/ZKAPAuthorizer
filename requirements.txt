@@ -1,0 +1,2 @@
+# Pinned version of all dependencies, direct and transitive, needed at
+# runtime.  This is the configuration tested on CI.

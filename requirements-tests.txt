@@ -1,0 +1,13 @@
+# Pinned version of all test-only dependencies, direct and transitive.  These
+# are in addition to the dependencies in requirements.txt.  This is the
+# configuration tested on CI.
+chardet==3.0.4
+codecov==2.0.15
+coverage==4.5.3
+idna==2.8
+requests==2.22.0
+urllib3==1.25.3
+
+# As an exception, certifi may float.  It contains time-sensitive data
+# (certificates).  Pinning it guarantees a failure eventually.
+certifi
