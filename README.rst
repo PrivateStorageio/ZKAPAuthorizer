@@ -1,6 +1,8 @@
 Secure Access Token Authorizer
 ==============================
 
+|coverage|_
+
 What is this?
 -------------
 
@@ -29,3 +31,6 @@ Copyright
 .. _Tahoe-LAFS: https://tahoe-lafs.org/
 
 .. _PrivacyPass: https://privacypass.github.io/
+
+.. |coverage| image:: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer/branch/master/graph/badge.svg
+.. _coverage: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer
