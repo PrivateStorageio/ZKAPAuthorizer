@@ -24,6 +24,8 @@ jobs:
       - run:
           name: "Sphinx Documentation Build"
           command: |
+            virtualenv venv
+            . venv/bin/activate
             pip install --upgrade pip
             pip install -r docs/requirements.txt
             sphinx-build docs/source docs/build
