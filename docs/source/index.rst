@@ -10,7 +10,8 @@ Welcome to Secure Access Token Authorizer's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   code_of_conduct
+   CONTRIBUTING
 
 Indices and tables
 ==================

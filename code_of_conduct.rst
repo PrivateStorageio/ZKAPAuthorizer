@@ -1,4 +1,5 @@
-# Contributor Code of Conduct
+Contributor Code of Conduct
+===========================
 
 As contributors and maintainers of this project, and in the interest of
 fostering an open and welcoming community, we pledge to respect all people who
@@ -41,17 +42,9 @@ is deemed necessary and appropriate to the circumstances. Maintainers are
 obligated to maintain confidentiality with regard to the reporter of an
 incident.
 
-You may send reports to [our Conduct email](mailto:conduct@privatestorage.io).
+You may send reports to `our Conduct email <mailto:conduct@privatestorage.io>`_.
 
-If you wish to contact specific maintainers directly, the following have made
-themselves available for conduct issues:
-
-- Jean-Paul Calderone (jean-paul@privatestorage.io)
-
-
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 1.3.0, available at
-[http://contributor-covenant.org/version/1/3/0/][version] and the Twisted code of conduct.
-
-[homepage]: https://contributor-covenant.org/
-[version]: https://contributor-covenant.org/version/1/3/0/
+This Code of Conduct is adapted from the
+`Contributor Covenant homepage <https://contributor-covenant.org/>`_,
+`version 1.3.0 <https://contributor-covenant.org/version/1/3/0/>`_,
+and the Twisted code of conduct.
