@@ -2,6 +2,7 @@ Secure Access Token Authorizer
 ==============================
 
 |coverage|_
+|circleci|_
 
 What is this?
 -------------
@@ -34,3 +35,6 @@ Copyright
 
 .. |coverage| image:: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer/branch/master/graph/badge.svg
 .. _coverage: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer
+
+.. |circleci| image:: https://circleci.com/gh/PrivateStorageio/SecureAccessTokenAuthorizer.svg?style=svg
+.. _circleci: https://circleci.com/gh/PrivateStorageio/SecureAccessTokenAuthorizer
