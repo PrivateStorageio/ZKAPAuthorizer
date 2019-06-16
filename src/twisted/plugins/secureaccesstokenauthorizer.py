@@ -15,3 +15,9 @@
 """
 A drop-in to supply plugins to the Twisted plugin system.
 """
+
+from _secureaccesstokenauthorizer import (
+    SecureAccessTokenAuthorizer,
+)
+
+storage_server = SecureAccessTokenAuthorizer()
