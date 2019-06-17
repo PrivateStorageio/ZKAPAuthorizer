@@ -25,10 +25,24 @@ from testtools import (
 )
 from testtools.matchers import (
     Contains,
+    AfterPreprocessing,
+)
+from testtools.twistedsupport import (
+    succeeded,
+)
+
+from hypothesis import (
+    given,
+)
+
+from foolscap.ipb import (
+    IReferenceable,
+    IRemotelyCallable,
 )
 
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
+    IAnnounceableStorageServer,
 )
 
 from twisted.plugin import (
@@ -37,6 +51,17 @@ from twisted.plugin import (
 from twisted.plugins.secureaccesstokenauthorizer import (
     storage_server,
 )
+
+from .strategies import (
+    configurations,
+)
+from .matchers import (
+    Provides,
+)
+
+def get_anonymous_storage_server():
+    return None
+
 
 class PluginTests(TestCase):
     """
@@ -57,3 +82,45 @@ class PluginTests(TestCase):
         ``storage_server`` provides ``IFoolscapStoragePlugin``.
         """
         verifyObject(IFoolscapStoragePlugin, storage_server)
+
+
+    @given(configurations())
+    def test_returns_announceable(self, configuration):
+        """
+        ``storage_server.get_storage_server`` returns an instance which provides
+        ``IAnnounceableStorageServer``.
+        """
+        storage_server_deferred = storage_server.get_storage_server(
+            configuration,
+            get_anonymous_storage_server,
+        )
+        self.assertThat(
+            storage_server_deferred,
+            succeeded(Provides([IAnnounceableStorageServer])),
+        )
+
+
+    @given(configurations())
+    def test_returns_referenceable(self, configuration):
+        """
+        The storage server attached to the result of
+        ``storage_server.get_storage_server`` provides ``IReferenceable`` and
+        ``IRemotelyCallable``.
+        """
+        # XXX It's not clear what the actual Foolscap-imposed requirements on
+        # this object should be.  Maybe the two above-mentioned interfaces are
+        # important ... or maybe not?
+
+        storage_server_deferred = storage_server.get_storage_server(
+            configuration,
+            get_anonymous_storage_server,
+        )
+        self.assertThat(
+            storage_server_deferred,
+            succeeded(
+                AfterPreprocessing(
+                    lambda ann: ann.storage_server,
+                    Provides([IReferenceable, IRemotelyCallable]),
+                ),
+            ),
+        )
