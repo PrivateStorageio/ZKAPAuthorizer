@@ -17,17 +17,32 @@ The Twisted plugin that glues the Secure Access Token system into
 Tahoe-LAFS.
 """
 
+import attr
+
 from zope.interface import (
     implementer,
 )
 
+from twisted.internet.defer import (
+    succeed,
+)
+
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
+    IAnnounceableStorageServer,
 )
 
 from .api import (
     SecureAccessTokenAuthorizerStorageServer,
 )
+
+@implementer(IAnnounceableStorageServer)
+@attr.s
+class AnnounceableStorageServer(object):
+    announcement = attr.ib()
+    storage_server = attr.ib()
+
+
 
 @implementer(IFoolscapStoragePlugin)
 class SecureAccessTokenAuthorizer(object):
@@ -38,10 +53,18 @@ class SecureAccessTokenAuthorizer(object):
     name = u"privatestorageio-satauthz-v1"
 
     def get_storage_server(self, configuration, get_anonymous_storage_server):
-        return SecureAccessTokenAuthorizerStorageServer(
+        announcement = {}
+        storage_server = SecureAccessTokenAuthorizerStorageServer(
             get_anonymous_storage_server(),
             **configuration
         )
+        return succeed(
+            AnnounceableStorageServer(
+                announcement,
+                storage_server,
+            ),
+        )
+
 
     def get_storage_client(self, configuration, announcement):
         raise NotImplementedError()

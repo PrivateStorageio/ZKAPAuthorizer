@@ -30,6 +30,7 @@ from foolscap.constraint import (
 )
 from foolscap.api import (
     ListOf,
+    Referenceable,
 )
 from foolscap.remoteinterface import (
     RemoteMethodSchema,
@@ -95,7 +96,7 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 
 
 @implementer(RITokenAuthorizedStorageServer)
-class SecureAccessTokenAuthorizerStorageServer(proxyForInterface(RIStorageServer)):
+class SecureAccessTokenAuthorizerStorageServer(proxyForInterface(RIStorageServer), Referenceable):
     def allocate_buckets(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
         return super(SecureAccessTokenAuthorizerStorageServer, self).allocate_buckets(*a, **kw)

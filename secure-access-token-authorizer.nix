@@ -9,13 +9,16 @@ buildPythonPackage rec {
   ];
 
   propagatedBuildInputs = with pythonPackages; [
+    attrs
     zope_interface
     twisted
     tahoe-lafs
   ];
 
   checkInputs = with pythonPackages; [
+    fixtures
     testtools
+    hypothesis
   ];
 
   checkPhase = ''
