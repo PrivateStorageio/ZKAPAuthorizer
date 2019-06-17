@@ -22,6 +22,7 @@ buildPythonPackage rec {
   ];
 
   checkPhase = ''
+    ${pythonPackages.pyflakes}/bin/pyflakes src/_secureaccesstokenauthorizer
     ${pythonPackages.twisted}/bin/trial _secureaccesstokenauthorizer
   '';
 }
