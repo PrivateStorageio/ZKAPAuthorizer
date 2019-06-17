@@ -16,6 +16,10 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+from zope.interface.verify import (
+    verifyObject,
+)
+
 from testtools import (
     TestCase,
 )
@@ -46,3 +50,10 @@ class PluginTests(TestCase):
             getPlugins(IFoolscapStoragePlugin),
             Contains(storage_server),
         )
+
+
+    def test_provides_interface(self):
+        """
+        ``storage_server`` provides ``IFoolscapStoragePlugin``.
+        """
+        verifyObject(IFoolscapStoragePlugin, storage_server)
