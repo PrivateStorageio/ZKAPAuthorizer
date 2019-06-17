@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-A drop-in to supply plugins to the Twisted plugin system.
-"""
+__all__ = [
+    "SecureAccessTokenAuthorizerStorageServer",
+    "SecureAccessTokenAuthorizer",
+]
 
-from _secureaccesstokenauthorizer.api import (
-    SecureAccessTokenAuthorizer,
+from ._storage_server import (
+    SecureAccessTokenAuthorizerStorageServer,
 )
 
-storage_server = SecureAccessTokenAuthorizer()
+from ._plugin import (
+    SecureAccessTokenAuthorizer,
+)

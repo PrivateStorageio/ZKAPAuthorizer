@@ -25,7 +25,7 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
 )
 
-from . import (
+from .api import (
     SecureAccessTokenAuthorizerStorageServer,
 )
 
@@ -40,7 +40,7 @@ class SecureAccessTokenAuthorizer(object):
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         return SecureAccessTokenAuthorizerStorageServer(
             get_anonymous_storage_server(),
-            **configuration,
+            **configuration
         )
 
     def get_storage_client(self, configuration, announcement):

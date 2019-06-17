@@ -17,6 +17,25 @@ A Tahoe-LAFS RIStorageServer-alike which authorizes writes and lease
 updates using a per-call token.
 """
 
+from zope.interface import (
+    implementer,
+)
+
+from twisted.python.components import (
+    proxyForInterface,
+)
+
+from foolscap.constraint import (
+    ByteStringConstraint,
+)
+from foolscap.api import (
+    ListOf,
+)
+from foolscap.remoteinterface import (
+    RemoteMethodSchema,
+    RemoteInterface,
+)
+
 from allmydata.interfaces import (
     RIStorageServer,
 )
@@ -43,7 +62,7 @@ def add_tokens(schema):
 
 
 def add_arguments(schema, **kwargs):
-    new_kwargs = dict(**zip(schema.argumentNames, schema.argConstraints))
+    new_kwargs = schema.argConstraints.copy()
     new_kwargs.update(kwargs)
     modified_schema = RemoteMethodSchema(**new_kwargs)
     return modified_schema
