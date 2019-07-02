@@ -15,6 +15,9 @@
 """
 A Tahoe-LAFS RIStorageServer-alike which authorizes writes and lease
 updates using a per-call token.
+
+This is the server part of a storage access protocol.  The client part is
+implemented in ``_storage_client.py``.
 """
 
 from zope.interface import (

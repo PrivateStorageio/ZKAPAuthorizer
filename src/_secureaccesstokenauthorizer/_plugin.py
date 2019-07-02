@@ -34,6 +34,11 @@ from allmydata.interfaces import (
 
 from .api import (
     SecureAccessTokenAuthorizerStorageServer,
+    SecureAccessTokenAuthorizerStorageClient,
+)
+
+from ._storage_server import (
+    TOKEN_LENGTH,
 )
 
 @implementer(IAnnounceableStorageServer)
@@ -66,5 +71,8 @@ class SecureAccessTokenAuthorizer(object):
         )
 
 
-    def get_storage_client(self, configuration, announcement):
-        raise NotImplementedError()
+    def get_storage_client(self, configuration, announcement, get_rref):
+        return SecureAccessTokenAuthorizerStorageClient(
+            get_rref,
+            lambda: [b"x" * TOKEN_LENGTH],
+        )

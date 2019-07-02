@@ -14,11 +14,15 @@
 
 __all__ = [
     "SecureAccessTokenAuthorizerStorageServer",
+    "SecureAccessTokenAuthorizerStorageClient",
     "SecureAccessTokenAuthorizer",
 ]
 
 from ._storage_server import (
     SecureAccessTokenAuthorizerStorageServer,
+)
+from ._storage_client import (
+    SecureAccessTokenAuthorizerStorageClient,
 )
 
 from ._plugin import (
