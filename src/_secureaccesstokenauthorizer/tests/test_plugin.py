@@ -24,6 +24,7 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Always,
     Contains,
     AfterPreprocessing,
 )
@@ -35,6 +36,9 @@ from hypothesis import (
     given,
 )
 
+from foolscap.broker import (
+    Broker,
+)
 from foolscap.ipb import (
     IReferenceable,
     IRemotelyCallable,
@@ -47,6 +51,9 @@ from allmydata.interfaces import (
 
 from twisted.plugin import (
     getPlugins,
+)
+from twisted.test.proto_helpers import (
+    StringTransport,
 )
 from twisted.plugins.secureaccesstokenauthorizer import (
     storage_server,
@@ -107,10 +114,6 @@ class PluginTests(TestCase):
         ``storage_server.get_storage_server`` provides ``IReferenceable`` and
         ``IRemotelyCallable``.
         """
-        # XXX It's not clear what the actual Foolscap-imposed requirements on
-        # this object should be.  Maybe the two above-mentioned interfaces are
-        # important ... or maybe not?
-
         storage_server_deferred = storage_server.get_storage_server(
             configuration,
             get_anonymous_storage_server,
@@ -121,6 +124,29 @@ class PluginTests(TestCase):
                 AfterPreprocessing(
                     lambda ann: ann.storage_server,
                     Provides([IReferenceable, IRemotelyCallable]),
+                ),
+            ),
+        )
+
+    @given(configurations())
+    def test_returns_serializable(self, configuration):
+        """
+        The storage server attached to the result of
+        ``storage_server.get_storage_server`` can be serialized by a banana
+        Broker (for Foolscap).
+        """
+        storage_server_deferred = storage_server.get_storage_server(
+            configuration,
+            get_anonymous_storage_server,
+        )
+        broker = Broker(None)
+        broker.makeConnection(StringTransport())
+        self.expectThat(
+            storage_server_deferred,
+            succeeded(
+                AfterPreprocessing(
+                    lambda ann: broker.send(ann.storage_server),
+                    Always(),
                 ),
             ),
         )
