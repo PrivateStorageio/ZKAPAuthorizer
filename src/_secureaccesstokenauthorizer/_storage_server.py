@@ -18,7 +18,7 @@ updates using a per-call token.
 """
 
 from zope.interface import (
-    implementer,
+    implementer_only,
 )
 
 from twisted.python.components import (
@@ -31,6 +31,10 @@ from foolscap.constraint import (
 from foolscap.api import (
     ListOf,
     Referenceable,
+)
+from foolscap.ipb import (
+    IReferenceable,
+    IRemotelyCallable,
 )
 from foolscap.remoteinterface import (
     RemoteMethodSchema,
@@ -95,7 +99,7 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 
 
 
-@implementer(RITokenAuthorizedStorageServer)
+@implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
 class SecureAccessTokenAuthorizerStorageServer(proxyForInterface(RIStorageServer), Referenceable):
     def allocate_buckets(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
@@ -104,3 +108,17 @@ class SecureAccessTokenAuthorizerStorageServer(proxyForInterface(RIStorageServer
     def add_lease(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
         return super(SecureAccessTokenAuthorizerStorageServer, self).add_lease(*a, **kw)
+
+# I don't understand why this is required.
+# SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
+# the built in adapter should take care of this case.
+from twisted.python.components import (
+    registerAdapter,
+)
+from foolscap.referenceable import (
+    ReferenceableSlicer,
+)
+from foolscap.ipb import (
+    ISlicer,
+)
+registerAdapter(ReferenceableSlicer, SecureAccessTokenAuthorizerStorageServer, ISlicer)
