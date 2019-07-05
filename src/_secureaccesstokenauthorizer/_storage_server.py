@@ -123,6 +123,9 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
         self._validate_tokens(tokens)
         return self._original.remote_renew_lease(*a, **kw)
 
+    def remote_advise_corrupt_share(self, *a, **kw):
+        return self._original.remote_advise_corrupt_share(*a, **kw)
+
 # I don't understand why this is required.
 # SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
 # the built in adapter should take care of this case.

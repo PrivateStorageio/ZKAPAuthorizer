@@ -103,3 +103,17 @@ class SecureAccessTokenAuthorizerStorageClient(object):
             renew_secret,
         )
 
+    def advise_corrupt_share(
+            self,
+            share_type,
+            storage_index,
+            shnum,
+            reason,
+    ):
+        return self._rref.callRemote(
+            "advise_corrupt_share",
+            share_type,
+            storage_index,
+            shnum,
+            reason,
+        )
