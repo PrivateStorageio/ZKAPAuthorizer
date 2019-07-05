@@ -67,3 +67,12 @@ class SecureAccessTokenAuthorizerStorageClient(object):
             allocated_size,
             canary,
         )
+
+    def get_buckets(
+            self,
+            storage_index,
+    ):
+        return self._rref.callRemote(
+            "get_buckets",
+            storage_index,
+        )

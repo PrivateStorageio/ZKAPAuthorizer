@@ -18,6 +18,15 @@ Hypothesis strategies for property testing.
 
 from hypothesis.strategies import (
     just,
+    binary,
+    integers,
+    sets,
+)
+
+from allmydata.interfaces import (
+    StorageIndex,
+    LeaseRenewSecret,
+    LeaseCancelSecret,
 )
 
 def configurations():
@@ -25,3 +34,65 @@ def configurations():
     Build configuration values for the plugin.
     """
     return just({})
+
+
+def storage_indexes():
+    """
+    Build Tahoe-LAFS storage indexes.
+    """
+    return binary(
+        min_size=StorageIndex.minLength,
+        max_size=StorageIndex.maxLength,
+    )
+
+
+def lease_renew_secrets():
+    """
+    Build Tahoe-LAFS lease renewal secrets.
+    """
+    return binary(
+        min_size=LeaseRenewSecret.minLength,
+        max_size=LeaseRenewSecret.maxLength,
+    )
+
+
+def lease_cancel_secrets():
+    """
+    Build Tahoe-LAFS lease cancellation secrets.
+    """
+    return binary(
+        min_size=LeaseCancelSecret.minLength,
+        max_size=LeaseCancelSecret.maxLength,
+    )
+
+
+def sharenums():
+    """
+    Build Tahoe-LAFS share numbers.
+    """
+    return integers(
+        min_value=0,
+        max_value=255,
+    )
+
+
+def sharenum_sets():
+    """
+    Build sets of Tahoe-LAFS share numbers.
+    """
+    return sets(
+        sharenums(),
+        min_size=1,
+        max_size=255,
+    )
+
+
+def sizes():
+    """
+    Build Tahoe-LAFS share sizes.
+    """
+    return integers(
+        min_value=0,
+        # Just for practical purposes...
+        max_value=2 ** 16,
+    )
