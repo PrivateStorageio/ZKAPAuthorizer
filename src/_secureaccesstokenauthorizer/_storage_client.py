@@ -90,3 +90,16 @@ class SecureAccessTokenAuthorizerStorageClient(object):
             renew_secret,
             cancel_secret,
         )
+
+    def renew_lease(
+            self,
+            storage_index,
+            renew_secret,
+    ):
+        return self._rref.callRemote(
+            "renew_lease",
+            self._get_tokens(),
+            storage_index,
+            renew_secret,
+        )
+
