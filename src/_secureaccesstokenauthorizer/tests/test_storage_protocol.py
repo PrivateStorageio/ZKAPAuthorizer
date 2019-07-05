@@ -203,7 +203,8 @@ class ImmutableTests(TestCase):
         assume(add_lease_secret != renew_lease_secret)
 
         # Create a share we can toy with.
-        _, allocated = self.anonymous_storage_server.remote_allocate_buckets(
+        write_toy_shares(
+            self.anonymous_storage_server,
             storage_index,
             add_lease_secret,
             cancel_secret,
@@ -211,9 +212,6 @@ class ImmutableTests(TestCase):
             size,
             canary=self.canary,
         )
-        [(_, writer)] = allocated.items()
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
 
         extract_result(
             self.client.add_lease(
@@ -246,7 +244,8 @@ class ImmutableTests(TestCase):
         self.useFixture(MonkeyPatch("time.time", lambda: now))
 
         # Create a share we can toy with.
-        _, allocated = self.anonymous_storage_server.remote_allocate_buckets(
+        write_toy_shares(
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -254,9 +253,6 @@ class ImmutableTests(TestCase):
             size,
             canary=self.canary,
         )
-        [(_, writer)] = allocated.items()
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
 
         now += 100000
         extract_result(
@@ -291,7 +287,8 @@ class ImmutableTests(TestCase):
         cleanup_storage_server(self.anonymous_storage_server)
 
         # Create a share we can toy with.
-        _, allocated = self.anonymous_storage_server.remote_allocate_buckets(
+        write_toy_shares(
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -299,9 +296,6 @@ class ImmutableTests(TestCase):
             size,
             canary=self.canary,
         )
-        [(_, writer)] = allocated.items()
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
 
         extract_result(
             self.client.advise_corrupt_share(
@@ -315,6 +309,39 @@ class ImmutableTests(TestCase):
             FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
             HasLength(1),
         )
+
+
+def write_toy_shares(
+        storage_server,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        size,
+        canary,
+):
+    """
+    Write some immutable shares to the given storage server.
+
+    :param allmydata.storage.server.StorageServer storage_server:
+    :param bytes storage_index:
+    :param bytes renew_secret:
+    :param bytes cancel_secret:
+    :param set[int] sharenums:
+    :param int size:
+    :param IRemoteReference canary:
+    """
+    _, allocated = storage_server.remote_allocate_buckets(
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        size,
+        canary=canary,
+    )
+    for (sharenum, writer) in allocated.items():
+        writer.remote_write(0, bytes_for_share(sharenum, size))
+        writer.remote_close()
 
 
 def get_leases(storage_server, storage_index):
