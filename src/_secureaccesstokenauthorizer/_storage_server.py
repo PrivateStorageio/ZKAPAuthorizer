@@ -117,7 +117,7 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
 
     def remote_add_lease(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
-        return self._original.remote_allocate_buckets(*a, **kw)
+        return self._original.remote_add_lease(*a, **kw)
 
 # I don't understand why this is required.
 # SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
