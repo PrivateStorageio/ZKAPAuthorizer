@@ -275,6 +275,47 @@ class ImmutableTests(TestCase):
             Equals(int(now + RENEW_INTERVAL)),
         )
 
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenum=sharenums(),
+        size=sizes(),
+    )
+    def test_advise_corrupt_share(self, storage_index, renew_secret, cancel_secret, sharenum, size):
+        """
+        An advisory of corruption in a share can be sent to the server.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Create a share we can toy with.
+        _, allocated = self.anonymous_storage_server.remote_allocate_buckets(
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            {sharenum},
+            size,
+            canary=self.canary,
+        )
+        [(_, writer)] = allocated.items()
+        writer.remote_write(0, bytes_for_share(sharenum, size))
+        writer.remote_close()
+
+        extract_result(
+            self.client.advise_corrupt_share(
+                u"immutable",
+                storage_index,
+                sharenum,
+                u"the bits look bad",
+            ),
+        )
+        self.assertThat(
+            FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
+            HasLength(1),
+        )
+
 
 def get_leases(storage_server, storage_index):
     """
@@ -304,7 +345,11 @@ def cleanup_storage_server(storage_server):
     :param allmydata.storage.server.StorageServer storage_server: The storage
         server with some on-disk shares to delete.
     """
-    start = FilePath(storage_server.sharedir)
-    for p in start.walk():
-        if p is not start:
-            p.remove()
+    starts = [
+        FilePath(storage_server.sharedir),
+        FilePath(storage_server.corruption_advisory_dir),
+    ]
+    for start in starts:
+        for p in start.walk():
+            if p is not start:
+                p.remove()
