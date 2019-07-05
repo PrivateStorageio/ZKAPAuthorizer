@@ -1,0 +1,168 @@
+# Copyright 2019 PrivateStorage.io, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Tests for communication between the client and server components.
+"""
+import attr
+
+from fixtures import (
+    Fixture,
+    TempDir,
+)
+from testtools import (
+    TestCase,
+)
+from testtools.matchers import (
+    Equals,
+)
+from testtools.twistedsupport._deferred import (
+    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
+    # there appear to have stalled.
+    extract_result,
+)
+
+from hypothesis import (
+    given,
+)
+
+from twisted.internet.defer import (
+    execute,
+)
+
+from foolscap.referenceable import (
+    LocalReferenceable,
+)
+
+from allmydata.storage.server import (
+    StorageServer,
+)
+
+from .strategies import (
+    storage_indexes,
+    lease_renew_secrets,
+    lease_cancel_secrets,
+    sharenum_sets,
+    sizes,
+)
+
+from ..api import (
+    SecureAccessTokenAuthorizerStorageServer,
+    SecureAccessTokenAuthorizerStorageClient,
+)
+
+def bytes_for_share(sharenum, size):
+    """
+    Generate marginally distinctive bytes of a certain length for the given
+    share number.
+    """
+    if 0 <= sharenum <= 255:
+        return (unichr(sharenum) * size).encode("latin-1")
+    raise ValueError("Sharenum must be between 0 and 255 inclusive.")
+
+
+class AnonymousStorageServer(Fixture):
+    def _setUp(self):
+        self.tempdir = self.useFixture(TempDir()).join(b"storage")
+        self.storage_server = StorageServer(
+            self.tempdir,
+            b"x" * 20,
+        )
+
+
+@attr.s
+class LocalRemote(object):
+    _referenceable = attr.ib()
+
+    def callRemote(self, methname, *args, **kwargs):
+        return execute(
+            getattr(self._referenceable, "remote_" + methname),
+            *args,
+            **kwargs
+        )
+
+
+class ImmutableTests(TestCase):
+    """
+    Tests for interaction with immutable shares.
+    """
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_create(self, storage_index, renew_secret, cancel_secret, sharenums, size):
+        """
+        Immutable share data created using *allocate_buckets* and methods of the
+        resulting buckets can be read back using *get_buckets* and methods of
+        those resulting buckets.
+        """
+        anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
+
+        def get_tokens():
+            return [u"x"]
+
+        server = SecureAccessTokenAuthorizerStorageServer(
+            anonymous_storage_server,
+        )
+        local_remote_server = LocalRemote(server)
+        client = SecureAccessTokenAuthorizerStorageClient(
+            get_rref=lambda: local_remote_server,
+            get_tokens=get_tokens,
+        )
+
+        alreadygot, allocated = extract_result(
+            client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=LocalReferenceable(None),
+            ),
+        )
+        self.expectThat(
+            alreadygot,
+            Equals(set()),
+            u"fresh server somehow already had shares",
+        )
+        self.expectThat(
+            set(allocated.keys()),
+            Equals(sharenums),
+            u"fresh server refused to allocate all requested buckets",
+        )
+
+        for sharenum, bucket in allocated.items():
+            # returns None, nothing to extract
+            bucket.remote_write(0, bytes_for_share(sharenum, size)),
+            # returns None, nothing to extract
+            bucket.remote_close()
+
+        readers = extract_result(client.get_buckets(storage_index))
+
+        self.expectThat(
+            set(readers.keys()),
+            Equals(sharenums),
+            u"server did not return all buckets we wrote",
+        )
+        for (sharenum, bucket) in readers.items():
+            self.expectThat(
+                bucket.remote_read(0, size),
+                Equals(bytes_for_share(sharenum, size)),
+                u"server returned wrong bytes for share number {}".format(
+                    sharenum,
+                ),
+            )

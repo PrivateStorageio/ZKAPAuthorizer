@@ -20,12 +20,10 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
+import attr
+
 from zope.interface import (
     implementer_only,
-)
-
-from twisted.python.components import (
-    proxyForInterface,
 )
 
 from foolscap.constraint import (
@@ -103,14 +101,23 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 
 
 @implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
-class SecureAccessTokenAuthorizerStorageServer(proxyForInterface(RIStorageServer), Referenceable):
-    def allocate_buckets(self, tokens, *a, **kw):
-        self._validate_tokens(tokens)
-        return super(SecureAccessTokenAuthorizerStorageServer, self).allocate_buckets(*a, **kw)
+@attr.s
+class SecureAccessTokenAuthorizerStorageServer(Referenceable):
+    _original = attr.ib()
 
-    def add_lease(self, tokens, *a, **kw):
+    def _validate_tokens(self, tokens):
+        pass
+
+    def remote_allocate_buckets(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
-        return super(SecureAccessTokenAuthorizerStorageServer, self).add_lease(*a, **kw)
+        return self._original.remote_allocate_buckets(*a, **kw)
+
+    def remote_get_buckets(self, storage_index):
+        return self._original.remote_get_buckets(storage_index)
+
+    def remote_add_lease(self, tokens, *a, **kw):
+        self._validate_tokens(tokens)
+        return self._original.remote_allocate_buckets(*a, **kw)
 
 # I don't understand why this is required.
 # SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
