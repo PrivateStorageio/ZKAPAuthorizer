@@ -17,13 +17,10 @@ Tests for communication between the client and server components.
 """
 import attr
 
-from struct import (
-    unpack,
-)
-
 from fixtures import (
     Fixture,
     TempDir,
+    MonkeyPatch,
 )
 from testtools import (
     TestCase,
@@ -225,14 +222,80 @@ class ImmutableTests(TestCase):
                 cancel_secret,
             ),
         )
-
-        # It's hard to assert much about the lease without knowing about
-        # *some* implementation details of the storage server.  I prefer to
-        # know Python API details rather than on-disk format details.
-        [(_, reader)] = self.server.remote_get_buckets(storage_index).items()
-        leases = list(reader._share_file.get_leases())
+        [(_, leases)] = get_leases(self.server, storage_index).items()
         self.assertThat(leases, HasLength(2))
 
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenum=sharenums(),
+        size=sizes(),
+    )
+    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenum, size):
+        """
+        A lease on an immutable share can be updated to expire at a later time.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Take control of time (in this hacky, fragile way) so we can verify
+        # the expiration time gets bumped by the renewal.
+        now = 1000000000.5
+        self.useFixture(MonkeyPatch("time.time", lambda: now))
+
+        # Create a share we can toy with.
+        _, allocated = self.anonymous_storage_server.remote_allocate_buckets(
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            {sharenum},
+            size,
+            canary=self.canary,
+        )
+        [(_, writer)] = allocated.items()
+        writer.remote_write(0, bytes_for_share(sharenum, size))
+        writer.remote_close()
+
+        now += 100000
+        extract_result(
+            self.client.renew_lease(
+                storage_index,
+                renew_secret,
+            ),
+        )
+
+        # Based on Tahoe-LAFS' hard-coded renew time.
+        RENEW_INTERVAL = 60 * 60 * 24 * 31
+
+        [(_, [lease])] = get_leases(self.server, storage_index).items()
+        self.assertThat(
+            lease.get_expiration_time(),
+            Equals(int(now + RENEW_INTERVAL)),
+        )
+
+
+def get_leases(storage_server, storage_index):
+    """
+    Get all leases for all shares of the given storage index on the given
+    server.
+
+    :param StorageServer storage_server: The storage server on which to find
+        the information.
+
+    :param bytes storage_index: The storage index for which to look up shares.
+
+    :return dict[int, list[LeaseInfo]]: The lease information for each share.
+    """
+    # It's hard to assert much about the lease without knowing about *some*
+    # implementation details of the storage server.  I prefer to know Python
+    # API details rather than on-disk format details.
+    return {
+        sharenum: list(reader._share_file.get_leases())
+        for (sharenum, reader)
+        in storage_server.remote_get_buckets(storage_index).items()
+    }
 
 def cleanup_storage_server(storage_server):
     """
