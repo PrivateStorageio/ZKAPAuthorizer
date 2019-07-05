@@ -126,6 +126,12 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
     def remote_advise_corrupt_share(self, *a, **kw):
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
+    def remote_slot_testv_and_readv_and_writev(self, *a, **kw):
+        return self._original.remote_slot_testv_and_readv_and_writev(*a, **kw)
+
+    def remote_slot_readv(self, *a, **kw):
+        return self._original.remote_slot_readv(*a, **kw)
+
 # I don't understand why this is required.
 # SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
 # the built in adapter should take care of this case.
