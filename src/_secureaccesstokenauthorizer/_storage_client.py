@@ -76,3 +76,17 @@ class SecureAccessTokenAuthorizerStorageClient(object):
             "get_buckets",
             storage_index,
         )
+
+    def add_lease(
+            self,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+    ):
+        return self._rref.callRemote(
+            "add_lease",
+            self._get_tokens(),
+            storage_index,
+            renew_secret,
+            cancel_secret,
+        )
