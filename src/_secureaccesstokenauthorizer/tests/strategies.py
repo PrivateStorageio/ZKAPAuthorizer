@@ -17,16 +17,21 @@ Hypothesis strategies for property testing.
 """
 
 from hypothesis.strategies import (
+    one_of,
     just,
     binary,
     integers,
     sets,
+    lists,
+    tuples,
+    dictionaries,
 )
 
 from allmydata.interfaces import (
     StorageIndex,
     LeaseRenewSecret,
     LeaseCancelSecret,
+    WriteEnablerSecret,
 )
 
 def configurations():
@@ -66,6 +71,16 @@ def lease_cancel_secrets():
     )
 
 
+def write_enabler_secrets():
+    """
+    Build Tahoe-LAFS write enabler secrets.
+    """
+    return binary(
+        min_size=WriteEnablerSecret.minLength,
+        max_size=WriteEnablerSecret.maxLength,
+    )
+
+
 def sharenums():
     """
     Build Tahoe-LAFS share numbers.
@@ -92,7 +107,102 @@ def sizes():
     Build Tahoe-LAFS share sizes.
     """
     return integers(
+        # Size 0 data isn't data, it's nothing.
+        min_value=1,
+        # Just for practical purposes...
+        max_value=2 ** 16,
+    )
+
+
+def offsets():
+    """
+    Build Tahoe-LAFS share offsets.
+    """
+    return integers(
         min_value=0,
         # Just for practical purposes...
         max_value=2 ** 16,
+    )
+
+
+def bytes_for_share(sharenum, size):
+    """
+    :return bytes: marginally distinctive bytes of a certain length for the
+        given share number
+    """
+    if 0 <= sharenum <= 255:
+        return (unichr(sharenum) * size).encode("latin-1")
+    raise ValueError("Sharenum must be between 0 and 255 inclusive.")
+
+
+def shares():
+    """
+    Build Tahoe-LAFS share data.
+    """
+    return tuples(
+        sharenums(),
+        sizes()
+    ).map(
+        lambda (num, size): bytes_for_share(num, size),
+    )
+
+
+def data_vectors():
+    """
+    Build Tahoe-LAFS data vectors.
+    """
+    return lists(
+        tuples(
+            offsets(),
+            shares(),
+        ),
+        # An empty data vector doesn't make much sense.  If you have no data
+        # to write, you should probably use slot_readv instead.  Also,
+        # Tahoe-LAFS explodes if you pass an empty data vector -
+        # storage/server.py, OSError(ENOENT) from `os.listdir(bucketdir)`.
+        min_size=1,
+        # Just for practical purposes...
+        max_size=8,
+    )
+
+
+def test_vectors():
+    """
+    Build Tahoe-LAFS test vectors.
+    """
+    return lists(
+        # XXX TODO
+        just(None),
+        min_size=0,
+        max_size=0,
+    )
+
+
+def test_and_write_vectors():
+    """
+    Build Tahoe-LAFS test and write vectors for a single share.
+    """
+    return tuples(
+        test_vectors(),
+        data_vectors(),
+        one_of(
+            just(None),
+            sizes(),
+        ),
+    )
+
+
+def test_and_write_vectors_for_shares():
+    """
+    Build Tahoe-LAFS test and write vectors for a number of shares.
+    """
+    return dictionaries(
+        sharenums(),
+        test_and_write_vectors(),
+        # An empty dictionary wouldn't make much sense.  And it provokes a
+        # NameError from Tahoe, storage/server.py:479, `new_length` referenced
+        # before assignment.
+        min_size=1,
+        # Just for practical purposes...
+        max_size=8,
     )

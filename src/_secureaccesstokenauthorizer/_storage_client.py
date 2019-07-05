@@ -117,3 +117,31 @@ class SecureAccessTokenAuthorizerStorageClient(object):
             shnum,
             reason,
         )
+
+    def slot_testv_and_readv_and_writev(
+            self,
+            storage_index,
+            secrets,
+            tw_vectors,
+            r_vector,
+    ):
+        return self._rref.callRemote(
+            "slot_testv_and_readv_and_writev",
+            storage_index,
+            secrets,
+            tw_vectors,
+            r_vector,
+        )
+
+    def slot_readv(
+            self,
+            storage_index,
+            shares,
+            r_vector,
+    ):
+        return self._rref.callRemote(
+            "slot_readv",
+            storage_index,
+            shares,
+            r_vector,
+        )

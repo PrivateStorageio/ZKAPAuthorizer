@@ -15,6 +15,7 @@
 """
 Tests for communication between the client and server components.
 """
+
 import attr
 
 from fixtures import (
@@ -38,6 +39,7 @@ from testtools.twistedsupport._deferred import (
 from hypothesis import (
     given,
     assume,
+    note,
 )
 from hypothesis.strategies import (
     tuples,
@@ -62,25 +64,19 @@ from .strategies import (
     storage_indexes,
     lease_renew_secrets,
     lease_cancel_secrets,
+    write_enabler_secrets,
     sharenums,
     sharenum_sets,
     sizes,
+    test_and_write_vectors_for_shares,
+    # Not really a strategy...
+    bytes_for_share,
 )
 
 from ..api import (
     SecureAccessTokenAuthorizerStorageServer,
     SecureAccessTokenAuthorizerStorageClient,
 )
-
-def bytes_for_share(sharenum, size):
-    """
-    Generate marginally distinctive bytes of a certain length for the given
-    share number.
-    """
-    if 0 <= sharenum <= 255:
-        return (unichr(sharenum) * size).encode("latin-1")
-    raise ValueError("Sharenum must be between 0 and 255 inclusive.")
-
 
 class AnonymousStorageServer(Fixture):
     def _setUp(self):
@@ -309,6 +305,88 @@ class ShareTests(TestCase):
             FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
             HasLength(1),
         )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        Mutable share data written using *slot_testv_and_readv_and_writev* can be
+        read back.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        wrote, read = extract_result(
+            self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors=test_and_write_vectors_for_shares,
+                r_vector=[],
+            ),
+        )
+
+        self.assertThat(
+            wrote,
+            Equals(True),
+            u"Server rejected a write to a new mutable storage index",
+        )
+
+        self.assertThat(
+            read,
+            Equals({}),
+            u"Server gave back read results when we asked for none.",
+        )
+
+        for sharenum, (test_vector, write_vector, new_length) in test_and_write_vectors_for_shares.items():
+            r_vector = list(map(write_vector_to_read_vector, write_vector))
+            read = extract_result(
+                self.client.slot_readv(
+                    storage_index,
+                    shares=[sharenum],
+                    r_vector=r_vector,
+                ),
+            )
+            note("read vector {}".format(r_vector))
+            # Create a buffer and pile up all the write operations in it.
+            # This lets us make correct assertions about overlapping writes.
+            length = max(
+                offset + len(data)
+                for (offset, data)
+                in write_vector
+            )
+            expected = b"\x00" * length
+            for (offset, data) in write_vector:
+                expected = expected[:offset] + data + expected[offset + len(data):]
+            if new_length is not None and new_length < length:
+                expected = expected[:new_length]
+            self.assertThat(
+                read,
+                Equals({sharenum: list(
+                    # Get the expected value out of our scratch buffer.
+                    expected[offset:offset + len(data)]
+                    for (offset, data)
+                    in write_vector
+                )}),
+                u"Server didn't reliably read back data just written for share {}".format(
+                    sharenum,
+                ),
+            )
+
+
+def write_vector_to_read_vector(write_vector):
+    """
+    Create a read vector which will read back the data written by the given
+    write vector.
+    """
+    return (write_vector[0], len(write_vector[1]))
 
 
 def write_toy_shares(
