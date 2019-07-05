@@ -103,12 +103,12 @@ class LocalRemote(object):
         )
 
 
-class ImmutableTests(TestCase):
+class ShareTests(TestCase):
     """
-    Tests for interaction with immutable shares.
+    Tests for interaction with shares.
     """
     def setUp(self):
-        super(ImmutableTests, self).setUp()
+        super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
@@ -131,7 +131,7 @@ class ImmutableTests(TestCase):
         sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_create(self, storage_index, renew_secret, cancel_secret, sharenums, size):
+    def test_create_immutable(self, storage_index, renew_secret, cancel_secret, sharenums, size):
         """
         Immutable share data created using *allocate_buckets* and methods of the
         resulting buckets can be read back using *get_buckets* and methods of
@@ -364,6 +364,7 @@ def get_leases(storage_server, storage_index):
         for (sharenum, reader)
         in storage_server.remote_get_buckets(storage_index).items()
     }
+
 
 def cleanup_storage_server(storage_server):
     """
