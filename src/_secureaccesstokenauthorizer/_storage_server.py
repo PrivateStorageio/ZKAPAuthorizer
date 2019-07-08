@@ -101,7 +101,10 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 
 
 @implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
-@attr.s
+# It would be great to use `frozen=True` (value-based hashing) instead of
+# `cmp=False` (identity based hashing) but Referenceable wants to set some
+# attributes on self and it's hard to avoid that.
+@attr.s(cmp=False)
 class SecureAccessTokenAuthorizerStorageServer(Referenceable):
     _original = attr.ib()
 
