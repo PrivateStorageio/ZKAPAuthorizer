@@ -150,3 +150,29 @@ class PluginTests(TestCase):
                 ),
             ),
         )
+
+
+    @given(configurations())
+    def test_returns_hashable(self, configuration):
+        """
+        The storage server attached to the result of
+        ``storage_server.get_storage_server`` is hashable for use as a Python
+        dictionary key.
+
+        This is another requirement of Foolscap.
+        """
+        storage_server_deferred = storage_server.get_storage_server(
+            configuration,
+            get_anonymous_storage_server,
+        )
+        broker = Broker(None)
+        broker.makeConnection(StringTransport())
+        self.expectThat(
+            storage_server_deferred,
+            succeeded(
+                AfterPreprocessing(
+                    lambda ann: hash(ann.storage_server),
+                    Always(),
+                ),
+            ),
+        )
