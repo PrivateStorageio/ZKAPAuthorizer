@@ -63,14 +63,32 @@ def add_tokens(schema):
     :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
         ``schema`` but with one additional required argument.
     """
-    return add_arguments(schema, tokens=TokenList)
+    return add_arguments(schema, [(b"tokens", TokenList)])
 
 
+def add_arguments(schema, kwargs):
+    """
+    Create a new schema like ``schema`` but with the arguments given by
+    ``kwargs`` prepended to the signature.
 
-def add_arguments(schema, **kwargs):
-    new_kwargs = schema.argConstraints.copy()
+    :param foolscap.remoteinterface.RemoteMethodSchema schema: The existing
+        schema.
+
+    :param list[(bytes, foolscap.IConstraint)] kwargs: The arguments to
+        prepend to the signature of ``schema``.
+
+    :return foolscap.remoteinterface.RemoteMethodSchema: The new schema
+        object.
+    """
+    new_kwargs = dict(schema.argConstraints)
     new_kwargs.update(kwargs)
     modified_schema = RemoteMethodSchema(**new_kwargs)
+    # Initialized from **new_kwargs, RemoteMethodSchema.argumentNames is in
+    # some arbitrary, probably-incorrect order.  Fix it.
+    modified_schema.argumentNames = (
+        list(argName for (argName, _) in kwargs) +
+        schema.argumentNames
+    )
     return modified_schema
 
 
@@ -129,7 +147,8 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
     def remote_advise_corrupt_share(self, *a, **kw):
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
-    def remote_slot_testv_and_readv_and_writev(self, *a, **kw):
+    def remote_slot_testv_and_readv_and_writev(self, tokens, *a, **kw):
+        self._validate_tokens(tokens)
         return self._original.remote_slot_testv_and_readv_and_writev(*a, **kw)
 
     def remote_slot_readv(self, *a, **kw):
