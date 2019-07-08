@@ -92,10 +92,14 @@ class LocalRemote(object):
     _referenceable = attr.ib()
 
     def callRemote(self, methname, *args, **kwargs):
+        schema = self._referenceable.getInterface()[methname]
+        schema.checkAllArgs(args, kwargs, inbound=False)
+        # TODO: Figure out how to call checkResults on the result.
         return execute(
-            getattr(self._referenceable, "remote_" + methname),
-            *args,
-            **kwargs
+            self._referenceable.doRemoteCall,
+            methname,
+            args,
+            kwargs,
         )
 
 
