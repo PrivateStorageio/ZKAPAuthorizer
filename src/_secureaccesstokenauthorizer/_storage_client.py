@@ -127,6 +127,7 @@ class SecureAccessTokenAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
+            self._get_tokens(),
             storage_index,
             secrets,
             tw_vectors,

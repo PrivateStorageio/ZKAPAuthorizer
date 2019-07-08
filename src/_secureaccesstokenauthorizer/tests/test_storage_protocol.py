@@ -77,6 +77,9 @@ from ..api import (
     SecureAccessTokenAuthorizerStorageServer,
     SecureAccessTokenAuthorizerStorageClient,
 )
+from .._storage_server import (
+    TOKEN_LENGTH,
+)
 
 class AnonymousStorageServer(Fixture):
     def _setUp(self):
@@ -113,7 +116,7 @@ class ShareTests(TestCase):
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
         def get_tokens():
-            return [u"x"]
+            return [b"x" * TOKEN_LENGTH]
 
         self.server = SecureAccessTokenAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -299,10 +302,10 @@ class ShareTests(TestCase):
 
         extract_result(
             self.client.advise_corrupt_share(
-                u"immutable",
+                b"immutable",
                 storage_index,
                 sharenum,
-                u"the bits look bad",
+                b"the bits look bad",
             ),
         )
         self.assertThat(
