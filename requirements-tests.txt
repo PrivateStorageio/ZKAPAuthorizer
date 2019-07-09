@@ -1,12 +1,32 @@
 # Pinned version of all test-only dependencies, direct and transitive.  These
 # are in addition to the dependencies in requirements.txt.  This is the
 # configuration tested on CI.
+
+# Via codecov
 chardet==3.0.4
 codecov==2.0.15
 coverage==4.5.3
 idna==2.8
 requests==2.22.0
 urllib3==1.25.3
+
+# Via from testtools
+extras==1.0.0
+filelock==3.0.10
+fixtures==3.0.0
+linecache2==1.0.0
+packaging==19.0
+pbr==5.4.0
+pluggy==0.8.1
+py==1.7.0
+pyparsing==2.3.1
+python-mimeparse==1.6.0
+six==1.12.0
+testtools==2.3.0
+toml==0.10.0
+tox==3.7.0
+traceback2==1.4.0
+unittest2==1.1.0
 
 # As an exception, certifi may float.  It contains time-sensitive data
 # (certificates).  Pinning it guarantees a failure eventually.
