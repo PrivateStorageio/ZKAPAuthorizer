@@ -15,19 +15,27 @@
 version: 2
 
 jobs:
+  sharing:
+    - run: &PREPARE_VIRTUALENV
+        name: "Prepare virtualenv"
+        command: |
+            virtualenv venv
+            . venv/bin/activate
+            pip install --upgrade certifi pip pip-tools
+
   documentation:
     docker:
       - image: "circleci/python:3.7"
     steps:
       - "checkout"
 
+      - <<: *PREPARE_VIRTUALENV
+
       - run:
           name: "Sphinx Documentation Build"
           command: |
-            virtualenv venv
             . venv/bin/activate
-            pip install --upgrade pip
-            pip install -r docs/requirements.txt
+            pip-sync docs/requirements.txt
             sphinx-build docs/source docs/build
 
       - store_artifacts:
@@ -40,13 +48,13 @@ jobs:
     steps:
       - "checkout"
 
+      - << *PREPARE_VIRTUALENV
+
       - run:
           name: "Run Test Suite"
           command: |
-            virtualenv venv
             . venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt -r requirements-tests.txt
+            pip-sync requirements.txt requirements-tests.txt
             pip install .
             coverage run -m twisted.trial _secureaccesstokenauthorizer
 
