@@ -57,7 +57,7 @@ jobs:
     steps:
       - "checkout"
 
-      - << *PREPARE_VIRTUALENV
+      - <<: *PREPARE_VIRTUALENV
 
       - run:
           name: "Run Test Suite"
