@@ -1,4 +1,4 @@
 attrs
 zope.interface
 twisted
-https://github.com/tahoe-lafs/tahoe-lafs/archive/integration/storage-economics.zip#egg=tahoe-lafs
+-e git+https://github.com/tahoe-lafs/tahoe-lafs@integration/storage-economics#egg=tahoe-lafs

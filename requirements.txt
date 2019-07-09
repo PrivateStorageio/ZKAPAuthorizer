@@ -4,6 +4,9 @@
 #
 #    pip-compile --allow-unsafe --generate-hashes --output-file=requirements.txt requirements.in
 #
+# WARNING: pip install will require the following package to be hashed.
+# Consider using a hashable URL like https://github.com/jazzband/pip-tools/archive/SOMECOMMIT.zip
+-e git+https://github.com/tahoe-lafs/tahoe-lafs@integration/storage-economics#egg=tahoe-lafs
 appdirs==1.4.3 \
     --hash=sha256:9e5896d1372858f8dd3344faf4e5014d21849c756c8d5701f78f8a103b372d92 \
     --hash=sha256:d8b24664561d0d34ddfaec54636d502d7cea6e29c3eaf68f3df6180863e2166e \
@@ -220,9 +223,6 @@ spake2==0.8 \
     --hash=sha256:c17a614b29ee4126206e22181f70a406c618d3c6c62ca6d6779bce95e9c926f4 \
     --hash=sha256:ce80705f8516c54364931f3b2c9a917ba001500d7f2fc76a0e8cf3bcaf0e30f7 \
     # via magic-wormhole
-https://github.com/tahoe-lafs/tahoe-lafs/archive/integration/storage-economics.zip#egg=tahoe-lafs \
-    --hash=sha256:1d2eb197ab8066d8e711ca08b414a7813db686da4c58bc94fa68c38980109462 \
-    --hash=sha256:82d4d20f2672e67927d91e73e54dbfd7e526eca27dea09a29f131bef7dfaee86
 tqdm==4.32.2 \
     --hash=sha256:14a285392c32b6f8222ecfbcd217838f88e11630affe9006cd0e94c7eff3cb61 \
     --hash=sha256:25d4c0ea02a305a688e7e9c2cdc8f862f989ef2a4701ab28ee963295f5b109ab \
