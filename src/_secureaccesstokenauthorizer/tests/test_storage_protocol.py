@@ -30,6 +30,9 @@ from testtools.matchers import (
     Equals,
     HasLength,
 )
+from testtools.twistedsupport import (
+    succeeded,
+)
 from testtools.twistedsupport._deferred import (
     # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
     # there appear to have stalled.
@@ -72,7 +75,9 @@ from .strategies import (
     # Not really a strategy...
     bytes_for_share,
 )
-
+from .matchers import (
+    matches_version_dictionary,
+)
 from ..api import (
     SecureAccessTokenAuthorizerStorageServer,
     SecureAccessTokenAuthorizerStorageClient,
@@ -106,6 +111,7 @@ class LocalRemote(object):
         )
 
 
+
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -125,6 +131,16 @@ class ShareTests(TestCase):
         self.client = SecureAccessTokenAuthorizerStorageClient(
             get_rref=lambda: self.local_remote_server,
             get_tokens=get_tokens,
+        )
+
+    def test_get_version(self):
+        """
+        Version information about the storage server can be retrieved using
+        *get_version*.
+        """
+        self.assertThat(
+            self.client.get_version(),
+            succeeded(matches_version_dictionary()),
         )
 
     @given(

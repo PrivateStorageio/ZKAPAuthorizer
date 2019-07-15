@@ -129,6 +129,9 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
     def _validate_tokens(self, tokens):
         pass
 
+    def remote_get_version(self):
+        return self._original.remote_get_version()
+
     def remote_allocate_buckets(self, tokens, *a, **kw):
         self._validate_tokens(tokens)
         return self._original.remote_allocate_buckets(*a, **kw)
