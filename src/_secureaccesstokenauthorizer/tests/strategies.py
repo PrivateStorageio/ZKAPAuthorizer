@@ -143,7 +143,7 @@ def shares():
         sharenums(),
         sizes()
     ).map(
-        lambda (num, size): bytes_for_share(num, size),
+        lambda num_and_size: bytes_for_share(*num_and_size),
     )
 
 
