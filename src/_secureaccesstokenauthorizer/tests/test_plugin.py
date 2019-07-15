@@ -16,10 +16,6 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from zope.interface.verify import (
-    verifyObject,
-)
-
 from testtools import (
     TestCase,
 )
