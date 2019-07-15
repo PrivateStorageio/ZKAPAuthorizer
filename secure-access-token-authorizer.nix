@@ -1,4 +1,4 @@
-{ buildPythonPackage, sphinx, circleci-cli, pythonPackages, tahoe-lafs }:
+{ buildPythonPackage, sphinx, circleci-cli, pythonPackages }:
 buildPythonPackage rec {
   version = "0.0";
   name = "secure-access-token-authorizer-${version}";
