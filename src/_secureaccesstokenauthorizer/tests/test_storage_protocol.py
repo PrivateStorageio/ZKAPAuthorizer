@@ -382,7 +382,11 @@ class ShareTests(TestCase):
             self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
-                tw_vectors=test_and_write_vectors_for_shares,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v)
+                    in test_and_write_vectors_for_shares.items()
+                },
                 r_vector=[],
             ),
         )
@@ -399,8 +403,8 @@ class ShareTests(TestCase):
             u"Server gave back read results when we asked for none.",
         )
 
-        for sharenum, (test_vector, write_vector, new_length) in test_and_write_vectors_for_shares.items():
-            r_vector = list(map(write_vector_to_read_vector, write_vector))
+        for sharenum, vectors in test_and_write_vectors_for_shares.items():
+            r_vector = list(map(write_vector_to_read_vector, vectors.write_vector))
             read = extract_result(
                 self.client.slot_readv(
                     storage_index,
@@ -414,20 +418,20 @@ class ShareTests(TestCase):
             length = max(
                 offset + len(data)
                 for (offset, data)
-                in write_vector
+                in vectors.write_vector
             )
             expected = b"\x00" * length
-            for (offset, data) in write_vector:
+            for (offset, data) in vectors.write_vector:
                 expected = expected[:offset] + data + expected[offset + len(data):]
-            if new_length is not None and new_length < length:
-                expected = expected[:new_length]
+            if vectors.new_length is not None and vectors.new_length < length:
+                expected = expected[:vectors.new_length]
             self.assertThat(
                 read,
                 Equals({sharenum: list(
                     # Get the expected value out of our scratch buffer.
                     expected[offset:offset + len(data)]
                     for (offset, data)
-                    in write_vector
+                    in vectors.write_vector
                 )}),
                 u"Server didn't reliably read back data just written for share {}".format(
                     sharenum,

@@ -16,6 +16,8 @@
 Hypothesis strategies for property testing.
 """
 
+import attr
+
 from hypothesis.strategies import (
     one_of,
     just,
@@ -25,6 +27,7 @@ from hypothesis.strategies import (
     lists,
     tuples,
     dictionaries,
+    builds,
 )
 
 from allmydata.interfaces import (
@@ -178,11 +181,31 @@ def test_vectors():
     )
 
 
+@attr.s(frozen=True)
+class TestAndWriteVectors(object):
+    """
+    Provide an alternate structure for the values required by the
+    ``tw_vectors`` parameter accepted by
+    ``RIStorageServer.slot_testv_and_readv_and_writev``.
+    """
+    test_vector = attr.ib()
+    write_vector = attr.ib()
+    new_length = attr.ib()
+
+    def for_call(self):
+        """
+        Construct a value suitable to be passed as ``tw_vectors`` to
+        ``slot_testv_and_readv_and_writev``.
+        """
+        return (self.test_vector, self.write_vector, self.new_length)
+
+
 def test_and_write_vectors():
     """
     Build Tahoe-LAFS test and write vectors for a single share.
     """
-    return tuples(
+    return builds(
+        TestAndWriteVectors,
         test_vectors(),
         data_vectors(),
         one_of(
