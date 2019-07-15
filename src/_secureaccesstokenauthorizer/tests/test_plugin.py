@@ -47,6 +47,7 @@ from foolscap.ipb import (
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
+    IStorageServer,
 )
 
 from twisted.plugin import (
@@ -61,12 +62,17 @@ from twisted.plugins.secureaccesstokenauthorizer import (
 
 from .strategies import (
     configurations,
+    announcements,
 )
 from .matchers import (
     Provides,
 )
 
 def get_anonymous_storage_server():
+    return None
+
+
+def get_rref():
     return None
 
 
@@ -91,6 +97,12 @@ class PluginTests(TestCase):
         verifyObject(IFoolscapStoragePlugin, storage_server)
 
 
+
+class ServerPluginTests(TestCase):
+    """
+    Tests for the plugin's implementation of
+    ``IFoolscapStoragePlugin.get_storage_server``.
+    """
     @given(configurations())
     def test_returns_announceable(self, configuration):
         """
@@ -175,4 +187,28 @@ class PluginTests(TestCase):
                     Always(),
                 ),
             ),
+        )
+
+
+
+class ClientPluginTests(TestCase):
+    """
+    Tests for the plugin's implementation of
+    ``IFoolscapStoragePlugin.get_storage_client``.
+    """
+    @given(configurations(), announcements())
+    def test_interface(self, configuration, announcement):
+        """
+        ``get_storage_client`` returns a ``Deferred`` that fires with an object
+        which provides ``IStorageServer``.
+        """
+        storage_client_deferred = storage_server.get_storage_client(
+            configuration,
+            announcement,
+            get_rref,
+        )
+
+        self.assertThat(
+            storage_client_deferred,
+            succeeded(Provides([IStorageServer])),
         )

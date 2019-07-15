@@ -72,7 +72,9 @@ class SecureAccessTokenAuthorizer(object):
 
 
     def get_storage_client(self, configuration, announcement, get_rref):
-        return SecureAccessTokenAuthorizerStorageClient(
-            get_rref,
-            lambda: [b"x" * TOKEN_LENGTH],
+        return succeed(
+            SecureAccessTokenAuthorizerStorageClient(
+                get_rref,
+                lambda: [b"x" * TOKEN_LENGTH],
+            )
         )

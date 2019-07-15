@@ -206,3 +206,10 @@ def test_and_write_vectors_for_shares():
         # Just for practical purposes...
         max_size=8,
     )
+
+
+def announcements():
+    """
+    Build announcements for the SecureAccessTokenAuthorizer plugin.
+    """
+    return just({})
