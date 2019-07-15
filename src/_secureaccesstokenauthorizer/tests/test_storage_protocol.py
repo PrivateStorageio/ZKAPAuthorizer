@@ -87,19 +87,50 @@ from .._storage_server import (
 )
 
 class AnonymousStorageServer(Fixture):
+    """
+    Supply an instance of allmydata.storage.server.StorageServer which
+    implements anonymous access to Tahoe-LAFS storage server functionality.
+
+    :ivar FilePath tempdir: The path to the server's storage on the
+        filesystem.
+
+    :ivar allmydata.storage.server.StorageServer storage_server: The storage
+        server.
+    """
     def _setUp(self):
-        self.tempdir = self.useFixture(TempDir()).join(b"storage")
+        self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
         self.storage_server = StorageServer(
-            self.tempdir,
+            self.tempdir.asBytesMode().path,
             b"x" * 20,
         )
 
 
 @attr.s
 class LocalRemote(object):
+    """
+    Adapt a referenceable to behave as if it were a remote reference instead.
+
+    This is only a partial implementation of ``IRemoteReference`` so it
+    doesn't declare the interface.
+
+    ``foolscap.referenceable.LocalReferenceable`` is in many ways a better
+    adapter between these interfaces but it also uses ``eventually`` which
+    complicates matters immensely for testing.
+
+    :ivar foolscap.ipb.IReferenceable _referenceable: The object to which this
+        provides a simulated remote interface.
+    """
     _referenceable = attr.ib()
 
     def callRemote(self, methname, *args, **kwargs):
+        """
+        Call the given method on the wrapped object, passing the given arguments.
+
+        Arguments are checked for conformance to the remote interface but the
+        return value is not (because I don't know how -exarkun).
+
+        :return Deferred: The result of the call on the wrapped object.
+        """
         schema = self._referenceable.getInterface()[methname]
         schema.checkAllArgs(args, kwargs, inbound=False)
         # TODO: Figure out how to call checkResults on the result.
