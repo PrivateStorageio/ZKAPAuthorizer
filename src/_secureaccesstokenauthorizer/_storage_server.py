@@ -46,9 +46,25 @@ from allmydata.interfaces import (
     RIStorageServer,
 )
 
+# The Foolscap convention seems to be to try to constrain inputs to valid
+# values.  So we'll try to limit the number of tokens a client can supply.
+# Foolscap may be moving away from this so we may eventually drop this as
+# well.  Though it may still make sense on a non-Foolscap protocol (eg HTTP)
+# which Tahoe-LAFS may eventually support.
+#
+# In any case, for now, pick some fairly arbitrary value.  I am deliberately
+# picking a small number here and expect to have to raise.  However, ideally,
+# a client could accomplish a lot with a few tokens while also not wasting a
+# lot of value.
 MAXIMUM_TOKENS_PER_CALL = 10
+
+# This is the length of a serialized PrivacyPass pass (there's a lot of
+# confusion between "tokens" and "passes" here, sadly).
 TOKEN_LENGTH = 97
 
+# Take those values and turn them into the appropriate Foolscap constraint
+# objects.  Foolscap seems to have a convention of representing these as
+# CamelCase module-level values so I replicate that here.
 Token = ByteStringConstraint(maxLength=TOKEN_LENGTH, minLength=TOKEN_LENGTH)
 TokenList = ListOf(Token, maxLength=MAXIMUM_TOKENS_PER_CALL)
 
