@@ -94,7 +94,10 @@ class PluginTests(TestCase):
         """
         ``storage_server`` provides ``IFoolscapStoragePlugin``.
         """
-        verifyObject(IFoolscapStoragePlugin, storage_server)
+        self.assertThat(
+            storage_server,
+            Provides([IFoolscapStoragePlugin]),
+        )
 
 
 
