@@ -213,7 +213,7 @@ class ShareTests(TestCase):
         )
 
         for sharenum, bucket in allocated.items():
-            bucket.remote_write(0, bytes_for_share(sharenum, size)),
+            bucket.remote_write(0, bytes_for_share(sharenum, size))
             bucket.remote_close()
 
         readers = extract_result(self.client.get_buckets(storage_index))
