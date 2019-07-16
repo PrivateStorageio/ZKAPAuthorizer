@@ -1,4 +1,9 @@
-{ fetchFromGitHub, nettools, pythonPackages, buildPythonPackage, eliot, autobahn }:
+{ fetchFromGitHub, nettools, pythonPackages, buildPythonPackage
+, twisted, foolscap, nevow, simplejson, zfec, pycryptopp, darcsver
+, setuptoolsTrial, setuptoolsDarcs, pycrypto, pyasn1, zope_interface
+, service-identity, pyyaml, magic-wormhole, treq, appdirs
+, eliot, autobahn
+}:
 buildPythonPackage rec {
   version = "1.14.0.dev";
   name = "tahoe-lafs-${version}";
@@ -27,11 +32,11 @@ buildPythonPackage rec {
 
 
   propagatedBuildInputs = with pythonPackages; [
-    twisted autobahn foolscap nevow simplejson zfec pycryptopp darcsver
+    twisted foolscap nevow simplejson zfec pycryptopp darcsver
     setuptoolsTrial setuptoolsDarcs pycrypto pyasn1 zope_interface
     service-identity pyyaml magic-wormhole treq appdirs
 
-    eliot
+    eliot autobahn
   ];
 
   doCheck = false;
