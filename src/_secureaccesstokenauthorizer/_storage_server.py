@@ -100,9 +100,14 @@ def add_arguments(schema, kwargs):
     new_kwargs.update(kwargs)
     modified_schema = RemoteMethodSchema(**new_kwargs)
     # Initialized from **new_kwargs, RemoteMethodSchema.argumentNames is in
-    # some arbitrary, probably-incorrect order.  Fix it.
+    # some arbitrary, probably-incorrect order.  This breaks user code which
+    # tries to use positional arguments.  Put them back in the order they were
+    # in originally (in the input ``schema``), prepended with the newly added
+    # arguments.
     modified_schema.argumentNames = (
+        # The new arguments
         list(argName for (argName, _) in kwargs) +
+        # The original arguments in the original order
         schema.argumentNames
     )
     return modified_schema
