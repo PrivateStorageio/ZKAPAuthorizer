@@ -34,7 +34,23 @@ from allmydata.interfaces import (
 @attr.s
 class SecureAccessTokenAuthorizerStorageClient(object):
     """
-    XXX
+    An implementation of the client portion of an access-token-based
+    authorization scheme on top of the basic Tahoe-LAFS storage protocol.
+
+    This ``IStorageServer`` implementation aims to offer the same storage
+    functionality as Tahoe-LAFS' built-in storage server but with an added
+    layer of token-based authorization for some operations.  The Python
+    interface exposed to application code is the same but the network protocol
+    is augmented with tokens which are automatically inserted by this class.
+    The tokens are interpreted by the corresponding server-side implementation
+    of this scheme.
+
+    :ivar _get_rref: A no-argument callable which retrieves the most recently
+        valid ``RemoteReference`` corresponding to the server-side object for
+        this scheme.
+
+    :ivar _get_tokens: A no-argument callable which retrieves some tokens
+        which can be used to authorize an operation.
     """
     _get_rref = attr.ib()
     _get_tokens = attr.ib()
