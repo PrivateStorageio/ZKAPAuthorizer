@@ -16,6 +16,10 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+from zope.interface import (
+    implementer,
+)
+
 from testtools import (
     TestCase,
 )
@@ -44,6 +48,7 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
     IStorageServer,
+    RIStorageServer,
 )
 
 from twisted.plugin import (
@@ -64,8 +69,14 @@ from .matchers import (
     Provides,
 )
 
+
+@implementer(RIStorageServer)
+class StubStorageServer(object):
+    pass
+
+
 def get_anonymous_storage_server():
-    return None
+    return StubStorageServer()
 
 
 def get_rref():

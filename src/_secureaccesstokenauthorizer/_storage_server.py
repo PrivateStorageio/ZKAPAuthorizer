@@ -21,6 +21,9 @@ implemented in ``_storage_client.py``.
 """
 
 import attr
+from attr.validators import (
+    provides,
+)
 
 from zope.interface import (
     implementer_only,
@@ -145,7 +148,7 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 # attributes on self and it's hard to avoid that.
 @attr.s(cmp=False)
 class SecureAccessTokenAuthorizerStorageServer(Referenceable):
-    _original = attr.ib()
+    _original = attr.ib(validator=provides(RIStorageServer))
 
     def _validate_tokens(self, tokens):
         pass
