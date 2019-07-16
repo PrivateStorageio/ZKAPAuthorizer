@@ -1,0 +1,4 @@
+attrs
+zope.interface
+twisted
+https://github.com/tahoe-lafs/tahoe-lafs/archive/48bd16a8d9109910122cc2e2c85eb4f378390135.zip#egg=tahoe-lafs
