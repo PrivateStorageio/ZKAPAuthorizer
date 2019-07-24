@@ -57,6 +57,9 @@ from twisted.plugin import (
 from twisted.test.proto_helpers import (
     StringTransport,
 )
+from twisted.web.resource import (
+    IResource,
+)
 from twisted.plugins.secureaccesstokenauthorizer import (
     storage_server,
 )
@@ -221,4 +224,20 @@ class ClientPluginTests(TestCase):
         self.assertThat(
             storage_client_deferred,
             succeeded(Provides([IStorageServer])),
+        )
+
+
+class ClientResourceTests(TestCase):
+    """
+    Tests for the plugin's implementation of
+    ``IFoolscapStoragePlugin.get_client_resource``.
+    """
+    @given(configurations())
+    def test_interface(self, configuration):
+        """
+        ``get_client_resource`` returns an object that provides ``IResource``.
+        """
+        self.assertThat(
+            storage_server.get_client_resource(configuration),
+            Provides([IResource]),
         )

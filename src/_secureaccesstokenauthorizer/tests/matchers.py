@@ -19,6 +19,7 @@ Testtools matchers useful for the test suite.
 import attr
 
 from testtools.matchers import (
+    Matcher,
     Mismatch,
     ContainsDict,
     Always,
@@ -54,3 +55,26 @@ def matches_version_dictionary():
         b'application-version': Always(),
         b'http://allmydata.org/tahoe/protocols/storage/v1': Always(),
     })
+
+
+
+def returns(matcher):
+    """
+    Matches a no-argument callable that returns a value matched by the given
+    matcher.
+    """
+    return _Returns(matcher)
+
+
+
+class _Returns(Matcher):
+    def __init__(self, result_matcher):
+        self.result_matcher = result_matcher
+
+
+    def match(self, matchee):
+        return self.result_matcher.match(matchee())
+
+
+    def __str__(self):
+        return "Returns({})".format(self.result_matcher)

@@ -12,6 +12,7 @@ Welcome to Secure Access Token Authorizer's documentation!
 
    code_of_conduct
    CONTRIBUTING
+   interface
 
 Indices and tables
 ==================
