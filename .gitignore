@@ -1,0 +1,8 @@
+.hypothesis
+_trial_temp
+*~
+result
+__pycache__
+dropin.cache
+pip-wheel-metadata
+*.egg-info
