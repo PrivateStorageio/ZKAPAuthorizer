@@ -60,7 +60,7 @@ def from_configuration(node_config):
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    store = PaymentReferenceStore(node_config)
+    store = PaymentReferenceStore.from_node_config(node_config)
     controller = PaymentController(store)
     root = Resource()
     root.putChild(

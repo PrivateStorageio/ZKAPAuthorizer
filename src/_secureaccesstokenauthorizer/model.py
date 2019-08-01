@@ -17,25 +17,24 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from os import (
-    makedirs,
-    listdir,
-)
-from errno import (
-    EEXIST,
-    ENOENT,
+from functools import (
+    wraps,
 )
 from json import (
     loads,
     dumps,
 )
+
+from sqlite3 import (
+    connect,
+)
+
 import attr
 
-# XXX
-from allmydata.node import (
-    _Config,
-    MissingConfigEntry,
+from twisted.python.filepath import (
+    FilePath,
 )
+
 
 class StoreAddError(Exception):
     def __init__(self, reason):
@@ -47,73 +46,126 @@ class StoreDirectoryError(Exception):
         self.reason = reason
 
 
+class SchemaError(TypeError):
+    pass
+
+
+CONFIG_DB_NAME = u"privatestorageio-satauthz-v1.sqlite3"
+
+def open_and_initialize(path):
+    try:
+        path.parent().makedirs(ignoreExistingDirectory=True)
+    except OSError as e:
+        raise StoreDirectoryError(e)
+
+    conn = connect(
+        path.asBytesMode().path,
+        isolation_level="IMMEDIATE",
+    )
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [version] AS SELECT 1 AS [version]
+            """
+        )
+        cursor.execute(
+            """
+            SELECT [version] FROM [version]
+            """
+        )
+        expected = [(1,)]
+        version = cursor.fetchall()
+        if version != expected:
+            raise SchemaError(
+                "Unexpected database schema version.  Expected {}.  Got {}.".format(
+                    expected,
+                    version,
+                ),
+            )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [payment-references] (
+                number text,
+
+                PRIMARY KEY(number)
+            )
+            """,
+        )
+    return conn
+
+
+def with_cursor(f):
+    @wraps(f)
+    def with_cursor(self, *a, **kw):
+        with self._connection:
+            return f(self, self._connection.cursor(), *a, **kw)
+    return with_cursor
+
+
 @attr.s(frozen=True)
 class PaymentReferenceStore(object):
     """
     This class implements persistence for payment references.
 
-    :ivar _Config node_config: The Tahoe-LAFS node configuration object for
+    :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
         the node that owns the persisted payment preferences.
     """
-    _CONFIG_DIR = u"privatestorageio-satauthz-v1"
-    node_config = attr.ib(type=_Config)
+    database_path = attr.ib(type=FilePath)
+    _connection = attr.ib()
 
-    def _config_key(self, prn):
-        return u"{}/{}.prn+json".format(self._CONFIG_DIR, prn)
+    @classmethod
+    def from_node_config(cls, node_config):
+        db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+        conn = open_and_initialize(
+            db_path,
+        )
+        return cls(
+            db_path,
+            conn,
+        )
 
-    def _prn(self, config_key):
-        if config_key.endswith(u".prn+json"):
-            return config_key[:-len(u".prn+json")]
-        raise ValueError("{} does not look like a config key".format(config_key))
-
-    def _read_pr_json(self, prn):
-        private_config_item = self._config_key(prn)
-        try:
-            return self.node_config.get_private_config(private_config_item)
-        except MissingConfigEntry:
+    @with_cursor
+    def get(self, cursor, prn):
+        cursor.execute(
+            """
+            SELECT
+                ([number])
+            FROM
+                [payment-references]
+            WHERE
+                [number] = ?
+            """,
+            (prn,),
+        )
+        refs = cursor.fetchall()
+        if len(refs) == 0:
             raise KeyError(prn)
+        return PaymentReference(refs[0][0])
 
-    def _write_pr_json(self, prn, pr_json):
-        private_config_item = self._config_key(prn)
-        # XXX Need an API to be able to avoid touching the filesystem directly
-        # here.
-        container = self.node_config.get_private_path(self._CONFIG_DIR)
-        try:
-            makedirs(container)
-        except EnvironmentError as e:
-            if EEXIST != e.errno:
-                raise StoreDirectoryError(e)
-        try:
-            self.node_config.write_private_config(private_config_item, pr_json)
-        except Exception as e:
-            raise StoreAddError(e)
+    @with_cursor
+    def add(self, cursor, prn):
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO [payment-references] VALUES (?)
+            """,
+            (prn,)
+        )
 
-    def get(self, prn):
-        payment_reference_json = self._read_pr_json(prn)
-        return PaymentReference.from_json(payment_reference_json)
+    @with_cursor
+    def list(self, cursor):
+        cursor.execute(
+            """
+            SELECT ([number]) FROM [payment-references]
+            """,
+        )
+        refs = cursor.fetchall()
 
-    def add(self, prn):
-        # XXX Not *exactly* atomic is it?  Probably want a
-        # write_private_config_if_not_exists or something.
-        try:
-            self._read_pr_json(prn)
-        except KeyError:
-            self._write_pr_json(prn, PaymentReference(prn).to_json())
-
-    def list(self):
-        # XXX Need an API to be able to avoid touching the filesystem directly
-        # here.
-        container = self.node_config.get_private_path(self._CONFIG_DIR)
-        try:
-            children = listdir(container)
-        except EnvironmentError as e:
-            if ENOENT != e.errno:
-                raise
-            children = []
         return list(
-            PaymentReference(self._prn(config_key))
-            for config_key
-            in children
+            PaymentReference(number)
+            for (number,)
+            in refs
         )
 
 

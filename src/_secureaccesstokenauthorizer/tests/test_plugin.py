@@ -20,6 +20,10 @@ from zope.interface import (
     implementer,
 )
 
+from fixtures import (
+    TempDir,
+)
+
 from testtools import (
     TestCase,
 )
@@ -234,11 +238,14 @@ class ClientResourceTests(TestCase):
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
     @given(tahoe_configs())
-    def test_interface(self, tahoe_config):
+    def test_interface(self, get_config):
         """
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+        config = get_config(nodedir, b"tub.port")
         self.assertThat(
-            storage_server.get_client_resource(tahoe_config),
+            storage_server.get_client_resource(config),
             Provides([IResource]),
         )

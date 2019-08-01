@@ -17,7 +17,6 @@ Tests for ``_secureaccesstokenauthorizer.model``.
 """
 
 from os import (
-    chmod,
     mkdir,
 )
 from errno import (
@@ -73,7 +72,7 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore(config)
+        store = PaymentReferenceStore.from_node_config(config)
         self.assertThat(
             lambda: store.get(prn),
             raises(KeyError),
@@ -88,7 +87,7 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore(config)
+        store = PaymentReferenceStore.from_node_config(config)
         store.add(prn)
         payment_reference = store.get(prn)
         self.assertThat(
@@ -106,7 +105,7 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore(config)
+        store = PaymentReferenceStore.from_node_config(config)
         store.add(prn)
         store.add(prn)
         payment_reference = store.get(prn)
@@ -128,7 +127,7 @@ class PaymentReferenceStoreTests(TestCase):
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
         config = get_config(nodedir, b"tub.port")
-        store = PaymentReferenceStore(config)
+        store = PaymentReferenceStore.from_node_config(config)
 
         for prn in prns:
             store.add(prn)
@@ -142,59 +141,24 @@ class PaymentReferenceStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), payment_reference_numbers(), payment_reference_numbers())
-    def test_unwriteable_store_directory(self, get_config, prn_a, prn_b):
-        """
-        If the underlying directory in the node configuration is not writeable
-        then ``PaymentReferenceStore.add`` raises ``StoreAddError``.
-        """
-        assume(prn_a != prn_b)
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        config = get_config(nodedir, b"tub.port")
-        store = PaymentReferenceStore(config)
-        # Initialize the underlying directory.
-        store.add(prn_a)
-        # Mess it up
-        chmod(config.get_private_path(store._CONFIG_DIR), 0o500)
-
-        self.assertThat(
-            lambda: store.add(prn_b),
-            Raises(
-                AfterPreprocessing(
-                    lambda (type, exc, tb): exc,
-                    MatchesAll(
-                        IsInstance(StoreAddError),
-                        MatchesStructure(
-                            reason=MatchesAll(
-                                IsInstance(IOError),
-                                MatchesStructure(
-                                    errno=Equals(EACCES),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-        )
-
     @given(tahoe_configs(), payment_reference_numbers())
     def test_uncreateable_store_directory(self, get_config, prn):
         """
         If the underlying directory in the node configuration cannot be created
-        then ``PaymentReferenceStore.add`` raises ``StoreDirectoryError``.
+        then ``PaymentReferenceStore.from_node_config`` raises
+        ``StoreDirectoryError``.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
-        config = get_config(nodedir, b"tub.port")
-        store = PaymentReferenceStore(config)
 
         # Create the node directory without permission to create the
         # underlying directory.
         mkdir(nodedir, 0o500)
 
+        config = get_config(nodedir, b"tub.port")
+
         self.assertThat(
-            lambda: store.add(prn),
+            lambda: PaymentReferenceStore.from_node_config(config),
             Raises(
                 AfterPreprocessing(
                     lambda (type, exc, tb): exc,
