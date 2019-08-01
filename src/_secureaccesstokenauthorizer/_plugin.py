@@ -84,5 +84,5 @@ class SecureAccessTokenAuthorizer(object):
         )
 
 
-    def get_client_resource(self, configuration):
-        return resource_from_configuration(configuration)
+    def get_client_resource(self, node_config):
+        return resource_from_configuration(node_config)

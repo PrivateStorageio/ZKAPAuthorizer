@@ -65,6 +65,7 @@ from twisted.plugins.secureaccesstokenauthorizer import (
 )
 
 from .strategies import (
+    tahoe_configs,
     configurations,
     announcements,
 )
@@ -232,12 +233,12 @@ class ClientResourceTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
-    @given(configurations())
-    def test_interface(self, configuration):
+    @given(tahoe_configs())
+    def test_interface(self, tahoe_config):
         """
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
         self.assertThat(
-            storage_server.get_client_resource(configuration),
+            storage_server.get_client_resource(tahoe_config),
             Provides([IResource]),
         )
