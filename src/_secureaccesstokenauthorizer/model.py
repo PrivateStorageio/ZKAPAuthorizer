@@ -19,9 +19,11 @@ the storage plugin.
 
 from os import (
     makedirs,
+    listdir,
 )
 from errno import (
     EEXIST,
+    ENOENT,
 )
 from json import (
     loads,
@@ -59,6 +61,11 @@ class PaymentReferenceStore(object):
     def _config_key(self, prn):
         return u"{}/{}.prn+json".format(self._CONFIG_DIR, prn)
 
+    def _prn(self, config_key):
+        if config_key.endswith(u".prn+json"):
+            return config_key[:-len(u".prn+json")]
+        raise ValueError("{} does not look like a config key".format(config_key))
+
     def _read_pr_json(self, prn):
         private_config_item = self._config_key(prn)
         try:
@@ -93,6 +100,22 @@ class PaymentReferenceStore(object):
         except KeyError:
             self._write_pr_json(prn, PaymentReference(prn).to_json())
 
+    def list(self):
+        # XXX Need an API to be able to avoid touching the filesystem directly
+        # here.
+        container = self.node_config.get_private_path(self._CONFIG_DIR)
+        try:
+            children = listdir(container)
+        except EnvironmentError as e:
+            if ENOENT != e.errno:
+                raise
+            children = []
+        return list(
+            PaymentReference(self._prn(config_key))
+            for config_key
+            in children
+        )
+
 
 @attr.s
 class PaymentReference(object):
@@ -111,7 +134,11 @@ class PaymentReference(object):
 
 
     def to_json(self):
-        return dumps(self.to_json_v1())
+        return dumps(self.marshal())
+
+
+    def marshal(self):
+        return self.to_json_v1()
 
 
     def to_json_v1(self):

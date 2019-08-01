@@ -21,7 +21,7 @@ In the future it should also allow users to read statistics about token usage.
 """
 
 from json import (
-    loads,
+    loads, dumps,
 )
 
 from twisted.web.http import (
@@ -104,6 +104,17 @@ class _PaymentReferenceNumberCollection(Resource):
 
         self._controller.redeem(prn)
         return b""
+
+
+    def render_GET(self, request):
+        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        return dumps({
+            u"payment-reference-numbers": list(
+                prn.marshal()
+                for prn
+                in self._store.list()
+            ),
+        })
 
 
     def getChild(self, segment, request):

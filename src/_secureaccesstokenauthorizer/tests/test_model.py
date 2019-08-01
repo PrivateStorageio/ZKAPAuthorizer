@@ -45,6 +45,9 @@ from hypothesis import (
     given,
     assume,
 )
+from hypothesis.strategies import (
+    lists,
+)
 
 from ..model import (
     StoreDirectoryError,
@@ -111,6 +114,30 @@ class PaymentReferenceStoreTests(TestCase):
             payment_reference,
             MatchesStructure(
                 number=Equals(prn),
+            ),
+        )
+
+
+    @given(tahoe_configs(), lists(payment_reference_numbers()))
+    def test_list(self, get_config, prns):
+        """
+        ``PaymentReferenceStore.list`` returns a ``list`` containing a
+        ``PaymentReference`` object for each payment reference number
+        previously added.
+        """
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+        config = get_config(nodedir, b"tub.port")
+        store = PaymentReferenceStore(config)
+
+        for prn in prns:
+            store.add(prn)
+
+        self.assertThat(
+            store.list(),
+            AfterPreprocessing(
+                lambda refs: set(ref.number for ref in refs),
+                Equals(set(prns)),
             ),
         )
 

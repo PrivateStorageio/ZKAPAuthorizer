@@ -60,6 +60,7 @@ from hypothesis.strategies import (
     one_of,
     just,
     fixed_dictionaries,
+    lists,
     integers,
     binary,
     text,
@@ -345,6 +346,66 @@ class PaymentReferenceNumberTests(TestCase):
                             Equals({
                                 u"version": 1,
                                 u"number": prn,
+                            }),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    @given(tahoe_configs_with_client_config, lists(payment_reference_numbers(), unique=True))
+    def test_list_prns(self, get_config, prns):
+        """
+        A ``GET`` to the ``PaymentReferenceNumberCollection`` itself returns a
+        list of existing payment reference numbers.
+        """
+        # Hypothesis causes our test case instances to be re-used many times
+        # between setUp and tearDown.  Avoid re-using the same temporary
+        # directory for every Hypothesis iteration because this test leaves
+        # state behind that invalidates future iterations.
+        tempdir = self.useFixture(TempDir())
+        root = from_configuration(
+            get_config(tempdir.join(b"tahoe.ini"), b"tub.port"),
+        )
+
+        agent = RequestTraversalAgent(root)
+
+        for prn in prns:
+            producer = FileBodyProducer(
+                BytesIO(dumps({u"payment-reference-number": prn})),
+                cooperator=uncooperator(),
+            )
+            putting = agent.request(
+                b"PUT",
+                b"http://127.0.0.1/payment-reference-number",
+                bodyProducer=producer,
+            )
+            self.assertThat(
+                putting,
+                succeeded(
+                    ok_response(),
+                ),
+            )
+
+        getting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/payment-reference-number",
+        )
+
+        self.assertThat(
+            getting,
+            succeeded(
+                MatchesAll(
+                    ok_response(headers=application_json()),
+                    AfterPreprocessing(
+                        json_content,
+                        succeeded(
+                            Equals({
+                                u"payment-reference-numbers": list(
+                                    {u"version": 1, u"number": prn}
+                                    for prn
+                                    in prns
+                                ),
                             }),
                         ),
                     ),

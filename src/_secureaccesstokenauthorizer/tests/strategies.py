@@ -170,6 +170,8 @@ def payment_reference_numbers():
         max_size=32,
     ).map(
         urlsafe_b64encode,
+    ).map(
+        lambda prn: prn.decode("ascii"),
     )
 
 

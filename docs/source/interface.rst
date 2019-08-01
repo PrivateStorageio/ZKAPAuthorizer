@@ -42,3 +42,15 @@ The ``stage`` property indicates how far into redemption the plugin has proceede
 The ``of`` property indicates how many steps the process involves in total.
 The ``stage-name`` property gives a human-meaningful description of the current stage.
 The ``stage-entered-time`` property gives the timestamp for the start of the current staged.
+
+``GET /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This endpoint allows an external agent to retrieve the status of all payment reference numbers.
+This endpoint accepts no request body.
+
+The response is **OK** with ``application/json`` content-type response body like::
+
+  {"payment-reference-numbers": [<payment reference status object>, ...]}
+
+The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
