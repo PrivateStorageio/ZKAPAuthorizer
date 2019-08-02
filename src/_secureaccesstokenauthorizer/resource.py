@@ -44,7 +44,7 @@ from .controller import (
     PaymentController,
 )
 
-def from_configuration(node_config):
+def from_configuration(node_config, store=None):
     """
     Instantiate the plugin root resource using data from its configuration
     section in the Tahoe-LAFS configuration file::
@@ -57,10 +57,14 @@ def from_configuration(node_config):
         This is also used to read and write files in the private storage area
         of the node's persistent state location.
 
+    :param PaymentReferenceStore store: The store to use.  If ``None`` a
+        sensible one is constructed.
+
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    store = PaymentReferenceStore.from_node_config(node_config)
+    if store is None:
+        store = PaymentReferenceStore.from_node_config(node_config)
     controller = PaymentController(store)
     root = Resource()
     root.putChild(
@@ -96,6 +100,8 @@ class _PaymentReferenceNumberCollection(Resource):
             return bad_request().render(request)
         prn = payload[u"payment-reference-number"]
         if not isinstance(prn, unicode):
+            return bad_request().render(request)
+        if not prn.strip():
             return bad_request().render(request)
         try:
             urlsafe_b64decode(prn.encode("ascii"))

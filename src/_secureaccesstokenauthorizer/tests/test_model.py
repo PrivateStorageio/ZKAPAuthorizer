@@ -42,16 +42,21 @@ from fixtures import (
 
 from hypothesis import (
     given,
-    assume,
 )
 from hypothesis.strategies import (
     lists,
 )
 
+from twisted.python.filepath import (
+    FilePath,
+)
+
 from ..model import (
+    SchemaError,
     StoreDirectoryError,
-    StoreAddError,
     PaymentReferenceStore,
+    open_and_initialize,
+    memory_connect,
 )
 
 from .strategies import (
@@ -64,6 +69,22 @@ class PaymentReferenceStoreTests(TestCase):
     """
     Tests for ``PaymentReferenceStore``.
     """
+    def test_create_mismatched_schema(self):
+        """
+        ``open_and_initialize`` raises ``SchemaError`` if asked for a database
+        with a schema version other than it can create.
+        """
+        tempdir = self.useFixture(TempDir())
+        dbpath = tempdir.join(b"db.sqlite3")
+        self.assertThat(
+            lambda: open_and_initialize(
+                FilePath(dbpath),
+                required_schema_version=100,
+            ),
+            raises(SchemaError),
+        )
+
+
     @given(tahoe_configs(), payment_reference_numbers())
     def test_get_missing(self, get_config, prn):
         """
@@ -72,7 +93,10 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(config)
+        store = PaymentReferenceStore.from_node_config(
+            config,
+            memory_connect,
+        )
         self.assertThat(
             lambda: store.get(prn),
             raises(KeyError),
@@ -87,7 +111,10 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(config)
+        store = PaymentReferenceStore.from_node_config(
+            config,
+            memory_connect,
+        )
         store.add(prn)
         payment_reference = store.get(prn)
         self.assertThat(
@@ -105,7 +132,10 @@ class PaymentReferenceStoreTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(config)
+        store = PaymentReferenceStore.from_node_config(
+            config,
+            memory_connect,
+        )
         store.add(prn)
         store.add(prn)
         payment_reference = store.get(prn)
@@ -127,7 +157,10 @@ class PaymentReferenceStoreTests(TestCase):
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
         config = get_config(nodedir, b"tub.port")
-        store = PaymentReferenceStore.from_node_config(config)
+        store = PaymentReferenceStore.from_node_config(
+            config,
+            memory_connect,
+        )
 
         for prn in prns:
             store.add(prn)
@@ -158,7 +191,10 @@ class PaymentReferenceStoreTests(TestCase):
         config = get_config(nodedir, b"tub.port")
 
         self.assertThat(
-            lambda: PaymentReferenceStore.from_node_config(config),
+            lambda: PaymentReferenceStore.from_node_config(
+                config,
+                memory_connect,
+            ),
             Raises(
                 AfterPreprocessing(
                     lambda (type, exc, tb): exc,

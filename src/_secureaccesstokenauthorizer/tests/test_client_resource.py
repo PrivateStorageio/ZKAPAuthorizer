@@ -55,6 +55,7 @@ from fixtures import (
 
 from hypothesis import (
     given,
+    note,
 )
 from hypothesis.strategies import (
     one_of,
@@ -87,6 +88,10 @@ from treq.testing import (
     RequestTraversalAgent,
 )
 
+from ..model import (
+    PaymentReferenceStore,
+    memory_connect,
+)
 from ..resource import (
     from_configuration,
 )
@@ -139,6 +144,8 @@ def is_urlsafe_base64(text):
         return False
     return True
 
+
+
 def invalid_bodies():
     """
     Build byte strings that ``PUT /payment-reference-number`` considers
@@ -163,6 +170,17 @@ def invalid_bodies():
         binary().filter(is_not_json),
     )
 
+
+def root_from_config(config):
+    return from_configuration(
+        config,
+        PaymentReferenceStore.from_node_config(
+            config,
+            memory_connect,
+        ),
+    )
+
+
 class PaymentReferenceNumberTests(TestCase):
     """
     Tests relating to ``/payment-reference-number`` as implemented by the
@@ -171,7 +189,6 @@ class PaymentReferenceNumberTests(TestCase):
     """
     def setUp(self):
         super(PaymentReferenceNumberTests, self).setUp()
-        self.tempdir = self.useFixture(TempDir())
         self.useFixture(CaptureTwistedLogs())
 
 
@@ -181,10 +198,9 @@ class PaymentReferenceNumberTests(TestCase):
         A resource is reachable at the ``payment-reference-number`` child of a the
         resource returned by ``from_configuration``.
         """
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
-
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         self.assertThat(
             getChildForRequest(root, request),
             Provides([IResource]),
@@ -198,9 +214,9 @@ class PaymentReferenceNumberTests(TestCase):
         is passed in to the PRN redemption model object for handling and an
         ``OK`` response is returned.
         """
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
             BytesIO(dumps({u"payment-reference-number": prn})),
@@ -229,9 +245,9 @@ class PaymentReferenceNumberTests(TestCase):
         consist of an object with a single *payment-reference-number* property
         then the response is *BAD REQUEST*.
         """
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
             BytesIO(body),
@@ -259,11 +275,10 @@ class PaymentReferenceNumberTests(TestCase):
         When a syntactically invalid PRN is requested with a ``GET`` to a child of
         ``PaymentReferenceNumberCollection`` the response is **BAD REQUEST**.
         """
+        tempdir = self.useFixture(TempDir())
         not_prn = prn[1:]
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
-
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
@@ -284,10 +299,9 @@ class PaymentReferenceNumberTests(TestCase):
         ``PaymentReferenceNumberCollection`` the response is **NOT FOUND** if
         the PRN hasn't previously been submitted with a ``PUT``.
         """
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
-
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
@@ -308,10 +322,9 @@ class PaymentReferenceNumberTests(TestCase):
         same PRN then the response code is **OK** and details about the PRN
         are included in a json-encoded response body.
         """
-        root = from_configuration(
-            get_config(self.tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
-
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
 
         producer = FileBodyProducer(
@@ -364,11 +377,11 @@ class PaymentReferenceNumberTests(TestCase):
         # directory for every Hypothesis iteration because this test leaves
         # state behind that invalidates future iterations.
         tempdir = self.useFixture(TempDir())
-        root = from_configuration(
-            get_config(tempdir.join(b"tahoe.ini"), b"tub.port"),
-        )
-
+        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        root = root_from_config(config)
         agent = RequestTraversalAgent(root)
+
+        note("{} PRNs".format(len(prns)))
 
         for prn in prns:
             producer = FileBodyProducer(

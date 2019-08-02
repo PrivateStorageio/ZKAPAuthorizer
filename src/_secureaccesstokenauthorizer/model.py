@@ -26,7 +26,7 @@ from json import (
 )
 
 from sqlite3 import (
-    connect,
+    connect as _connect,
 )
 
 import attr
@@ -52,7 +52,26 @@ class SchemaError(TypeError):
 
 CONFIG_DB_NAME = u"privatestorageio-satauthz-v1.sqlite3"
 
-def open_and_initialize(path):
+def open_and_initialize(path, required_schema_version, connect=None):
+    """
+    Open a SQLite3 database for use as a payment reference store.
+
+    Create the database and populate it with a schema, if it does not already
+    exist.
+
+    :param FilePath path: The location of the SQLite3 database file.
+
+    :param int required_schema_version: The schema version which must be
+        present in the database in order for a SQLite3 connection to be
+        returned.
+
+    :raise SchemaError: If the schema in the database does not match the
+        required schema version.
+
+    :return: A SQLite3 connection object for the database at the given path.
+    """
+    if connect is None:
+        connect = _connect
     try:
         path.parent().makedirs(ignoreExistingDirectory=True)
     except OSError as e:
@@ -65,6 +84,8 @@ def open_and_initialize(path):
     with conn:
         cursor = conn.cursor()
         cursor.execute(
+            # This code knows how to create schema version 1.  This is
+            # regardless of what the caller *wants* to find in the database.
             """
             CREATE TABLE IF NOT EXISTS [version] AS SELECT 1 AS [version]
             """
@@ -74,22 +95,21 @@ def open_and_initialize(path):
             SELECT [version] FROM [version]
             """
         )
-        expected = [(1,)]
-        version = cursor.fetchall()
-        if version != expected:
+        [(actual_version,)] = cursor.fetchall()
+        if actual_version != required_schema_version:
             raise SchemaError(
-                "Unexpected database schema version.  Expected {}.  Got {}.".format(
-                    expected,
-                    version,
+                "Unexpected database schema version.  Required {}.  Got {}.".format(
+                    required_schema_version,
+                    actual_version,
                 ),
             )
 
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS [payment-references] (
-                number text,
+                [number] text,
 
-                PRIMARY KEY(number)
+                PRIMARY KEY([number])
             )
             """,
         )
@@ -104,6 +124,13 @@ def with_cursor(f):
     return with_cursor
 
 
+def memory_connect(path, *a, **kw):
+    """
+    Always connect to an in-memory SQLite3 database.
+    """
+    return _connect(":memory:", *a, **kw)
+
+
 @attr.s(frozen=True)
 class PaymentReferenceStore(object):
     """
@@ -116,10 +143,12 @@ class PaymentReferenceStore(object):
     _connection = attr.ib()
 
     @classmethod
-    def from_node_config(cls, node_config):
+    def from_node_config(cls, node_config, connect=None):
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
+            required_schema_version=1,
+            connect=connect,
         )
         return cls(
             db_path,
