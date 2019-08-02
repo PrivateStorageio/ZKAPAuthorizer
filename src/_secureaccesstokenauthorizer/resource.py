@@ -101,7 +101,9 @@ class _PaymentReferenceNumberCollection(Resource):
         prn = payload[u"payment-reference-number"]
         if not isinstance(prn, unicode):
             return bad_request().render(request)
-        if not prn.strip():
+        if len(prn) != 44:
+            # TODO.  44 is the length of 32 bytes base64 encoded.  This model
+            # information presumably belongs somewhere else.
             return bad_request().render(request)
         try:
             urlsafe_b64decode(prn.encode("ascii"))

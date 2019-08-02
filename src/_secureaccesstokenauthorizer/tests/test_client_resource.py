@@ -137,13 +137,13 @@ def not_payment_reference_numbers():
         ),
     )
 
+
 def is_urlsafe_base64(text):
     try:
         urlsafe_b64decode(text)
     except:
         return False
     return True
-
 
 
 def invalid_bodies():
