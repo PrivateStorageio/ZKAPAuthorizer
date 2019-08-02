@@ -24,7 +24,4 @@ class PaymentController(object):
     store = attr.ib()
 
     def redeem(self, prn):
-        try:
-            self.store.get(prn)
-        except KeyError:
-            self.store.add(prn)
+        self.store.add(prn)
