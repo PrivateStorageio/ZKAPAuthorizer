@@ -4,3 +4,4 @@ attrs
 hypothesis
 testtools
 fixtures
+treq
