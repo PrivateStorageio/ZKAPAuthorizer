@@ -32,16 +32,10 @@ If the payment reference number is not known then the response is **NOT FOUND**.
 For any payment reference number which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  {"stage": <integer>,
-   "of": <integer>,
-   "stage-name": <string>,
-   "stage-entered-time": <iso8601 timestamp>
-  }
+  {"value": <string>}
 
-The ``stage`` property indicates how far into redemption the plugin has proceeded.
-The ``of`` property indicates how many steps the process involves in total.
-The ``stage-name`` property gives a human-meaningful description of the current stage.
-The ``stage-entered-time`` property gives the timestamp for the start of the current staged.
+The ``value`` property merely indicates the payment reference number which was requested.
+Further properties will be added to this response in the near future.
 
 ``GET /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
