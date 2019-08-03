@@ -220,8 +220,8 @@ spake2==0.8 \
     --hash=sha256:c17a614b29ee4126206e22181f70a406c618d3c6c62ca6d6779bce95e9c926f4 \
     --hash=sha256:ce80705f8516c54364931f3b2c9a917ba001500d7f2fc76a0e8cf3bcaf0e30f7 \
     # via magic-wormhole
-https://github.com/tahoe-lafs/tahoe-lafs/archive/48bd16a8d9109910122cc2e2c85eb4f378390135.zip#egg=tahoe-lafs \
-    --hash=sha256:982e67ee3e515f400ab88b7ce02dba8a7c0dd897eb07f3111a80a06778e2b6e4
+https://github.com/tahoe-lafs/tahoe-lafs/archive/6c1a37c95188c1d9a877286ef726280a68d38a4b.zip#egg=tahoe-lafs \
+    --hash=sha256:fda66824f274f003d4cb98cf59104549a4e572f943c25383f2db56615aa6d105
 tqdm==4.32.2 \
     --hash=sha256:14a285392c32b6f8222ecfbcd217838f88e11630affe9006cd0e94c7eff3cb61 \
     --hash=sha256:25d4c0ea02a305a688e7e9c2cdc8f862f989ef2a4701ab28ee963295f5b109ab \
