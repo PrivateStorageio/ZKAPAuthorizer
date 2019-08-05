@@ -184,9 +184,6 @@ def invalid_bodies():
                 not_payment_reference_numbers(),
             ),
         }).map(dumps),
-        fixed_dictionaries({
-            u"payment-reference-number": integers(),
-        }).map(dumps),
         # Not even JSON
         binary().filter(is_not_json),
     )
