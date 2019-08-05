@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-Tests for ``_secureaccesstokenauthorizer.model``.
+Tests for ``_zkapauthorizer.model``.
 """
 
 from os import (

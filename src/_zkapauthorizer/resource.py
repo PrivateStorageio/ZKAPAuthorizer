@@ -49,7 +49,7 @@ def from_configuration(node_config, store=None):
     Instantiate the plugin root resource using data from its configuration
     section in the Tahoe-LAFS configuration file::
 
-        [storageclient.plugins.privatestorageio-satauthz-v1]
+        [storageclient.plugins.privatestorageio-zkapauthz-v1]
         # nothing yet
 
     :param _Config node_config: An object representing the overall node

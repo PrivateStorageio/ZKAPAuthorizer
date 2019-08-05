@@ -12,19 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = [
-    "SecureAccessTokenAuthorizerStorageServer",
-    "SecureAccessTokenAuthorizerStorageClient",
-    "SecureAccessTokenAuthorizer",
-]
+"""
+A drop-in to supply plugins to the Twisted plugin system.
+"""
 
-from ._storage_server import (
-    SecureAccessTokenAuthorizerStorageServer,
-)
-from ._storage_client import (
-    SecureAccessTokenAuthorizerStorageClient,
+from _zkapauthorizer.api import (
+    ZKAPAuthorizer,
 )
 
-from ._plugin import (
-    SecureAccessTokenAuthorizer,
-)
+storage_server = ZKAPAuthorizer()

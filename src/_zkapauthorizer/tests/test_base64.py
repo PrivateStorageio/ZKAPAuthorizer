@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Tests for ``_secureaccesstokenauthorizer._base64``.
+Tests for ``_zkapauthorizer._base64``.
 """
 
 from base64 import (

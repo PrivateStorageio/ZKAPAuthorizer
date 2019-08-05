@@ -32,7 +32,7 @@ from allmydata.interfaces import (
 
 @implementer(IStorageServer)
 @attr.s
-class SecureAccessTokenAuthorizerStorageClient(object):
+class ZKAPAuthorizerStorageClient(object):
     """
     An implementation of the client portion of an access-token-based
     authorization scheme on top of the basic Tahoe-LAFS storage protocol.

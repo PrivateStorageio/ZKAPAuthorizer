@@ -4,7 +4,7 @@
 }:
 buildPythonPackage rec {
   version = "0.0";
-  name = "secure-access-token-authorizer-${version}";
+  name = "zero-knowledge-access-pass-authorizer-${version}";
   src = ./.;
 
   depsBuildBuild = [
@@ -29,7 +29,7 @@ buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    ${pyflakes}/bin/pyflakes src/_secureaccesstokenauthorizer
-    python -m coverage run --source _secureaccesstokenauthorizer,twisted.plugins.secureaccesstokenauthorizer --module twisted.trial _secureaccesstokenauthorizer
+    ${pyflakes}/bin/pyflakes src/_zkapauthorizer
+    python -m coverage run --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module twisted.trial _zkapauthorizer
   '';
 }

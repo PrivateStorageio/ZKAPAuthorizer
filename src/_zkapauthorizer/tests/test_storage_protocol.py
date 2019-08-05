@@ -79,8 +79,8 @@ from .matchers import (
     matches_version_dictionary,
 )
 from ..api import (
-    SecureAccessTokenAuthorizerStorageServer,
-    SecureAccessTokenAuthorizerStorageClient,
+    ZKAPAuthorizerStorageServer,
+    ZKAPAuthorizerStorageClient,
 )
 from .._storage_server import (
     TOKEN_LENGTH,
@@ -155,11 +155,11 @@ class ShareTests(TestCase):
         def get_tokens():
             return [b"x" * TOKEN_LENGTH]
 
-        self.server = SecureAccessTokenAuthorizerStorageServer(
+        self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
         )
         self.local_remote_server = LocalRemote(self.server)
-        self.client = SecureAccessTokenAuthorizerStorageClient(
+        self.client = ZKAPAuthorizerStorageClient(
             get_rref=lambda: self.local_remote_server,
             get_tokens=get_tokens,
         )

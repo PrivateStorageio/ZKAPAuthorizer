@@ -1,5 +1,5 @@
-Secure Access Token Authorizer
-==============================
+Zero-Knowledge Access Pass Authorizer
+=====================================
 
 |coverage|_
 |circleci|_
@@ -7,9 +7,9 @@ Secure Access Token Authorizer
 What is this?
 -------------
 
-Secure Access Token Authorizer is a `Tahoe-LAFS`_ storage-system plugin which authorizes storage operations based on privacy-respecting tokens.
+Zero-Knowledge Access Pass (ZKAP) Authorizer is a `Tahoe-LAFS`_ storage-system plugin which authorizes storage operations based on privacy-respecting passes.
 
-Such tokens derive from `PrivacyPass`_.
+Such passes derive from `PrivacyPass`_.
 They allow a Tahoe-LAFS client to prove it has a right to access without revealing additional information.
 
 Copyright
@@ -33,8 +33,8 @@ Copyright
 
 .. _PrivacyPass: https://privacypass.github.io/
 
-.. |coverage| image:: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer/branch/master/graph/badge.svg
-.. _coverage: https://codecov.io/gh/PrivateStorageio/SecureAccessTokenAuthorizer
+.. |coverage| image:: https://codecov.io/gh/PrivateStorageio/ZKAPAuthorizer/branch/master/graph/badge.svg
+.. _coverage: https://codecov.io/gh/PrivateStorageio/ZKAPAuthorizer
 
-.. |circleci| image:: https://circleci.com/gh/PrivateStorageio/SecureAccessTokenAuthorizer.svg?style=svg
-.. _circleci: https://circleci.com/gh/PrivateStorageio/SecureAccessTokenAuthorizer
+.. |circleci| image:: https://circleci.com/gh/PrivateStorageio/ZKAPAuthorizer.svg?style=svg
+.. _circleci: https://circleci.com/gh/PrivateStorageio/ZKAPAuthorizer
