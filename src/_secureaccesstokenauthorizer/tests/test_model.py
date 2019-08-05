@@ -63,7 +63,7 @@ from ..model import (
 
 from .strategies import (
     tahoe_configs,
-    payment_reference_numbers,
+    vouchers,
 )
 
 
@@ -87,7 +87,7 @@ class PaymentReferenceStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), payment_reference_numbers())
+    @given(tahoe_configs(), vouchers())
     def test_get_missing(self, get_config, prn):
         """
         ``PaymentReferenceStore.get`` raises ``KeyError`` when called with a
@@ -104,7 +104,7 @@ class PaymentReferenceStoreTests(TestCase):
             raises(KeyError),
         )
 
-    @given(tahoe_configs(), payment_reference_numbers())
+    @given(tahoe_configs(), vouchers())
     def test_add(self, get_config, prn):
         """
         ``PaymentReferenceStore.get`` returns a ``PaymentReference`` representing
@@ -126,7 +126,7 @@ class PaymentReferenceStoreTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), payment_reference_numbers())
+    @given(tahoe_configs(), vouchers())
     def test_add_idempotent(self, get_config, prn):
         """
         More than one call to ``PaymentReferenceStore.add`` with the same argument
@@ -149,7 +149,7 @@ class PaymentReferenceStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), lists(payment_reference_numbers()))
+    @given(tahoe_configs(), lists(vouchers()))
     def test_list(self, get_config, prns):
         """
         ``PaymentReferenceStore.list`` returns a ``list`` containing a
@@ -244,7 +244,7 @@ class PaymentReferenceTests(TestCase):
     """
     Tests for ``PaymentReference``.
     """
-    @given(payment_reference_numbers())
+    @given(vouchers())
     def test_json_roundtrip(self, prn):
         """
         ``PaymentReference.to_json . PaymentReference.from_json → id``

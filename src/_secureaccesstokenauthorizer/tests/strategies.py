@@ -161,7 +161,7 @@ def client_configurations():
     return just({})
 
 
-def payment_reference_numbers():
+def vouchers():
     """
     Build unicode strings in the format of vouchers.
     """

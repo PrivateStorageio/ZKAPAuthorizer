@@ -102,7 +102,7 @@ from ..resource import (
 from .strategies import (
     tahoe_configs,
     client_configurations,
-    payment_reference_numbers,
+    vouchers,
     requests,
 )
 from .matchers import (
@@ -136,7 +136,7 @@ def is_not_json(bytestring):
         return True
     return False
 
-def not_payment_reference_numbers():
+def not_vouchers():
     """
     Builds unicode strings which are not legal vouchers.
     """
@@ -146,7 +146,7 @@ def not_payment_reference_numbers():
                 not is_urlsafe_base64(t)
             ),
         ),
-        payment_reference_numbers().map(
+        vouchers().map(
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
             # from the urlsafe-base64 alphabet.
@@ -169,19 +169,18 @@ def is_urlsafe_base64(text):
 
 def invalid_bodies():
     """
-    Build byte strings that ``PUT /payment-reference-number`` considers
-    invalid.
+    Build byte strings that ``PUT /voucher`` considers invalid.
     """
     return one_of(
         # The wrong key but the right kind of value.
         fixed_dictionaries({
-            u"some-key": payment_reference_numbers(),
+            u"some-key": vouchers(),
         }).map(dumps),
         # The right key but the wrong kind of value.
         fixed_dictionaries({
-            u"payment-reference-number": one_of(
+            u"voucher": one_of(
                 integers(),
-                not_payment_reference_numbers(),
+                not_vouchers(),
             ),
         }).map(dumps),
         # Not even JSON
@@ -208,7 +207,7 @@ def root_from_config(config):
 
 class PaymentReferenceNumberTests(TestCase):
     """
-    Tests relating to ``/payment-reference-number`` as implemented by the
+    Tests relating to ``/voucher`` as implemented by the
     ``_secureaccesstokenauthorizer.resource`` module and its handling of
     vouchers.
     """
@@ -217,11 +216,11 @@ class PaymentReferenceNumberTests(TestCase):
         self.useFixture(CaptureTwistedLogs())
 
 
-    @given(tahoe_configs_with_client_config, requests(just([u"payment-reference-number"])))
+    @given(tahoe_configs_with_client_config, requests(just([u"voucher"])))
     def test_reachable(self, get_config, request):
         """
-        A resource is reachable at the ``payment-reference-number`` child of a the
-        resource returned by ``from_configuration``.
+        A resource is reachable at the ``voucher`` child of a the resource
+        returned by ``from_configuration``.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -232,7 +231,7 @@ class PaymentReferenceNumberTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, payment_reference_numbers())
+    @given(tahoe_configs_with_client_config, vouchers())
     def test_put_prn(self, get_config, prn):
         """
         When a voucher is ``PUT`` to ``PaymentReferenceNumberCollection`` it is
@@ -244,12 +243,12 @@ class PaymentReferenceNumberTests(TestCase):
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
-            BytesIO(dumps({u"payment-reference-number": prn})),
+            BytesIO(dumps({u"voucher": prn})),
             cooperator=uncooperator(),
         )
         requesting = agent.request(
             b"PUT",
-            b"http://127.0.0.1/payment-reference-number",
+            b"http://127.0.0.1/voucher",
             bodyProducer=producer,
         )
         self.addDetail(
@@ -267,8 +266,8 @@ class PaymentReferenceNumberTests(TestCase):
     def test_put_invalid_body(self, get_config, body):
         """
         If the body of a ``PUT`` to ``PaymentReferenceNumberCollection`` does not
-        consist of an object with a single *payment-reference-number* property
-        then the response is *BAD REQUEST*.
+        consist of an object with a single *voucher* property then the
+        response is *BAD REQUEST*.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -280,7 +279,7 @@ class PaymentReferenceNumberTests(TestCase):
         )
         requesting = agent.request(
             b"PUT",
-            b"http://127.0.0.1/payment-reference-number",
+            b"http://127.0.0.1/voucher",
             bodyProducer=producer,
         )
         self.addDetail(
@@ -294,7 +293,7 @@ class PaymentReferenceNumberTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, not_payment_reference_numbers())
+    @given(tahoe_configs_with_client_config, not_vouchers())
     def test_get_invalid_prn(self, get_config, not_prn):
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
@@ -305,7 +304,7 @@ class PaymentReferenceNumberTests(TestCase):
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
-        url = u"http://127.0.0.1/payment-reference-number/{}".format(
+        url = u"http://127.0.0.1/voucher/{}".format(
             quote(
                 not_prn.encode("utf-8"),
                 safe=b"",
@@ -323,7 +322,7 @@ class PaymentReferenceNumberTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, payment_reference_numbers())
+    @given(tahoe_configs_with_client_config, vouchers())
     def test_get_unknown_prn(self, get_config, prn):
         """
         When a voucher is requested with a ``GET`` to a child of
@@ -336,7 +335,7 @@ class PaymentReferenceNumberTests(TestCase):
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
-            u"http://127.0.0.1/payment-reference-number/{}".format(prn).encode("ascii"),
+            u"http://127.0.0.1/voucher/{}".format(prn).encode("ascii"),
         )
         self.assertThat(
             requesting,
@@ -346,7 +345,7 @@ class PaymentReferenceNumberTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, payment_reference_numbers())
+    @given(tahoe_configs_with_client_config, vouchers())
     def test_get_known_prn(self, get_config, prn):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
@@ -359,12 +358,12 @@ class PaymentReferenceNumberTests(TestCase):
         agent = RequestTraversalAgent(root)
 
         producer = FileBodyProducer(
-            BytesIO(dumps({u"payment-reference-number": prn})),
+            BytesIO(dumps({u"voucher": prn})),
             cooperator=uncooperator(),
         )
         putting = agent.request(
             b"PUT",
-            b"http://127.0.0.1/payment-reference-number",
+            b"http://127.0.0.1/voucher",
             bodyProducer=producer,
         )
         self.assertThat(
@@ -376,7 +375,7 @@ class PaymentReferenceNumberTests(TestCase):
 
         getting = agent.request(
             b"GET",
-            u"http://127.0.0.1/payment-reference-number/{}".format(
+            u"http://127.0.0.1/voucher/{}".format(
                 quote(
                     prn.encode("utf-8"),
                     safe=b"",
@@ -402,7 +401,7 @@ class PaymentReferenceNumberTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, lists(payment_reference_numbers(), unique=True))
+    @given(tahoe_configs_with_client_config, lists(vouchers(), unique=True))
     def test_list_prns(self, get_config, prns):
         """
         A ``GET`` to the ``PaymentReferenceNumberCollection`` itself returns a
@@ -421,12 +420,12 @@ class PaymentReferenceNumberTests(TestCase):
 
         for prn in prns:
             producer = FileBodyProducer(
-                BytesIO(dumps({u"payment-reference-number": prn})),
+                BytesIO(dumps({u"voucher": prn})),
                 cooperator=uncooperator(),
             )
             putting = agent.request(
                 b"PUT",
-                b"http://127.0.0.1/payment-reference-number",
+                b"http://127.0.0.1/voucher",
                 bodyProducer=producer,
             )
             self.assertThat(
@@ -438,7 +437,7 @@ class PaymentReferenceNumberTests(TestCase):
 
         getting = agent.request(
             b"GET",
-            b"http://127.0.0.1/payment-reference-number",
+            b"http://127.0.0.1/voucher",
         )
 
         self.assertThat(
@@ -450,7 +449,7 @@ class PaymentReferenceNumberTests(TestCase):
                         json_content,
                         succeeded(
                             Equals({
-                                u"payment-reference-numbers": list(
+                                u"vouchers": list(
                                     {u"version": 1, u"number": prn}
                                     for prn
                                     in prns

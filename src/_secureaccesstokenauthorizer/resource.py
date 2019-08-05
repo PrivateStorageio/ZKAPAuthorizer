@@ -68,7 +68,7 @@ def from_configuration(node_config, store=None):
     controller = PaymentController(store)
     root = Resource()
     root.putChild(
-        b"payment-reference-number",
+        b"voucher",
         _PaymentReferenceNumberCollection(
             store,
             controller,
@@ -98,9 +98,9 @@ class _PaymentReferenceNumberCollection(Resource):
             payload = loads(request.content.read())
         except Exception:
             return bad_request().render(request)
-        if payload.keys() != [u"payment-reference-number"]:
+        if payload.keys() != [u"voucher"]:
             return bad_request().render(request)
-        prn = payload[u"payment-reference-number"]
+        prn = payload[u"voucher"]
         if not is_syntactic_prn(prn):
             return bad_request().render(request)
 
@@ -111,7 +111,7 @@ class _PaymentReferenceNumberCollection(Resource):
     def render_GET(self, request):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps({
-            u"payment-reference-numbers": list(
+            u"vouchers": list(
                 prn.marshal()
                 for prn
                 in self._store.list()
