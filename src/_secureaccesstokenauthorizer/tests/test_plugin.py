@@ -20,6 +20,10 @@ from zope.interface import (
     implementer,
 )
 
+from fixtures import (
+    TempDir,
+)
+
 from testtools import (
     TestCase,
 )
@@ -57,11 +61,15 @@ from twisted.plugin import (
 from twisted.test.proto_helpers import (
     StringTransport,
 )
+from twisted.web.resource import (
+    IResource,
+)
 from twisted.plugins.secureaccesstokenauthorizer import (
     storage_server,
 )
 
 from .strategies import (
+    tahoe_configs,
     configurations,
     announcements,
 )
@@ -221,4 +229,23 @@ class ClientPluginTests(TestCase):
         self.assertThat(
             storage_client_deferred,
             succeeded(Provides([IStorageServer])),
+        )
+
+
+class ClientResourceTests(TestCase):
+    """
+    Tests for the plugin's implementation of
+    ``IFoolscapStoragePlugin.get_client_resource``.
+    """
+    @given(tahoe_configs())
+    def test_interface(self, get_config):
+        """
+        ``get_client_resource`` returns an object that provides ``IResource``.
+        """
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+        config = get_config(nodedir, b"tub.port")
+        self.assertThat(
+            storage_server.get_client_resource(config),
+            Provides([IResource]),
         )

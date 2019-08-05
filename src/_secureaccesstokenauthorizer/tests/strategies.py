@@ -16,18 +16,29 @@
 Hypothesis strategies for property testing.
 """
 
+from base64 import (
+    urlsafe_b64encode,
+)
+
 import attr
 
 from hypothesis.strategies import (
     one_of,
     just,
     binary,
+    characters,
+    text,
     integers,
     sets,
     lists,
     tuples,
     dictionaries,
+    fixed_dictionaries,
     builds,
+)
+
+from twisted.web.test.requesthelper import (
+    DummyRequest,
 )
 
 from allmydata.interfaces import (
@@ -37,11 +48,150 @@ from allmydata.interfaces import (
     WriteEnablerSecret,
 )
 
+from allmydata.client import (
+    config_from_string,
+)
+
+
+def _merge_dictionaries(dictionaries):
+    result = {}
+    for d in dictionaries:
+        result.update(d)
+    return result
+
+
+def _tahoe_config_quote(text):
+    return text.replace(u"%", u"%%")
+
+
+def _config_string_from_sections(divided_sections):
+    sections = _merge_dictionaries(divided_sections)
+    return u"".join(list(
+        u"[{name}]\n{items}\n".format(
+            name=name,
+            items=u"\n".join(
+                u"{key} = {value}".format(key=key, value=_tahoe_config_quote(value))
+                for (key, value)
+                in contents.items()
+            )
+        )
+        for (name, contents) in sections.items()
+    ))
+
+
+def tahoe_config_texts(storage_client_plugins):
+    """
+    Build the text of complete Tahoe-LAFS configurations for a node.
+    """
+    return builds(
+        lambda *sections: _config_string_from_sections(
+            sections,
+        ),
+        fixed_dictionaries(
+            {
+                "storageclient.plugins.{}".format(name): configs
+                for (name, configs)
+                in storage_client_plugins.items()
+            },
+        ),
+        fixed_dictionaries(
+            {
+                "node": fixed_dictionaries(
+                    {
+                        "nickname": node_nicknames(),
+                    },
+                ),
+                "client": fixed_dictionaries(
+                    {
+                        "storage.plugins": just(
+                            u",".join(storage_client_plugins.keys()),
+                        ),
+                    },
+                ),
+            },
+        ),
+    )
+
+
+def tahoe_configs(storage_client_plugins=None):
+    """
+    Build complete Tahoe-LAFS configurations for a node.
+    """
+    if storage_client_plugins is None:
+        storage_client_plugins = {}
+    return tahoe_config_texts(
+        storage_client_plugins,
+    ).map(
+        lambda config_text: lambda basedir, portnumfile: config_from_string(
+            basedir,
+            portnumfile,
+            config_text.encode("utf-8"),
+        ),
+    )
+
+def node_nicknames():
+    """
+    Builds Tahoe-LAFS node nicknames.
+    """
+    return text(
+        min_size=0,
+        max_size=16,
+        alphabet=characters(
+            blacklist_categories={
+                # Surrogates
+                u"Cs",
+                # Unnamed and control characters
+                u"Cc",
+            },
+        ),
+    )
+
+
 def configurations():
     """
-    Build configuration values for the plugin.
+    Build configuration values for the server-side plugin.
     """
     return just({})
+
+
+def client_configurations():
+    """
+    Build configuration values for the client-side plugin.
+    """
+    return just({})
+
+
+def payment_reference_numbers():
+    """
+    Build unicode strings in the format of payment reference numbers.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        urlsafe_b64encode,
+    ).map(
+        lambda prn: prn.decode("ascii"),
+    )
+
+
+def request_paths():
+    """
+    Build lists of unicode strings that represent the path component of an
+    HTTP request.
+
+    :see: ``requests``
+    """
+
+
+def requests(paths=request_paths()):
+    """
+    Build objects providing ``twisted.web.iweb.IRequest``.
+    """
+    return builds(
+        DummyRequest,
+        paths,
+    )
 
 
 def storage_indexes():
@@ -227,7 +377,7 @@ def test_and_write_vectors_for_shares():
         # before assignment.
         min_size=1,
         # Just for practical purposes...
-        max_size=8,
+        max_size=4,
     )
 
 

@@ -41,6 +41,10 @@ from ._storage_server import (
     TOKEN_LENGTH,
 )
 
+from .resource import (
+    from_configuration as resource_from_configuration,
+)
+
 @implementer(IAnnounceableStorageServer)
 @attr.s
 class AnnounceableStorageServer(object):
@@ -78,3 +82,7 @@ class SecureAccessTokenAuthorizer(object):
                 lambda: [b"x" * TOKEN_LENGTH],
             )
         )
+
+
+    def get_client_resource(self, node_config):
+        return resource_from_configuration(node_config)
