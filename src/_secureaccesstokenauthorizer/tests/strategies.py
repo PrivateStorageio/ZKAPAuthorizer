@@ -161,9 +161,9 @@ def client_configurations():
     return just({})
 
 
-def payment_reference_numbers():
+def vouchers():
     """
-    Build unicode strings in the format of payment reference numbers.
+    Build unicode strings in the format of vouchers.
     """
     return binary(
         min_size=32,
@@ -171,7 +171,7 @@ def payment_reference_numbers():
     ).map(
         urlsafe_b64encode,
     ).map(
-        lambda prn: prn.decode("ascii"),
+        lambda voucher: voucher.decode("ascii"),
     )
 
 

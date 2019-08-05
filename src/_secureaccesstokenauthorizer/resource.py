@@ -15,7 +15,7 @@
 """
 This module implements views (in the MVC sense) for the web interface for
 the client side of the storage plugin.  This interface allows users to redeem
-payment codes for fresh tokens.
+vouchers for fresh tokens.
 
 In the future it should also allow users to read statistics about token usage.
 """
@@ -38,7 +38,7 @@ from ._base64 import (
 )
 
 from .model import (
-    PaymentReferenceStore,
+    VoucherStore,
 )
 from .controller import (
     PaymentController,
@@ -57,19 +57,19 @@ def from_configuration(node_config, store=None):
         This is also used to read and write files in the private storage area
         of the node's persistent state location.
 
-    :param PaymentReferenceStore store: The store to use.  If ``None`` a
-        sensible one is constructed.
+    :param VoucherStore store: The store to use.  If ``None`` a sensible one
+        is constructed.
 
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
     if store is None:
-        store = PaymentReferenceStore.from_node_config(node_config)
+        store = VoucherStore.from_node_config(node_config)
     controller = PaymentController(store)
     root = Resource()
     root.putChild(
-        b"payment-reference-number",
-        _PaymentReferenceNumberCollection(
+        b"voucher",
+        _VoucherCollection(
             store,
             controller,
         ),
@@ -77,13 +77,12 @@ def from_configuration(node_config, store=None):
     return root
 
 
-class _PaymentReferenceNumberCollection(Resource):
+class _VoucherCollection(Resource):
     """
-    This class implements redemption of payment reference numbers (PRNs).
-    Users **PUT** such numbers to this resource which delegates redemption
-    responsibilities to the redemption controller.  Child resources of this
-    resource can also be retrieved to monitor the status of previously
-    submitted PRNs.
+    This class implements redemption of vouchers.  Users **PUT** such numbers
+    to this resource which delegates redemption responsibilities to the
+    redemption controller.  Child resources of this resource can also be
+    retrieved to monitor the status of previously submitted vouchers.
     """
     def __init__(self, store, controller):
         self._store = store
@@ -93,83 +92,82 @@ class _PaymentReferenceNumberCollection(Resource):
 
     def render_PUT(self, request):
         """
-        Record a PRN and begin attempting to redeem it.
+        Record a voucher and begin attempting to redeem it.
         """
         try:
             payload = loads(request.content.read())
         except Exception:
             return bad_request().render(request)
-        if payload.keys() != [u"payment-reference-number"]:
+        if payload.keys() != [u"voucher"]:
             return bad_request().render(request)
-        prn = payload[u"payment-reference-number"]
-        if not is_syntactic_prn(prn):
+        voucher = payload[u"voucher"]
+        if not is_syntactic_voucher(voucher):
             return bad_request().render(request)
 
-        self._controller.redeem(prn)
+        self._controller.redeem(voucher)
         return b""
 
 
     def render_GET(self, request):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps({
-            u"payment-reference-numbers": list(
-                prn.marshal()
-                for prn
+            u"vouchers": list(
+                voucher.marshal()
+                for voucher
                 in self._store.list()
             ),
         })
 
 
     def getChild(self, segment, request):
-        prn = segment.decode("utf-8")
-        if not is_syntactic_prn(prn):
+        voucher = segment.decode("utf-8")
+        if not is_syntactic_voucher(voucher):
             return bad_request()
         try:
-            payment_reference = self._store.get(prn)
+            voucher = self._store.get(voucher)
         except KeyError:
             return NoResource()
-        return PaymentReferenceView(payment_reference)
+        return VoucherView(voucher)
 
 
-def is_syntactic_prn(prn):
+def is_syntactic_voucher(voucher):
     """
-    :param prn: A candidate object to inspect.
+    :param voucher: A candidate object to inspect.
 
-    :return bool: ``True`` if and only if ``prn`` is a unicode string
-        containing a syntactically valid payment reference number.  This says
-        **nothing** about the validity of the represented PRN itself.  A
-        ``True`` result only means the unicode string can be **interpreted**
-        as a PRN.
+    :return bool: ``True`` if and only if ``voucher`` is a unicode string
+        containing a syntactically valid voucher.  This says **nothing** about
+        the validity of the represented voucher itself.  A ``True`` result
+        only means the unicode string can be **interpreted** as a voucher.
     """
-    if not isinstance(prn, unicode):
+    if not isinstance(voucher, unicode):
         return False
-    if len(prn) != 44:
+    if len(voucher) != 44:
         # TODO.  44 is the length of 32 bytes base64 encoded.  This model
         # information presumably belongs somewhere else.
         return False
     try:
-        urlsafe_b64decode(prn.encode("ascii"))
+        urlsafe_b64decode(voucher.encode("ascii"))
     except Exception:
         return False
     return True
 
 
-class PaymentReferenceView(Resource):
+class VoucherView(Resource):
     """
-    This class implements a view for a ``PaymentReference`` instance.
+    This class implements a view for a ``Voucher`` instance.
     """
-    def __init__(self, reference):
+    def __init__(self, voucher):
         """
-        :param PaymentReference reference: The model object for which to provide a
+        :param Voucher reference: The model object for which to provide a
             view.
         """
-        self._reference = reference
+        self._voucher = voucher
         Resource.__init__(self)
 
 
     def render_GET(self, request):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return self._reference.to_json()
+        return self._voucher.to_json()
 
 
 def bad_request():
