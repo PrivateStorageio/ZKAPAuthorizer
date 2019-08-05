@@ -147,9 +147,9 @@ def not_payment_reference_numbers():
             ),
         ),
         payment_reference_numbers().map(
-            # Turn a valid PRN into a PRN that is invalid only by containing a
-            # character from the base64 alphabet in place of one from the
-            # urlsafe-base64 alphabet.
+            # Turn a valid voucher into a voucher that is invalid only by
+            # containing a character from the base64 alphabet in place of one
+            # from the urlsafe-base64 alphabet.
             lambda prn: u"/" + prn[1:],
         ),
     )
@@ -210,7 +210,7 @@ class PaymentReferenceNumberTests(TestCase):
     """
     Tests relating to ``/payment-reference-number`` as implemented by the
     ``_secureaccesstokenauthorizer.resource`` module and its handling of
-    payment reference numbers (PRNs).
+    payment reference numbers.
     """
     def setUp(self):
         super(PaymentReferenceNumberTests, self).setUp()
@@ -235,9 +235,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, payment_reference_numbers())
     def test_put_prn(self, get_config, prn):
         """
-        When a PRN is sent in a ``PUT`` to ``PaymentReferenceNumberCollection`` it
-        is passed in to the PRN redemption model object for handling and an
-        ``OK`` response is returned.
+        When a voucher is ``PUT`` to ``PaymentReferenceNumberCollection`` it is
+        passed in to the redemption model object for handling and an ``OK``
+        response is returned.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -297,8 +297,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, not_payment_reference_numbers())
     def test_get_invalid_prn(self, get_config, not_prn):
         """
-        When a syntactically invalid PRN is requested with a ``GET`` to a child of
-        ``PaymentReferenceNumberCollection`` the response is **BAD REQUEST**.
+        When a syntactically invalid voucher is requested with a ``GET`` to a
+        child of ``PaymentReferenceNumberCollection`` the response is **BAD
+        REQUEST**.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -325,9 +326,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, payment_reference_numbers())
     def test_get_unknown_prn(self, get_config, prn):
         """
-        When a PRN is requested with a ``GET`` to a child of
+        When a voucher is requested with a ``GET`` to a child of
         ``PaymentReferenceNumberCollection`` the response is **NOT FOUND** if
-        the PRN hasn't previously been submitted with a ``PUT``.
+        the voucher hasn't previously been submitted with a ``PUT``.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -348,9 +349,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, payment_reference_numbers())
     def test_get_known_prn(self, get_config, prn):
         """
-        When a PRN is first ``PUT`` and then later a ``GET`` is issued for the
-        same PRN then the response code is **OK** and details about the PRN
-        are included in a json-encoded response body.
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details about the
+        voucher are included in a json-encoded response body.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -416,7 +417,7 @@ class PaymentReferenceNumberTests(TestCase):
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
 
-        note("{} PRNs".format(len(prns)))
+        note("{} vouchers".format(len(prns)))
 
         for prn in prns:
             producer = FileBodyProducer(

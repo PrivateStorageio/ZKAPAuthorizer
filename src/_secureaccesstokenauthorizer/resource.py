@@ -79,11 +79,11 @@ def from_configuration(node_config, store=None):
 
 class _PaymentReferenceNumberCollection(Resource):
     """
-    This class implements redemption of payment reference numbers (PRNs).
-    Users **PUT** such numbers to this resource which delegates redemption
+    This class implements redemption of payment reference numbers.  Users
+    **PUT** such numbers to this resource which delegates redemption
     responsibilities to the redemption controller.  Child resources of this
     resource can also be retrieved to monitor the status of previously
-    submitted PRNs.
+    submitted vouchers.
     """
     def __init__(self, store, controller):
         self._store = store
@@ -93,7 +93,7 @@ class _PaymentReferenceNumberCollection(Resource):
 
     def render_PUT(self, request):
         """
-        Record a PRN and begin attempting to redeem it.
+        Record a voucher and begin attempting to redeem it.
         """
         try:
             payload = loads(request.content.read())
@@ -137,9 +137,9 @@ def is_syntactic_prn(prn):
 
     :return bool: ``True`` if and only if ``prn`` is a unicode string
         containing a syntactically valid payment reference number.  This says
-        **nothing** about the validity of the represented PRN itself.  A
+        **nothing** about the validity of the represented voucher itself.  A
         ``True`` result only means the unicode string can be **interpreted**
-        as a PRN.
+        as a voucher.
     """
     if not isinstance(prn, unicode):
         return False
