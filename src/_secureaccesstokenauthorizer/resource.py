@@ -92,6 +92,9 @@ class _PaymentReferenceNumberCollection(Resource):
 
 
     def render_PUT(self, request):
+        """
+        Record a PRN and begin attempting to redeem it.
+        """
         try:
             payload = loads(request.content.read())
         except Exception:
@@ -99,15 +102,7 @@ class _PaymentReferenceNumberCollection(Resource):
         if payload.keys() != [u"payment-reference-number"]:
             return bad_request().render(request)
         prn = payload[u"payment-reference-number"]
-        if not isinstance(prn, unicode):
-            return bad_request().render(request)
-        if len(prn) != 44:
-            # TODO.  44 is the length of 32 bytes base64 encoded.  This model
-            # information presumably belongs somewhere else.
-            return bad_request().render(request)
-        try:
-            urlsafe_b64decode(prn.encode("ascii"))
-        except Exception:
+        if not is_syntactic_prn(prn):
             return bad_request().render(request)
 
         self._controller.redeem(prn)
@@ -126,10 +121,8 @@ class _PaymentReferenceNumberCollection(Resource):
 
 
     def getChild(self, segment, request):
-        prn = segment
-        try:
-            urlsafe_b64decode(prn)
-        except Exception:
+        prn = segment.decode("utf-8")
+        if not is_syntactic_prn(prn):
             return bad_request()
         try:
             payment_reference = self._store.get(prn)
@@ -138,9 +131,38 @@ class _PaymentReferenceNumberCollection(Resource):
         return PaymentReferenceView(payment_reference)
 
 
+def is_syntactic_prn(prn):
+    """
+    :param prn: A candidate object to inspect.
+
+    :return bool: ``True`` if and only if ``prn`` is a unicode string
+        containing a syntactically valid payment reference number.  This says
+        **nothing** about the validity of the represented PRN itself.  A
+        ``True`` result only means the unicode string can be **interpreted**
+        as a PRN.
+    """
+    if not isinstance(prn, unicode):
+        return False
+    if len(prn) != 44:
+        # TODO.  44 is the length of 32 bytes base64 encoded.  This model
+        # information presumably belongs somewhere else.
+        return False
+    try:
+        urlsafe_b64decode(prn.encode("ascii"))
+    except Exception:
+        return False
+    return True
+
 
 class PaymentReferenceView(Resource):
+    """
+    This class implements a view for a ``PaymentReference`` instance.
+    """
     def __init__(self, reference):
+        """
+        :param PaymentReference reference: The model object for which to provide a
+            view.
+        """
         self._reference = reference
         Resource.__init__(self)
 
@@ -151,6 +173,10 @@ class PaymentReferenceView(Resource):
 
 
 def bad_request():
+    """
+    :return IResource: A resource which can be rendered to produce a **BAD
+        REQUEST** response.
+    """
     return ErrorPage(
         BAD_REQUEST, b"Bad Request", b"Bad Request",
     )

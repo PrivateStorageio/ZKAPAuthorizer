@@ -30,6 +30,9 @@ from json import (
 from io import (
     BytesIO,
 )
+from urllib import (
+    quote,
+)
 
 from testtools import (
     TestCase,
@@ -122,6 +125,11 @@ tahoe_configs_with_client_config = tahoe_configs(storage_client_plugins={
 })
 
 def is_not_json(bytestring):
+    """
+    :param bytes bytestring: A candidate byte string to inspect.
+
+    :return bool: ``False`` if and only if ``bytestring`` is JSON encoded.
+    """
     try:
         loads(bytestring)
     except:
@@ -129,16 +137,29 @@ def is_not_json(bytestring):
     return False
 
 def not_payment_reference_numbers():
-    return text().filter(
-        lambda t: (
-            # exclude / because it changes url dispatch and makes tests fail
-            # differently.
-            u"/" not in t and not is_urlsafe_base64(t)
+    """
+    Builds unicode strings which are not legal payment reference numbers.
+    """
+    return one_of(
+        text().filter(
+            lambda t: (
+                not is_urlsafe_base64(t)
+            ),
+        ),
+        payment_reference_numbers().map(
+            # Turn a valid PRN into a PRN that is invalid only by containing a
+            # character from the base64 alphabet in place of one from the
+            # urlsafe-base64 alphabet.
+            lambda prn: u"/" + prn[1:],
         ),
     )
 
-
 def is_urlsafe_base64(text):
+    """
+    :param unicode text: A candidate unicode string to inspect.
+
+    :return bool: ``True`` if and only if ``text`` is urlsafe-base64 encoded
+    """
     try:
         urlsafe_b64decode(text)
     except:
@@ -172,6 +193,13 @@ def invalid_bodies():
 
 
 def root_from_config(config):
+    """
+    Create a client root resource from a Tahoe-LAFS configuration.
+
+    :param _Config config: The Tahoe-LAFS configuration.
+
+    :return IResource: The root client resource.
+    """
     return from_configuration(
         config,
         PaymentReferenceStore.from_node_config(
@@ -269,20 +297,25 @@ class PaymentReferenceNumberTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, payment_reference_numbers())
-    def test_get_invalid_prn(self, get_config, prn):
+    @given(tahoe_configs_with_client_config, not_payment_reference_numbers())
+    def test_get_invalid_prn(self, get_config, not_prn):
         """
         When a syntactically invalid PRN is requested with a ``GET`` to a child of
         ``PaymentReferenceNumberCollection`` the response is **BAD REQUEST**.
         """
         tempdir = self.useFixture(TempDir())
-        not_prn = prn[1:]
         config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
+        url = u"http://127.0.0.1/payment-reference-number/{}".format(
+            quote(
+                not_prn.encode("utf-8"),
+                safe=b"",
+            ).decode("utf-8"),
+        ).encode("ascii")
         requesting = agent.request(
             b"GET",
-            u"http://127.0.0.1/payment-reference-number/{}".format(not_prn).encode("utf-8"),
+            url,
         )
         self.assertThat(
             requesting,
@@ -345,7 +378,12 @@ class PaymentReferenceNumberTests(TestCase):
 
         getting = agent.request(
             b"GET",
-            u"http://127.0.0.1/payment-reference-number/{}".format(prn).encode("ascii"),
+            u"http://127.0.0.1/payment-reference-number/{}".format(
+                quote(
+                    prn.encode("utf-8"),
+                    safe=b"",
+                ).decode("utf-8"),
+            ).encode("ascii"),
         )
 
         self.assertThat(
