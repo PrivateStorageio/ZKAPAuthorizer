@@ -43,12 +43,13 @@ class IY(Interface):
     pass
 
 
-@implementer(IX)
+@implementer(IX, IY)
 class X(object):
     pass
 
 
-class Z(object):
+@implementer(IY)
+class Y(object):
     pass
 
 
@@ -58,7 +59,7 @@ class ProvidesTests(TestCase):
     """
     def test_match(self):
         """
-        ``Provides.match`` returns ``None`` when the given object provides any of
+        ``Provides.match`` returns ``None`` when the given object provides all of
         the configured interfaces.
         """
         self.assertThat(
@@ -72,7 +73,7 @@ class ProvidesTests(TestCase):
         none of the configured interfaces.
         """
         self.assertThat(
-            Provides([IX, IY]).match(Z()),
+            Provides([IX, IY]).match(Y()),
             Not(Is(None)),
         )
 

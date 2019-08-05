@@ -28,7 +28,7 @@ from testtools.matchers import (
 @attr.s
 class Provides(object):
     """
-    Match objects that provide one or more Zope Interface interfaces.
+    Match objects that provide all of a list of Zope Interface interfaces.
     """
     interfaces = attr.ib()
 
