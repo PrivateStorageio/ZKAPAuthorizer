@@ -88,7 +88,7 @@ class VoucherStoreTests(TestCase):
 
 
     @given(tahoe_configs(), vouchers())
-    def test_get_missing(self, get_config, prn):
+    def test_get_missing(self, get_config, voucher):
         """
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
@@ -100,12 +100,12 @@ class VoucherStoreTests(TestCase):
             memory_connect,
         )
         self.assertThat(
-            lambda: store.get(prn),
+            lambda: store.get(voucher),
             raises(KeyError),
         )
 
     @given(tahoe_configs(), vouchers())
-    def test_add(self, get_config, prn):
+    def test_add(self, get_config, voucher):
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
@@ -116,17 +116,17 @@ class VoucherStoreTests(TestCase):
             config,
             memory_connect,
         )
-        store.add(prn)
-        voucher = store.get(prn)
+        store.add(voucher)
+        voucher = store.get(voucher)
         self.assertThat(
             voucher,
             MatchesStructure(
-                number=Equals(prn),
+                number=Equals(voucher),
             ),
         )
 
     @given(tahoe_configs(), vouchers())
-    def test_add_idempotent(self, get_config, prn):
+    def test_add_idempotent(self, get_config, voucher):
         """
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
@@ -137,19 +137,19 @@ class VoucherStoreTests(TestCase):
             config,
             memory_connect,
         )
-        store.add(prn)
-        store.add(prn)
-        voucher = store.get(prn)
+        store.add(voucher)
+        store.add(voucher)
+        voucher = store.get(voucher)
         self.assertThat(
             voucher,
             MatchesStructure(
-                number=Equals(prn),
+                number=Equals(voucher),
             ),
         )
 
 
     @given(tahoe_configs(), lists(vouchers()))
-    def test_list(self, get_config, prns):
+    def test_list(self, get_config, vouchers):
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
@@ -162,14 +162,14 @@ class VoucherStoreTests(TestCase):
             memory_connect,
         )
 
-        for prn in prns:
-            store.add(prn)
+        for voucher in vouchers:
+            store.add(voucher)
 
         self.assertThat(
             store.list(),
             AfterPreprocessing(
                 lambda refs: set(ref.number for ref in refs),
-                Equals(set(prns)),
+                Equals(set(vouchers)),
             ),
         )
 
@@ -243,11 +243,11 @@ class VoucherTests(TestCase):
     Tests for ``Voucher``.
     """
     @given(vouchers())
-    def test_json_roundtrip(self, prn):
+    def test_json_roundtrip(self, voucher):
         """
         ``Voucher.to_json . Voucher.from_json → id``
         """
-        ref = Voucher(prn)
+        ref = Voucher(voucher)
         self.assertThat(
             Voucher.from_json(ref.to_json()),
             Equals(ref),

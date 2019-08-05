@@ -23,5 +23,5 @@ import attr
 class PaymentController(object):
     store = attr.ib()
 
-    def redeem(self, prn):
-        self.store.add(prn)
+    def redeem(self, voucher):
+        self.store.add(voucher)

@@ -150,7 +150,7 @@ def not_vouchers():
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
             # from the urlsafe-base64 alphabet.
-            lambda prn: u"/" + prn[1:],
+            lambda voucher: u"/" + voucher[1:],
         ),
     )
 
@@ -232,7 +232,7 @@ class VoucherTests(TestCase):
 
 
     @given(tahoe_configs_with_client_config, vouchers())
-    def test_put_prn(self, get_config, prn):
+    def test_put_voucher(self, get_config, voucher):
         """
         When a voucher is ``PUT`` to ``VoucherCollection`` it is passed in to the
         redemption model object for handling and an ``OK`` response is
@@ -243,7 +243,7 @@ class VoucherTests(TestCase):
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
-            BytesIO(dumps({u"voucher": prn})),
+            BytesIO(dumps({u"voucher": voucher})),
             cooperator=uncooperator(),
         )
         requesting = agent.request(
@@ -294,7 +294,7 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs_with_client_config, not_vouchers())
-    def test_get_invalid_prn(self, get_config, not_prn):
+    def test_get_invalid_voucher(self, get_config, not_voucher):
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
         child of ``VoucherCollection`` the response is **BAD REQUEST**.
@@ -305,7 +305,7 @@ class VoucherTests(TestCase):
         agent = RequestTraversalAgent(root)
         url = u"http://127.0.0.1/voucher/{}".format(
             quote(
-                not_prn.encode("utf-8"),
+                not_voucher.encode("utf-8"),
                 safe=b"",
             ).decode("utf-8"),
         ).encode("ascii")
@@ -322,7 +322,7 @@ class VoucherTests(TestCase):
 
 
     @given(tahoe_configs_with_client_config, vouchers())
-    def test_get_unknown_prn(self, get_config, prn):
+    def test_get_unknown_voucher(self, get_config, voucher):
         """
         When a voucher is requested with a ``GET`` to a child of
         ``VoucherCollection`` the response is **NOT FOUND** if the voucher
@@ -334,7 +334,7 @@ class VoucherTests(TestCase):
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
-            u"http://127.0.0.1/voucher/{}".format(prn).encode("ascii"),
+            u"http://127.0.0.1/voucher/{}".format(voucher).encode("ascii"),
         )
         self.assertThat(
             requesting,
@@ -345,7 +345,7 @@ class VoucherTests(TestCase):
 
 
     @given(tahoe_configs_with_client_config, vouchers())
-    def test_get_known_prn(self, get_config, prn):
+    def test_get_known_voucher(self, get_config, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details about the
@@ -357,7 +357,7 @@ class VoucherTests(TestCase):
         agent = RequestTraversalAgent(root)
 
         producer = FileBodyProducer(
-            BytesIO(dumps({u"voucher": prn})),
+            BytesIO(dumps({u"voucher": voucher})),
             cooperator=uncooperator(),
         )
         putting = agent.request(
@@ -376,7 +376,7 @@ class VoucherTests(TestCase):
             b"GET",
             u"http://127.0.0.1/voucher/{}".format(
                 quote(
-                    prn.encode("utf-8"),
+                    voucher.encode("utf-8"),
                     safe=b"",
                 ).decode("utf-8"),
             ).encode("ascii"),
@@ -392,7 +392,7 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"version": 1,
-                                u"number": prn,
+                                u"number": voucher,
                             }),
                         ),
                     ),
@@ -401,7 +401,7 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs_with_client_config, lists(vouchers(), unique=True))
-    def test_list_prns(self, get_config, prns):
+    def test_list_vouchers(self, get_config, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
@@ -415,11 +415,11 @@ class VoucherTests(TestCase):
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
 
-        note("{} vouchers".format(len(prns)))
+        note("{} vouchers".format(len(vouchers)))
 
-        for prn in prns:
+        for voucher in vouchers:
             producer = FileBodyProducer(
-                BytesIO(dumps({u"voucher": prn})),
+                BytesIO(dumps({u"voucher": voucher})),
                 cooperator=uncooperator(),
             )
             putting = agent.request(
@@ -449,9 +449,9 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"vouchers": list(
-                                    {u"version": 1, u"number": prn}
-                                    for prn
-                                    in prns
+                                    {u"version": 1, u"number": voucher}
+                                    for voucher
+                                    in vouchers
                                 ),
                             }),
                         ),

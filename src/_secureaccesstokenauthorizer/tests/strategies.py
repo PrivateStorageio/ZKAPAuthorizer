@@ -171,7 +171,7 @@ def vouchers():
     ).map(
         urlsafe_b64encode,
     ).map(
-        lambda prn: prn.decode("ascii"),
+        lambda voucher: voucher.decode("ascii"),
     )
 
 

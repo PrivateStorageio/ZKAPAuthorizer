@@ -100,11 +100,11 @@ class _VoucherCollection(Resource):
             return bad_request().render(request)
         if payload.keys() != [u"voucher"]:
             return bad_request().render(request)
-        prn = payload[u"voucher"]
-        if not is_syntactic_prn(prn):
+        voucher = payload[u"voucher"]
+        if not is_syntactic_voucher(voucher):
             return bad_request().render(request)
 
-        self._controller.redeem(prn)
+        self._controller.redeem(voucher)
         return b""
 
 
@@ -112,42 +112,41 @@ class _VoucherCollection(Resource):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
         return dumps({
             u"vouchers": list(
-                prn.marshal()
-                for prn
+                voucher.marshal()
+                for voucher
                 in self._store.list()
             ),
         })
 
 
     def getChild(self, segment, request):
-        prn = segment.decode("utf-8")
-        if not is_syntactic_prn(prn):
+        voucher = segment.decode("utf-8")
+        if not is_syntactic_voucher(voucher):
             return bad_request()
         try:
-            voucher = self._store.get(prn)
+            voucher = self._store.get(voucher)
         except KeyError:
             return NoResource()
         return VoucherView(voucher)
 
 
-def is_syntactic_prn(prn):
+def is_syntactic_voucher(voucher):
     """
-    :param prn: A candidate object to inspect.
+    :param voucher: A candidate object to inspect.
 
-    :return bool: ``True`` if and only if ``prn`` is a unicode string
-        containing a syntactically valid voucher.  This says
-        **nothing** about the validity of the represented voucher itself.  A
-        ``True`` result only means the unicode string can be **interpreted**
-        as a voucher.
+    :return bool: ``True`` if and only if ``voucher`` is a unicode string
+        containing a syntactically valid voucher.  This says **nothing** about
+        the validity of the represented voucher itself.  A ``True`` result
+        only means the unicode string can be **interpreted** as a voucher.
     """
-    if not isinstance(prn, unicode):
+    if not isinstance(voucher, unicode):
         return False
-    if len(prn) != 44:
+    if len(voucher) != 44:
         # TODO.  44 is the length of 32 bytes base64 encoded.  This model
         # information presumably belongs somewhere else.
         return False
     try:
-        urlsafe_b64decode(prn.encode("ascii"))
+        urlsafe_b64decode(voucher.encode("ascii"))
     except Exception:
         return False
     return True

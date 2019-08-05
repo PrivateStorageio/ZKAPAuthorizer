@@ -160,7 +160,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def get(self, cursor, prn):
+    def get(self, cursor, voucher):
         cursor.execute(
             """
             SELECT
@@ -170,20 +170,20 @@ class VoucherStore(object):
             WHERE
                 [number] = ?
             """,
-            (prn,),
+            (voucher,),
         )
         refs = cursor.fetchall()
         if len(refs) == 0:
-            raise KeyError(prn)
+            raise KeyError(voucher)
         return Voucher(refs[0][0])
 
     @with_cursor
-    def add(self, cursor, prn):
+    def add(self, cursor, voucher):
         cursor.execute(
             """
             INSERT OR IGNORE INTO [vouchers] VALUES (?)
             """,
-            (prn,)
+            (voucher,)
         )
 
     @with_cursor
