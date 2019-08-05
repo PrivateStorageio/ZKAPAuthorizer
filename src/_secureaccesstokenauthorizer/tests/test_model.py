@@ -117,9 +117,8 @@ class VoucherStoreTests(TestCase):
             memory_connect,
         )
         store.add(voucher)
-        voucher = store.get(voucher)
         self.assertThat(
-            voucher,
+            store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
             ),
@@ -139,9 +138,8 @@ class VoucherStoreTests(TestCase):
         )
         store.add(voucher)
         store.add(voucher)
-        voucher = store.get(voucher)
         self.assertThat(
-            voucher,
+            store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
             ),
