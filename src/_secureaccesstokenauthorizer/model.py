@@ -53,7 +53,7 @@ CONFIG_DB_NAME = u"privatestorageio-satauthz-v1.sqlite3"
 
 def open_and_initialize(path, required_schema_version, connect=None):
     """
-    Open a SQLite3 database for use as a payment reference store.
+    Open a SQLite3 database for use as a voucher store.
 
     Create the database and populate it with a schema, if it does not already
     exist.
@@ -110,7 +110,7 @@ def open_and_initialize(path, required_schema_version, connect=None):
 
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS [payment-references] (
+            CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
 
                 PRIMARY KEY([number])
@@ -136,12 +136,12 @@ def memory_connect(path, *a, **kw):
 
 
 @attr.s(frozen=True)
-class PaymentReferenceStore(object):
+class VoucherStore(object):
     """
-    This class implements persistence for payment references.
+    This class implements persistence for vouchers.
 
     :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
-        the node that owns the persisted payment preferences.
+        the node that owns the persisted vouchers.
     """
     database_path = attr.ib(type=FilePath)
     _connection = attr.ib()
@@ -166,7 +166,7 @@ class PaymentReferenceStore(object):
             SELECT
                 ([number])
             FROM
-                [payment-references]
+                [vouchers]
             WHERE
                 [number] = ?
             """,
@@ -175,13 +175,13 @@ class PaymentReferenceStore(object):
         refs = cursor.fetchall()
         if len(refs) == 0:
             raise KeyError(prn)
-        return PaymentReference(refs[0][0])
+        return Voucher(refs[0][0])
 
     @with_cursor
     def add(self, cursor, prn):
         cursor.execute(
             """
-            INSERT OR IGNORE INTO [payment-references] VALUES (?)
+            INSERT OR IGNORE INTO [vouchers] VALUES (?)
             """,
             (prn,)
         )
@@ -190,20 +190,20 @@ class PaymentReferenceStore(object):
     def list(self, cursor):
         cursor.execute(
             """
-            SELECT ([number]) FROM [payment-references]
+            SELECT ([number]) FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
 
         return list(
-            PaymentReference(number)
+            Voucher(number)
             for (number,)
             in refs
         )
 
 
 @attr.s
-class PaymentReference(object):
+class Voucher(object):
     number = attr.ib()
 
     @classmethod

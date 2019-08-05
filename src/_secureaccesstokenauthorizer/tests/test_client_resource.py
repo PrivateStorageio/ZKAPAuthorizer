@@ -92,7 +92,7 @@ from treq.testing import (
 )
 
 from ..model import (
-    PaymentReferenceStore,
+    VoucherStore,
     memory_connect,
 )
 from ..resource import (
@@ -198,7 +198,7 @@ def root_from_config(config):
     """
     return from_configuration(
         config,
-        PaymentReferenceStore.from_node_config(
+        VoucherStore.from_node_config(
             config,
             memory_connect,
         ),

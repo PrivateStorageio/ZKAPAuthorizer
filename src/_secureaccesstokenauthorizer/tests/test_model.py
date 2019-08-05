@@ -55,8 +55,8 @@ from twisted.python.filepath import (
 from ..model import (
     SchemaError,
     StoreOpenError,
-    PaymentReferenceStore,
-    PaymentReference,
+    VoucherStore,
+    Voucher,
     open_and_initialize,
     memory_connect,
 )
@@ -67,9 +67,9 @@ from .strategies import (
 )
 
 
-class PaymentReferenceStoreTests(TestCase):
+class VoucherStoreTests(TestCase):
     """
-    Tests for ``PaymentReferenceStore``.
+    Tests for ``VoucherStore``.
     """
     def test_create_mismatched_schema(self):
         """
@@ -90,12 +90,12 @@ class PaymentReferenceStoreTests(TestCase):
     @given(tahoe_configs(), vouchers())
     def test_get_missing(self, get_config, prn):
         """
-        ``PaymentReferenceStore.get`` raises ``KeyError`` when called with a
+        ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(
+        store = VoucherStore.from_node_config(
             config,
             memory_connect,
         )
@@ -107,20 +107,19 @@ class PaymentReferenceStoreTests(TestCase):
     @given(tahoe_configs(), vouchers())
     def test_add(self, get_config, prn):
         """
-        ``PaymentReferenceStore.get`` returns a ``PaymentReference`` representing
-        a payment reference previously added to the store with
-        ``PaymentReferenceStore.add``.
+        ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
+        previously added to the store with ``VoucherStore.add``.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(
+        store = VoucherStore.from_node_config(
             config,
             memory_connect,
         )
         store.add(prn)
-        payment_reference = store.get(prn)
+        voucher = store.get(prn)
         self.assertThat(
-            payment_reference,
+            voucher,
             MatchesStructure(
                 number=Equals(prn),
             ),
@@ -129,20 +128,20 @@ class PaymentReferenceStoreTests(TestCase):
     @given(tahoe_configs(), vouchers())
     def test_add_idempotent(self, get_config, prn):
         """
-        More than one call to ``PaymentReferenceStore.add`` with the same argument
-        results in the same state as a single call.
+        More than one call to ``VoucherStore.add`` with the same argument results
+        in the same state as a single call.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = PaymentReferenceStore.from_node_config(
+        store = VoucherStore.from_node_config(
             config,
             memory_connect,
         )
         store.add(prn)
         store.add(prn)
-        payment_reference = store.get(prn)
+        voucher = store.get(prn)
         self.assertThat(
-            payment_reference,
+            voucher,
             MatchesStructure(
                 number=Equals(prn),
             ),
@@ -152,13 +151,13 @@ class PaymentReferenceStoreTests(TestCase):
     @given(tahoe_configs(), lists(vouchers()))
     def test_list(self, get_config, prns):
         """
-        ``PaymentReferenceStore.list`` returns a ``list`` containing a
-        ``PaymentReference`` object for each voucher previously added.
+        ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
+        for each voucher previously added.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
         config = get_config(nodedir, b"tub.port")
-        store = PaymentReferenceStore.from_node_config(
+        store = VoucherStore.from_node_config(
             config,
             memory_connect,
         )
@@ -179,8 +178,7 @@ class PaymentReferenceStoreTests(TestCase):
     def test_uncreateable_store_directory(self, get_config):
         """
         If the underlying directory in the node configuration cannot be created
-        then ``PaymentReferenceStore.from_node_config`` raises
-        ``StoreOpenError``.
+        then ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
@@ -192,7 +190,7 @@ class PaymentReferenceStoreTests(TestCase):
         config = get_config(nodedir, b"tub.port")
 
         self.assertThat(
-            lambda: PaymentReferenceStore.from_node_config(
+            lambda: VoucherStore.from_node_config(
                 config,
                 memory_connect,
             ),
@@ -219,7 +217,7 @@ class PaymentReferenceStoreTests(TestCase):
     def test_unopenable_store(self, get_config):
         """
         If the underlying database file cannot be opened then
-        ``PaymentReferenceStore.from_node_config`` raises ``StoreOpenError``.
+        ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
@@ -227,30 +225,30 @@ class PaymentReferenceStoreTests(TestCase):
         config = get_config(nodedir, b"tub.port")
 
         # Create the underlying database file.
-        store = PaymentReferenceStore.from_node_config(config)
+        store = VoucherStore.from_node_config(config)
 
         # Prevent further access to it.
         store.database_path.chmod(0o000)
 
         self.assertThat(
-            lambda: PaymentReferenceStore.from_node_config(
+            lambda: VoucherStore.from_node_config(
                 config,
             ),
             raises(StoreOpenError),
         )
 
 
-class PaymentReferenceTests(TestCase):
+class VoucherTests(TestCase):
     """
-    Tests for ``PaymentReference``.
+    Tests for ``Voucher``.
     """
     @given(vouchers())
     def test_json_roundtrip(self, prn):
         """
-        ``PaymentReference.to_json . PaymentReference.from_json → id``
+        ``Voucher.to_json . Voucher.from_json → id``
         """
-        ref = PaymentReference(prn)
+        ref = Voucher(prn)
         self.assertThat(
-            PaymentReference.from_json(ref.to_json()),
+            Voucher.from_json(ref.to_json()),
             Equals(ref),
         )

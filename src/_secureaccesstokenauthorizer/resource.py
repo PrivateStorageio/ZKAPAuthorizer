@@ -15,7 +15,7 @@
 """
 This module implements views (in the MVC sense) for the web interface for
 the client side of the storage plugin.  This interface allows users to redeem
-payment codes for fresh tokens.
+vouchers for fresh tokens.
 
 In the future it should also allow users to read statistics about token usage.
 """
@@ -38,7 +38,7 @@ from ._base64 import (
 )
 
 from .model import (
-    PaymentReferenceStore,
+    VoucherStore,
 )
 from .controller import (
     PaymentController,
@@ -57,14 +57,14 @@ def from_configuration(node_config, store=None):
         This is also used to read and write files in the private storage area
         of the node's persistent state location.
 
-    :param PaymentReferenceStore store: The store to use.  If ``None`` a
-        sensible one is constructed.
+    :param VoucherStore store: The store to use.  If ``None`` a sensible one
+        is constructed.
 
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
     if store is None:
-        store = PaymentReferenceStore.from_node_config(node_config)
+        store = VoucherStore.from_node_config(node_config)
     controller = PaymentController(store)
     root = Resource()
     root.putChild(
@@ -124,10 +124,10 @@ class _VoucherCollection(Resource):
         if not is_syntactic_prn(prn):
             return bad_request()
         try:
-            payment_reference = self._store.get(prn)
+            voucher = self._store.get(prn)
         except KeyError:
             return NoResource()
-        return PaymentReferenceView(payment_reference)
+        return VoucherView(voucher)
 
 
 def is_syntactic_prn(prn):
@@ -153,22 +153,22 @@ def is_syntactic_prn(prn):
     return True
 
 
-class PaymentReferenceView(Resource):
+class VoucherView(Resource):
     """
-    This class implements a view for a ``PaymentReference`` instance.
+    This class implements a view for a ``Voucher`` instance.
     """
-    def __init__(self, reference):
+    def __init__(self, voucher):
         """
-        :param PaymentReference reference: The model object for which to provide a
+        :param Voucher reference: The model object for which to provide a
             view.
         """
-        self._reference = reference
+        self._voucher = voucher
         Resource.__init__(self)
 
 
     def render_GET(self, request):
         request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
-        return self._reference.to_json()
+        return self._voucher.to_json()
 
 
 def bad_request():
