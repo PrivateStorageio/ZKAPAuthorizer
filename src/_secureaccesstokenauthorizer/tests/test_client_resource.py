@@ -224,7 +224,7 @@ class PaymentReferenceNumberTests(TestCase):
         resource returned by ``from_configuration``.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         self.assertThat(
             getChildForRequest(root, request),
@@ -240,7 +240,7 @@ class PaymentReferenceNumberTests(TestCase):
         ``OK`` response is returned.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
@@ -271,7 +271,7 @@ class PaymentReferenceNumberTests(TestCase):
         then the response is *BAD REQUEST*.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
@@ -301,7 +301,7 @@ class PaymentReferenceNumberTests(TestCase):
         ``PaymentReferenceNumberCollection`` the response is **BAD REQUEST**.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         url = u"http://127.0.0.1/payment-reference-number/{}".format(
@@ -330,7 +330,7 @@ class PaymentReferenceNumberTests(TestCase):
         the PRN hasn't previously been submitted with a ``PUT``.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
@@ -353,7 +353,7 @@ class PaymentReferenceNumberTests(TestCase):
         are included in a json-encoded response body.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
 
@@ -412,7 +412,7 @@ class PaymentReferenceNumberTests(TestCase):
         # directory for every Hypothesis iteration because this test leaves
         # state behind that invalidates future iterations.
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe.ini"), b"tub.port")
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
         agent = RequestTraversalAgent(root)
 
