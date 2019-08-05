@@ -26,6 +26,7 @@ from json import (
 )
 
 from sqlite3 import (
+    OperationalError,
     connect as _connect,
 )
 
@@ -36,12 +37,10 @@ from twisted.python.filepath import (
 )
 
 
-class StoreAddError(Exception):
-    def __init__(self, reason):
-        self.reason = reason
-
-
-class StoreDirectoryError(Exception):
+class StoreOpenError(Exception):
+    """
+    There was a problem opening the underlying data store.
+    """
     def __init__(self, reason):
         self.reason = reason
 
@@ -75,12 +74,17 @@ def open_and_initialize(path, required_schema_version, connect=None):
     try:
         path.parent().makedirs(ignoreExistingDirectory=True)
     except OSError as e:
-        raise StoreDirectoryError(e)
+        raise StoreOpenError(e)
 
-    conn = connect(
-        path.asBytesMode().path,
-        isolation_level="IMMEDIATE",
-    )
+    dbfile = path.asBytesMode().path
+    try:
+        conn = connect(
+            dbfile,
+            isolation_level="IMMEDIATE",
+        )
+    except OperationalError as e:
+        raise StoreOpenError(e)
+
     with conn:
         cursor = conn.cursor()
         cursor.execute(

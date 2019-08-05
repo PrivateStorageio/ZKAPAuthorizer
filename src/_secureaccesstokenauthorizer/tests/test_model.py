@@ -1,3 +1,4 @@
+# coding: utf-8
 # Copyright 2019 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,8 +54,9 @@ from twisted.python.filepath import (
 
 from ..model import (
     SchemaError,
-    StoreDirectoryError,
+    StoreOpenError,
     PaymentReferenceStore,
+    PaymentReference,
     open_and_initialize,
     memory_connect,
 )
@@ -174,12 +176,12 @@ class PaymentReferenceStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), payment_reference_numbers())
-    def test_uncreateable_store_directory(self, get_config, prn):
+    @given(tahoe_configs())
+    def test_uncreateable_store_directory(self, get_config):
         """
         If the underlying directory in the node configuration cannot be created
         then ``PaymentReferenceStore.from_node_config`` raises
-        ``StoreDirectoryError``.
+        ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
@@ -199,7 +201,7 @@ class PaymentReferenceStoreTests(TestCase):
                 AfterPreprocessing(
                     lambda (type, exc, tb): exc,
                     MatchesAll(
-                        IsInstance(StoreDirectoryError),
+                        IsInstance(StoreOpenError),
                         MatchesStructure(
                             reason=MatchesAll(
                                 IsInstance(OSError),
@@ -211,4 +213,45 @@ class PaymentReferenceStoreTests(TestCase):
                     ),
                 ),
             ),
+        )
+
+
+    @given(tahoe_configs())
+    def test_unopenable_store(self, get_config):
+        """
+        If the underlying database file cannot be opened then
+        ``PaymentReferenceStore.from_node_config`` raises ``StoreOpenError``.
+        """
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+
+        config = get_config(nodedir, b"tub.port")
+
+        # Create the underlying database file.
+        store = PaymentReferenceStore.from_node_config(config)
+
+        # Prevent further access to it.
+        store.database_path.chmod(0o000)
+
+        self.assertThat(
+            lambda: PaymentReferenceStore.from_node_config(
+                config,
+            ),
+            raises(StoreOpenError),
+        )
+
+
+class PaymentReferenceTests(TestCase):
+    """
+    Tests for ``PaymentReference``.
+    """
+    @given(payment_reference_numbers())
+    def test_json_roundtrip(self, prn):
+        """
+        ``PaymentReference.to_json . PaymentReference.from_json → id``
+        """
+        ref = PaymentReference(prn)
+        self.assertThat(
+            PaymentReference.from_json(ref.to_json()),
+            Equals(ref),
         )
