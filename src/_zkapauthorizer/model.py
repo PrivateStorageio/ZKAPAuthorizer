@@ -49,7 +49,7 @@ class SchemaError(TypeError):
     pass
 
 
-CONFIG_DB_NAME = u"privatestorageio-satauthz-v1.sqlite3"
+CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
 
 def open_and_initialize(path, required_schema_version, connect=None):
     """

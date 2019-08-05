@@ -121,7 +121,7 @@ def uncooperator(started=True):
 
 
 tahoe_configs_with_client_config = tahoe_configs(storage_client_plugins={
-    u"privatestorageio-satauthz-v1": client_configurations(),
+    u"privatestorageio-zkapauthz-v1": client_configurations(),
 })
 
 def is_not_json(bytestring):

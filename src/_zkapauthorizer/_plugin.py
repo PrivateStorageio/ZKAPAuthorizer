@@ -59,7 +59,7 @@ class ZKAPAuthorizer(object):
     A storage plugin which provides a token-based access control mechanism on
     top of the Tahoe-LAFS built-in storage server interface.
     """
-    name = u"privatestorageio-satauthz-v1"
+    name = u"privatestorageio-zkapauthz-v1"
 
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         announcement = {}
