@@ -91,7 +91,7 @@ class PaymentReferenceStoreTests(TestCase):
     def test_get_missing(self, get_config, prn):
         """
         ``PaymentReferenceStore.get`` raises ``KeyError`` when called with a
-        payment reference number not previously added to the store.
+        voucher not previously added to the store.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
@@ -153,8 +153,7 @@ class PaymentReferenceStoreTests(TestCase):
     def test_list(self, get_config, prns):
         """
         ``PaymentReferenceStore.list`` returns a ``list`` containing a
-        ``PaymentReference`` object for each payment reference number
-        previously added.
+        ``PaymentReference`` object for each voucher previously added.
         """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")

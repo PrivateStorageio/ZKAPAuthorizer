@@ -138,7 +138,7 @@ def is_not_json(bytestring):
 
 def not_payment_reference_numbers():
     """
-    Builds unicode strings which are not legal payment reference numbers.
+    Builds unicode strings which are not legal vouchers.
     """
     return one_of(
         text().filter(
@@ -210,7 +210,7 @@ class PaymentReferenceNumberTests(TestCase):
     """
     Tests relating to ``/payment-reference-number`` as implemented by the
     ``_secureaccesstokenauthorizer.resource`` module and its handling of
-    payment reference numbers.
+    vouchers.
     """
     def setUp(self):
         super(PaymentReferenceNumberTests, self).setUp()
@@ -406,7 +406,7 @@ class PaymentReferenceNumberTests(TestCase):
     def test_list_prns(self, get_config, prns):
         """
         A ``GET`` to the ``PaymentReferenceNumberCollection`` itself returns a
-        list of existing payment reference numbers.
+        list of existing vouchers.
         """
         # Hypothesis causes our test case instances to be re-used many times
         # between setUp and tearDown.  Avoid re-using the same temporary

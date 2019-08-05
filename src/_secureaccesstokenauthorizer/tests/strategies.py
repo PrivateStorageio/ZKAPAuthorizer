@@ -163,7 +163,7 @@ def client_configurations():
 
 def payment_reference_numbers():
     """
-    Build unicode strings in the format of payment reference numbers.
+    Build unicode strings in the format of vouchers.
     """
     return binary(
         min_size=32,

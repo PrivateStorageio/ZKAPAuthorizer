@@ -10,41 +10,41 @@ SecureAccessTokenAuthorizer publishes an HTTP-based interface inside the main Ta
 ``PUT /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This endpoint allows an external agent which has submitted a payment to cause the plugin to redeem the payment reference for tokens.
+This endpoint allows an external agent which has submitted a payment to cause the plugin to redeem the voucher for tokens.
 The request body for this endpoint must have the ``application/json`` content-type.
-The request body contains a simple json object containing the payment reference number::
+The request body contains a simple json object containing the voucher::
 
-  {"payment-reference-number": "<payment reference number>"}
+  {"payment-reference-number": "<voucher>"}
 
-The endpoint responds to such a request with an **OK** HTTP response code if the payment reference number is accepted for processing.
-If the payment reference number cannot be accepted at the time of the request then the response code will be anything other than **OK**.
+The endpoint responds to such a request with an **OK** HTTP response code if the voucher is accepted for processing.
+If the voucher cannot be accepted at the time of the request then the response code will be anything other than **OK**.
 
 If the response is **OK** then a repeated request with the same body will have no effect.
 If the response is not **OK** then a repeated request with the same body will try to accept the number again.
 
-``GET /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number/<payment reference number>``
+``GET /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number/<voucher>``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This endpoint allows an external agent to monitor the status of the redemption of a payment reference number.
+This endpoint allows an external agent to monitor the status of the redemption of a voucher.
 This endpoint accepts no request body.
 
-If the payment reference number is not known then the response is **NOT FOUND**.
-For any payment reference number which has previously been submitted,
+If the voucher is not known then the response is **NOT FOUND**.
+For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
   {"value": <string>}
 
-The ``value`` property merely indicates the payment reference number which was requested.
+The ``value`` property merely indicates the voucher which was requested.
 Further properties will be added to this response in the near future.
 
 ``GET /storage-plugins/privatestorageio-satauthz-v1/payment-reference-number``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This endpoint allows an external agent to retrieve the status of all payment reference numbers.
+This endpoint allows an external agent to retrieve the status of all vouchers.
 This endpoint accepts no request body.
 
 The response is **OK** with ``application/json`` content-type response body like::
 
-  {"payment-reference-numbers": [<payment reference status object>, ...]}
+  {"payment-reference-numbers": [<voucher status object>, ...]}
 
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.

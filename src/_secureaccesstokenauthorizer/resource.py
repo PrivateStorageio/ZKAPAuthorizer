@@ -79,11 +79,10 @@ def from_configuration(node_config, store=None):
 
 class _PaymentReferenceNumberCollection(Resource):
     """
-    This class implements redemption of payment reference numbers.  Users
-    **PUT** such numbers to this resource which delegates redemption
-    responsibilities to the redemption controller.  Child resources of this
-    resource can also be retrieved to monitor the status of previously
-    submitted vouchers.
+    This class implements redemption of vouchers.  Users **PUT** such numbers
+    to this resource which delegates redemption responsibilities to the
+    redemption controller.  Child resources of this resource can also be
+    retrieved to monitor the status of previously submitted vouchers.
     """
     def __init__(self, store, controller):
         self._store = store
@@ -136,7 +135,7 @@ def is_syntactic_prn(prn):
     :param prn: A candidate object to inspect.
 
     :return bool: ``True`` if and only if ``prn`` is a unicode string
-        containing a syntactically valid payment reference number.  This says
+        containing a syntactically valid voucher.  This says
         **nothing** about the validity of the represented voucher itself.  A
         ``True`` result only means the unicode string can be **interpreted**
         as a voucher.
