@@ -64,7 +64,7 @@ jobs:
           command: |
             . venv/bin/activate
             pip install .
-            coverage run -m twisted.trial _secureaccesstokenauthorizer
+            coverage run -m twisted.trial _zkapauthorizer
 
       - run:
           name: "Report Coverage"

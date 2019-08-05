@@ -5,7 +5,7 @@ Client
 ------
 
 When enabled in a Tahoe-LAFS client node,
-SecureAccessTokenAuthorizer publishes an HTTP-based interface inside the main Tahoe-LAFS web interface.
+ZKAPAuthorizer publishes an HTTP-based interface inside the main Tahoe-LAFS web interface.
 
 ``PUT /storage-plugins/privatestorageio-satauthz-v1/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

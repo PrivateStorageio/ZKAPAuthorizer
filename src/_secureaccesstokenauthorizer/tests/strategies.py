@@ -383,6 +383,6 @@ def test_and_write_vectors_for_shares():
 
 def announcements():
     """
-    Build announcements for the SecureAccessTokenAuthorizer plugin.
+    Build announcements for the ZKAPAuthorizer plugin.
     """
     return just({})

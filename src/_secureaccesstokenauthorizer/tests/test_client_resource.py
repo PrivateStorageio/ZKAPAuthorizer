@@ -208,7 +208,7 @@ def root_from_config(config):
 class VoucherTests(TestCase):
     """
     Tests relating to ``/voucher`` as implemented by the
-    ``_secureaccesstokenauthorizer.resource`` module and its handling of
+    ``_zkapauthorizer.resource`` module and its handling of
     vouchers.
     """
     def setUp(self):

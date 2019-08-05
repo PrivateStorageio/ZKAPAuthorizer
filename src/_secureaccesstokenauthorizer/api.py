@@ -13,18 +13,18 @@
 # limitations under the License.
 
 __all__ = [
-    "SecureAccessTokenAuthorizerStorageServer",
-    "SecureAccessTokenAuthorizerStorageClient",
-    "SecureAccessTokenAuthorizer",
+    "ZKAPAuthorizerStorageServer",
+    "ZKAPAuthorizerStorageClient",
+    "ZKAPAuthorizer",
 ]
 
 from ._storage_server import (
-    SecureAccessTokenAuthorizerStorageServer,
+    ZKAPAuthorizerStorageServer,
 )
 from ._storage_client import (
-    SecureAccessTokenAuthorizerStorageClient,
+    ZKAPAuthorizerStorageClient,
 )
 
 from ._plugin import (
-    SecureAccessTokenAuthorizer,
+    ZKAPAuthorizer,
 )

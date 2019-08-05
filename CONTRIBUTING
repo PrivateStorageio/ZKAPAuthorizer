@@ -1,5 +1,5 @@
-Contributing to SecureAccessTokenAuthorizer
-===========================================
+Contributing to ZKAPAuthorizer
+==============================
 
 Contributions are accepted in many forms.
 
@@ -11,9 +11,9 @@ Examples of contributions include:
 
 File a ticket at:
 
-https://github.com/PrivateStorageio/SecureAccessTokenAuthorizer/issues/new
+https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/new
 
-SecureAccessTokenAuthorizer uses GitHub keep track of bugs, feature requests, and associated patches.
+ZKAPAuthorizer uses GitHub keep track of bugs, feature requests, and associated patches.
 
 Contributions are managed using GitHub's Pull Requests.
 For a PR to be accepted it needs to have:

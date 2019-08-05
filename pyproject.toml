@@ -1,5 +1,5 @@
 [tool.towncrier]
-    package = "_secureaccesstokenauthorizer"
+    package = "_zkapauthorizer"
     package_dir = "src"
     filename = "ChangeLog.rst"
 

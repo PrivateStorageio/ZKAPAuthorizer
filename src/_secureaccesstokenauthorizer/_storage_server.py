@@ -156,7 +156,7 @@ class RITokenAuthorizedStorageServer(RemoteInterface):
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
 # attributes on self and it's hard to avoid that.
 @attr.s(cmp=False)
-class SecureAccessTokenAuthorizerStorageServer(Referenceable):
+class ZKAPAuthorizerStorageServer(Referenceable):
     """
     A class which wraps an ``RIStorageServer`` to insert token validity checks
     before allowing certain functionality.
@@ -240,7 +240,7 @@ class SecureAccessTokenAuthorizerStorageServer(Referenceable):
         return self._original.remote_slot_readv(*a, **kw)
 
 # I don't understand why this is required.
-# SecureAccessTokenAuthorizerStorageServer is-a Referenceable.  It seems like
+# ZKAPAuthorizerStorageServer is-a Referenceable.  It seems like
 # the built in adapter should take care of this case.
 from twisted.python.components import (
     registerAdapter,
@@ -251,4 +251,4 @@ from foolscap.referenceable import (
 from foolscap.ipb import (
     ISlicer,
 )
-registerAdapter(ReferenceableSlicer, SecureAccessTokenAuthorizerStorageServer, ISlicer)
+registerAdapter(ReferenceableSlicer, ZKAPAuthorizerStorageServer, ISlicer)

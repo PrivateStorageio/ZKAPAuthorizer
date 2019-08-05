@@ -64,7 +64,7 @@ from twisted.test.proto_helpers import (
 from twisted.web.resource import (
     IResource,
 )
-from twisted.plugins.secureaccesstokenauthorizer import (
+from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
@@ -93,7 +93,7 @@ def get_rref():
 
 class PluginTests(TestCase):
     """
-    Tests for ``twisted.plugins.secureaccesstokenauthorizer.storage_server``.
+    Tests for ``twisted.plugins.zkapauthorizer.storage_server``.
     """
     def test_discoverable(self):
         """

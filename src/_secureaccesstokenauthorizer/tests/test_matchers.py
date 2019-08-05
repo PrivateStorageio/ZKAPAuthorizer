@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Tests for ``_secureaccesstokenauthorizer.tests.matchers``.
+Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
 from zope.interface import (

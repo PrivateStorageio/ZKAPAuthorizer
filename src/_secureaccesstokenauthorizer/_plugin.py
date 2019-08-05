@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-The Twisted plugin that glues the Secure Access Token system into
+The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
@@ -33,8 +33,8 @@ from allmydata.interfaces import (
 )
 
 from .api import (
-    SecureAccessTokenAuthorizerStorageServer,
-    SecureAccessTokenAuthorizerStorageClient,
+    ZKAPAuthorizerStorageServer,
+    ZKAPAuthorizerStorageClient,
 )
 
 from ._storage_server import (
@@ -54,7 +54,7 @@ class AnnounceableStorageServer(object):
 
 
 @implementer(IFoolscapStoragePlugin)
-class SecureAccessTokenAuthorizer(object):
+class ZKAPAuthorizer(object):
     """
     A storage plugin which provides a token-based access control mechanism on
     top of the Tahoe-LAFS built-in storage server interface.
@@ -63,7 +63,7 @@ class SecureAccessTokenAuthorizer(object):
 
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         announcement = {}
-        storage_server = SecureAccessTokenAuthorizerStorageServer(
+        storage_server = ZKAPAuthorizerStorageServer(
             get_anonymous_storage_server(),
             **configuration
         )
@@ -77,7 +77,7 @@ class SecureAccessTokenAuthorizer(object):
 
     def get_storage_client(self, configuration, announcement, get_rref):
         return succeed(
-            SecureAccessTokenAuthorizerStorageClient(
+            ZKAPAuthorizerStorageClient(
                 get_rref,
                 lambda: [b"x" * TOKEN_LENGTH],
             )
