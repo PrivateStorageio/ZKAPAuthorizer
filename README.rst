@@ -1,5 +1,5 @@
-Secure Access Token Authorizer
-==============================
+Zero-Knowledge Access Pass Authorizer
+=====================================
 
 |coverage|_
 |circleci|_
@@ -7,9 +7,9 @@ Secure Access Token Authorizer
 What is this?
 -------------
 
-Secure Access Token Authorizer is a `Tahoe-LAFS`_ storage-system plugin which authorizes storage operations based on privacy-respecting tokens.
+Zero-Knowledge Access Pass (ZKAP) Authorizer is a `Tahoe-LAFS`_ storage-system plugin which authorizes storage operations based on privacy-respecting passes.
 
-Such tokens derive from `PrivacyPass`_.
+Such passes derive from `PrivacyPass`_.
 They allow a Tahoe-LAFS client to prove it has a right to access without revealing additional information.
 
 Copyright
