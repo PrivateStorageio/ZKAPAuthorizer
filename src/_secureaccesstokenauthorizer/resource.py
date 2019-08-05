@@ -69,7 +69,7 @@ def from_configuration(node_config, store=None):
     root = Resource()
     root.putChild(
         b"voucher",
-        _PaymentReferenceNumberCollection(
+        _VoucherCollection(
             store,
             controller,
         ),
@@ -77,7 +77,7 @@ def from_configuration(node_config, store=None):
     return root
 
 
-class _PaymentReferenceNumberCollection(Resource):
+class _VoucherCollection(Resource):
     """
     This class implements redemption of vouchers.  Users **PUT** such numbers
     to this resource which delegates redemption responsibilities to the

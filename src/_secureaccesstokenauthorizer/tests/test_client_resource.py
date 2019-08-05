@@ -205,14 +205,14 @@ def root_from_config(config):
     )
 
 
-class PaymentReferenceNumberTests(TestCase):
+class VoucherTests(TestCase):
     """
     Tests relating to ``/voucher`` as implemented by the
     ``_secureaccesstokenauthorizer.resource`` module and its handling of
     vouchers.
     """
     def setUp(self):
-        super(PaymentReferenceNumberTests, self).setUp()
+        super(VoucherTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
 
@@ -234,9 +234,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, vouchers())
     def test_put_prn(self, get_config, prn):
         """
-        When a voucher is ``PUT`` to ``PaymentReferenceNumberCollection`` it is
-        passed in to the redemption model object for handling and an ``OK``
-        response is returned.
+        When a voucher is ``PUT`` to ``VoucherCollection`` it is passed in to the
+        redemption model object for handling and an ``OK`` response is
+        returned.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -265,9 +265,9 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, invalid_bodies())
     def test_put_invalid_body(self, get_config, body):
         """
-        If the body of a ``PUT`` to ``PaymentReferenceNumberCollection`` does not
-        consist of an object with a single *voucher* property then the
-        response is *BAD REQUEST*.
+        If the body of a ``PUT`` to ``VoucherCollection`` does not consist of an
+        object with a single *voucher* property then the response is *BAD
+        REQUEST*.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -297,8 +297,7 @@ class PaymentReferenceNumberTests(TestCase):
     def test_get_invalid_prn(self, get_config, not_prn):
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
-        child of ``PaymentReferenceNumberCollection`` the response is **BAD
-        REQUEST**.
+        child of ``VoucherCollection`` the response is **BAD REQUEST**.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -326,8 +325,8 @@ class PaymentReferenceNumberTests(TestCase):
     def test_get_unknown_prn(self, get_config, prn):
         """
         When a voucher is requested with a ``GET`` to a child of
-        ``PaymentReferenceNumberCollection`` the response is **NOT FOUND** if
-        the voucher hasn't previously been submitted with a ``PUT``.
+        ``VoucherCollection`` the response is **NOT FOUND** if the voucher
+        hasn't previously been submitted with a ``PUT``.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -404,8 +403,8 @@ class PaymentReferenceNumberTests(TestCase):
     @given(tahoe_configs_with_client_config, lists(vouchers(), unique=True))
     def test_list_prns(self, get_config, prns):
         """
-        A ``GET`` to the ``PaymentReferenceNumberCollection`` itself returns a
-        list of existing vouchers.
+        A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
+        vouchers.
         """
         # Hypothesis causes our test case instances to be re-used many times
         # between setUp and tearDown.  Avoid re-using the same temporary
