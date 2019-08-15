@@ -79,9 +79,6 @@ cffi==1.12.3 \
     --hash=sha256:e1ff2748c84d97b065cc95429814cdba39bcbd77c9c85c89344b317dc0d9cbff \
     --hash=sha256:ed851c75d1e0e043cbf5ca9a8e1b13c4c90f3fbd863dacb01c0808e2b5204201 \
     # via bcrypt, cryptography, pynacl
-characteristic==14.3.0 \
-    --hash=sha256:5324ca333fc9705bf0f1a38d36021baa37888590ccfe8c3738c68adfa609bbbb \
-    --hash=sha256:ded68d4e424115ed44e5c83c2a901a0b6157a959079d7591d92106ffd3ada380
 click==7.0 \
     --hash=sha256:2335065e6395b9e67ca716de5f7526736bfa6ceead690adf616d925bdc622b13 \
     --hash=sha256:5b94b49521f6456670fdb30cd82a4eca9412788a93fa6dd6df72c94d5a8ff2d7 \
@@ -150,7 +147,8 @@ nevow==0.14.4 \
     --hash=sha256:2299a0d2a0c1312040705599d5d571acfea74df82b968c0b9264f6f45266cf6e
 pyasn1-modules==0.2.6 \
     --hash=sha256:43c17a83c155229839cc5c6b868e8d0c6041dba149789b6d6e28801c64821722 \
-    --hash=sha256:e30199a9d221f1b26c885ff3d87fd08694dbbe18ed0e8e405a2a7126d30ce4c0
+    --hash=sha256:e30199a9d221f1b26c885ff3d87fd08694dbbe18ed0e8e405a2a7126d30ce4c0 \
+    # via service-identity
 pyasn1==0.4.6 \
     --hash=sha256:3bb81821d47b17146049e7574ab4bf1e315eb7aead30efe5d6a9ca422c9710be \
     --hash=sha256:b773d5c9196ffbc3a1e13bdf909d446cad80a039aa3340bcad72f395b76ebc86 \
@@ -158,8 +156,6 @@ pyasn1==0.4.6 \
 pycparser==2.19 \
     --hash=sha256:a988718abfad80b6b157acce7bf130a30876d27603738ac39f140993246b25b3 \
     # via cffi
-pycryptopp==0.7.1.869544967005693312591928092448767568728501330214 \
-    --hash=sha256:08ad57a1a39b7ed23c173692281da0b8d49d98ad3dcc09f8cca6d901e142699f
 pyhamcrest==1.9.0 \
     --hash=sha256:6b672c02fdf7470df9674ab82263841ce8333fb143f32f021f6cb26f0e512420 \
     --hash=sha256:8ffaa0a53da57e89de14ced7185ac746227a8894dbd5a3c718bf05ddbd1d56cd \
@@ -219,8 +215,8 @@ spake2==0.8 \
     --hash=sha256:c17a614b29ee4126206e22181f70a406c618d3c6c62ca6d6779bce95e9c926f4 \
     --hash=sha256:ce80705f8516c54364931f3b2c9a917ba001500d7f2fc76a0e8cf3bcaf0e30f7 \
     # via magic-wormhole
-https://github.com/tahoe-lafs/tahoe-lafs/archive/6c1a37c95188c1d9a877286ef726280a68d38a4b.zip#egg=tahoe-lafs \
-    --hash=sha256:fda66824f274f003d4cb98cf59104549a4e572f943c25383f2db56615aa6d105
+https://github.com/tahoe-lafs/tahoe-lafs/archive/b35a8908f4096ccae35da78b0e7dde96d6cf1667.zip#egg=tahoe-lafs \
+    --hash=sha256:b93eecd4986e06a1cd0eca25c39610bf7ab5011b654cb82f9a323009762bd9a7
 tqdm==4.32.2 \
     --hash=sha256:14a285392c32b6f8222ecfbcd217838f88e11630affe9006cd0e94c7eff3cb61 \
     --hash=sha256:25d4c0ea02a305a688e7e9c2cdc8f862f989ef2a4701ab28ee963295f5b109ab \
@@ -272,4 +268,4 @@ zope.interface==4.6.0 \
 setuptools==41.0.1 \
     --hash=sha256:a222d126f5471598053c9a77f4b5d4f26eaa1f150ad6e01dcf1a42e185d05613 \
     --hash=sha256:c7769ce668c7a333d84e17fe8b524b1c45e7ee9f7908ad0a73e1eda7e6a5aebf \
-    # via pycryptopp, pyhamcrest, zope.interface
+    # via pyhamcrest, zope.interface
