@@ -4,7 +4,8 @@
 }:
 buildPythonPackage rec {
   version = "0.0";
-  name = "zero-knowledge-access-pass-authorizer-${version}";
+  pname = "zero-knowledge-access-pass-authorizer";
+  name = "${pname}-${version}";
   src = ./.;
 
   depsBuildBuild = [
