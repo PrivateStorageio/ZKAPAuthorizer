@@ -230,7 +230,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             same from the perspective of token validation.
         """
         self._validate_tokens(tokens)
-        return self._original.remote_slot_testv_and_readv_and_writev(*a, **kw)
+        # Skip over the remotely exposed method and jump to the underlying
+        # implementation which accepts one additional parameter that we know
+        # about (and don't expose over the network): renew_leases.  We always
+        # pass False for this because we want to manage leases completely
+        # separately from writes.
+        kw["renew_leases"] = False
+        return self._original.slot_testv_and_readv_and_writev(*a, **kw)
 
     def remote_slot_readv(self, *a, **kw):
         """

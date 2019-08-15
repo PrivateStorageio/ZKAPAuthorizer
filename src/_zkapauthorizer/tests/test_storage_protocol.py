@@ -437,6 +437,48 @@ class ShareTests(TestCase):
                     sharenum,
                 ),
             )
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_write_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        When mutable share data is written using *slot_testv_and_readv_and_writev*
+        any leases on the corresponding slot remain the same.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        wrote, read = extract_result(
+            self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v)
+                    in test_and_write_vectors_for_shares.items()
+                },
+                r_vector=[],
+            ),
+        )
+
+        self.assertThat(
+            wrote,
+            Equals(True),
+            u"Server rejected a write to a new mutable slot",
+        )
+
+        # There are *no* leases on this newly written slot!
+        self.assertThat(
+            list(self.anonymous_storage_server.get_slot_leases(storage_index)),
+            Equals([]),
+        )
 
 
 def write_vector_to_read_vector(write_vector):
