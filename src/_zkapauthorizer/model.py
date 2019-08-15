@@ -117,6 +117,15 @@ def open_and_initialize(path, required_schema_version, connect=None):
             )
             """,
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [passes] (
+                [text] text, -- The string that defines the pass.
+
+                PRIMARY KEY([text])
+            )
+            """,
+        )
     return conn
 
 
@@ -200,6 +209,76 @@ class VoucherStore(object):
             for (number,)
             in refs
         )
+
+    @with_cursor
+    def insert_passes(self, cursor, passes):
+        """
+        Store some passes.
+
+        :param list[Pass] passes: The passes to store.
+        """
+        cursor.executemany(
+            """
+            INSERT INTO [passes] VALUES (?)
+            """,
+            list((p.text,) for p in passes),
+        )
+
+    @with_cursor
+    def extract_passes(self, cursor, count):
+        """
+        Remove and return some passes.
+
+        :param int count: The maximum number of passes to remove and return.
+            If fewer passes than this are available, only as many as are
+            available are returned.
+
+        :return list[Pass]: The removed passes.
+        """
+        cursor.execute(
+            """
+            CREATE TEMPORARY TABLE [extracting-passes]
+            AS
+            SELECT [text] FROM [passes] LIMIT ?
+            """,
+            (count,),
+        )
+        cursor.execute(
+            """
+            DELETE FROM [passes] WHERE [text] IN [extracting-passes]
+            """,
+        )
+        cursor.execute(
+            """
+            SELECT ([text]) FROM [extracting-passes]
+            """,
+        )
+        texts = cursor.fetchall()
+        cursor.execute(
+            """
+            DROP TABLE [extracting-passes]
+            """,
+        )
+        return list(
+            Pass(t)
+            for (t,)
+            in texts
+        )
+
+
+@attr.s(frozen=True)
+class Pass(object):
+    """
+    A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
+
+    :ivar unicode text: The text value of the pass.  This can be sent to a
+        service provider one time to anonymously prove a prior voucher
+        redemption.  If it is sent more than once the service provider may
+        choose to reject it and the anonymity property is compromised.  Pass
+        text should be kept secret.  If pass text is divulged to third-parties
+        the anonymity property may be compromised.
+    """
+    text = attr.ib(type=unicode)
 
 
 @attr.s

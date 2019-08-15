@@ -64,6 +64,7 @@ from ..model import (
 from .strategies import (
     tahoe_configs,
     vouchers,
+    zkaps,
 )
 
 
@@ -146,7 +147,7 @@ class VoucherStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), lists(vouchers()))
+    @given(tahoe_configs(), lists(vouchers(), unique=True))
     def test_list(self, get_config, vouchers):
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
@@ -250,3 +251,27 @@ class VoucherTests(TestCase):
             Voucher.from_json(ref.to_json()),
             Equals(ref),
         )
+
+
+class ZKAPStoreTests(TestCase):
+    """
+    Tests for ZKAP-related functionality of ``VoucherStore``.
+    """
+    @given(tahoe_configs(), lists(zkaps(), unique=True))
+    def test_zkaps_round_trip(self, get_config, passes):
+        """
+        ZKAPs that are added to the store can later be retrieved.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"node"), b"tub.port")
+        store = VoucherStore.from_node_config(
+            config,
+            memory_connect,
+        )
+        store.insert_passes(passes)
+        retrieved_passes = store.extract_passes(len(passes))
+        self.expectThat(passes, Equals(retrieved_passes))
+
+        # After extraction, the passes are no longer available.
+        more_passes = store.extract_passes(1)
+        self.expectThat([], Equals(more_passes))

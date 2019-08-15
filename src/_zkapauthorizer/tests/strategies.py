@@ -52,6 +52,10 @@ from allmydata.client import (
     config_from_string,
 )
 
+from ..model import (
+    Pass,
+)
+
 
 def _merge_dictionaries(dictionaries):
     result = {}
@@ -172,6 +176,20 @@ def vouchers():
         urlsafe_b64encode,
     ).map(
         lambda voucher: voucher.decode("ascii"),
+    )
+
+
+def zkaps():
+    """
+    Build random ZKAPs as ``Pass` instances.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        urlsafe_b64encode,
+    ).map(
+        lambda zkap: Pass(zkap.decode("ascii")),
     )
 
 
