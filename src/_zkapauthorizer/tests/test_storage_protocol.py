@@ -394,7 +394,7 @@ class ShareTests(TestCase):
         self.assertThat(
             wrote,
             Equals(True),
-            u"Server rejected a write to a new mutable storage index",
+            u"Server rejected a write to a new mutable slot",
         )
 
         self.assertThat(
