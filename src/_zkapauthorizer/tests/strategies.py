@@ -54,6 +54,7 @@ from allmydata.client import (
 
 from ..model import (
     Pass,
+    RandomToken,
 )
 
 
@@ -176,6 +177,20 @@ def vouchers():
         urlsafe_b64encode,
     ).map(
         lambda voucher: voucher.decode("ascii"),
+    )
+
+
+def random_tokens():
+    """
+    Build random tokens as unicode strings.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        urlsafe_b64encode,
+    ).map(
+        lambda token: RandomToken(token.decode("ascii")),
     )
 
 

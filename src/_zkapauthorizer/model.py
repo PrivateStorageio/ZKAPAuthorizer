@@ -85,6 +85,8 @@ def open_and_initialize(path, required_schema_version, connect=None):
     except OperationalError as e:
         raise StoreOpenError(e)
 
+    conn.execute("PRAGMA foreign_keys = ON")
+
     with conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -112,8 +114,20 @@ def open_and_initialize(path, required_schema_version, connect=None):
             """
             CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
+                [redeemed] num DEFAULT 0,
 
                 PRIMARY KEY([number])
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [tokens] (
+                [text] text, -- The random string that defines the token.
+                [voucher] text, -- Reference to the voucher these tokens go with.
+
+                PRIMARY KEY([text])
+                FOREIGN KEY([voucher]) REFERENCES [vouchers]([number])
             )
             """,
         )
@@ -152,7 +166,7 @@ class VoucherStore(object):
     :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
         the node that owns the persisted vouchers.
     """
-    database_path = attr.ib(type=FilePath)
+    database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
     _connection = attr.ib()
 
     @classmethod
@@ -173,7 +187,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                ([number])
+                [number], [redeemed]
             FROM
                 [vouchers]
             WHERE
@@ -184,36 +198,53 @@ class VoucherStore(object):
         refs = cursor.fetchall()
         if len(refs) == 0:
             raise KeyError(voucher)
-        return Voucher(refs[0][0])
+        return Voucher(refs[0][0], bool(refs[0][1]))
 
     @with_cursor
-    def add(self, cursor, voucher):
+    def add(self, cursor, voucher, tokens):
         cursor.execute(
             """
-            INSERT OR IGNORE INTO [vouchers] VALUES (?)
+            INSERT OR IGNORE INTO [vouchers] ([number]) VALUES (?)
             """,
             (voucher,)
         )
+        if cursor.rowcount:
+            # Something was inserted.  Insert the tokens, too.  It's okay to
+            # drop the tokens in the other case.  They've never been used.
+            # What's *already* in the database, on the other hand, may already
+            # have been submitted in a redeem attempt and must not change.
+            cursor.executemany(
+                """
+                INSERT INTO [tokens] ([voucher], [text]) VALUES (?, ?)
+                """,
+                list(
+                    (voucher, token.token_value)
+                    for token
+                    in tokens
+                ),
+            )
 
     @with_cursor
     def list(self, cursor):
         cursor.execute(
             """
-            SELECT ([number]) FROM [vouchers]
+            SELECT [number], [redeemed] FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
 
         return list(
-            Voucher(number)
-            for (number,)
+            Voucher(number, bool(redeemed))
+            for (number, redeemed)
             in refs
         )
 
     @with_cursor
-    def insert_passes(self, cursor, passes):
+    def insert_passes_for_voucher(self, cursor, voucher, passes):
         """
         Store some passes.
+
+        :param unicode voucher: The voucher associated with the passes.
 
         :param list[Pass] passes: The passes to store.
         """
@@ -222,6 +253,12 @@ class VoucherStore(object):
             INSERT INTO [passes] VALUES (?)
             """,
             list((p.text,) for p in passes),
+        )
+        cursor.execute(
+            """
+            UPDATE [vouchers] SET [redeemed] = 1 WHERE [number] = ?
+            """,
+            (voucher,),
         )
 
     @with_cursor
@@ -250,7 +287,7 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            SELECT ([text]) FROM [extracting-passes]
+            SELECT [text] FROM [extracting-passes]
             """,
         )
         texts = cursor.fetchall()
@@ -278,12 +315,18 @@ class Pass(object):
         text should be kept secret.  If pass text is divulged to third-parties
         the anonymity property may be compromised.
     """
-    text = attr.ib(type=unicode)
+    text = attr.ib(validator=attr.validators.instance_of(unicode))
+
+
+@attr.s(frozen=True)
+class RandomToken(object):
+    token_value = attr.ib(validator=attr.validators.instance_of(unicode))
 
 
 @attr.s
 class Voucher(object):
     number = attr.ib()
+    redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
 
     @classmethod
     def from_json(cls, json):
