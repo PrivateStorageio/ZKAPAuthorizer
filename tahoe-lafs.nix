@@ -11,8 +11,8 @@ buildPythonPackage rec {
     owner = "LeastAuthority";
     repo = "tahoe-lafs";
     # HEAD of integration/storage-economics branch as of July 15th 2019.
-    rev = "e7bd717a3f1dc89e81df583fca177bb3d92ebfa2";
-    sha256 = "0s5w9r1zmagl16ig6642wn8dcpkwb6qn4816xbrzh1d7y3pr11rd";
+    rev = "b35a8908f4096ccae35da78b0e7dde96d6cf1667";
+    sha256 = "0n289hzx2s1jvspmpz2c5iwl0dvnfc8qbiqfmpbl88ymrjp7p6rr";
   };
 
   postPatch = ''

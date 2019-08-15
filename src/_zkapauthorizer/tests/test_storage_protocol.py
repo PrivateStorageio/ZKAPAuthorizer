@@ -29,9 +29,11 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     HasLength,
+    Always,
 )
 from testtools.twistedsupport import (
     succeeded,
+    failed,
 )
 from testtools.twistedsupport._deferred import (
     # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
@@ -121,6 +123,7 @@ class LocalRemote(object):
         provides a simulated remote interface.
     """
     _referenceable = attr.ib()
+    check_args = attr.ib(default=True)
 
     def callRemote(self, methname, *args, **kwargs):
         """
@@ -132,7 +135,8 @@ class LocalRemote(object):
         :return Deferred: The result of the call on the wrapped object.
         """
         schema = self._referenceable.getInterface()[methname]
-        schema.checkAllArgs(args, kwargs, inbound=False)
+        if self.check_args:
+            schema.checkAllArgs(args, kwargs, inbound=False)
         # TODO: Figure out how to call checkResults on the result.
         return execute(
             self._referenceable.doRemoteCall,
@@ -476,6 +480,79 @@ class ShareTests(TestCase):
 
         # There are *no* leases on this newly written slot!
         self.assertThat(
+            list(self.anonymous_storage_server.get_slot_leases(storage_index)),
+            Equals([]),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_client_cannot_control_lease_behavior(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        If the client passes ``renew_leases`` to *slot_testv_and_readv_and_writev*
+        it fails with ``TypeError``, no lease is updated, and no share data is
+        written.
+        """
+        # First, tell the client to let us violate the protocol.  It is the
+        # server's responsibility to defend against this attack.
+        self.local_remote_server.check_args = False
+
+        # The nice Python API doesn't let you do this so we drop down to
+        # the layer below.  We also use positional arguments because they
+        # transit the network differently from keyword arguments.  Yay.
+        d = self.client._rref.callRemote(
+            "slot_testv_and_readv_and_writev",
+            # tokens
+            self.client._get_tokens(),
+            # storage_index
+            storage_index,
+            # secrets
+            secrets,
+            # tw_vectors
+            {
+                k: v.for_call()
+                for (k, v)
+                in test_and_write_vectors_for_shares.items()
+            },
+            # r_vector
+            [],
+            # add_leases
+            True,
+        )
+
+        # The operation should fail.  I'm not that concerned with how just
+        # yet.
+        self.expectThat(
+            d,
+            failed(Always()),
+        )
+
+        # There should be no shares at the given storage index.
+        d = self.client.slot_readv(
+            storage_index,
+            # Surprise.  shares=None means all shares.
+            shares=None,
+            r_vector=list(
+                list(map(write_vector_to_read_vector, vector.write_vector))
+                for vector
+                in test_and_write_vectors_for_shares.values()
+            ),
+        )
+        self.expectThat(
+            d,
+            succeeded(
+                Equals({}),
+            ),
+        )
+
+        # And there should be no leases on those non-shares.
+        self.expectThat(
             list(self.anonymous_storage_server.get_slot_leases(storage_index)),
             Equals([]),
         )
