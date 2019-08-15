@@ -270,7 +270,7 @@ class ShareTests(TestCase):
                 cancel_secret,
             ),
         )
-        [(_, leases)] = get_leases(self.server, storage_index).items()
+        leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
     @given(
@@ -315,7 +315,7 @@ class ShareTests(TestCase):
         # Based on Tahoe-LAFS' hard-coded renew time.
         RENEW_INTERVAL = 60 * 60 * 24 * 31
 
-        [(_, [lease])] = get_leases(self.server, storage_index).items()
+        [lease] = self.anonymous_storage_server.get_leases(storage_index)
         self.assertThat(
             lease.get_expiration_time(),
             Equals(int(now + RENEW_INTERVAL)),
@@ -520,28 +520,6 @@ def write_toy_shares(
     for (sharenum, writer) in allocated.items():
         writer.remote_write(0, bytes_for_share(sharenum, size))
         writer.remote_close()
-
-
-def get_leases(storage_server, storage_index):
-    """
-    Get all leases for all shares of the given storage index on the given
-    server.
-
-    :param StorageServer storage_server: The storage server on which to find
-        the information.
-
-    :param bytes storage_index: The storage index for which to look up shares.
-
-    :return dict[int, list[LeaseInfo]]: The lease information for each share.
-    """
-    # It's hard to assert much about the lease without knowing about *some*
-    # implementation details of the storage server.  I prefer to know Python
-    # API details rather than on-disk format details.
-    return {
-        sharenum: list(reader._share_file.get_leases())
-        for (sharenum, reader)
-        in storage_server.remote_get_buckets(storage_index).items()
-    }
 
 
 def cleanup_storage_server(storage_server):
