@@ -8,11 +8,11 @@ buildPythonPackage rec {
   version = "1.14.0.dev";
   name = "tahoe-lafs-${version}";
   src = fetchFromGitHub {
-    owner = "tahoe-lafs";
+    owner = "LeastAuthority";
     repo = "tahoe-lafs";
     # HEAD of integration/storage-economics branch as of July 15th 2019.
-    rev = "48bd16a8d9109910122cc2e2c85eb4f378390135";
-    sha256 = "0i8k7zb4381vbblriciz1m33va0mxld6nrhpwvjqr9jk335b1a9q";
+    rev = "e7bd717a3f1dc89e81df583fca177bb3d92ebfa2";
+    sha256 = "0s5w9r1zmagl16ig6642wn8dcpkwb6qn4816xbrzh1d7y3pr11rd";
   };
 
   postPatch = ''
