@@ -177,4 +177,8 @@ class PaymentController(object):
         )
 
     def _redeemSuccess(self, voucher, passes):
+        """
+        Update the database state to reflect that a voucher was redeemed and to
+        store the resulting passes.
+        """
         self.store.insert_passes_for_voucher(voucher, passes)
