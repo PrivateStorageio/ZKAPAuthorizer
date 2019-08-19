@@ -45,6 +45,10 @@ from .resource import (
     from_configuration as resource_from_configuration,
 )
 
+from .controller import (
+    DummyRedeemer,
+)
+
 @implementer(IAnnounceableStorageServer)
 @attr.s
 class AnnounceableStorageServer(object):
@@ -85,4 +89,7 @@ class ZKAPAuthorizer(object):
 
 
     def get_client_resource(self, node_config):
-        return resource_from_configuration(node_config)
+        return resource_from_configuration(
+            node_config,
+            redeemer=DummyRedeemer(),
+        )
