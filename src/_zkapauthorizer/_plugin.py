@@ -17,6 +17,14 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
+from weakref import (
+    WeakValueDictionary,
+)
+
+from functools import (
+    partial,
+)
+
 import attr
 
 from zope.interface import (
@@ -37,8 +45,8 @@ from .api import (
     ZKAPAuthorizerStorageClient,
 )
 
-from ._storage_server import (
-    TOKEN_LENGTH,
+from .model import (
+    VoucherStore,
 )
 
 from .resource import (
@@ -56,14 +64,37 @@ class AnnounceableStorageServer(object):
     storage_server = attr.ib()
 
 
-
+@attr.s
 @implementer(IFoolscapStoragePlugin)
 class ZKAPAuthorizer(object):
     """
     A storage plugin which provides a token-based access control mechanism on
     top of the Tahoe-LAFS built-in storage server interface.
+
+    :ivar WeakValueDictionary _stores: A mapping from node directories to this
+        plugin's database connections for those nodes.  The existence of any
+        kind of attribute to reference database connections (not so much the
+        fact that it is a WeakValueDictionary; if it were just a weakref the
+        same would be true) probably reflects an error in the interface which
+        forces different methods to use instance state to share a database
+        connection.
     """
-    name = u"privatestorageio-zkapauthz-v1"
+    name = attr.ib(default=u"privatestorageio-zkapauthz-v1")
+    _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
+
+    def _get_store(self, node_config):
+        """
+        :return VoucherStore: The database for the given node.  At most one
+            connection is made to the database per ``ZKAPAuthorizer`` instance.
+        """
+        key =  node_config.get_config_path()
+        try:
+            s = self._stores[key]
+        except KeyError:
+            s = VoucherStore.from_node_config(node_config)
+            self._stores[key] = s
+        return s
+
 
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         announcement = {}
@@ -79,11 +110,13 @@ class ZKAPAuthorizer(object):
         )
 
 
-    def get_storage_client(self, configuration, announcement, get_rref):
+    def get_storage_client(self, node_config, announcement, get_rref):
         return succeed(
             ZKAPAuthorizerStorageClient(
                 get_rref,
-                lambda: [b"x" * TOKEN_LENGTH],
+                # TODO: Make the caller figure out the correct number of
+                # passes to extract.
+                partial(self._get_store(node_config).extract_passes, 1),
             )
         )
 
@@ -91,5 +124,6 @@ class ZKAPAuthorizer(object):
     def get_client_resource(self, node_config):
         return resource_from_configuration(
             node_config,
+            store=self._get_store(node_config),
             redeemer=DummyRedeemer(),
         )

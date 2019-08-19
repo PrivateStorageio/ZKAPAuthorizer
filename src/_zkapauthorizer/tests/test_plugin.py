@@ -31,9 +31,15 @@ from testtools.matchers import (
     Always,
     Contains,
     AfterPreprocessing,
+    Equals,
 )
 from testtools.twistedsupport import (
     succeeded,
+)
+from testtools.twistedsupport._deferred import (
+    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
+    # there appear to have stalled.
+    extract_result,
 )
 
 from hypothesis import (
@@ -46,6 +52,9 @@ from foolscap.broker import (
 from foolscap.ipb import (
     IReferenceable,
     IRemotelyCallable,
+)
+from foolscap.referenceable import (
+    LocalReferenceable,
 )
 
 from allmydata.interfaces import (
@@ -68,10 +77,19 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
+from ..model import (
+    VoucherStore,
+)
+
 from .strategies import (
     tahoe_configs,
     configurations,
     announcements,
+    vouchers,
+    random_tokens,
+    zkaps,
+    storage_indexes,
+    lease_renew_secrets,
 )
 from .matchers import (
     Provides,
@@ -88,7 +106,7 @@ def get_anonymous_storage_server():
 
 
 def get_rref():
-    return None
+    return LocalReferenceable(None)
 
 
 class PluginTests(TestCase):
@@ -214,14 +232,20 @@ class ClientPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
-    @given(configurations(), announcements())
-    def test_interface(self, configuration, announcement):
+    @given(tahoe_configs(), announcements())
+    def test_interface(self, get_config, announcement):
         """
         ``get_storage_client`` returns a ``Deferred`` that fires with an object
         which provides ``IStorageServer``.
         """
+        tempdir = self.useFixture(TempDir())
+        node_config = get_config(
+            tempdir.join(b"node"),
+            b"tub.port",
+        )
+
         storage_client_deferred = storage_server.get_storage_client(
-            configuration,
+            node_config,
             announcement,
             get_rref,
         )
@@ -229,6 +253,63 @@ class ClientPluginTests(TestCase):
         self.assertThat(
             storage_client_deferred,
             succeeded(Provides([IStorageServer])),
+        )
+
+
+    @given(
+        tahoe_configs(),
+        announcements(),
+        vouchers(),
+        random_tokens(),
+        zkaps(),
+        storage_indexes(),
+        lease_renew_secrets(),
+    )
+    def test_passes_extracted(
+            self,
+            get_config,
+            announcement,
+            voucher,
+            token,
+            zkap,
+            storage_index,
+            renew_secret,
+    ):
+        """
+        The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
+        extracts passes from the plugin database.
+        """
+        tempdir = self.useFixture(TempDir())
+        node_config = get_config(
+            tempdir.join(b"node"),
+            b"tub.port",
+        )
+
+        store = VoucherStore.from_node_config(node_config)
+        store.add(voucher, [token])
+        store.insert_passes_for_voucher(voucher, [zkap])
+
+        storage_client_deferred = storage_server.get_storage_client(
+            node_config,
+            announcement,
+            get_rref,
+        )
+
+        storage_client = extract_result(storage_client_deferred)
+
+        # This is hooked up to a garbage reference.  We don't care about its
+        # _result_, anyway, right now.
+        d = storage_client.renew_lease(
+            storage_index,
+            renew_secret,
+        )
+        d.addBoth(lambda ignored: None)
+
+        # There should be no passes left to extract.
+        remaining = store.extract_passes(1)
+        self.assertThat(
+            remaining,
+            Equals([]),
         )
 
 
