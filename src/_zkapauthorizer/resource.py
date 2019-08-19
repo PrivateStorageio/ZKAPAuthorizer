@@ -103,12 +103,12 @@ class _VoucherCollection(Resource):
         try:
             payload = loads(request.content.read())
         except Exception:
-            return bad_request().render(request)
+            return bad_request(u"json request body required").render(request)
         if payload.keys() != [u"voucher"]:
-            return bad_request().render(request)
+            return bad_request(u"request object must have exactly one key: 'voucher'").render(request)
         voucher = payload[u"voucher"]
         if not is_syntactic_voucher(voucher):
-            return bad_request().render(request)
+            return bad_request(u"submitted voucher is syntactically invalid").render(request)
 
         self._controller.redeem(voucher)
         return b""
@@ -176,11 +176,11 @@ class VoucherView(Resource):
         return self._voucher.to_json()
 
 
-def bad_request():
+def bad_request(reason=u"Bad Request"):
     """
     :return IResource: A resource which can be rendered to produce a **BAD
         REQUEST** response.
     """
     return ErrorPage(
-        BAD_REQUEST, b"Bad Request", b"Bad Request",
+        BAD_REQUEST, b"Bad Request", reason.encode("utf-8"),
     )
