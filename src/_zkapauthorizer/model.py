@@ -85,6 +85,9 @@ def open_and_initialize(path, required_schema_version, connect=None):
     except OperationalError as e:
         raise StoreOpenError(e)
 
+    # Enforcement of foreign key constraints is off by default.  It must be
+    # enabled on a per-connection basis.  This is a helpful feature to ensure
+    # consistency so we want it enforced and we use it in our schema.
     conn.execute("PRAGMA foreign_keys = ON")
 
     with conn:
@@ -171,6 +174,16 @@ class VoucherStore(object):
 
     @classmethod
     def from_node_config(cls, node_config, connect=None):
+        """
+        Create or open the ``VoucherStore`` for a given node.
+
+        :param allmydata.node._Config node_config: The Tahoe-LAFS
+            configuration object for the node for which we want to open a
+            store.
+
+        :param connect: An alternate database connection function.  This is
+            primarily for the purposes of the test suite.
+        """
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
@@ -184,6 +197,11 @@ class VoucherStore(object):
 
     @with_cursor
     def get(self, cursor, voucher):
+        """
+        :param unicode voucher: The text value of a voucher to retrieve.
+
+        :return Voucher: The voucher object that matches the given value.
+        """
         cursor.execute(
             """
             SELECT
@@ -202,6 +220,14 @@ class VoucherStore(object):
 
     @with_cursor
     def add(self, cursor, voucher, tokens):
+        """
+        Add a new voucher and associated random tokens to the database.  If a
+        voucher with the given text value is already present, do nothing.
+
+        :param unicode voucher: The text value of a voucher to add.
+
+        :param list[RandomToken]: The tokens to add alongside the voucher.
+        """
         cursor.execute(
             """
             INSERT OR IGNORE INTO [vouchers] ([number]) VALUES (?)
@@ -226,6 +252,11 @@ class VoucherStore(object):
 
     @with_cursor
     def list(self, cursor):
+        """
+        Get all known vouchers.
+
+        :return list[Voucher]: All vouchers known to the store.
+        """
         cursor.execute(
             """
             SELECT [number], [redeemed] FROM [vouchers]
@@ -244,7 +275,9 @@ class VoucherStore(object):
         """
         Store some passes.
 
-        :param unicode voucher: The voucher associated with the passes.
+        :param unicode voucher: The voucher associated with the passes.  This
+            voucher will be marked as redeemed to indicate it has fulfilled
+            its purpose and has no further use for us.
 
         :param list[Pass] passes: The passes to store.
         """
