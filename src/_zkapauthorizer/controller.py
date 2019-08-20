@@ -33,6 +33,9 @@ from twisted.internet.defer import (
     succeed,
 )
 
+from .foolscap import (
+    TOKEN_LENGTH,
+)
 from .model import (
     Pass,
     RandomToken,
@@ -128,7 +131,7 @@ class DummyRedeemer(object):
         """
         return succeed(
             list(
-                Pass(u"pass-" + token.token_value)
+                Pass((u"pass-" + token.token_value).zfill(TOKEN_LENGTH))
                 for token
                 in random_tokens
             ),
