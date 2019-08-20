@@ -49,7 +49,7 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar _get_tokens: A no-argument callable which retrieves some tokens
+    :ivar _get_passes: A no-argument callable which retrieves some passes
         which can be used to authorize an operation.
     """
     _get_rref = attr.ib()
@@ -60,6 +60,10 @@ class ZKAPAuthorizerStorageClient(object):
         return self._get_rref()
 
     def _get_encoded_passes(self):
+        """
+        :return: A list of passes from ``_get_passes`` encoded into their
+            ``bytes`` representation.
+        """
         return list(
             t.text.encode("ascii")
             for t
