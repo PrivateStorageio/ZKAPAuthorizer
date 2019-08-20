@@ -111,13 +111,11 @@ class ZKAPAuthorizer(object):
 
 
     def get_storage_client(self, node_config, announcement, get_rref):
-        return succeed(
-            ZKAPAuthorizerStorageClient(
-                get_rref,
-                # TODO: Make the caller figure out the correct number of
-                # passes to extract.
-                partial(self._get_store(node_config).extract_passes, 1),
-            )
+        return ZKAPAuthorizerStorageClient(
+            get_rref,
+            # TODO: Make the caller figure out the correct number of
+            # passes to extract.
+            partial(self._get_store(node_config).extract_passes, 1),
         )
 
 

@@ -36,11 +36,6 @@ from testtools.matchers import (
 from testtools.twistedsupport import (
     succeeded,
 )
-from testtools.twistedsupport._deferred import (
-    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
-    # there appear to have stalled.
-    extract_result,
-)
 
 from hypothesis import (
     given,
@@ -235,8 +230,8 @@ class ClientPluginTests(TestCase):
     @given(tahoe_configs(), announcements())
     def test_interface(self, get_config, announcement):
         """
-        ``get_storage_client`` returns a ``Deferred`` that fires with an object
-        which provides ``IStorageServer``.
+        ``get_storage_client`` returns an object which provides
+        ``IStorageServer``.
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
@@ -244,15 +239,15 @@ class ClientPluginTests(TestCase):
             b"tub.port",
         )
 
-        storage_client_deferred = storage_server.get_storage_client(
+        storage_client = storage_server.get_storage_client(
             node_config,
             announcement,
             get_rref,
         )
 
         self.assertThat(
-            storage_client_deferred,
-            succeeded(Provides([IStorageServer])),
+            storage_client,
+            Provides([IStorageServer]),
         )
 
 
@@ -289,13 +284,11 @@ class ClientPluginTests(TestCase):
         store.add(voucher, [token])
         store.insert_passes_for_voucher(voucher, [zkap])
 
-        storage_client_deferred = storage_server.get_storage_client(
+        storage_client = storage_server.get_storage_client(
             node_config,
             announcement,
             get_rref,
         )
-
-        storage_client = extract_result(storage_client_deferred)
 
         # This is hooked up to a garbage reference.  We don't care about its
         # _result_, anyway, right now.
