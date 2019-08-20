@@ -37,15 +37,12 @@ from ._base64 import (
     urlsafe_b64decode,
 )
 
-from .model import (
-    VoucherStore,
-)
 from .controller import (
     PaymentController,
     NonRedeemer,
 )
 
-def from_configuration(node_config, store=None, redeemer=None):
+def from_configuration(node_config, store, redeemer=None):
     """
     Instantiate the plugin root resource using data from its configuration
     section in the Tahoe-LAFS configuration file::
@@ -58,8 +55,7 @@ def from_configuration(node_config, store=None, redeemer=None):
         This is also used to read and write files in the private storage area
         of the node's persistent state location.
 
-    :param VoucherStore store: The store to use.  If ``None`` a sensible one
-        is constructed.
+    :param VoucherStore store: The store to use.
 
     :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
         sensible one is constructed.
@@ -67,8 +63,6 @@ def from_configuration(node_config, store=None, redeemer=None):
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    if store is None:
-        store = VoucherStore.from_node_config(node_config)
     if redeemer is None:
         redeemer = NonRedeemer()
     controller = PaymentController(store, redeemer)
