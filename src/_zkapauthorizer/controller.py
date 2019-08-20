@@ -150,10 +150,11 @@ class PaymentController(object):
       2. The controller tells the data store to remember the voucher.
          The data store provides durability for the voucher which represents an investment (ie, a purchase) on the part of the client.
 
-      3. The controller tells the store to hand all currently idle vouchers to a redeemer.
-         In normal operation, only the newly added voucher will be idle.
+      3. The controller hands the voucher and some random tokens to a redeemer.
+         In the future, this step will need to be retried in the case of failures.
 
-
+      4. When the voucher has been redeemed for passes, the controller hands them to the data store with the voucher.
+        The data store marks the voucher as redeemed and stores the passes for use by the storage client.
     """
     store = attr.ib()
     redeemer = attr.ib()
