@@ -159,7 +159,7 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
-        def get_tokens():
+        def get_passes():
             return [Pass(u"x" * TOKEN_LENGTH)]
 
         self.server = ZKAPAuthorizerStorageServer(
@@ -168,7 +168,7 @@ class ShareTests(TestCase):
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
             get_rref=lambda: self.local_remote_server,
-            get_tokens=get_tokens,
+            get_passes=get_passes,
         )
 
     def test_get_version(self):
@@ -512,7 +512,7 @@ class ShareTests(TestCase):
         d = self.client._rref.callRemote(
             "slot_testv_and_readv_and_writev",
             # tokens
-            self.client._get_tokens(),
+            self.client._get_encoded_passes(),
             # storage_index
             storage_index,
             # secrets
