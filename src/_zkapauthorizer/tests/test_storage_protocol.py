@@ -29,7 +29,8 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     HasLength,
-    Always,
+    IsInstance,
+    AfterPreprocessing,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -84,8 +85,11 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
-from .._storage_server import (
+from ..foolscap import (
     TOKEN_LENGTH,
+)
+from ..model import (
+    Pass,
 )
 
 class AnonymousStorageServer(Fixture):
@@ -156,8 +160,8 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
-        def get_tokens():
-            return [b"x" * TOKEN_LENGTH]
+        def get_passes():
+            return [Pass(u"x" * TOKEN_LENGTH)]
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -165,7 +169,7 @@ class ShareTests(TestCase):
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
             get_rref=lambda: self.local_remote_server,
-            get_tokens=get_tokens,
+            get_passes=get_passes,
         )
 
     def test_get_version(self):
@@ -509,7 +513,7 @@ class ShareTests(TestCase):
         d = self.client._rref.callRemote(
             "slot_testv_and_readv_and_writev",
             # tokens
-            self.client._get_tokens(),
+            self.client._get_encoded_passes(),
             # storage_index
             storage_index,
             # secrets
@@ -526,11 +530,15 @@ class ShareTests(TestCase):
             True,
         )
 
-        # The operation should fail.  I'm not that concerned with how just
-        # yet.
+        # The operation should fail.
         self.expectThat(
             d,
-            failed(Always()),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(TypeError),
+                ),
+            ),
         )
 
         # There should be no shares at the given storage index.

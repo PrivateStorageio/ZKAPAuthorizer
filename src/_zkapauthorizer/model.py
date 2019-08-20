@@ -85,6 +85,11 @@ def open_and_initialize(path, required_schema_version, connect=None):
     except OperationalError as e:
         raise StoreOpenError(e)
 
+    # Enforcement of foreign key constraints is off by default.  It must be
+    # enabled on a per-connection basis.  This is a helpful feature to ensure
+    # consistency so we want it enforced and we use it in our schema.
+    conn.execute("PRAGMA foreign_keys = ON")
+
     with conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -112,8 +117,29 @@ def open_and_initialize(path, required_schema_version, connect=None):
             """
             CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
+                [redeemed] num DEFAULT 0,
 
                 PRIMARY KEY([number])
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [tokens] (
+                [text] text, -- The random string that defines the token.
+                [voucher] text, -- Reference to the voucher these tokens go with.
+
+                PRIMARY KEY([text])
+                FOREIGN KEY([voucher]) REFERENCES [vouchers]([number])
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [passes] (
+                [text] text, -- The string that defines the pass.
+
+                PRIMARY KEY([text])
             )
             """,
         )
@@ -143,11 +169,21 @@ class VoucherStore(object):
     :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
         the node that owns the persisted vouchers.
     """
-    database_path = attr.ib(type=FilePath)
+    database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
     _connection = attr.ib()
 
     @classmethod
     def from_node_config(cls, node_config, connect=None):
+        """
+        Create or open the ``VoucherStore`` for a given node.
+
+        :param allmydata.node._Config node_config: The Tahoe-LAFS
+            configuration object for the node for which we want to open a
+            store.
+
+        :param connect: An alternate database connection function.  This is
+            primarily for the purposes of the test suite.
+        """
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
@@ -161,10 +197,15 @@ class VoucherStore(object):
 
     @with_cursor
     def get(self, cursor, voucher):
+        """
+        :param unicode voucher: The text value of a voucher to retrieve.
+
+        :return Voucher: The voucher object that matches the given value.
+        """
         cursor.execute(
             """
             SELECT
-                ([number])
+                [number], [redeemed]
             FROM
                 [vouchers]
             WHERE
@@ -175,36 +216,150 @@ class VoucherStore(object):
         refs = cursor.fetchall()
         if len(refs) == 0:
             raise KeyError(voucher)
-        return Voucher(refs[0][0])
+        return Voucher(refs[0][0], bool(refs[0][1]))
 
     @with_cursor
-    def add(self, cursor, voucher):
+    def add(self, cursor, voucher, tokens):
+        """
+        Add a new voucher and associated random tokens to the database.  If a
+        voucher with the given text value is already present, do nothing.
+
+        :param unicode voucher: The text value of a voucher to add.
+
+        :param list[RandomToken]: The tokens to add alongside the voucher.
+        """
         cursor.execute(
             """
-            INSERT OR IGNORE INTO [vouchers] VALUES (?)
+            INSERT OR IGNORE INTO [vouchers] ([number]) VALUES (?)
             """,
             (voucher,)
         )
+        if cursor.rowcount:
+            # Something was inserted.  Insert the tokens, too.  It's okay to
+            # drop the tokens in the other case.  They've never been used.
+            # What's *already* in the database, on the other hand, may already
+            # have been submitted in a redeem attempt and must not change.
+            cursor.executemany(
+                """
+                INSERT INTO [tokens] ([voucher], [text]) VALUES (?, ?)
+                """,
+                list(
+                    (voucher, token.token_value)
+                    for token
+                    in tokens
+                ),
+            )
 
     @with_cursor
     def list(self, cursor):
+        """
+        Get all known vouchers.
+
+        :return list[Voucher]: All vouchers known to the store.
+        """
         cursor.execute(
             """
-            SELECT ([number]) FROM [vouchers]
+            SELECT [number], [redeemed] FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
 
         return list(
-            Voucher(number)
-            for (number,)
+            Voucher(number, bool(redeemed))
+            for (number, redeemed)
             in refs
         )
+
+    @with_cursor
+    def insert_passes_for_voucher(self, cursor, voucher, passes):
+        """
+        Store some passes.
+
+        :param unicode voucher: The voucher associated with the passes.  This
+            voucher will be marked as redeemed to indicate it has fulfilled
+            its purpose and has no further use for us.
+
+        :param list[Pass] passes: The passes to store.
+        """
+        cursor.executemany(
+            """
+            INSERT INTO [passes] VALUES (?)
+            """,
+            list((p.text,) for p in passes),
+        )
+        cursor.execute(
+            """
+            UPDATE [vouchers] SET [redeemed] = 1 WHERE [number] = ?
+            """,
+            (voucher,),
+        )
+
+    @with_cursor
+    def extract_passes(self, cursor, count):
+        """
+        Remove and return some passes.
+
+        :param int count: The maximum number of passes to remove and return.
+            If fewer passes than this are available, only as many as are
+            available are returned.
+
+        :return list[Pass]: The removed passes.
+        """
+        cursor.execute(
+            """
+            CREATE TEMPORARY TABLE [extracting-passes]
+            AS
+            SELECT [text] FROM [passes] LIMIT ?
+            """,
+            (count,),
+        )
+        cursor.execute(
+            """
+            DELETE FROM [passes] WHERE [text] IN [extracting-passes]
+            """,
+        )
+        cursor.execute(
+            """
+            SELECT [text] FROM [extracting-passes]
+            """,
+        )
+        texts = cursor.fetchall()
+        cursor.execute(
+            """
+            DROP TABLE [extracting-passes]
+            """,
+        )
+        return list(
+            Pass(t)
+            for (t,)
+            in texts
+        )
+
+
+@attr.s(frozen=True)
+class Pass(object):
+    """
+    A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
+
+    :ivar unicode text: The text value of the pass.  This can be sent to a
+        service provider one time to anonymously prove a prior voucher
+        redemption.  If it is sent more than once the service provider may
+        choose to reject it and the anonymity property is compromised.  Pass
+        text should be kept secret.  If pass text is divulged to third-parties
+        the anonymity property may be compromised.
+    """
+    text = attr.ib(validator=attr.validators.instance_of(unicode))
+
+
+@attr.s(frozen=True)
+class RandomToken(object):
+    token_value = attr.ib(validator=attr.validators.instance_of(unicode))
 
 
 @attr.s
 class Voucher(object):
     number = attr.ib()
+    redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
 
     @classmethod
     def from_json(cls, json):

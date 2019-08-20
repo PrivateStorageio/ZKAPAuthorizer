@@ -49,15 +49,26 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar _get_tokens: A no-argument callable which retrieves some tokens
+    :ivar _get_passes: A no-argument callable which retrieves some passes
         which can be used to authorize an operation.
     """
     _get_rref = attr.ib()
-    _get_tokens = attr.ib()
+    _get_passes = attr.ib()
 
     @property
     def _rref(self):
         return self._get_rref()
+
+    def _get_encoded_passes(self):
+        """
+        :return: A list of passes from ``_get_passes`` encoded into their
+            ``bytes`` representation.
+        """
+        return list(
+            t.text.encode("ascii")
+            for t
+            in self._get_passes()
+        )
 
     def get_version(self):
         return self._rref.callRemote(
@@ -75,7 +86,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_tokens(),
+            self._get_encoded_passes(),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -101,7 +112,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "add_lease",
-            self._get_tokens(),
+            self._get_encoded_passes(),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -114,7 +125,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "renew_lease",
-            self._get_tokens(),
+            self._get_encoded_passes(),
             storage_index,
             renew_secret,
         )
@@ -143,7 +154,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_tokens(),
+            self._get_encoded_passes(),
             storage_index,
             secrets,
             tw_vectors,

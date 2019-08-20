@@ -92,6 +92,7 @@ from treq.testing import (
 )
 
 from ..model import (
+    Voucher,
     VoucherStore,
     memory_connect,
 )
@@ -390,10 +391,7 @@ class VoucherTests(TestCase):
                     AfterPreprocessing(
                         json_content,
                         succeeded(
-                            Equals({
-                                u"version": 1,
-                                u"number": voucher,
-                            }),
+                            Equals(Voucher(voucher).marshal()),
                         ),
                     ),
                 ),
@@ -449,7 +447,7 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"vouchers": list(
-                                    {u"version": 1, u"number": voucher}
+                                    Voucher(voucher).marshal()
                                     for voucher
                                     in vouchers
                                 ),

@@ -64,6 +64,8 @@ from ..model import (
 from .strategies import (
     tahoe_configs,
     vouchers,
+    random_tokens,
+    zkaps,
 )
 
 
@@ -104,8 +106,8 @@ class VoucherStoreTests(TestCase):
             raises(KeyError),
         )
 
-    @given(tahoe_configs(), vouchers())
-    def test_add(self, get_config, voucher):
+    @given(tahoe_configs(), vouchers(), lists(random_tokens(), unique=True))
+    def test_add(self, get_config, voucher, tokens):
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
@@ -116,16 +118,17 @@ class VoucherStoreTests(TestCase):
             config,
             memory_connect,
         )
-        store.add(voucher)
+        store.add(voucher, tokens)
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
+                redeemed=Equals(False),
             ),
         )
 
-    @given(tahoe_configs(), vouchers())
-    def test_add_idempotent(self, get_config, voucher):
+    @given(tahoe_configs(), vouchers(), lists(random_tokens(), unique=True))
+    def test_add_idempotent(self, get_config, voucher, tokens):
         """
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
@@ -136,8 +139,8 @@ class VoucherStoreTests(TestCase):
             config,
             memory_connect,
         )
-        store.add(voucher)
-        store.add(voucher)
+        store.add(voucher, tokens)
+        store.add(voucher, [])
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
@@ -146,7 +149,7 @@ class VoucherStoreTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), lists(vouchers()))
+    @given(tahoe_configs(), lists(vouchers(), unique=True))
     def test_list(self, get_config, vouchers):
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
@@ -161,16 +164,16 @@ class VoucherStoreTests(TestCase):
         )
 
         for voucher in vouchers:
-            store.add(voucher)
+            store.add(voucher, [])
 
         self.assertThat(
             store.list(),
-            AfterPreprocessing(
-                lambda refs: set(ref.number for ref in refs),
-                Equals(set(vouchers)),
-            ),
+            Equals(list(
+                Voucher(number)
+                for number
+                in vouchers
+            )),
         )
-
 
     @given(tahoe_configs())
     def test_uncreateable_store_directory(self, get_config):
@@ -250,3 +253,43 @@ class VoucherTests(TestCase):
             Voucher.from_json(ref.to_json()),
             Equals(ref),
         )
+
+
+class ZKAPStoreTests(TestCase):
+    """
+    Tests for ZKAP-related functionality of ``VoucherStore``.
+    """
+    @given(tahoe_configs(), vouchers(), lists(zkaps(), unique=True))
+    def test_zkaps_round_trip(self, get_config, voucher_value, passes):
+        """
+        ZKAPs that are added to the store can later be retrieved.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"node"), b"tub.port")
+        store = VoucherStore.from_node_config(
+            config,
+            memory_connect,
+        )
+        store.insert_passes_for_voucher(voucher_value, passes)
+        retrieved_passes = store.extract_passes(len(passes))
+        self.expectThat(passes, Equals(retrieved_passes))
+
+        # After extraction, the passes are no longer available.
+        more_passes = store.extract_passes(1)
+        self.expectThat([], Equals(more_passes))
+
+    @given(tahoe_configs(), vouchers(), random_tokens(), zkaps())
+    def test_mark_vouchers_redeemed(self, get_config, voucher_value, token, one_pass):
+        """
+        The voucher for ZKAPs that are added to the store are marked as redeemed.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"node"), b"tub.port")
+        store = VoucherStore.from_node_config(
+            config,
+            memory_connect,
+        )
+        store.add(voucher_value, [token])
+        store.insert_passes_for_voucher(voucher_value, [one_pass])
+        loaded_voucher = store.get(voucher_value)
+        self.assertThat(loaded_voucher.redeemed, Equals(True))

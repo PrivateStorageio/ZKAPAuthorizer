@@ -37,14 +37,12 @@ from ._base64 import (
     urlsafe_b64decode,
 )
 
-from .model import (
-    VoucherStore,
-)
 from .controller import (
     PaymentController,
+    NonRedeemer,
 )
 
-def from_configuration(node_config, store=None):
+def from_configuration(node_config, store, redeemer=None):
     """
     Instantiate the plugin root resource using data from its configuration
     section in the Tahoe-LAFS configuration file::
@@ -57,15 +55,17 @@ def from_configuration(node_config, store=None):
         This is also used to read and write files in the private storage area
         of the node's persistent state location.
 
-    :param VoucherStore store: The store to use.  If ``None`` a sensible one
-        is constructed.
+    :param VoucherStore store: The store to use.
+
+    :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
+        sensible one is constructed.
 
     :return IResource: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    if store is None:
-        store = VoucherStore.from_node_config(node_config)
-    controller = PaymentController(store)
+    if redeemer is None:
+        redeemer = NonRedeemer()
+    controller = PaymentController(store, redeemer)
     root = Resource()
     root.putChild(
         b"voucher",
@@ -97,12 +97,12 @@ class _VoucherCollection(Resource):
         try:
             payload = loads(request.content.read())
         except Exception:
-            return bad_request().render(request)
+            return bad_request(u"json request body required").render(request)
         if payload.keys() != [u"voucher"]:
-            return bad_request().render(request)
+            return bad_request(u"request object must have exactly one key: 'voucher'").render(request)
         voucher = payload[u"voucher"]
         if not is_syntactic_voucher(voucher):
-            return bad_request().render(request)
+            return bad_request(u"submitted voucher is syntactically invalid").render(request)
 
         self._controller.redeem(voucher)
         return b""
@@ -170,11 +170,11 @@ class VoucherView(Resource):
         return self._voucher.to_json()
 
 
-def bad_request():
+def bad_request(reason=u"Bad Request"):
     """
     :return IResource: A resource which can be rendered to produce a **BAD
         REQUEST** response.
     """
     return ErrorPage(
-        BAD_REQUEST, b"Bad Request", b"Bad Request",
+        BAD_REQUEST, b"Bad Request", reason.encode("utf-8"),
     )

@@ -8,6 +8,8 @@ buildPythonPackage rec {
   name = "${pname}-${version}";
   src = ./.;
 
+  outputs = [ "out" "doc" ];
+
   depsBuildBuild = [
     sphinx
     circleci-cli
@@ -30,7 +32,15 @@ buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    ${pyflakes}/bin/pyflakes src/_zkapauthorizer
-    python -m coverage run --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module twisted.trial _zkapauthorizer
+    runHook preCheck
+    "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
+    python -m coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module twisted.trial _zkapauthorizer
+    runHook postCheck
+  '';
+
+  postCheck = ''
+    python -m coverage html
+    mkdir -p "$doc/share/doc/${name}"
+    cp -vr .coverage htmlcov "$doc/share/doc/${name}"
   '';
 }
