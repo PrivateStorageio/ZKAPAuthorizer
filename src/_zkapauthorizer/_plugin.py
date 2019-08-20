@@ -111,6 +111,12 @@ class ZKAPAuthorizer(object):
 
 
     def get_storage_client(self, node_config, announcement, get_rref):
+        """
+        Create an ``IStorageClient`` that submits ZKAPs with certain requests in
+        order to authorize them.  The ZKAPs are extracted from the database
+        managed by this plugin in the node directory that goes along with
+        ``node_config``.
+        """
         return ZKAPAuthorizerStorageClient(
             get_rref,
             # TODO: Make the caller figure out the correct number of
