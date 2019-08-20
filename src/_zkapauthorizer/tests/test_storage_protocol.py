@@ -84,8 +84,11 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
-from .._storage_server import (
+from ..foolscap import (
     TOKEN_LENGTH,
+)
+from ..model import (
+    Pass,
 )
 
 class AnonymousStorageServer(Fixture):
@@ -157,7 +160,7 @@ class ShareTests(TestCase):
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
         def get_tokens():
-            return [b"x" * TOKEN_LENGTH]
+            return [Pass(u"x" * TOKEN_LENGTH)]
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,

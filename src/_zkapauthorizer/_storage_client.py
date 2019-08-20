@@ -59,6 +59,13 @@ class ZKAPAuthorizerStorageClient(object):
     def _rref(self):
         return self._get_rref()
 
+    def _get_encoded_tokens(self):
+        return list(
+            t.text.encode("ascii")
+            for t
+            in self._get_tokens()
+        )
+
     def get_version(self):
         return self._rref.callRemote(
             "get_version",
@@ -75,7 +82,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_tokens(),
+            self._get_encoded_tokens(),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -101,7 +108,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "add_lease",
-            self._get_tokens(),
+            self._get_encoded_tokens(),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -114,7 +121,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "renew_lease",
-            self._get_tokens(),
+            self._get_encoded_tokens(),
             storage_index,
             renew_secret,
         )
@@ -143,7 +150,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_tokens(),
+            self._get_encoded_tokens(),
             storage_index,
             secrets,
             tw_vectors,
