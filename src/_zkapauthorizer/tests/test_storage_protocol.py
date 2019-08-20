@@ -29,7 +29,8 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     HasLength,
-    Always,
+    IsInstance,
+    AfterPreprocessing,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -529,11 +530,15 @@ class ShareTests(TestCase):
             True,
         )
 
-        # The operation should fail.  I'm not that concerned with how just
-        # yet.
+        # The operation should fail.
         self.expectThat(
             d,
-            failed(Always()),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(TypeError),
+                ),
+            ),
         )
 
         # There should be no shares at the given storage index.

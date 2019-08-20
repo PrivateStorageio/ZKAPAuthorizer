@@ -117,7 +117,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
-    def remote_slot_testv_and_readv_and_writev(self, tokens, *a, **kw):
+    def remote_slot_testv_and_readv_and_writev(
+            self,
+            tokens,
+            storage_index,
+            secrets,
+            tw_vectors,
+            r_vector,
+    ):
         """
         Pass through after a token check to ensure clients can only allocate
         storage for mutable shares if they present valid tokens.
@@ -132,8 +139,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # about (and don't expose over the network): renew_leases.  We always
         # pass False for this because we want to manage leases completely
         # separately from writes.
-        kw["renew_leases"] = False
-        return self._original.slot_testv_and_readv_and_writev(*a, **kw)
+        return self._original.slot_testv_and_readv_and_writev(
+            storage_index,
+            secrets,
+            tw_vectors,
+            r_vector,
+            renew_leases=False,
+        )
 
     def remote_slot_readv(self, *a, **kw):
         """
