@@ -1,4 +1,6 @@
 self: super: {
+  openssl = self.openssl_1_1;
+
   python27 = super.python27.override {
     packageOverrides = python-self: python-super: {
       # new tahoe-lafs dependency
