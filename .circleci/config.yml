@@ -53,6 +53,7 @@ jobs:
 
     environment:
       PIP_SYNC_REQUIREMENTS: "requirements.txt requirements-tests.txt"
+      ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
     steps:
       - "checkout"
