@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> { overlays = [ (import ./overlays.nix) ]; } }:
+{ pkgs ? import ./nixpkgs.nix { } }:
 let
   zkapauthorizer = pkgs.callPackage ./default.nix { };
 in
