@@ -23,8 +23,12 @@ from json import (
 from zope.interface import (
     implementer,
 )
+import attr
 from testtools import (
     TestCase,
+)
+from testtools.content import (
+    text_content,
 )
 from testtools.matchers import (
     Equals,
@@ -32,9 +36,11 @@ from testtools.matchers import (
     AllMatch,
     IsInstance,
     HasLength,
+    AfterPreprocessing,
 )
 from testtools.twistedsupport import (
     succeeded,
+    failed,
 )
 
 from fixtures import (
@@ -47,18 +53,32 @@ from hypothesis import (
 from hypothesis.strategies import (
     integers,
 )
+from twisted.python.url import (
+    URL,
+)
 from twisted.internet.defer import (
     fail,
+    succeed,
 )
 from twisted.web.iweb import (
     IAgent,
+    IBodyProducer,
 )
 from twisted.web.resource import (
     Resource,
 )
 from treq.testing import (
-    RequestTraversalAgent,
+    StubTreq,
 )
+
+from privacypass import (
+    SecurityException,
+    PublicKey,
+    BlindedToken,
+    BatchDLEQProof,
+    random_signing_key,
+)
+
 from ..controller import (
     IRedeemer,
     NonRedeemer,
@@ -70,6 +90,7 @@ from ..controller import (
 from ..model import (
     memory_connect,
     VoucherStore,
+    Voucher,
     Pass,
 )
 
@@ -134,6 +155,8 @@ class PaymentControllerTests(TestCase):
         )
 
 
+NOWHERE = URL.from_text(u"https://127.0.0.1/")
+
 class RistrettoRedeemerTests(TestCase):
     """
     Tests for ``RistrettoRedeemer``.
@@ -142,39 +165,28 @@ class RistrettoRedeemerTests(TestCase):
         """
         An ``RistrettoRedeemer`` instance provides ``IRedeemer``.
         """
-        redeemer = RistrettoRedeemer(stub_agent())
+        redeemer = RistrettoRedeemer(stub_agent(), NOWHERE)
         self.assertThat(
             redeemer,
             Provides([IRedeemer]),
         )
 
-    @given(vouchers(), integers(min_value=1, max_value=100))
-    def test_redemption(self, voucher, num_tokens):
+    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    def test_good_ristretto_redemption(self, voucher, num_tokens):
         """
-        ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a list
-        of ``Pass`` instances.
+        If the issuer returns a successful result then
+        ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
+        list of ``Pass`` instances.
         """
-        public_key = u"pub foo-bar"
-        signatures = list(u"sig-{}".format(n) for n in range(num_tokens))
-        proof = u"proof bar-foo"
-
-        issuer = SuccessfulRedemption(public_key, signatures, proof)
-        agent = agent_for_loopback_ristretto(issuer)
-        redeemer = RistrettoRedeemer(agent)
+        signing_key = random_signing_key()
+        issuer = RistrettoRedemption(signing_key)
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        # The redeemer gives back the requested number of tokens.
-        self.expectThat(
-            len(random_tokens),
-            Equals(num_tokens),
-        )
         d = redeemer.redeem(
             voucher,
             random_tokens,
         )
-        # Perform some very basic checks on the results.  We won't verify the
-        # crypto here since we don't have a real Ristretto server.  Such
-        # checks would fail.  Some integration tests will verify that part of
-        # things.
         self.assertThat(
             d,
             succeeded(
@@ -187,16 +199,46 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
+    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    def test_bad_ristretto_redemption(self, voucher, num_tokens):
+        """
+        If the issuer returns a successful result then
+        ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
+        list of ``Pass`` instances.
+        """
+        signing_key = random_signing_key()
+        issuer = RistrettoRedemption(signing_key)
+        # Make it lie about the public key it is using.
+        issuer.public_key = PublicKey.from_signing_key(random_signing_key())
 
-def agent_for_loopback_ristretto(local_issuer):
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        d = redeemer.redeem(
+            voucher,
+            random_tokens,
+        )
+        self.addDetail(u"redeem Deferred", text_content(str(d)))
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(SecurityException),
+                ),
+            ),
+        )
+
+
+def treq_for_loopback_ristretto(local_issuer):
     """
-    Create an ``IAgent`` which can dispatch to a local issuer.
+    Create a ``treq``-alike which can dispatch to a local issuer.
     """
     v1 = Resource()
     v1.putChild(b"redeem", local_issuer)
     root = Resource()
     root.putChild(b"v1", v1)
-    return RequestTraversalAgent(root)
+    return StubTreq(root)
 
 
 class SuccessfulRedemption(Resource):
@@ -228,3 +270,45 @@ class _StubAgent(object):
 
 def stub_agent():
     return _StubAgent()
+
+
+class RistrettoRedemption(Resource):
+    def __init__(self, signing_key):
+        Resource.__init__(self)
+        self.signing_key = signing_key
+        self.public_key = PublicKey.from_signing_key(signing_key)
+
+    def render_POST(self, request):
+        request_body = loads(request.content.read())
+        marshaled_blinded_tokens = request_body[u"redeemTokens"]
+        servers_blinded_tokens = list(
+            BlindedToken.decode_base64(marshaled_blinded_token.encode("ascii"))
+            for marshaled_blinded_token
+            in marshaled_blinded_tokens
+        )
+        servers_signed_tokens = list(
+            self.signing_key.sign(blinded_token)
+            for blinded_token
+            in servers_blinded_tokens
+        )
+        marshaled_signed_tokens = list(
+            signed_token.encode_base64()
+            for signed_token
+            in servers_signed_tokens
+        )
+        servers_proof = BatchDLEQProof.create(
+            self.signing_key,
+            servers_blinded_tokens,
+            servers_signed_tokens,
+        )
+        try:
+            marshaled_proof = servers_proof.encode_base64()
+        finally:
+            servers_proof.destroy()
+
+        return dumps({
+            u"success": True,
+            u"public-key": self.public_key.encode_base64(),
+            u"signatures": marshaled_signed_tokens,
+            u"proof": marshaled_proof,
+        })

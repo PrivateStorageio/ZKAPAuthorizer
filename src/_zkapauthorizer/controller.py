@@ -20,7 +20,9 @@ for the client side of the storage plugin.
 from functools import (
     partial,
 )
-
+from json import (
+    dumps,
+)
 import attr
 
 from zope.interface import (
@@ -28,9 +30,17 @@ from zope.interface import (
     implementer,
 )
 
+from twisted.python.url import (
+    URL,
+)
 from twisted.internet.defer import (
     Deferred,
     succeed,
+    inlineCallbacks,
+    returnValue,
+)
+from treq import (
+    json_content,
 )
 
 import privacypass
@@ -39,9 +49,18 @@ from .foolscap import (
     TOKEN_LENGTH,
 )
 from .model import (
-    Pass,
     RandomToken,
+    Voucher,
+    Pass,
 )
+
+
+class TransientRedemptionError(Exception):
+    pass
+
+
+class PermanentRedemptionError(Exception):
+    pass
 
 
 class IRedeemer(Interface):
@@ -96,7 +115,7 @@ class NonRedeemer(object):
     def random_tokens_for_voucher(self, voucher, count):
         # It doesn't matter because we're never going to try to redeem them.
         return list(
-            RandomToken(u"{}-{}".format(voucher, n))
+            RandomToken(u"{}-{}".format(voucher.number, n))
             for n
             in range(count)
         )
@@ -121,7 +140,7 @@ class DummyRedeemer(object):
         """
         # Dummy token generation.
         return list(
-            RandomToken(u"{}-{}".format(voucher, n))
+            RandomToken(u"{}-{}".format(voucher.number, n))
             for n
             in range(count)
         )
@@ -143,7 +162,8 @@ class DummyRedeemer(object):
 @implementer(IRedeemer)
 @attr.s
 class RistrettoRedeemer(object):
-    _agent = attr.ib()
+    _treq = attr.ib()
+    _api_root = attr.ib(validator=attr.validators.instance_of(URL))
 
     def random_tokens_for_voucher(self, voucher, count):
         return list(
@@ -152,13 +172,82 @@ class RistrettoRedeemer(object):
             in range(count)
         )
 
-    def redeem(self, voucher, random_tokens):
-        # The wrong implementation, of course.
-        return succeed(list(
-            Pass(text=u"tok-" + token.token_value)
+    @inlineCallbacks
+    def redeem(self, voucher, encoded_random_tokens):
+        random_tokens = list(
+            privacypass.RandomToken.decode_base64(token.token_value.encode("ascii"))
             for token
-            in random_tokens
+            in encoded_random_tokens
+        )
+        blinded_tokens = list(token.blind() for token in random_tokens)
+        response = yield self._treq.post(
+            self._api_root.child(u"v1", u"redeem").to_text(),
+            dumps({
+                u"redeemVoucher": voucher.number,
+                u"redeemTokens": list(
+                    token.encode_base64()
+                    for token
+                    in blinded_tokens
+                ),
+            }),
+        )
+        result = yield json_content(response)
+        marshaled_signed_tokens = result[u"signatures"]
+        marshaled_proof = result[u"proof"]
+        marshaled_public_key = result[u"public-key"]
+
+        public_key = privacypass.PublicKey.decode_base64(
+            marshaled_public_key.encode("ascii"),
+        )
+        clients_signed_tokens = list(
+            privacypass.SignedToken.decode_base64(
+                marshaled_signed_token.encode("ascii"),
+            )
+            for marshaled_signed_token
+            in marshaled_signed_tokens
+        )
+        clients_proof = privacypass.BatchDLEQProof.decode_base64(
+            marshaled_proof.encode("ascii"),
+        )
+        clients_unblinded_tokens = clients_proof.invalid_or_unblind(
+            random_tokens,
+            blinded_tokens,
+            clients_signed_tokens,
+            public_key,
+        )
+        returnValue(list(
+            Pass(text=unblinded_token.encode_base64().decode("ascii"))
+            for unblinded_token
+            in clients_unblinded_tokens
         ))
+
+    def tokens_to_passes(self, message, unblinded_tokens):
+        clients_preimages = list(
+            token.preimage()
+            for token
+            in unblinded_tokens
+        )
+        clients_verification_keys = list(
+            token.derive_verification_key_sha512()
+            for token
+            in unblinded_tokens
+        )
+        clients_passes = zip(
+            clients_preimages, (
+                verification_key.sign_sha512(message)
+                for verification_key
+                in clients_verification_keys
+            ),
+        )
+        marshaled_passes = list(
+            (
+                token_preimage.encode_base64(),
+                sig.encode_base64()
+            )
+            for (token_preimage, sig)
+            in clients_passes
+        )
+        return marshaled_passes
 
 
 @attr.s
@@ -183,6 +272,9 @@ class PaymentController(object):
     redeemer = attr.ib()
 
     def redeem(self, voucher):
+        """
+        :param unicode voucher: A voucher to redeem.
+        """
         # Pre-generate the random tokens to use when redeeming the voucher.
         # These are persisted with the voucher so the redemption can be made
         # idempotent.  We don't want to lose the value if we fail after the
@@ -192,13 +284,13 @@ class PaymentController(object):
         # server signs a given set of random tokens once or many times, the
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
-        tokens = self.redeemer.random_tokens_for_voucher(voucher, 100)
+        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), 100)
 
         # Persist the voucher and tokens so they're available if we fail.
         self.store.add(voucher, tokens)
 
         # Ask the redeemer to do the real task of redemption.
-        d = self.redeemer.redeem(voucher, tokens)
+        d = self.redeemer.redeem(Voucher(voucher), tokens)
         d.addCallback(
             partial(self._redeemSuccess, voucher),
         )
