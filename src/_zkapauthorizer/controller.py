@@ -33,6 +33,8 @@ from twisted.internet.defer import (
     succeed,
 )
 
+import privacypass
+
 from .foolscap import (
     TOKEN_LENGTH,
 )
@@ -136,6 +138,27 @@ class DummyRedeemer(object):
                 in random_tokens
             ),
         )
+
+
+@implementer(IRedeemer)
+@attr.s
+class RistrettoRedeemer(object):
+    _agent = attr.ib()
+
+    def random_tokens_for_voucher(self, voucher, count):
+        return list(
+            RandomToken(privacypass.RandomToken.create().encode_base64().decode("ascii"))
+            for n
+            in range(count)
+        )
+
+    def redeem(self, voucher, random_tokens):
+        # The wrong implementation, of course.
+        return succeed(list(
+            Pass(text=u"tok-" + token.token_value)
+            for token
+            in random_tokens
+        ))
 
 
 @attr.s

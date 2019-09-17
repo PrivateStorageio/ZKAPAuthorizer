@@ -16,11 +16,25 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
+from json import (
+    loads,
+    dumps,
+)
+from zope.interface import (
+    implementer,
+)
 from testtools import (
     TestCase,
 )
 from testtools.matchers import (
     Equals,
+    MatchesAll,
+    AllMatch,
+    IsInstance,
+    HasLength,
+)
+from testtools.twistedsupport import (
+    succeeded,
 )
 
 from fixtures import (
@@ -30,21 +44,41 @@ from fixtures import (
 from hypothesis import (
     given,
 )
-
+from hypothesis.strategies import (
+    integers,
+)
+from twisted.internet.defer import (
+    fail,
+)
+from twisted.web.iweb import (
+    IAgent,
+)
+from twisted.web.resource import (
+    Resource,
+)
+from treq.testing import (
+    RequestTraversalAgent,
+)
 from ..controller import (
+    IRedeemer,
     NonRedeemer,
     DummyRedeemer,
+    RistrettoRedeemer,
     PaymentController,
 )
 
 from ..model import (
     memory_connect,
     VoucherStore,
+    Pass,
 )
 
 from .strategies import (
     tahoe_configs,
     vouchers,
+)
+from .matchers import (
+    Provides,
 )
 
 class PaymentControllerTests(TestCase):
@@ -98,3 +132,99 @@ class PaymentControllerTests(TestCase):
             persisted_voucher.redeemed,
             Equals(True),
         )
+
+
+class RistrettoRedeemerTests(TestCase):
+    """
+    Tests for ``RistrettoRedeemer``.
+    """
+    def test_interface(self):
+        """
+        An ``RistrettoRedeemer`` instance provides ``IRedeemer``.
+        """
+        redeemer = RistrettoRedeemer(stub_agent())
+        self.assertThat(
+            redeemer,
+            Provides([IRedeemer]),
+        )
+
+    @given(vouchers(), integers(min_value=1, max_value=100))
+    def test_redemption(self, voucher, num_tokens):
+        """
+        ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a list
+        of ``Pass`` instances.
+        """
+        public_key = u"pub foo-bar"
+        signatures = list(u"sig-{}".format(n) for n in range(num_tokens))
+        proof = u"proof bar-foo"
+
+        issuer = SuccessfulRedemption(public_key, signatures, proof)
+        agent = agent_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(agent)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        # The redeemer gives back the requested number of tokens.
+        self.expectThat(
+            len(random_tokens),
+            Equals(num_tokens),
+        )
+        d = redeemer.redeem(
+            voucher,
+            random_tokens,
+        )
+        # Perform some very basic checks on the results.  We won't verify the
+        # crypto here since we don't have a real Ristretto server.  Such
+        # checks would fail.  Some integration tests will verify that part of
+        # things.
+        self.assertThat(
+            d,
+            succeeded(
+                MatchesAll(
+                    AllMatch(
+                        IsInstance(Pass),
+                    ),
+                    HasLength(num_tokens),
+                ),
+            ),
+        )
+
+
+def agent_for_loopback_ristretto(local_issuer):
+    """
+    Create an ``IAgent`` which can dispatch to a local issuer.
+    """
+    v1 = Resource()
+    v1.putChild(b"redeem", local_issuer)
+    root = Resource()
+    root.putChild(b"v1", v1)
+    return RequestTraversalAgent(root)
+
+
+class SuccessfulRedemption(Resource):
+    def __init__(self, public_key, signatures, proof):
+        Resource.__init__(self)
+        self.public_key = public_key
+        self.signatures = signatures
+        self.proof = proof
+        self.redemptions = []
+
+    def render_POST(self, request):
+        request_body = loads(request.content.read())
+        voucher = request_body[u"redeemVoucher"]
+        tokens = request_body[u"redeemTokens"]
+        self.redemptions.append((voucher, tokens))
+        return dumps({
+            u"success": True,
+            u"public-key": self.public_key,
+            u"signatures": self.signatures,
+            u"proof": self.proof,
+        })
+
+
+@implementer(IAgent)
+class _StubAgent(object):
+    def request(self, method, uri, headers=None, bodyProducer=None):
+        return fail(Exception("It's only a model."))
+
+
+def stub_agent():
+    return _StubAgent()
