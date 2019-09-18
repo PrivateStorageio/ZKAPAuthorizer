@@ -160,8 +160,8 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
-        def get_passes():
-            return [Pass(u"x" * TOKEN_LENGTH)]
+        def get_passes(message, count):
+            return [Pass(u"x" * TOKEN_LENGTH)] * count
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -512,8 +512,8 @@ class ShareTests(TestCase):
         # transit the network differently from keyword arguments.  Yay.
         d = self.client._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            # tokens
-            self.client._get_encoded_passes(),
+            # passes
+            self.client._get_encoded_passes(storage_index, 1),
             # storage_index
             storage_index,
             # secrets

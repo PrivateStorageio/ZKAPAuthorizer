@@ -36,11 +36,12 @@ from testtools.matchers import (
 from testtools.twistedsupport import (
     succeeded,
 )
-
 from hypothesis import (
     given,
 )
-
+from hypothesis.strategies import (
+    just,
+)
 from foolscap.broker import (
     Broker,
 )
@@ -77,8 +78,9 @@ from ..model import (
 )
 
 from .strategies import (
+    minimal_tahoe_configs,
     tahoe_configs,
-    configurations,
+    server_configurations,
     announcements,
     vouchers,
     random_tokens,
@@ -134,7 +136,7 @@ class ServerPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_announceable(self, configuration):
         """
         ``storage_server.get_storage_server`` returns an instance which provides
@@ -150,7 +152,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_referenceable(self, configuration):
         """
         The storage server attached to the result of
@@ -171,7 +173,7 @@ class ServerPluginTests(TestCase):
             ),
         )
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_serializable(self, configuration):
         """
         The storage server attached to the result of
@@ -195,7 +197,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_hashable(self, configuration):
         """
         The storage server attached to the result of
@@ -220,6 +222,10 @@ class ServerPluginTests(TestCase):
             ),
         )
 
+
+tahoe_configs_with_dummy_redeemer = minimal_tahoe_configs({
+    u"privatestorageio-zkapauthz-v1": just({u"redeemer": u"dummy"}),
+})
 
 
 class ClientPluginTests(TestCase):
@@ -252,7 +258,7 @@ class ClientPluginTests(TestCase):
 
 
     @given(
-        tahoe_configs(),
+        tahoe_configs_with_dummy_redeemer,
         announcements(),
         vouchers(),
         random_tokens(),

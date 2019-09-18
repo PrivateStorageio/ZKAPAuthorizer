@@ -102,7 +102,6 @@ from ..resource import (
 
 from .strategies import (
     tahoe_configs,
-    client_configurations,
     vouchers,
     requests,
 )
@@ -120,10 +119,6 @@ def uncooperator(started=True):
     )
 
 
-
-tahoe_configs_with_client_config = tahoe_configs(storage_client_plugins={
-    u"privatestorageio-zkapauthz-v1": client_configurations(),
-})
 
 def is_not_json(bytestring):
     """
@@ -217,7 +212,7 @@ class VoucherTests(TestCase):
         self.useFixture(CaptureTwistedLogs())
 
 
-    @given(tahoe_configs_with_client_config, requests(just([u"voucher"])))
+    @given(tahoe_configs(), requests(just([u"voucher"])))
     def test_reachable(self, get_config, request):
         """
         A resource is reachable at the ``voucher`` child of a the resource
@@ -232,7 +227,7 @@ class VoucherTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, vouchers())
+    @given(tahoe_configs(), vouchers())
     def test_put_voucher(self, get_config, voucher):
         """
         When a voucher is ``PUT`` to ``VoucherCollection`` it is passed in to the
@@ -263,7 +258,7 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, invalid_bodies())
+    @given(tahoe_configs(), invalid_bodies())
     def test_put_invalid_body(self, get_config, body):
         """
         If the body of a ``PUT`` to ``VoucherCollection`` does not consist of an
@@ -294,7 +289,7 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, not_vouchers())
+    @given(tahoe_configs(), not_vouchers())
     def test_get_invalid_voucher(self, get_config, not_voucher):
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
@@ -322,7 +317,7 @@ class VoucherTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, vouchers())
+    @given(tahoe_configs(), vouchers())
     def test_get_unknown_voucher(self, get_config, voucher):
         """
         When a voucher is requested with a ``GET`` to a child of
@@ -345,7 +340,7 @@ class VoucherTests(TestCase):
         )
 
 
-    @given(tahoe_configs_with_client_config, vouchers())
+    @given(tahoe_configs(), vouchers())
     def test_get_known_voucher(self, get_config, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
@@ -398,7 +393,7 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs_with_client_config, lists(vouchers(), unique=True))
+    @given(tahoe_configs(), lists(vouchers(), unique=True))
     def test_list_vouchers(self, get_config, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing

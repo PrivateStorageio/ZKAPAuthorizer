@@ -39,8 +39,14 @@ from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
 )
+from twisted.web.client import (
+    Agent,
+)
 from treq import (
     json_content,
+)
+from treq.client import (
+    HTTPClient,
 )
 
 import privacypass
@@ -49,6 +55,7 @@ from .model import (
     RandomToken,
     UnblindedToken,
     Voucher,
+    Pass,
 )
 
 
@@ -131,6 +138,10 @@ class DummyRedeemer(object):
     really redeeming them, it makes up some fake ZKAPs and pretends those are
     the result.
     """
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls()
+
     def random_tokens_for_voucher(self, voucher, count):
         """
         Generate some number of random tokens to submit along with a voucher for
@@ -156,12 +167,26 @@ class DummyRedeemer(object):
             ),
         )
 
+    def tokens_to_passes(self, message, unblinded_tokens):
+        return list(
+            Pass(token.text)
+            for token
+            in unblinded_tokens
+        )
+
 
 @implementer(IRedeemer)
 @attr.s
 class RistrettoRedeemer(object):
     _treq = attr.ib()
     _api_root = attr.ib(validator=attr.validators.instance_of(URL))
+
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls(
+            HTTPClient(Agent(reactor)),
+            URL.from_text(announcement[u"ristretto-issuer-root-url"]),
+        )
 
     def random_tokens_for_voucher(self, voucher, count):
         return list(
@@ -220,8 +245,9 @@ class RistrettoRedeemer(object):
         ))
 
     def tokens_to_passes(self, message, unblinded_tokens):
-        # XXX Here's some more of the privacypass dance.  Something needs to
-        # know to call this, I guess?  Also it's untested as heck.
+        assert isinstance(message, bytes)
+        assert isinstance(unblinded_tokens, list)
+        assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
             privacypass.UnblindedToken.decode_base64(token.text.encode("ascii"))
             for token
@@ -252,7 +278,11 @@ class RistrettoRedeemer(object):
             for (token_preimage, sig)
             in clients_passes
         )
-        return marshaled_passes
+        return list(
+            Pass(p)
+            for p
+            in marshaled_passes
+        )
 
 
 @attr.s
@@ -309,3 +339,19 @@ class PaymentController(object):
         passes later).
         """
         self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
+
+
+def get_redeemer(plugin_name, node_config, announcement, reactor):
+    section_name = u"storageclient.plugins.{}".format(plugin_name)
+    redeemer_kind = node_config.get_config(
+        section=section_name,
+        option=u"redeemer",
+        default=u"ristretto",
+    )
+    return _REDEEMERS[redeemer_kind](section_name, node_config, announcement, reactor)
+
+
+_REDEEMERS = {
+    u"dummy": DummyRedeemer.make,
+    u"ristretto": RistrettoRedeemer.make,
+}

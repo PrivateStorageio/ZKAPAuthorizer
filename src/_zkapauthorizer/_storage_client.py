@@ -49,8 +49,11 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar _get_passes: A no-argument callable which retrieves some passes
-        which can be used to authorize an operation.
+    :ivar _get_passes: A two-argument callable which retrieves some passes
+        which can be used to authorize an operation.  The first argument is a
+        bytes message binding the passes to the request for which they will be
+        used.  The second is an integer giving the number of passes to
+        request.
     """
     _get_rref = attr.ib()
     _get_passes = attr.ib()
@@ -59,7 +62,7 @@ class ZKAPAuthorizerStorageClient(object):
     def _rref(self):
         return self._get_rref()
 
-    def _get_encoded_passes(self):
+    def _get_encoded_passes(self, message, count):
         """
         :return: A list of passes from ``_get_passes`` encoded into their
             ``bytes`` representation.
@@ -67,7 +70,7 @@ class ZKAPAuthorizerStorageClient(object):
         return list(
             t.text.encode("ascii")
             for t
-            in self._get_passes()
+            in self._get_passes(message, count)
         )
 
     def get_version(self):
@@ -86,7 +89,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_encoded_passes(),
+            self._get_encoded_passes(storage_index, 1),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -112,7 +115,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "add_lease",
-            self._get_encoded_passes(),
+            self._get_encoded_passes(storage_index, 1),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -125,7 +128,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "renew_lease",
-            self._get_encoded_passes(),
+            self._get_encoded_passes(storage_index, 1),
             storage_index,
             renew_secret,
         )
@@ -154,7 +157,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_encoded_passes(),
+            self._get_encoded_passes(storage_index, 1),
             storage_index,
             secrets,
             tw_vectors,

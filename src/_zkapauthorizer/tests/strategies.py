@@ -119,7 +119,7 @@ def tahoe_config_texts(storage_client_plugins):
     )
 
 
-def tahoe_configs(storage_client_plugins=None):
+def minimal_tahoe_configs(storage_client_plugins=None):
     """
     Build complete Tahoe-LAFS configurations for a node.
     """
@@ -134,6 +134,17 @@ def tahoe_configs(storage_client_plugins=None):
             config_text.encode("utf-8"),
         ),
     )
+
+
+def tahoe_configs():
+    """
+    Build complete Tahoe-LAFS configurations including the zkapauthorizer
+    client plugin section.
+    """
+    return minimal_tahoe_configs({
+        u"privatestorageio-zkapauthz-v1": client_configurations(),
+    })
+
 
 def node_nicknames():
     """
@@ -153,11 +164,13 @@ def node_nicknames():
     )
 
 
-def configurations():
+def server_configurations():
     """
     Build configuration values for the server-side plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
 
 
 def client_configurations():
@@ -435,4 +448,6 @@ def announcements():
     """
     Build announcements for the ZKAPAuthorizer plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
