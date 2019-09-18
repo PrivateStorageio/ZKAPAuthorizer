@@ -82,7 +82,7 @@ from .strategies import (
     announcements,
     vouchers,
     random_tokens,
-    zkaps,
+    unblinded_tokens,
     storage_indexes,
     lease_renew_secrets,
 )
@@ -256,23 +256,23 @@ class ClientPluginTests(TestCase):
         announcements(),
         vouchers(),
         random_tokens(),
-        zkaps(),
+        unblinded_tokens(),
         storage_indexes(),
         lease_renew_secrets(),
     )
-    def test_passes_extracted(
+    def test_unblinded_tokens_extracted(
             self,
             get_config,
             announcement,
             voucher,
             token,
-            zkap,
+            unblinded_token,
             storage_index,
             renew_secret,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
-        extracts passes from the plugin database.
+        extracts unblinded tokens from the plugin database.
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
@@ -282,7 +282,7 @@ class ClientPluginTests(TestCase):
 
         store = VoucherStore.from_node_config(node_config)
         store.add(voucher, [token])
-        store.insert_passes_for_voucher(voucher, [zkap])
+        store.insert_unblinded_tokens_for_voucher(voucher, [unblinded_token])
 
         storage_client = storage_server.get_storage_client(
             node_config,
@@ -298,8 +298,8 @@ class ClientPluginTests(TestCase):
         )
         d.addBoth(lambda ignored: None)
 
-        # There should be no passes left to extract.
-        remaining = store.extract_passes(1)
+        # There should be no unblinded tokens left to extract.
+        remaining = store.extract_unblinded_tokens(1)
         self.assertThat(
             remaining,
             Equals([]),

@@ -136,10 +136,10 @@ def open_and_initialize(path, required_schema_version, connect=None):
         )
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS [passes] (
-                [text] text, -- The string that defines the pass.
+            CREATE TABLE IF NOT EXISTS [unblinded-tokens] (
+                [token] text, -- The base64 encoded unblinded token.
 
-                PRIMARY KEY([text])
+                PRIMARY KEY([token])
             )
             """,
         )
@@ -271,21 +271,26 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def insert_passes_for_voucher(self, cursor, voucher, passes):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, unblinded_tokens):
         """
-        Store some passes.
+        Store some unblinded tokens.
 
-        :param unicode voucher: The voucher associated with the passes.  This
-            voucher will be marked as redeemed to indicate it has fulfilled
-            its purpose and has no further use for us.
+        :param unicode voucher: The voucher associated with the unblinded
+            tokens.  This voucher will be marked as redeemed to indicate it
+            has fulfilled its purpose and has no further use for us.
 
-        :param list[Pass] passes: The passes to store.
+        :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
+            store.
         """
         cursor.executemany(
             """
-            INSERT INTO [passes] VALUES (?)
+            INSERT INTO [unblinded-tokens] VALUES (?)
             """,
-            list((p.text,) for p in passes),
+            list(
+                (t.text,)
+                for t
+                in unblinded_tokens
+            ),
         )
         cursor.execute(
             """
@@ -295,45 +300,61 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def extract_passes(self, cursor, count):
+    def extract_unblinded_tokens(self, cursor, count):
         """
-        Remove and return some passes.
+        Remove and return some unblinded tokens.
 
-        :param int count: The maximum number of passes to remove and return.
-            If fewer passes than this are available, only as many as are
+        :param int count: The maximum number of unblinded tokens to remove and
+            return.  If fewer than this are available, only as many as are
             available are returned.
 
-        :return list[Pass]: The removed passes.
+        :return list[UnblindedTokens]: The removed unblinded tokens.
         """
         cursor.execute(
             """
-            CREATE TEMPORARY TABLE [extracting-passes]
+            CREATE TEMPORARY TABLE [extracting]
             AS
-            SELECT [text] FROM [passes] LIMIT ?
+            SELECT [token] FROM [unblinded-tokens] LIMIT ?
             """,
             (count,),
         )
         cursor.execute(
             """
-            DELETE FROM [passes] WHERE [text] IN [extracting-passes]
+            DELETE FROM [unblinded-tokens] WHERE [token] IN [extracting]
             """,
         )
         cursor.execute(
             """
-            SELECT [text] FROM [extracting-passes]
+            SELECT [token] FROM [extracting]
             """,
         )
         texts = cursor.fetchall()
         cursor.execute(
             """
-            DROP TABLE [extracting-passes]
+            DROP TABLE [extracting]
             """,
         )
         return list(
-            Pass(t)
+            UnblindedToken(t)
             for (t,)
             in texts
         )
+
+
+@attr.s(frozen=True)
+class UnblindedToken(object):
+    """
+    An ``UnblindedToken`` instance represents cryptographic proof of a voucher
+    redemption.  It is an intermediate artifact in the PrivacyPass protocol
+    and can be used to construct a privacy-preserving pass which can be
+    exchanged for service.
+
+    :ivar unicode text: The base64 encoded serialized form of the unblinded
+        token.  This can be used to reconstruct a
+        ``privacypass.UnblindedToken`` using that class's ``decode_base64``
+        method.
+    """
+    text = attr.ib(validator=attr.validators.instance_of(unicode))
 
 
 @attr.s(frozen=True)

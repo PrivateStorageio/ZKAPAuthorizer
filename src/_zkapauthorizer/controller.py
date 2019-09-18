@@ -45,13 +45,10 @@ from treq import (
 
 import privacypass
 
-from .foolscap import (
-    TOKEN_LENGTH,
-)
 from .model import (
     RandomToken,
+    UnblindedToken,
     Voucher,
-    Pass,
 )
 
 
@@ -86,7 +83,8 @@ class IRedeemer(Interface):
 
     def redeem(voucher, random_tokens):
         """
-        Redeem a voucher for passes.
+        Redeem a voucher for unblinded tokens which can be used to construct
+        passes.
 
         Implementations of this method do not need to be fault tolerant.  If a
         redemption attempt is interrupted before it completes, it is the
@@ -98,8 +96,8 @@ class IRedeemer(Interface):
         :param list[RandomToken] random_tokens: The random tokens to use in
             the redemption process.
 
-        :return: A ``Deferred`` which fires with a list of ``Pass`` instances
-            on successful redemption or which fails with
+        :return: A ``Deferred`` which fires with a list of ``UnblindedToken``
+            instances on successful redemption or which fails with
             ``TransientRedemptionError`` on any error which may be resolved by
             simply trying again later or which fails with
             ``PermanentRedemptionError`` on any error which is definitive and
@@ -147,12 +145,12 @@ class DummyRedeemer(object):
 
     def redeem(self, voucher, random_tokens):
         """
-        :return: An already-fired ``Deferred`` that has a list of ``Pass``
-            instances wrapping meaningless values.
+        :return: An already-fired ``Deferred`` that has a list of
+          ``UnblindedToken`` instances wrapping meaningless values.
         """
         return succeed(
             list(
-                Pass((u"pass-" + token.token_value).zfill(TOKEN_LENGTH))
+                UnblindedToken(token.token_value)
                 for token
                 in random_tokens
             ),
@@ -216,8 +214,8 @@ class RistrettoRedeemer(object):
             public_key,
         )
         returnValue(list(
-            Pass(text=unblinded_token.encode_base64().decode("ascii"))
-            for unblinded_token
+            UnblindedToken(token.encode_base64().decode("ascii"))
+            for token
             in clients_unblinded_tokens
         ))
 
@@ -267,8 +265,10 @@ class PaymentController(object):
       3. The controller hands the voucher and some random tokens to a redeemer.
          In the future, this step will need to be retried in the case of failures.
 
-      4. When the voucher has been redeemed for passes, the controller hands them to the data store with the voucher.
-        The data store marks the voucher as redeemed and stores the passes for use by the storage client.
+      4. When the voucher has been redeemed for unblinded tokens (inputs to
+         pass construction), the controller hands them to the data store with
+         the voucher.  The data store marks the voucher as redeemed and stores
+         the unblinded tokens for use by the storage client.
     """
     store = attr.ib()
     redeemer = attr.ib()
@@ -297,9 +297,10 @@ class PaymentController(object):
             partial(self._redeemSuccess, voucher),
         )
 
-    def _redeemSuccess(self, voucher, passes):
+    def _redeemSuccess(self, voucher, unblinded_tokens):
         """
         Update the database state to reflect that a voucher was redeemed and to
-        store the resulting passes.
+        store the resulting unblinded tokens (which can be used to construct
+        passes later).
         """
-        self.store.insert_passes_for_voucher(voucher, passes)
+        self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)

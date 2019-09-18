@@ -119,9 +119,8 @@ class ZKAPAuthorizer(object):
         """
         return ZKAPAuthorizerStorageClient(
             get_rref,
-            # TODO: Make the caller figure out the correct number of
-            # passes to extract.
-            partial(self._get_store(node_config).extract_passes, 1),
+            # TODO: Make the caller figure out the correct number to extract.
+            partial(self._get_store(node_config).extract_unblinded_tokens, 1),
         )
 
 

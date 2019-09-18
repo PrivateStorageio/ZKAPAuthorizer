@@ -23,7 +23,6 @@ from json import (
 from zope.interface import (
     implementer,
 )
-import attr
 from testtools import (
     TestCase,
 )
@@ -58,11 +57,9 @@ from twisted.python.url import (
 )
 from twisted.internet.defer import (
     fail,
-    succeed,
 )
 from twisted.web.iweb import (
     IAgent,
-    IBodyProducer,
 )
 from twisted.web.resource import (
     Resource,
@@ -91,7 +88,7 @@ from ..model import (
     memory_connect,
     VoucherStore,
     Voucher,
-    Pass,
+    UnblindedToken,
 )
 
 from .strategies import (
@@ -176,7 +173,7 @@ class RistrettoRedeemerTests(TestCase):
         """
         If the issuer returns a successful result then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
-        list of ``Pass`` instances.
+        list of ``UnblindedToken`` instances.
         """
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
@@ -192,7 +189,7 @@ class RistrettoRedeemerTests(TestCase):
             succeeded(
                 MatchesAll(
                     AllMatch(
-                        IsInstance(Pass),
+                        IsInstance(UnblindedToken),
                     ),
                     HasLength(num_tokens),
                 ),
@@ -202,9 +199,9 @@ class RistrettoRedeemerTests(TestCase):
     @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
     def test_bad_ristretto_redemption(self, voucher, num_tokens):
         """
-        If the issuer returns a successful result then
+        If the issuer returns a successful result with an invalid proof then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
-        list of ``Pass`` instances.
+        ``Failure`` wrapping ``SecurityException``.
         """
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)

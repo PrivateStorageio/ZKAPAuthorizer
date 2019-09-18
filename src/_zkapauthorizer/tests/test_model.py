@@ -65,7 +65,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
     random_tokens,
-    zkaps,
+    unblinded_tokens,
 )
 
 
@@ -255,14 +255,14 @@ class VoucherTests(TestCase):
         )
 
 
-class ZKAPStoreTests(TestCase):
+class UnblindedTokenStoreTests(TestCase):
     """
-    Tests for ZKAP-related functionality of ``VoucherStore``.
+    Tests for ``UnblindedToken``-related functionality of ``VoucherStore``.
     """
-    @given(tahoe_configs(), vouchers(), lists(zkaps(), unique=True))
-    def test_zkaps_round_trip(self, get_config, voucher_value, passes):
+    @given(tahoe_configs(), vouchers(), lists(unblinded_tokens(), unique=True))
+    def test_unblinded_tokens_round_trip(self, get_config, voucher_value, tokens):
         """
-        ZKAPs that are added to the store can later be retrieved.
+        Unblinded tokens that are added to the store can later be retrieved.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
@@ -270,18 +270,19 @@ class ZKAPStoreTests(TestCase):
             config,
             memory_connect,
         )
-        store.insert_passes_for_voucher(voucher_value, passes)
-        retrieved_passes = store.extract_passes(len(passes))
-        self.expectThat(passes, Equals(retrieved_passes))
+        store.insert_unblinded_tokens_for_voucher(voucher_value, tokens)
+        retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
+        self.expectThat(tokens, Equals(retrieved_tokens))
 
-        # After extraction, the passes are no longer available.
-        more_passes = store.extract_passes(1)
-        self.expectThat([], Equals(more_passes))
+        # After extraction, the unblinded tokens are no longer available.
+        more_unblinded_tokens = store.extract_unblinded_tokens(1)
+        self.expectThat([], Equals(more_unblinded_tokens))
 
-    @given(tahoe_configs(), vouchers(), random_tokens(), zkaps())
-    def test_mark_vouchers_redeemed(self, get_config, voucher_value, token, one_pass):
+    @given(tahoe_configs(), vouchers(), random_tokens(), unblinded_tokens())
+    def test_mark_vouchers_redeemed(self, get_config, voucher_value, token, one_token):
         """
-        The voucher for ZKAPs that are added to the store are marked as redeemed.
+        The voucher for unblinded tokens that are added to the store is marked as
+        redeemed.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
@@ -290,6 +291,6 @@ class ZKAPStoreTests(TestCase):
             memory_connect,
         )
         store.add(voucher_value, [token])
-        store.insert_passes_for_voucher(voucher_value, [one_pass])
+        store.insert_unblinded_tokens_for_voucher(voucher_value, [one_token])
         loaded_voucher = store.get(voucher_value)
         self.assertThat(loaded_voucher.redeemed, Equals(True))

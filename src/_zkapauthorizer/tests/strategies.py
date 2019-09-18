@@ -55,6 +55,7 @@ from allmydata.client import (
 from ..model import (
     Pass,
     RandomToken,
+    UnblindedToken
 )
 
 
@@ -205,6 +206,22 @@ def zkaps():
         urlsafe_b64encode,
     ).map(
         lambda zkap: Pass(zkap.decode("ascii")),
+    )
+
+
+def unblinded_tokens():
+    """
+    Builds random ``_zkapauthorizer.model.UnblindedToken`` wrapping invalid
+    base64 encode data.  You cannot use these in the PrivacyPass cryptographic
+    protocol but you can put them into the database and take them out again.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        urlsafe_b64encode,
+    ).map(
+        lambda zkap: UnblindedToken(zkap.decode("ascii")),
     )
 
 
