@@ -269,6 +269,25 @@ class RistrettoRedeemerTests(TestCase):
 
 
 def ristretto_verify(signing_key, message, marshaled_passes):
+    """
+    Verify that the given passes were generated in a process that involved a
+    signature from the given signing key and using the given message.
+
+    :param privacypass.SigningKey signing_key: A signing key which should have
+        signed some random blinded tokens earlier in the lifecycle of the
+        passes to verify.
+
+    :param bytes message: Request binding data which is involved in the
+        generation of the passes to verify.
+
+    :param list[bytes] marshaled_passes: The base64-encoded representation of
+        some passes to verify. XXX Actually it's a two-tuple.  Do something
+        about that ...
+
+    :return bool: ``True`` if and only if all of the passes represented by
+        ``marshaled_passes`` pass the Ristretto-defined verification for an
+        exchange using the given signing key and message.
+    """
     servers_passes = list(
         (
             TokenPreimage.decode_base64(token_preimage),
