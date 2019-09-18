@@ -20,6 +20,9 @@ from json import (
     loads,
     dumps,
 )
+from functools import (
+    partial,
+)
 from zope.interface import (
     implementer,
 )
@@ -73,6 +76,8 @@ from privacypass import (
     PublicKey,
     BlindedToken,
     BatchDLEQProof,
+    TokenPreimage,
+    VerificationSignature,
     random_signing_key,
 )
 
@@ -205,7 +210,10 @@ class RistrettoRedeemerTests(TestCase):
         """
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
-        # Make it lie about the public key it is using.
+
+        # Make it lie about the public key it is using.  This causes the proof
+        # to be invalid since it proves the signature was made with a
+        # different key than reported in the response.
         issuer.public_key = PublicKey.from_signing_key(random_signing_key())
 
         treq = treq_for_loopback_ristretto(issuer)
@@ -225,6 +233,75 @@ class RistrettoRedeemerTests(TestCase):
                 ),
             ),
         )
+
+    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    def test_ristretto_pass_construction(self, voucher, num_tokens):
+        """
+        The passes constructed using unblinded tokens and messages pass the
+        Ristretto verification check.
+        """
+        message = b"hello world"
+
+        signing_key = random_signing_key()
+        issuer = RistrettoRedemption(signing_key)
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        d = redeemer.redeem(
+            voucher,
+            random_tokens,
+        )
+        def unblinded_tokens_to_passes(unblinded_tokens):
+            passes = redeemer.tokens_to_passes(message, unblinded_tokens)
+            return passes
+        d.addCallback(unblinded_tokens_to_passes)
+
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    partial(ristretto_verify, signing_key, message),
+                    Equals(True),
+                ),
+            ),
+        )
+
+
+def ristretto_verify(signing_key, message, marshaled_passes):
+    servers_passes = list(
+        (
+            TokenPreimage.decode_base64(token_preimage),
+            VerificationSignature.decode_base64(sig),
+        )
+        for (token_preimage, sig)
+        in marshaled_passes
+    )
+    servers_unblinded_tokens = list(
+        signing_key.rederive_unblinded_token(token_preimage)
+        for (token_preimage, sig)
+        in servers_passes
+    )
+    servers_verification_sigs = list(
+        sig
+        for (token_preimage, sig)
+        in servers_passes
+    )
+    servers_verification_keys = list(
+        unblinded_token.derive_verification_key_sha512()
+        for unblinded_token
+        in servers_unblinded_tokens
+    )
+    invalid_passes = list(
+        key.invalid_sha512(
+            sig,
+            message,
+        )
+        for (key, sig)
+        in zip(servers_verification_keys, servers_verification_sigs)
+    )
+
+    return not any(invalid_passes)
 
 
 def treq_for_loopback_ristretto(local_issuer):

@@ -222,6 +222,11 @@ class RistrettoRedeemer(object):
     def tokens_to_passes(self, message, unblinded_tokens):
         # XXX Here's some more of the privacypass dance.  Something needs to
         # know to call this, I guess?  Also it's untested as heck.
+        unblinded_tokens = list(
+            privacypass.UnblindedToken.decode_base64(token.text.encode("ascii"))
+            for token
+            in unblinded_tokens
+        )
         clients_preimages = list(
             token.preimage()
             for token
