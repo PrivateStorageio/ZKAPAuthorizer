@@ -1,5 +1,5 @@
 { buildPythonPackage, sphinx, circleci-cli
-, attrs, zope_interface, twisted, tahoe-lafs
+, attrs, zope_interface, twisted, tahoe-lafs, privacypass
 , fixtures, testtools, hypothesis, pyflakes, treq, coverage
 }:
 buildPythonPackage rec {
@@ -20,6 +20,7 @@ buildPythonPackage rec {
     zope_interface
     twisted
     tahoe-lafs
+    privacypass
   ];
 
   checkInputs = [
