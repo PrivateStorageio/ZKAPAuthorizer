@@ -133,8 +133,7 @@ class ZKAPAuthorizer(object):
         from twisted.internet import reactor
         redeemer = self._get_redeemer(node_config, announcement, reactor)
         extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
-        # TODO: Make the caller figure out the correct number to extract.
-        def get_passes(message, count=1):
+        def get_passes(message, count):
             unblinded_tokens = extract_unblinded_tokens(count)
             return redeemer.tokens_to_passes(message, unblinded_tokens)
 
