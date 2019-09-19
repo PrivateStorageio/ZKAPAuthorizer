@@ -280,20 +280,24 @@ def ristretto_verify(signing_key, message, marshaled_passes):
     :param bytes message: Request binding data which is involved in the
         generation of the passes to verify.
 
-    :param list[bytes] marshaled_passes: The base64-encoded representation of
-        some passes to verify. XXX Actually it's a two-tuple.  Do something
-        about that ...
+    :param list[bytes] marshaled_passes: Token preimages and corresponding
+        message signatures to verify.  Each element contains two
+        space-separated base64 encoded values, the first representing the
+        preimage and the second representing the signature.
 
     :return bool: ``True`` if and only if all of the passes represented by
         ``marshaled_passes`` pass the Ristretto-defined verification for an
         exchange using the given signing key and message.
     """
-    servers_passes = list(
-        (
-            TokenPreimage.decode_base64(token_preimage),
-            VerificationSignature.decode_base64(sig),
+    def decode(marshaled_pass):
+        t, s = marshaled_pass.split(u" ")
+        return (
+            TokenPreimage.decode_base64(t.encode("ascii")),
+            VerificationSignature.decode_base64(s.encode("ascii")),
         )
-        for (token_preimage, sig)
+    servers_passes = list(
+        decode(marshaled_pass.text)
+        for marshaled_pass
         in marshaled_passes
     )
     servers_unblinded_tokens = list(

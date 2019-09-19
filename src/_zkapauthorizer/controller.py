@@ -269,15 +269,12 @@ class RistrettoRedeemer(object):
             in unblinded_tokens
         )
         marshaled_passes = list(
-            (
-                token_preimage.encode_base64(),
-                sig.encode_base64()
-            )
-            for (token_preimage, sig)
-            in clients_passes
+            preimage.encode_base64() + b" " + signature.encode_base64()
+            for (preimage, signature)
+            in zip(clients_preimages, clients_signatures)
         )
         return list(
-            Pass(p)
+            Pass(p.decode("ascii"))
             for p
             in marshaled_passes
         )
