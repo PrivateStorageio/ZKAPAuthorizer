@@ -253,22 +253,20 @@ class RistrettoRedeemer(object):
             for token
             in unblinded_tokens
         )
-        clients_preimages = list(
-            token.preimage()
-            for token
-            in unblinded_tokens
-        )
         clients_verification_keys = list(
             token.derive_verification_key_sha512()
             for token
             in unblinded_tokens
         )
-        clients_passes = zip(
-            clients_preimages, (
-                verification_key.sign_sha512(message)
-                for verification_key
-                in clients_verification_keys
-            ),
+        clients_signatures = list(
+            verification_key.sign_sha512(message)
+            for verification_key
+            in clients_verification_keys
+        )
+        clients_preimages = list(
+            token.preimage()
+            for token
+            in unblinded_tokens
         )
         marshaled_passes = list(
             (
