@@ -1,6 +1,6 @@
 { fetchFromGitHub, nettools, pythonPackages, buildPythonPackage
 , twisted, foolscap, nevow, simplejson, zfec, pycryptopp, darcsver
-, setuptoolsTrial, setuptoolsDarcs, pycrypto, pyasn1, zope_interface
+, setuptoolsTrial, setuptoolsDarcs, pyasn1, zope_interface, cryptography
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
 , eliot, autobahn
 }:
@@ -28,16 +28,15 @@ buildPythonPackage rec {
     done
 
     sed -i 's/"zope.interface.*"/"zope.interface"/' src/allmydata/_auto_deps.py
-    sed -i 's/"pycrypto.*"/"pycrypto"/' src/allmydata/_auto_deps.py
   '';
 
 
   propagatedBuildInputs = with pythonPackages; [
     twisted foolscap nevow simplejson zfec pycryptopp darcsver
-    setuptoolsTrial setuptoolsDarcs pycrypto pyasn1 zope_interface
+    setuptoolsTrial setuptoolsDarcs pyasn1 zope_interface
     service-identity pyyaml magic-wormhole treq appdirs
 
-    eliot autobahn
+    eliot autobahn cryptography
   ];
 
   doCheck = false;
