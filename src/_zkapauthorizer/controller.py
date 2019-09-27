@@ -226,6 +226,8 @@ class RistrettoRedeemer(object):
             self._log.failure("Parsing redeem response failed", response=response)
             raise TransientRedemptionError()
 
+        self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
+
         marshaled_signed_tokens = result[u"signatures"]
         marshaled_proof = result[u"proof"]
         marshaled_public_key = result[u"public-key"]
