@@ -331,10 +331,11 @@ class PaymentController(object):
         # Ask the redeemer to do the real task of redemption.
         self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
         d = self.redeemer.redeem(Voucher(voucher), tokens)
-        d.addCallback(
+        d.addCallbacks(
             partial(self._redeemSuccess, voucher),
+            partial(self._redeemFailure, voucher),
         )
-        # XXX This needs an errback!
+        d.addErrback(partial(self._finalRedeemError, voucher))
 
     def _redeemSuccess(self, voucher, unblinded_tokens):
         """
@@ -344,6 +345,14 @@ class PaymentController(object):
         """
         self._log.info("Inserting redeemed unblinded tokens for a voucher ({voucher}).", voucher=voucher)
         self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
+
+    def _redeemFailure(self, voucher, reason):
+        self._log.failure("Redeeming random tokens for a voucher ({voucher}) failed.", reason, voucher=voucher)
+        return None
+
+    def _finalRedeemError(self, voucher, reason):
+        self._log.failure("Redeeming random tokens for a voucher ({voucher}) encountered error.", reason, voucher=voucher)
+        return None
 
 
 def get_redeemer(plugin_name, node_config, announcement, reactor):
