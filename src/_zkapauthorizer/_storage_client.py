@@ -70,7 +70,7 @@ class ZKAPAuthorizerStorageClient(object):
         return list(
             t.text.encode("ascii")
             for t
-            in self._get_passes(message, count)
+            in self._get_passes(message.encode("hex"), count)
         )
 
     def get_version(self):
