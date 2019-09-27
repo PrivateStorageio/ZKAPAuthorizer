@@ -161,6 +161,13 @@ class ShareTests(TestCase):
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
 
         def get_passes(message, count):
+            if not isinstance(message, bytes):
+                raise TypeError("message must be bytes")
+            try:
+                message.decode("utf-8")
+            except UnicodeDecodeError:
+                raise TypeError("message must be valid utf-8")
+
             return [Pass(u"x" * TOKEN_LENGTH)] * count
 
         self.server = ZKAPAuthorizerStorageServer(
