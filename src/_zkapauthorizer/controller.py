@@ -218,6 +218,7 @@ class RistrettoRedeemer(object):
                     in blinded_tokens
                 ),
             }),
+            headers={b"content-type": b"application/json"},
         )
         try:
             result = yield json_content(response)

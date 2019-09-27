@@ -65,7 +65,11 @@ from twisted.web.iweb import (
     IAgent,
 )
 from twisted.web.resource import (
+    ErrorPage,
     Resource,
+)
+from twisted.web.http import (
+    UNSUPPORTED_MEDIA_TYPE,
 )
 from treq.testing import (
     StubTreq,
@@ -338,27 +342,6 @@ def treq_for_loopback_ristretto(local_issuer):
     return StubTreq(root)
 
 
-class SuccessfulRedemption(Resource):
-    def __init__(self, public_key, signatures, proof):
-        Resource.__init__(self)
-        self.public_key = public_key
-        self.signatures = signatures
-        self.proof = proof
-        self.redemptions = []
-
-    def render_POST(self, request):
-        request_body = loads(request.content.read())
-        voucher = request_body[u"redeemVoucher"]
-        tokens = request_body[u"redeemTokens"]
-        self.redemptions.append((voucher, tokens))
-        return dumps({
-            u"success": True,
-            u"public-key": self.public_key,
-            u"signatures": self.signatures,
-            u"proof": self.proof,
-        })
-
-
 @implementer(IAgent)
 class _StubAgent(object):
     def request(self, method, uri, headers=None, bodyProducer=None):
@@ -376,6 +359,9 @@ class RistrettoRedemption(Resource):
         self.public_key = PublicKey.from_signing_key(signing_key)
 
     def render_POST(self, request):
+        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
+            return bad_content_type(request)
+
         request_body = loads(request.content.read())
         marshaled_blinded_tokens = request_body[u"redeemTokens"]
         servers_blinded_tokens = list(
@@ -409,3 +395,11 @@ class RistrettoRedemption(Resource):
             u"signatures": marshaled_signed_tokens,
             u"proof": marshaled_proof,
         })
+
+
+def bad_content_type(request):
+    return ErrorPage(
+        UNSUPPORTED_MEDIA_TYPE,
+        b"Unsupported media type",
+        b"Unsupported media type",
+    ).render(request)
