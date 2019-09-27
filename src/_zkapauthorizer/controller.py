@@ -30,6 +30,9 @@ from zope.interface import (
     implementer,
 )
 
+from twisted.logger import (
+    Logger,
+)
 from twisted.python.url import (
     URL,
 )
@@ -300,6 +303,8 @@ class PaymentController(object):
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
     """
+    _log = Logger()
+
     store = attr.ib()
     redeemer = attr.ib()
 
@@ -316,16 +321,20 @@ class PaymentController(object):
         # server signs a given set of random tokens once or many times, the
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
+        self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
         tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), 100)
 
         # Persist the voucher and tokens so they're available if we fail.
+        self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
         self.store.add(voucher, tokens)
 
         # Ask the redeemer to do the real task of redemption.
+        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
         d = self.redeemer.redeem(Voucher(voucher), tokens)
         d.addCallback(
             partial(self._redeemSuccess, voucher),
         )
+        # XXX This needs an errback!
 
     def _redeemSuccess(self, voucher, unblinded_tokens):
         """
@@ -333,6 +342,7 @@ class PaymentController(object):
         store the resulting unblinded tokens (which can be used to construct
         passes later).
         """
+        self._log.info("Inserting redeemed unblinded tokens for a voucher ({voucher}).", voucher=voucher)
         self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
 
 
