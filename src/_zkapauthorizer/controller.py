@@ -181,6 +181,8 @@ class DummyRedeemer(object):
 @implementer(IRedeemer)
 @attr.s
 class RistrettoRedeemer(object):
+    _log = Logger()
+
     _treq = attr.ib()
     _api_root = attr.ib(validator=attr.validators.instance_of(URL))
 
@@ -217,7 +219,12 @@ class RistrettoRedeemer(object):
                 ),
             }),
         )
-        result = yield json_content(response)
+        try:
+            result = yield json_content(response)
+        except ValueError:
+            self._log.failure("Parsing redeem response failed", response=response)
+            raise TransientRedemptionError()
+
         marshaled_signed_tokens = result[u"signatures"]
         marshaled_proof = result[u"proof"]
         marshaled_public_key = result[u"public-key"]
