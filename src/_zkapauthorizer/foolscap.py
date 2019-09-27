@@ -29,9 +29,12 @@ from allmydata.interfaces import (
 # lot of value.
 MAXIMUM_TOKENS_PER_CALL = 10
 
-# This is the length of a serialized PrivacyPass pass (there's a lot of
-# confusion between "tokens" and "passes" here, sadly).
-TOKEN_LENGTH = 97
+# This is the length of a serialized Ristretto-flavored PrivacyPass pass
+# (there's a lot of confusion between "tokens" and "passes" here, sadly).
+#
+# The pass is a combination of base64-encoded token preimages and unblinded
+# token signatures.
+TOKEN_LENGTH = 177
 
 # Take those values and turn them into the appropriate Foolscap constraint
 # objects.  Foolscap seems to have a convention of representing these as
