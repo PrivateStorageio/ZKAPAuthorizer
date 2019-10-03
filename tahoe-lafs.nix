@@ -11,9 +11,9 @@ buildPythonPackage rec {
     owner = "LeastAuthority";
     repo = "tahoe-lafs";
     # HEAD of an integration branch for all of the storage plugin stuff.  Last
-    # updated August 20th 2019.
-    rev = "ba2f31f5f3719c7cf9f621852571e89ab445bf61";
-    sha256 = "02c3zghx1951zw1912c2qf9s7n41wsbz8ld5700myak69nvkh0gs";
+    # updated August 23 2019.
+    rev = "d4b5de2e08e26ad2cc14265a5993be2ecc791d5b";
+    sha256 = "1l2da13w43zzwr1z262zhhq4hq3sha4zrxp7d46zmjn4ya0ixksf";
   };
 
   postPatch = ''
