@@ -26,9 +26,6 @@ buildPythonPackage rec {
     do
       sed -i "$i" -e"s/localhost/127.0.0.1/g"
     done
-
-    sed -i 's/"zope.interface.*"/"zope.interface"/' src/allmydata/_auto_deps.py
-    sed -i 's/"pycrypto.*"/"pycrypto"/' src/allmydata/_auto_deps.py
   '';
 
 
