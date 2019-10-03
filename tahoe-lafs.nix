@@ -4,7 +4,7 @@
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
 , eliot, autobahn, cryptography
 }:
-buildPythonPackage rec {
+python.pkgs.buildPythonPackage rec {
   version = "1.14.0.dev";
   name = "tahoe-lafs-${version}";
   src = fetchFromGitHub {
