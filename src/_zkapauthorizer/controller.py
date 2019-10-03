@@ -114,6 +114,25 @@ class IRedeemer(Interface):
             final.
         """
 
+    def tokens_to_passes(message, unblinded_tokens):
+        """
+        Construct passes from unblinded tokens which are suitable for use with a
+        given message.
+
+        :param bytes message: A valid utf-8-encoded byte sequence which serves
+            to protect the resulting passes from replay usage.  It is
+            preferable if every use of passes is associated with a unique
+            message.
+
+        :param list[UnblindedToken] unblinded_tokens: Unblinded tokens,
+            previously returned by a call to this implementation's ``redeem``
+            method.
+
+        :return list[Pass]: Passes constructed from the message and unblinded
+            tokens.  There is one pass in the resulting list for each unblinded
+            token in ``unblinded_tokens``.
+        """
+
 
 @implementer(IRedeemer)
 class NonRedeemer(object):
@@ -131,6 +150,11 @@ class NonRedeemer(object):
     def redeem(self, voucher, random_tokens):
         # Don't try to redeem them.
         return Deferred()
+
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise Exception(
+            "Cannot be called because no unblinded tokens are ever returned."
+        )
 
 
 @implementer(IRedeemer)
