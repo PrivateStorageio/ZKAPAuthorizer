@@ -37,5 +37,14 @@ python.pkgs.buildPythonPackage rec {
     eliot autobahn cryptography
   ];
 
+  checkInputs = with python.pkgs; [
+    hypothesis
+    testtools
+    fixtures
+  ];
+
+  checkPhase = ''
+    ${python}/bin/python -m twisted.trial -j4 allmydata
+  '';
   doCheck = false;
 }
