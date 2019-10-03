@@ -177,7 +177,9 @@ def client_configurations():
     """
     Build configuration values for the client-side plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
 
 
 def vouchers():

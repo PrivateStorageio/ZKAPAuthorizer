@@ -77,7 +77,6 @@ class ZKAPAuthorizer(object):
     """
     name = attr.ib(default=u"privatestorageio-zkapauthz-v1")
     _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
-    _announcement = attr.ib(default=None)
 
     def _get_store(self, node_config):
         """
@@ -127,9 +126,6 @@ class ZKAPAuthorizer(object):
         managed by this plugin in the node directory that goes along with
         ``node_config``.
         """
-        # XXXXXXXXXXXXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx........................ :(
-        self._announcement = announcement
-
         from twisted.internet import reactor
         redeemer = self._get_redeemer(node_config, announcement, reactor)
         extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
@@ -144,11 +140,9 @@ class ZKAPAuthorizer(object):
 
 
     def get_client_resource(self, node_config):
-        # XXXXXXXXXXXXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx........................ :(
-        announcement = self._announcement
         from twisted.internet import reactor
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
-            redeemer=self._get_redeemer(node_config, announcement, reactor),
+            redeemer=self._get_redeemer(node_config, None, reactor),
         )

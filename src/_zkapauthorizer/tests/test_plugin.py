@@ -16,6 +16,10 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+from io import (
+    BytesIO,
+)
+
 from zope.interface import (
     implementer,
 )
@@ -35,6 +39,9 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import (
     succeeded,
+)
+from testtools.content import (
+    text_content,
 )
 from hypothesis import (
     given,
@@ -75,6 +82,9 @@ from twisted.plugins.zkapauthorizer import (
 
 from ..model import (
     VoucherStore,
+)
+from ..controller import (
+    IssuerConfigurationMismatch,
 )
 
 from .strategies import (
@@ -227,6 +237,9 @@ tahoe_configs_with_dummy_redeemer = minimal_tahoe_configs({
     u"privatestorageio-zkapauthz-v1": just({u"redeemer": u"dummy"}),
 })
 
+tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs({
+    u"privatestorageio-zkapauthz-v1": just({u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}),
+})
 
 class ClientPluginTests(TestCase):
     """
@@ -255,6 +268,31 @@ class ClientPluginTests(TestCase):
             storage_client,
             Provides([IStorageServer]),
         )
+
+
+    @given(tahoe_configs_with_mismatched_issuer, announcements())
+    def test_mismatched_ristretto_issuer(self, get_config, announcement):
+        """
+        ``get_storage_client`` raises an exception when called with an
+        announcement and local configuration which specify different issuers.
+        """
+        tempdir = self.useFixture(TempDir())
+        node_config = get_config(
+            tempdir.join(b"node"),
+            b"tub.port",
+        )
+        config_text = BytesIO()
+        node_config.config.write(config_text)
+        self.addDetail(u"config", text_content(config_text.getvalue()))
+        self.addDetail(u"announcement", text_content(unicode(announcement)))
+        try:
+            result = storage_server.get_storage_client(node_config, announcement, get_rref)
+        except IssuerConfigurationMismatch:
+            pass
+        except Exception as e:
+            self.fail("get_storage_client raised the wrong exception: {}".format(e))
+        else:
+            self.fail("get_storage_client didn't raise, returned: {}".format(result))
 
 
     @given(

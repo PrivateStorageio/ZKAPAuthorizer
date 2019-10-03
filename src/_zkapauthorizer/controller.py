@@ -178,6 +178,32 @@ class DummyRedeemer(object):
         )
 
 
+class IssuerConfigurationMismatch(Exception):
+    """
+    The Ristretto issuer address in the local client configuration does not
+    match the Ristretto issuer address received in a storage server
+    announcement.
+
+    If these values do not match then there is no reason to expect that ZKAPs
+    will be accepted by the storage server because ZKAPs are bound to the
+    issuer's signing key.
+
+    This mismatch must be corrected before the storage server can be used.
+    Either the storage server needs to be reconfigured to respect the
+    authority of a different issuer (the same one the client is configured to
+    use), the client needs to select a different storage server to talk to, or
+    the client needs to be reconfigured to respect the authority of a
+    different issuer (the same one the storage server is announcing).
+
+    Note that issued ZKAPs cannot be exchanged between issues except through
+    some ad hoc, out-of-band means.  That is, if the client already has some
+    ZKAPs and chooses to change its configured issuer address, those existing
+    ZKAPs will not be usable and new ones must be obtained.
+    """
+    def __str__(self):
+        return "Announced issuer ({}) disagrees with configured issuer ({}).".format(self.args)
+
+
 @implementer(IRedeemer)
 @attr.s
 class RistrettoRedeemer(object):
@@ -188,9 +214,27 @@ class RistrettoRedeemer(object):
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
+        configured_issuer = node_config.get_config(
+            section=section_name,
+            option=u"ristretto-issuer-root-url",
+        ).decode("ascii")
+        if announcement is not None:
+            # Don't let us talk to a storage server that has a different idea
+            # about who issues ZKAPs.  We should lift this limitation (that is, we
+            # should support as many different issuers as the user likes) in the
+            # future but doing so requires changing how the web interface works
+            # and possibly also the interface for voucher submission.
+            #
+            # If we aren't given an announcement then we're not being used in
+            # the context of a specific storage server so the check is
+            # unnecessary and impossible.
+            announced_issuer = announcement[u"ristretto-issuer-root-url"]
+            if announced_issuer != configured_issuer:
+                raise IssuerConfigurationMismatch(announced_issuer, configured_issuer)
+
         return cls(
             HTTPClient(Agent(reactor)),
-            URL.from_text(announcement[u"ristretto-issuer-root-url"]),
+            URL.from_text(configured_issuer),
         )
 
     def random_tokens_for_voucher(self, voucher, count):
