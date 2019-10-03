@@ -1,8 +1,8 @@
-{ fetchFromGitHub, nettools, pythonPackages, buildPythonPackage
-, twisted, foolscap, nevow, simplejson, zfec, pycryptopp, darcsver
-, setuptoolsTrial, setuptoolsDarcs, pycrypto, pyasn1, zope_interface
+{ fetchFromGitHub, nettools, python
+, twisted, foolscap, nevow, zfec
+, setuptoolsTrial, pyasn1, zope_interface
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
-, eliot, autobahn
+, eliot, autobahn, cryptography
 }:
 buildPythonPackage rec {
   version = "1.14.0.dev";
@@ -29,12 +29,12 @@ buildPythonPackage rec {
   '';
 
 
-  propagatedBuildInputs = with pythonPackages; [
-    twisted foolscap nevow simplejson zfec pycryptopp darcsver
-    setuptoolsTrial setuptoolsDarcs pycrypto pyasn1 zope_interface
-    service-identity pyyaml magic-wormhole treq appdirs
+  propagatedBuildInputs = with python.pkgs; [
+    twisted foolscap nevow zfec appdirs
+    setuptoolsTrial pyasn1 zope_interface
+    service-identity pyyaml magic-wormhole treq
 
-    eliot autobahn
+    eliot autobahn cryptography
   ];
 
   doCheck = false;
