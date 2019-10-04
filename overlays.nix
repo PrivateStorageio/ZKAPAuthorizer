@@ -22,6 +22,9 @@ self: super: {
       # we depend on the privacypass python library, a set of bindings to the
       # challenge-bypass-ristretto Rust library
       privacypass = python-super.callPackage ./privacypass.nix { };
+
+      # And add ourselves to the collection too.
+      zkapauthorizer = python-super.callPackage ./zkapauthorizer.nix { };
     };
   };
 }
