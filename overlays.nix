@@ -5,18 +5,20 @@ self: super: {
 
   python27 = super.python27.override {
     packageOverrides = python-self: python-super: {
-      # A newer version of Hypothesis is required for compatibility with the
-      # typing module which gets pulled in by some dependency or other.
-      #
-      # A bug report filed against nixpkgs -
-      # https://github.com/NixOS/nixpkgs/issues/70431
-      hypothesis = python-super.callPackage ./hypothesis.nix { };
+      # # A newer version of Hypothesis is required for compatibility with the
+      # # typing module which gets pulled in by some dependency or other.
+      # #
+      # # A bug report filed against nixpkgs -
+      # # https://github.com/NixOS/nixpkgs/issues/70431
+      # hypothesis = python-super.callPackage ./hypothesis.nix { };
 
-      # The newer hypothesis requires a newer attrs.
-      attrs = python-super.callPackage ./attrs.nix { };
+      # # The newer hypothesis requires a newer attrs.
+      # attrs = python-super.callPackage ./attrs.nix { };
 
-      # The newer hypothesis or attrs breaks the pytest test suite.
-      pytest = python-super.callPackage ./pytest.nix { };
+      # # The newer hypothesis or attrs breaks the pytest test suite.
+      # pytest = python-super.callPackage ./pytest.nix { };
+
+      typing = python-super.callPackage ./typing.nix { };
 
       # new tahoe-lafs dependency
       eliot = python-super.callPackage ./eliot.nix { };
