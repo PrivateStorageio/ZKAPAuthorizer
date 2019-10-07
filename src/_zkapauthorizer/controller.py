@@ -220,6 +220,16 @@ class IssuerConfigurationMismatch(Exception):
 @implementer(IRedeemer)
 @attr.s
 class RistrettoRedeemer(object):
+    """
+    An ``IRedeemer`` which speaks the Ristretto-flavored PrivacyPass protocol
+    described at
+    https://docs.rs/challenge-bypass-ristretto/1.0.0-pre.0/challenge_bypass_ristretto/#cryptographic-protocol
+
+    :ivar treq.client.HTTPClient _treq: An HTTP client to use to make calls to
+        the issuer.
+
+    :ivar URL _api_root: The root of the issuer HTTP API.
+    """
     _log = Logger()
 
     _treq = attr.ib()
