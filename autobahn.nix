@@ -1,6 +1,7 @@
 { lib, buildPythonPackage, fetchFromGitHub, isPy3k,
   six, txaio, twisted, zope_interface, cffi, trollius, futures, cryptography,
-  mock, pytest
+  mock, pytest,
+  supportAsyncio ? false
 }:
 buildPythonPackage rec {
   pname = "autobahn";
@@ -14,7 +15,9 @@ buildPythonPackage rec {
   };
 
   propagatedBuildInputs = [ six txaio twisted zope_interface cffi cryptography ] ++
-    (lib.optionals (!isPy3k) [ trollius futures ]);
+    (lib.optionals (!isPy3k) [ futures ]) ++
+    (lib.optionals (supportAsyncio && !isPy3k) [ trollius ])
+    ;
 
   checkInputs = [ mock pytest ];
   checkPhase = ''
