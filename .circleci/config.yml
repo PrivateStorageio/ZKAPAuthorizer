@@ -49,30 +49,25 @@ jobs:
 
   tests:
     docker:
-      - image: "circleci/python:2.7"
+      # Run in a highly Nix-capable environment.
+      - image: "nixorg/nix:circleci"
 
     environment:
-      PIP_REQUIREMENTS: "-r requirements.txt -r requirements-tests.txt"
-      ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
+      CODECOV_TOKEN: "cc6e4697-4337-4506-88af-92b8f8ca6b22"
 
     steps:
       - "checkout"
 
-      - <<: *PREPARE_VIRTUALENV
-
       - run:
           name: "Run Test Suite"
           command: |
-            . venv/bin/activate
-            pip install .
-            coverage run -m twisted.trial _zkapauthorizer
+            nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - run:
           name: "Report Coverage"
           command: |
-            . venv/bin/activate
-            CODECOV_TOKEN="cc6e4697-4337-4506-88af-92b8f8ca6b22" codecov
-
+            nix-shell -p 'python.withPackages (ps: [ ps.codecov ])' --keep CODECOV_TOKEN --run \
+              codecov ./result-doc/share/doc/*/.coverage
 
 workflows:
   version: 2
