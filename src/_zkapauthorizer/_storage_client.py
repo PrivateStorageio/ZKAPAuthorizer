@@ -51,9 +51,9 @@ class ZKAPAuthorizerStorageClient(object):
 
     :ivar _get_passes: A two-argument callable which retrieves some passes
         which can be used to authorize an operation.  The first argument is a
-        bytes message binding the passes to the request for which they will be
-        used.  The second is an integer giving the number of passes to
-        request.
+        bytes (valid utf-8) message binding the passes to the request for
+        which they will be used.  The second is an integer giving the number
+        of passes to request.
     """
     _get_rref = attr.ib()
     _get_passes = attr.ib()
