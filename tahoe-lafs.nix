@@ -1,6 +1,6 @@
 { fetchFromGitHub, nettools, python
 , twisted, foolscap, nevow, zfec
-, setuptoolsTrial, pyasn1, zope_interface
+, setuptools, setuptoolsTrial, pyasn1, zope_interface
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
 , eliot, autobahn, cryptography
 }:
@@ -34,7 +34,7 @@ python.pkgs.buildPythonPackage rec {
     setuptoolsTrial pyasn1 zope_interface
     service-identity pyyaml magic-wormhole treq
 
-    eliot autobahn cryptography
+    eliot autobahn cryptography setuptools
   ];
 
   checkInputs = with python.pkgs; [
@@ -44,7 +44,6 @@ python.pkgs.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    ${python}/bin/python -m twisted.trial -j4 allmydata
+    $out/bin/tahoe --version
   '';
-  doCheck = false;
 }
