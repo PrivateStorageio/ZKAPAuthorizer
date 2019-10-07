@@ -62,14 +62,6 @@ from .model import (
 )
 
 
-class TransientRedemptionError(Exception):
-    pass
-
-
-class PermanentRedemptionError(Exception):
-    pass
-
-
 class IRedeemer(Interface):
     """
     An ``IRedeemer`` can exchange a voucher for one or more passes.
@@ -107,11 +99,8 @@ class IRedeemer(Interface):
             the redemption process.
 
         :return: A ``Deferred`` which fires with a list of ``UnblindedToken``
-            instances on successful redemption or which fails with
-            ``TransientRedemptionError`` on any error which may be resolved by
-            simply trying again later or which fails with
-            ``PermanentRedemptionError`` on any error which is definitive and
-            final.
+            instances on successful redemption or which fails with any error
+            to allow a retry to be made at some future point.
         """
 
     def tokens_to_passes(message, unblinded_tokens):
@@ -292,7 +281,7 @@ class RistrettoRedeemer(object):
             result = yield json_content(response)
         except ValueError:
             self._log.failure("Parsing redeem response failed", response=response)
-            raise TransientRedemptionError()
+            raise
 
         self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
 
