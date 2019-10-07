@@ -2,7 +2,6 @@
 fetchFromGitHub {
   owner = "LeastAuthority";
   repo = "privacypass";
-  rev = "5126376574ac126d2cdcd0612ef0ed65ef7bca6e";
-  sha256 = "sha256:1b53315qf3yp9mzrx7nmmqj9gia211yhrzg31jp8ny10w6vgbxmn";
-  fetchSubmodules = true;
+  rev = "45855401e163f8e622bd93a5c5bce13de8c8510a";
+  sha256 = "sha256:15wv8vas6x8cdicylp0m632c916p7qxq1k4lnchr8c92lldp0rv7";
 }

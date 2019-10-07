@@ -1,6 +1,6 @@
 { fetchFromGitHub, nettools, python
 , twisted, foolscap, nevow, zfec
-, setuptoolsTrial, pyasn1, zope_interface
+, setuptools, setuptoolsTrial, pyasn1, zope_interface
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
 , eliot, autobahn, cryptography
 }:
@@ -11,9 +11,9 @@ python.pkgs.buildPythonPackage rec {
     owner = "LeastAuthority";
     repo = "tahoe-lafs";
     # HEAD of an integration branch for all of the storage plugin stuff.  Last
-    # updated August 23 2019.
-    rev = "d4b5de2e08e26ad2cc14265a5993be2ecc791d5b";
-    sha256 = "1l2da13w43zzwr1z262zhhq4hq3sha4zrxp7d46zmjn4ya0ixksf";
+    # updated October 4 2019.
+    rev = "8c1f536ba4fbc01f3bc5f08412edbefc56ff7037";
+    sha256 = "17d7pkbsgss3rhqf7ac7ylzbddi555rnkzz48zjqwq1zx1z2jhy6";
   };
 
   postPatch = ''
@@ -34,7 +34,7 @@ python.pkgs.buildPythonPackage rec {
     setuptoolsTrial pyasn1 zope_interface
     service-identity pyyaml magic-wormhole treq
 
-    eliot autobahn cryptography
+    eliot autobahn cryptography setuptools
   ];
 
   checkInputs = with python.pkgs; [
@@ -44,7 +44,6 @@ python.pkgs.buildPythonPackage rec {
   ];
 
   checkPhase = ''
-    ${python}/bin/python -m twisted.trial -j4 allmydata
+    $out/bin/tahoe --version
   '';
-  doCheck = false;
 }
