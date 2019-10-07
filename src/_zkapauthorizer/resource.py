@@ -24,6 +24,9 @@ from json import (
     loads, dumps,
 )
 
+from twisted.logger import (
+    Logger,
+)
 from twisted.web.http import (
     BAD_REQUEST,
 )
@@ -84,6 +87,8 @@ class _VoucherCollection(Resource):
     redemption controller.  Child resources of this resource can also be
     retrieved to monitor the status of previously submitted vouchers.
     """
+    _log = Logger()
+
     def __init__(self, store, controller):
         self._store = store
         self._controller = controller
@@ -104,6 +109,7 @@ class _VoucherCollection(Resource):
         if not is_syntactic_voucher(voucher):
             return bad_request(u"submitted voucher is syntactically invalid").render(request)
 
+        self._log.info("Accepting a voucher ({voucher}) for redemption.", voucher=voucher)
         self._controller.redeem(voucher)
         return b""
 

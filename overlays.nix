@@ -1,5 +1,5 @@
 self: super: {
-  openssl = self.openssl_1_1;
+  openssl = super.openssl_1_1;
 
   ristretto = super.callPackage ./ristretto.nix { };
 

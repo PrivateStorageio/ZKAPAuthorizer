@@ -16,6 +16,10 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+from io import (
+    BytesIO,
+)
+
 from zope.interface import (
     implementer,
 )
@@ -36,11 +40,15 @@ from testtools.matchers import (
 from testtools.twistedsupport import (
     succeeded,
 )
-
+from testtools.content import (
+    text_content,
+)
 from hypothesis import (
     given,
 )
-
+from hypothesis.strategies import (
+    just,
+)
 from foolscap.broker import (
     Broker,
 )
@@ -75,14 +83,18 @@ from twisted.plugins.zkapauthorizer import (
 from ..model import (
     VoucherStore,
 )
+from ..controller import (
+    IssuerConfigurationMismatch,
+)
 
 from .strategies import (
+    minimal_tahoe_configs,
     tahoe_configs,
-    configurations,
+    server_configurations,
     announcements,
     vouchers,
     random_tokens,
-    zkaps,
+    unblinded_tokens,
     storage_indexes,
     lease_renew_secrets,
 )
@@ -134,7 +146,7 @@ class ServerPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_announceable(self, configuration):
         """
         ``storage_server.get_storage_server`` returns an instance which provides
@@ -150,7 +162,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_referenceable(self, configuration):
         """
         The storage server attached to the result of
@@ -171,7 +183,7 @@ class ServerPluginTests(TestCase):
             ),
         )
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_serializable(self, configuration):
         """
         The storage server attached to the result of
@@ -195,7 +207,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(configurations())
+    @given(server_configurations())
     def test_returns_hashable(self, configuration):
         """
         The storage server attached to the result of
@@ -221,6 +233,13 @@ class ServerPluginTests(TestCase):
         )
 
 
+tahoe_configs_with_dummy_redeemer = minimal_tahoe_configs({
+    u"privatestorageio-zkapauthz-v1": just({u"redeemer": u"dummy"}),
+})
+
+tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs({
+    u"privatestorageio-zkapauthz-v1": just({u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}),
+})
 
 class ClientPluginTests(TestCase):
     """
@@ -251,28 +270,53 @@ class ClientPluginTests(TestCase):
         )
 
 
+    @given(tahoe_configs_with_mismatched_issuer, announcements())
+    def test_mismatched_ristretto_issuer(self, get_config, announcement):
+        """
+        ``get_storage_client`` raises an exception when called with an
+        announcement and local configuration which specify different issuers.
+        """
+        tempdir = self.useFixture(TempDir())
+        node_config = get_config(
+            tempdir.join(b"node"),
+            b"tub.port",
+        )
+        config_text = BytesIO()
+        node_config.config.write(config_text)
+        self.addDetail(u"config", text_content(config_text.getvalue()))
+        self.addDetail(u"announcement", text_content(unicode(announcement)))
+        try:
+            result = storage_server.get_storage_client(node_config, announcement, get_rref)
+        except IssuerConfigurationMismatch:
+            pass
+        except Exception as e:
+            self.fail("get_storage_client raised the wrong exception: {}".format(e))
+        else:
+            self.fail("get_storage_client didn't raise, returned: {}".format(result))
+
+
     @given(
-        tahoe_configs(),
+        tahoe_configs_with_dummy_redeemer,
         announcements(),
         vouchers(),
         random_tokens(),
-        zkaps(),
+        unblinded_tokens(),
         storage_indexes(),
         lease_renew_secrets(),
     )
-    def test_passes_extracted(
+    def test_unblinded_tokens_extracted(
             self,
             get_config,
             announcement,
             voucher,
             token,
-            zkap,
+            unblinded_token,
             storage_index,
             renew_secret,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
-        extracts passes from the plugin database.
+        extracts unblinded tokens from the plugin database.
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
@@ -282,7 +326,7 @@ class ClientPluginTests(TestCase):
 
         store = VoucherStore.from_node_config(node_config)
         store.add(voucher, [token])
-        store.insert_passes_for_voucher(voucher, [zkap])
+        store.insert_unblinded_tokens_for_voucher(voucher, [unblinded_token])
 
         storage_client = storage_server.get_storage_client(
             node_config,
@@ -298,8 +342,8 @@ class ClientPluginTests(TestCase):
         )
         d.addBoth(lambda ignored: None)
 
-        # There should be no passes left to extract.
-        remaining = store.extract_passes(1)
+        # There should be no unblinded tokens left to extract.
+        remaining = store.extract_unblinded_tokens(1)
         self.assertThat(
             remaining,
             Equals([]),

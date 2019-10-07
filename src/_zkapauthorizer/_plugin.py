@@ -21,10 +21,6 @@ from weakref import (
     WeakValueDictionary,
 )
 
-from functools import (
-    partial,
-)
-
 import attr
 
 from zope.interface import (
@@ -54,7 +50,7 @@ from .resource import (
 )
 
 from .controller import (
-    DummyRedeemer,
+    get_redeemer,
 )
 
 @implementer(IAnnounceableStorageServer)
@@ -96,11 +92,24 @@ class ZKAPAuthorizer(object):
         return s
 
 
+    def _get_redeemer(self, node_config, announcement, reactor):
+        """
+        :return IRedeemer: The voucher redeemer indicated by the given
+            configuration.  A new instance is returned on every call because
+            the redeemer interface is stateless.
+        """
+        return get_redeemer(self.name, node_config, announcement, reactor)
+
+
     def get_storage_server(self, configuration, get_anonymous_storage_server):
-        announcement = {}
+        kwargs = configuration.copy()
+        root_url = kwargs.pop(u"ristretto-issuer-root-url")
+        announcement = {
+            u"ristretto-issuer-root-url": root_url,
+        }
         storage_server = ZKAPAuthorizerStorageServer(
             get_anonymous_storage_server(),
-            **configuration
+            **kwargs
         )
         return succeed(
             AnnounceableStorageServer(
@@ -117,17 +126,23 @@ class ZKAPAuthorizer(object):
         managed by this plugin in the node directory that goes along with
         ``node_config``.
         """
+        from twisted.internet import reactor
+        redeemer = self._get_redeemer(node_config, announcement, reactor)
+        extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
+        def get_passes(message, count):
+            unblinded_tokens = extract_unblinded_tokens(count)
+            return redeemer.tokens_to_passes(message, unblinded_tokens)
+
         return ZKAPAuthorizerStorageClient(
             get_rref,
-            # TODO: Make the caller figure out the correct number of
-            # passes to extract.
-            partial(self._get_store(node_config).extract_passes, 1),
+            get_passes,
         )
 
 
     def get_client_resource(self, node_config):
+        from twisted.internet import reactor
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
-            redeemer=DummyRedeemer(),
+            redeemer=self._get_redeemer(node_config, None, reactor),
         )

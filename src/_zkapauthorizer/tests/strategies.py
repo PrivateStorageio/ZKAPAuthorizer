@@ -55,6 +55,7 @@ from allmydata.client import (
 from ..model import (
     Pass,
     RandomToken,
+    UnblindedToken
 )
 
 
@@ -118,7 +119,7 @@ def tahoe_config_texts(storage_client_plugins):
     )
 
 
-def tahoe_configs(storage_client_plugins=None):
+def minimal_tahoe_configs(storage_client_plugins=None):
     """
     Build complete Tahoe-LAFS configurations for a node.
     """
@@ -133,6 +134,17 @@ def tahoe_configs(storage_client_plugins=None):
             config_text.encode("utf-8"),
         ),
     )
+
+
+def tahoe_configs():
+    """
+    Build complete Tahoe-LAFS configurations including the zkapauthorizer
+    client plugin section.
+    """
+    return minimal_tahoe_configs({
+        u"privatestorageio-zkapauthz-v1": client_configurations(),
+    })
+
 
 def node_nicknames():
     """
@@ -152,18 +164,22 @@ def node_nicknames():
     )
 
 
-def configurations():
+def server_configurations():
     """
     Build configuration values for the server-side plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
 
 
 def client_configurations():
     """
     Build configuration values for the client-side plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
 
 
 def vouchers():
@@ -205,6 +221,22 @@ def zkaps():
         urlsafe_b64encode,
     ).map(
         lambda zkap: Pass(zkap.decode("ascii")),
+    )
+
+
+def unblinded_tokens():
+    """
+    Builds random ``_zkapauthorizer.model.UnblindedToken`` wrapping invalid
+    base64 encode data.  You cannot use these in the PrivacyPass cryptographic
+    protocol but you can put them into the database and take them out again.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        urlsafe_b64encode,
+    ).map(
+        lambda zkap: UnblindedToken(zkap.decode("ascii")),
     )
 
 
@@ -418,4 +450,6 @@ def announcements():
     """
     Build announcements for the ZKAPAuthorizer plugin.
     """
-    return just({})
+    return just({
+        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+    })
