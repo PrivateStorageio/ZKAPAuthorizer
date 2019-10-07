@@ -1,5 +1,4 @@
 codecov
-twisted
 attrs
 hypothesis
 testtools
