@@ -113,6 +113,13 @@ jobs:
       - run:
           name: "Run Test Suite"
           command: |
+            # Building the package has, as a side effect, running the test
+            # suite.  If the test suite fails, so does the build.
+            #
+            # Pass in a couple args here to control how the test suite is run
+            # - configure Hypothesis so it can behave appropriately in a CI
+            # environment (where resources are scarce, competetion with other
+            # tenants is high, etc) and collect coverage information.
             nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - save_cache:
