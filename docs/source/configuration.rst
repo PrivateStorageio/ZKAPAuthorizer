@@ -30,7 +30,7 @@ For example::
 
   [storageclient.plugins.privatestorageio-zkapauthz-v1]
   redeemer = ristretto
-  ristretto-issuer-root-url = https://issuer.privatestorage.io/
+  ristretto-issuer-root-url = https://issuer.example.invalid/
 
 Note that ``ristretto-issuer-root-url`` must agree with whichever storage servers the client will be configured to interact with.
 If the values are not the same, the client will decline to use the storage servers.
@@ -47,4 +47,4 @@ To enable the plugin at all, add its name to the list of storage plugins in the 
 Then also configure the Ristretto-flavored PrivacyPass issuer the server will announce to clients::
 
   [storageserver.plugins.privatestorageio-zkapauthz-v1]
-  ristretto-issuer-root-url = https://issuer.privatestorage.io/
+  ristretto-issuer-root-url = https://issuer.example.invalid/
