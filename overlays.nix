@@ -16,9 +16,7 @@ self: super: {
       attrs = python-super.callPackage ./attrs.nix { };
 
       # The newer hypothesis or attrs breaks the pytest test suite.
-      pytest = python-super.pytest.overrideAttrs (old: {
-        doInstallCheck = false;
-      });
+      pytest = python-super.callPackage ./pytest.nix { };
 
       # new tahoe-lafs dependency
       eliot = python-super.callPackage ./eliot.nix { };
