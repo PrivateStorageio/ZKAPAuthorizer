@@ -21,8 +21,8 @@ aliases:
       command: |
         virtualenv venv
         . venv/bin/activate
-        pip install --upgrade certifi pip pip-tools
-        pip-sync ${PIP_SYNC_REQUIREMENTS}
+        pip install --upgrade certifi pip
+        pip install ${PIP_REQUIREMENTS}
 
 jobs:
   documentation:
@@ -30,7 +30,7 @@ jobs:
       - image: "circleci/python:3.7"
 
     environment:
-      PIP_SYNC_REQUIREMENTS: "docs/requirements.txt"
+      PIP_REQUIREMENTS: "-r docs/requirements.txt"
 
     steps:
       - "checkout"
@@ -52,7 +52,7 @@ jobs:
       - image: "circleci/python:2.7"
 
     environment:
-      PIP_SYNC_REQUIREMENTS: "requirements.txt requirements-tests.txt"
+      PIP_REQUIREMENTS: "-r requirements.txt -r requirements-tests.txt"
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
     steps:
