@@ -75,10 +75,51 @@ jobs:
 
       - "checkout"
 
+      - "run":
+          # CircleCI won't let us interpolate NIXPKGS_REV into a cache key.
+          # Only CircleCI's own environment variables or variables set via the
+          # web interface in a "context" can be interpolated into cache keys.
+          # However, we can interpolate the checksum of a file...  Since we
+          # don't care about the exact revision, we just care that a new
+          # revision gives us a new string, we can write the revision to a
+          # file and then put the checksum of that file into the cache key.
+          # This way, we don't have to maintain the nixpkgs revision in two
+          # places and risk having them desynchronize.
+          name: "Prepare For Cache Key"
+          command: |
+            echo "${NIXPKGS_REV}" > nixpkgs.rev
+
+      - restore_cache:
+          # Get all of Nix's state relating to the particular revision of
+          # nixpkgs we're using.  It will always be the same.  CircleCI
+          # artifacts and nixpkgs store objects are probably mostly hosted in
+          # the same place (S3) so there's not a lot of difference for
+          # anything that's pre-built.  For anything we end up building
+          # ourselves, though, this saves us all of the build time (less the
+          # download time).
+          #
+          # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
+          name: "Restore Nix Store Paths"
+          keys:
+            # Construct cache keys that allow sharing as long as nixpkgs
+            # revision is unchanged.
+            #
+            # If nixpkgs changes then potentially a lot of cached packages for
+            # the base system will be invalidated so we may as well drop them
+            # and make a new cache with the new packages.
+            - zkapauthorizer-nix-store-v1-{{ checksum "nixpkgs.rev" }}
+            - zkapauthorizer-nix-store-v1-
+
       - run:
           name: "Run Test Suite"
           command: |
             nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+
+      - save_cache:
+          name: "Cache Nix Store Paths"
+          key: zkapauthorizer-nix-store-v1-{{ checksum "nixpkgs.rev" }}
+          paths:
+            - "/nix"
 
       - run:
           name: "Report Coverage"
