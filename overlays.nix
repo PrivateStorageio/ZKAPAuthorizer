@@ -5,19 +5,16 @@ self: super: {
 
   python27 = super.python27.override {
     packageOverrides = python-self: python-super: {
-      # # A newer version of Hypothesis is required for compatibility with the
-      # # typing module which gets pulled in by some dependency or other.
-      # #
-      # # A bug report filed against nixpkgs -
-      # # https://github.com/NixOS/nixpkgs/issues/70431
-      # hypothesis = python-super.callPackage ./hypothesis.nix { };
-
-      # # The newer hypothesis requires a newer attrs.
-      # attrs = python-super.callPackage ./attrs.nix { };
-
-      # # The newer hypothesis or attrs breaks the pytest test suite.
-      # pytest = python-super.callPackage ./pytest.nix { };
-
+      # The newest typing is incompatible with the packaged version of
+      # Hypothesis.  Upgrading Hypothesis is like pulling on a loose thread in
+      # a sweater.  I pulled it as far as pytest where I found there was no
+      # upgrade route because pytest has dropped Python 2 support.
+      # Fortunately, downgrading typing ends up being fairly straightforward.
+      #
+      # For now.  This is, no doubt, a sign of things to come for the Python 2
+      # ecosystem - the early stages of a slow, painful death by the thousand
+      # cuts of incompatibilities between libraries with no maintained Python
+      # 2 support.
       typing = python-super.callPackage ./typing.nix { };
 
       # new tahoe-lafs dependency
