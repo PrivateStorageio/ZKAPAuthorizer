@@ -120,6 +120,9 @@ jobs:
             # - configure Hypothesis so it can behave appropriately in a CI
             # environment (where resources are scarce, competetion with other
             # tenants is high, etc) and collect coverage information.
+            #
+            # Further, we want the "doc" output built as well because that's
+            # where the coverage data ends up.
             nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - save_cache:
