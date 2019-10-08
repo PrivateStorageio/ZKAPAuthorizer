@@ -14,7 +14,7 @@
 
 """
 A Tahoe-LAFS RIStorageServer-alike which authorizes writes and lease
-updates using a per-call token.
+updates using per-call passes.
 
 This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
@@ -55,18 +55,18 @@ from .foolscap import (
 @attr.s(cmp=False)
 class ZKAPAuthorizerStorageServer(Referenceable):
     """
-    A class which wraps an ``RIStorageServer`` to insert token validity checks
+    A class which wraps an ``RIStorageServer`` to insert pass validity checks
     before allowing certain functionality.
     """
     _original = attr.ib(validator=provides(RIStorageServer))
 
-    def _validate_tokens(self, tokens):
+    def _validate_passes(self, passes):
         """
-        Check that all of the given tokens are valid.
+        Check that all of the given passes are valid.
 
-        :raise InvalidToken: If any token in ``tokens`` is not valid.
+        :raise InvalidPass: If any pass in ``passses`` is not valid.
 
-        :return NoneType: If all of the tokens in ``tokens`` are valid.
+        :return NoneType: If all of the passes in ``passes`` are valid.
 
         :note: This is yet to be implemented so it always returns ``None``.
         """
@@ -74,66 +74,66 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_get_version(self):
         """
-        Pass through without token check to allow clients to learn about our
+        Pass-through without pass check to allow clients to learn about our
         version and configuration in case it helps them decide how to behave.
         """
         return self._original.remote_get_version()
 
-    def remote_allocate_buckets(self, tokens, *a, **kw):
+    def remote_allocate_buckets(self, passes, *a, **kw):
         """
-        Pass through after a token check to ensure that clients can only allocate
-        storage for immutable shares if they present valid tokens.
+        Pass-through after a pass check to ensure that clients can only allocate
+        storage for immutable shares if they present valid passes.
         """
-        self._validate_tokens(tokens)
+        self._validate_passes(passes)
         return self._original.remote_allocate_buckets(*a, **kw)
 
     def remote_get_buckets(self, storage_index):
         """
-        Pass through without token check to let clients read immutable shares as
+        Pass-through without pass check to let clients read immutable shares as
         long as those shares exist.
         """
         return self._original.remote_get_buckets(storage_index)
 
-    def remote_add_lease(self, tokens, *a, **kw):
+    def remote_add_lease(self, passes, *a, **kw):
         """
-        Pass through after a token check to ensure clients can only extend the
-        duration of share storage if they present valid tokens.
+        Pass-through after a pass check to ensure clients can only extend the
+        duration of share storage if they present valid passes.
         """
-        self._validate_tokens(tokens)
+        self._validate_passes(passes)
         return self._original.remote_add_lease(*a, **kw)
 
-    def remote_renew_lease(self, tokens, *a, **kw):
+    def remote_renew_lease(self, passes, *a, **kw):
         """
-        Pass through after a token check to ensure clients can only extend the
-        duration of share storage if they present valid tokens.
+        Pass-through after a pass check to ensure clients can only extend the
+        duration of share storage if they present valid passes.
         """
-        self._validate_tokens(tokens)
+        self._validate_passes(passes)
         return self._original.remote_renew_lease(*a, **kw)
 
     def remote_advise_corrupt_share(self, *a, **kw):
         """
-        Pass through without a token check to let clients inform us of possible
+        Pass-through without a pass check to let clients inform us of possible
         issues with the system without incurring any cost to themselves.
         """
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
     def remote_slot_testv_and_readv_and_writev(
             self,
-            tokens,
+            passes,
             storage_index,
             secrets,
             tw_vectors,
             r_vector,
     ):
         """
-        Pass through after a token check to ensure clients can only allocate
-        storage for mutable shares if they present valid tokens.
+        Pass-through after a pass check to ensure clients can only allocate
+        storage for mutable shares if they present valid passes.
 
         :note: This method can be used both to allocate storage and to rewrite
             data in already-allocated storage.  These cases may not be the
-            same from the perspective of token validation.
+            same from the perspective of pass validation.
         """
-        self._validate_tokens(tokens)
+        self._validate_passes(passes)
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
         # about (and don't expose over the network): renew_leases.  We always
@@ -149,7 +149,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_slot_readv(self, *a, **kw):
         """
-        Pass through without a token check to let clients read mutable shares as
+        Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
         return self._original.remote_slot_readv(*a, **kw)

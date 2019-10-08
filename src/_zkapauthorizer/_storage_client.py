@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-A Tahoe-LAFS ``IStorageServer`` implementation which presents tokens
+A Tahoe-LAFS ``IStorageServer`` implementation which presents passes
 per-call to prove authorization for writes and lease updates.
 
 This is the client part of a storage access protocol.  The server part is
@@ -34,15 +34,15 @@ from allmydata.interfaces import (
 @attr.s
 class ZKAPAuthorizerStorageClient(object):
     """
-    An implementation of the client portion of an access-token-based
+    An implementation of the client portion of an access-pass-based
     authorization scheme on top of the basic Tahoe-LAFS storage protocol.
 
     This ``IStorageServer`` implementation aims to offer the same storage
     functionality as Tahoe-LAFS' built-in storage server but with an added
-    layer of token-based authorization for some operations.  The Python
+    layer of pass-based authorization for some operations.  The Python
     interface exposed to application code is the same but the network protocol
-    is augmented with tokens which are automatically inserted by this class.
-    The tokens are interpreted by the corresponding server-side implementation
+    is augmented with passes which are automatically inserted by this class.
+    The passes are interpreted by the corresponding server-side implementation
     of this scheme.
 
     :ivar _get_rref: A no-argument callable which retrieves the most recently
