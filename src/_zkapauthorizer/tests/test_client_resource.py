@@ -17,6 +17,10 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 import attr
 
 from .._base64 import (

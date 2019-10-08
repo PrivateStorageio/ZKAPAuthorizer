@@ -17,6 +17,10 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from os import (
     mkdir,
 )

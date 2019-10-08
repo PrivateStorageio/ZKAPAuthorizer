@@ -16,11 +16,13 @@
 Tests for communication between the client and server components.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 import attr
 
 from fixtures import (
-    Fixture,
-    TempDir,
     MonkeyPatch,
 )
 from testtools import (
@@ -62,10 +64,6 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
-from allmydata.storage.server import (
-    StorageServer,
-)
-
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -81,6 +79,9 @@ from .strategies import (
 from .matchers import (
     matches_version_dictionary,
 )
+from .fixtures import (
+    AnonymousStorageServer,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
@@ -91,25 +92,6 @@ from ..foolscap import (
 from ..model import (
     Pass,
 )
-
-class AnonymousStorageServer(Fixture):
-    """
-    Supply an instance of allmydata.storage.server.StorageServer which
-    implements anonymous access to Tahoe-LAFS storage server functionality.
-
-    :ivar FilePath tempdir: The path to the server's storage on the
-        filesystem.
-
-    :ivar allmydata.storage.server.StorageServer storage_server: The storage
-        server.
-    """
-    def _setUp(self):
-        self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
-        self.storage_server = StorageServer(
-            self.tempdir.asBytesMode().path,
-            b"x" * 20,
-        )
-
 
 @attr.s
 class LocalRemote(object):

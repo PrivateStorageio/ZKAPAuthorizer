@@ -16,6 +16,10 @@
 Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from zope.interface import (
     Interface,
     implementer,

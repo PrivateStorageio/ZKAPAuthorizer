@@ -16,6 +16,10 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from json import (
     loads,
     dumps,
