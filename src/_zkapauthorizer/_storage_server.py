@@ -27,12 +27,12 @@ from __future__ import (
 import attr
 from attr.validators import (
     provides,
+    instance_of,
 )
 
 from zope.interface import (
     implementer_only,
 )
-
 from foolscap.api import (
     Referenceable,
 )
@@ -43,9 +43,19 @@ from foolscap.ipb import (
 from allmydata.interfaces import (
     RIStorageServer,
 )
-
+from privacypass import (
+    TokenPreimage,
+    VerificationSignature,
+    SigningKey,
+)
 from .foolscap import (
     RITokenAuthorizedStorageServer,
+)
+from .storage_common import (
+    allocate_buckets_message,
+    add_lease_message,
+    renew_lease_message,
+    slot_testv_and_readv_and_writev_message,
 )
 
 @implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
@@ -59,18 +69,46 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     before allowing certain functionality.
     """
     _original = attr.ib(validator=provides(RIStorageServer))
+    _signing_key = attr.ib(validator=instance_of(SigningKey))
 
-    def _validate_passes(self, passes):
+    def _is_invalid_pass(self, message, pass_):
         """
-        Check that all of the given passes are valid.
+        Check the validity of a single pass.
 
-        :raise InvalidPass: If any pass in ``passses`` is not valid.
+        :param unicode message: The shared message for pass validation.
+        :param bytes pass_: The encoded pass to validate.
 
-        :return NoneType: If all of the passes in ``passes`` are valid.
-
-        :note: This is yet to be implemented so it always returns ``None``.
+        :return bool: ``True`` if the pass is invalid, ``False`` otherwise.
         """
-        return None
+        assert isinstance(message, unicode), "message %r not unicode" % (message,)
+        assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
+        try:
+            preimage_base64, signature_base64 = pass_.split(b" ")
+            preimage = TokenPreimage.decode_base64(preimage_base64)
+            proposed_signature = VerificationSignature.decode_base64(signature_base64)
+            unblinded_token = self._signing_key.rederive_unblinded_token(preimage)
+            verification_key = unblinded_token.derive_verification_key_sha512()
+            invalid_pass = verification_key.invalid_sha512(proposed_signature, message.encode("utf-8"))
+            return invalid_pass
+        except Exception:
+            # It would be pretty nice to log something here, sometimes, I guess?
+            return True
+
+    def _validate_passes(self, message, passes):
+        """
+        Check all of the given passes for validity.
+
+        :param unicode message: The shared message for pass validation.
+        :param list[bytes] passes: The encoded passes to validate.
+
+        :return list[bytes]: The passes which are found to be valid.
+        """
+        return list(
+            pass_
+            for pass_
+            in passes
+            if not self._is_invalid_pass(message, pass_)
+        )
 
     def remote_get_version(self):
         """
@@ -79,13 +117,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_get_version()
 
-    def remote_allocate_buckets(self, passes, *a, **kw):
+    def remote_allocate_buckets(self, passes, storage_index, *a, **kw):
         """
         Pass-through after a pass check to ensure that clients can only allocate
         storage for immutable shares if they present valid passes.
         """
-        self._validate_passes(passes)
-        return self._original.remote_allocate_buckets(*a, **kw)
+        self._validate_passes(allocate_buckets_message(storage_index), passes)
+        return self._original.remote_allocate_buckets(storage_index, *a, **kw)
 
     def remote_get_buckets(self, storage_index):
         """
@@ -94,21 +132,21 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_get_buckets(storage_index)
 
-    def remote_add_lease(self, passes, *a, **kw):
+    def remote_add_lease(self, passes, storage_index, *a, **kw):
         """
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        self._validate_passes(passes)
-        return self._original.remote_add_lease(*a, **kw)
+        self._validate_passes(add_lease_message(storage_index), passes)
+        return self._original.remote_add_lease(storage_index, *a, **kw)
 
-    def remote_renew_lease(self, passes, *a, **kw):
+    def remote_renew_lease(self, passes, storage_index, *a, **kw):
         """
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        self._validate_passes(passes)
-        return self._original.remote_renew_lease(*a, **kw)
+        self._validate_passes(renew_lease_message(storage_index), passes)
+        return self._original.remote_renew_lease(storage_index, *a, **kw)
 
     def remote_advise_corrupt_share(self, *a, **kw):
         """
@@ -133,7 +171,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             data in already-allocated storage.  These cases may not be the
             same from the perspective of pass validation.
         """
-        self._validate_passes(passes)
+        self._validate_passes(slot_testv_and_readv_and_writev_message(storage_index), passes)
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
         # about (and don't expose over the network): renew_leases.  We always

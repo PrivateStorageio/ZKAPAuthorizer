@@ -30,6 +30,13 @@ from allmydata.interfaces import (
     IStorageServer,
 )
 
+from .storage_common import (
+    allocate_buckets_message,
+    add_lease_message,
+    renew_lease_message,
+    slot_testv_and_readv_and_writev_message,
+)
+
 @implementer(IStorageServer)
 @attr.s
 class ZKAPAuthorizerStorageClient(object):
@@ -64,13 +71,16 @@ class ZKAPAuthorizerStorageClient(object):
 
     def _get_encoded_passes(self, message, count):
         """
+        :param unicode message: The message to which to bind the passes.
+
         :return: A list of passes from ``_get_passes`` encoded into their
             ``bytes`` representation.
         """
+        assert isinstance(message, unicode)
         return list(
             t.text.encode("ascii")
             for t
-            in self._get_passes(message.encode("hex"), count)
+            in self._get_passes(message.encode("utf-8"), count)
         )
 
     def get_version(self):
@@ -89,7 +99,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(allocate_buckets_message(storage_index), 1),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -115,7 +125,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "add_lease",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(add_lease_message(storage_index), 1),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -128,7 +138,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "renew_lease",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(renew_lease_message(storage_index), 1),
             storage_index,
             renew_secret,
         )
@@ -157,7 +167,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1),
             storage_index,
             secrets,
             tw_vectors,

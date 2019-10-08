@@ -164,12 +164,16 @@ def node_nicknames():
     )
 
 
-def server_configurations():
+def server_configurations(signing_key_path):
     """
     Build configuration values for the server-side plugin.
+
+    :param unicode signing_key_path: A value to insert for the
+        **ristretto-signing-key-path** item.
     """
     return just({
         u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+        u"ristretto-signing-key-path": signing_key_path.path,
     })
 
 
@@ -214,13 +218,10 @@ def zkaps():
     """
     Build random ZKAPs as ``Pass` instances.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
-    ).map(
-        urlsafe_b64encode,
-    ).map(
-        lambda zkap: Pass(zkap.decode("ascii")),
+    return builds(
+        lambda preimage, signature: Pass(u"{} {}".format(preimage, signature)),
+        preimage=binary(min_size=66, max_size=66).map(urlsafe_b64encode),
+        signature=binary(min_size=66, max_size=66).map(urlsafe_b64encode),
     )
 
 

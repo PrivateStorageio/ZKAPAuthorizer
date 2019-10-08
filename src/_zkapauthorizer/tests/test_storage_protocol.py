@@ -64,6 +64,10 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
+from privacypass import (
+    random_signing_key,
+)
+
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -91,6 +95,9 @@ from ..foolscap import (
 )
 from ..model import (
     Pass,
+)
+from ..storage_common import (
+    slot_testv_and_readv_and_writev_message,
 )
 
 @attr.s
@@ -141,6 +148,7 @@ class ShareTests(TestCase):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
+        self.signing_key = random_signing_key()
 
         def get_passes(message, count):
             if not isinstance(message, bytes):
@@ -154,6 +162,7 @@ class ShareTests(TestCase):
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
+            self.signing_key,
         )
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
@@ -502,7 +511,10 @@ class ShareTests(TestCase):
         d = self.client._rref.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
-            self.client._get_encoded_passes(storage_index, 1),
+            self.client._get_encoded_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                1,
+            ),
             # storage_index
             storage_index,
             # secrets

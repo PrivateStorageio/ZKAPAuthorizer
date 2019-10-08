@@ -71,6 +71,9 @@ from allmydata.interfaces import (
     RIStorageServer,
 )
 
+from twisted.python.filepath import (
+    FilePath,
+)
 from twisted.plugin import (
     getPlugins,
 )
@@ -105,6 +108,9 @@ from .strategies import (
 from .matchers import (
     Provides,
 )
+
+
+SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
 
 
 @implementer(RIStorageServer)
@@ -150,7 +156,7 @@ class ServerPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
-    @given(server_configurations())
+    @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_announceable(self, configuration):
         """
         ``storage_server.get_storage_server`` returns an instance which provides
@@ -166,7 +172,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(server_configurations())
+    @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_referenceable(self, configuration):
         """
         The storage server attached to the result of
@@ -187,7 +193,7 @@ class ServerPluginTests(TestCase):
             ),
         )
 
-    @given(server_configurations())
+    @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_serializable(self, configuration):
         """
         The storage server attached to the result of
@@ -211,7 +217,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-    @given(server_configurations())
+    @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_hashable(self, configuration):
         """
         The storage server attached to the result of
