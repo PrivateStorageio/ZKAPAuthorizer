@@ -24,6 +24,10 @@ from __future__ import (
     absolute_import,
 )
 
+from math import (
+    ceil,
+)
+
 import attr
 from attr.validators import (
     provides,
@@ -58,6 +62,12 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
+class MorePassesRequired(Exception):
+    def __init__(self, valid_count, required_count):
+        self.valid_count = valid_count
+        self.required_count = required_count
+
+
 @implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
@@ -68,8 +78,24 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     A class which wraps an ``RIStorageServer`` to insert pass validity checks
     before allowing certain functionality.
     """
+    # The number of bytes we're willing to store for a lease period for each
+    # pass submitted.
+    _BYTES_PER_PASS = 128 * 1024
+
     _original = attr.ib(validator=provides(RIStorageServer))
     _signing_key = attr.ib(validator=instance_of(SigningKey))
+
+    def _required_passes(self, stored_bytes):
+        """
+        Calculate the number of passes that are required to store ``stored_bytes``
+        for one lease period.
+
+        :param int stored_bytes: A number of bytes of storage for which to
+            calculate a price in passes.
+
+        :return int: The number of passes.
+        """
+        return int(ceil(stored_bytes / self._BYTES_PER_PASS))
 
     def _is_invalid_pass(self, message, pass_):
         """
@@ -117,13 +143,30 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_get_version()
 
-    def remote_allocate_buckets(self, passes, storage_index, *a, **kw):
+    def remote_allocate_buckets(self, passes, storage_index, renew_secret, cancel_secret, sharenums, allocated_size, canary):
         """
         Pass-through after a pass check to ensure that clients can only allocate
         storage for immutable shares if they present valid passes.
         """
-        self._validate_passes(allocate_buckets_message(storage_index), passes)
-        return self._original.remote_allocate_buckets(storage_index, *a, **kw)
+        valid_passes = self._validate_passes(
+            allocate_buckets_message(storage_index),
+            passes,
+        )
+        required_passes = self._required_passes(len(sharenums) * allocated_size)
+        if len(valid_passes) < required_passes:
+            raise MorePassesRequired(
+                len(valid_passes),
+                required_passes,
+            )
+
+        return self._original.remote_allocate_buckets(
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            canary,
+        )
 
     def remote_get_buckets(self, storage_index):
         """

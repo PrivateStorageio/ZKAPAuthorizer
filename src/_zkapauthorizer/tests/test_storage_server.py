@@ -1,5 +1,6 @@
 from __future__ import (
     absolute_import,
+    division,
 )
 
 from random import (
@@ -11,6 +12,7 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     AfterPreprocessing,
+    raises,
 )
 from hypothesis import (
     given,
@@ -34,8 +36,11 @@ from .fixtures import (
 )
 from ..api import (
     ZKAPAuthorizerStorageServer,
+    MorePassesRequired,
 )
-
+from ..storage_common import (
+    allocate_buckets_message,
+)
 
 def make_passes(signing_key, for_message, random_tokens):
     blinded_tokens = list(
@@ -121,3 +126,45 @@ class PassValidationTests(TestCase):
                 Equals(set(valid_passes)),
             ),
         )
+
+
+    def test_allocate_buckets_fails_without_enough_passes(self):
+        """
+        ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
+        passed fewer passes than it requires for the amount of data to be
+        stored.
+        """
+        required_passes = 2
+        bytes_per_pass = self.storage_server._BYTES_PER_PASS
+        share_nums = {3, 7}
+        allocated_size = int((required_passes * bytes_per_pass) / len(share_nums))
+        storage_index = b"0123456789"
+        renew_secret = b"x" * 32
+        cancel_secret = b"y" * 32
+        valid_passes = make_passes(
+            self.signing_key,
+            allocate_buckets_message(storage_index),
+            list(RandomToken.create() for i in range(required_passes - 1)),
+        )
+
+        allocate_buckets = lambda: self.storage_server.doRemoteCall(
+            "allocate_buckets",
+            (valid_passes,
+             storage_index,
+             renew_secret,
+             cancel_secret,
+             share_nums,
+             allocated_size,
+             FakeRemoteReference(),
+            ),
+            {},
+        )
+        self.assertThat(
+            allocate_buckets,
+            raises(MorePassesRequired),
+        )
+
+
+class FakeRemoteReference(object):
+    def notifyOnDisconnect(self, callback, *args, **kwargs):
+        pass
