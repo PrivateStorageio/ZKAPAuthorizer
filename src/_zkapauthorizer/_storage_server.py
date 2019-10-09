@@ -61,6 +61,16 @@ from .storage_common import (
 )
 
 class MorePassesRequired(Exception):
+    """
+    Storage operations fail with ``MorePassesRequired`` when they are not
+    accompanied by a sufficient number of valid passes.
+
+    :ivar int valid_count: The number of valid passes presented in the
+        operation.
+
+    ivar int required_count: The number of valid passes which must be
+        presented for the operation to be authorized.
+    """
     def __init__(self, valid_count, required_count):
         self.valid_count = valid_count
         self.required_count = required_count
@@ -90,12 +100,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def _is_invalid_pass(self, message, pass_):
         """
-        Check the validity of a single pass.
+        Cryptographically check the validity of a single pass.
 
         :param unicode message: The shared message for pass validation.
         :param bytes pass_: The encoded pass to validate.
 
-        :return bool: ``True`` if the pass is invalid, ``False`` otherwise.
+        :return bool: ``False`` (invalid) if the pass includes a valid
+            signature, ``True`` (valid) otherwise.
         """
         assert isinstance(message, unicode), "message %r not unicode" % (message,)
         assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
