@@ -14,6 +14,7 @@
 
 __all__ = [
     "MorePassesRequired",
+    "LeaseRenewalRequired",
     "ZKAPAuthorizerStorageServer",
     "ZKAPAuthorizerStorageClient",
     "ZKAPAuthorizer",
@@ -21,6 +22,7 @@ __all__ = [
 
 from ._storage_server import (
     MorePassesRequired,
+    LeaseRenewalRequired,
     ZKAPAuthorizerStorageServer,
 )
 from ._storage_client import (
