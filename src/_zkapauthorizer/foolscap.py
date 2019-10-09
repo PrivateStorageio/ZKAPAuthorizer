@@ -18,34 +18,32 @@ from allmydata.interfaces import (
 )
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
-# values.  So we'll try to limit the number of tokens a client can supply.
+# values.  So we'll try to limit the number of passes a client can supply.
 # Foolscap may be moving away from this so we may eventually drop this as
 # well.  Though it may still make sense on a non-Foolscap protocol (eg HTTP)
 # which Tahoe-LAFS may eventually support.
 #
 # In any case, for now, pick some fairly arbitrary value.  I am deliberately
 # picking a small number here and expect to have to raise.  However, ideally,
-# a client could accomplish a lot with a few tokens while also not wasting a
+# a client could accomplish a lot with a few passes while also not wasting a
 # lot of value.
-MAXIMUM_TOKENS_PER_CALL = 10
+_MAXIMUM_PASSES_PER_CALL = 10
 
-# This is the length of a serialized Ristretto-flavored PrivacyPass pass
-# (there's a lot of confusion between "tokens" and "passes" here, sadly).
-#
-# The pass is a combination of base64-encoded token preimages and unblinded
-# token signatures.
-TOKEN_LENGTH = 177
+# This is the length of a serialized Ristretto-flavored PrivacyPass pass The
+# pass is a combination of token preimages and unblinded token signatures,
+# each base64-encoded.
+_PASS_LENGTH = 177
 
 # Take those values and turn them into the appropriate Foolscap constraint
 # objects.  Foolscap seems to have a convention of representing these as
 # CamelCase module-level values so I replicate that here.
-Token = ByteStringConstraint(maxLength=TOKEN_LENGTH, minLength=TOKEN_LENGTH)
-TokenList = ListOf(Token, maxLength=MAXIMUM_TOKENS_PER_CALL)
+_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH)
+_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL)
 
 
-def add_tokens(schema):
+def add_passes(schema):
     """
-    Add a ``tokens`` parameter to the given method schema.
+    Add a ``passes`` parameter to the given method schema.
 
     :param foolscap.remoteinterface.RemoteMethodSchema schema: An existing
         method schema to modify.
@@ -53,7 +51,7 @@ def add_tokens(schema):
     :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
         ``schema`` but with one additional required argument.
     """
-    return add_arguments(schema, [(b"tokens", TokenList)])
+    return add_arguments(schema, [(b"passes", _PassList)])
 
 
 def add_arguments(schema, kwargs):
@@ -88,33 +86,33 @@ def add_arguments(schema, kwargs):
 
 
 
-class RITokenAuthorizedStorageServer(RemoteInterface):
+class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     """
-    An object which can store and retrieve shares, subject to token-based
+    An object which can store and retrieve shares, subject to pass-based
     authorization.
 
     This is much the same as ``allmydata.interfaces.RIStorageServer`` but
-    several of its methods take an additional ``tokens`` parameter.  Clients
-    are expected to supply suitable tokens and only after the tokens have been
+    several of its methods take an additional ``passes`` parameter.  Clients
+    are expected to supply suitable passes and only after the passes have been
     validated is service provided.
     """
     __remote_name__ = (
-        "RITokenAuthorizedStorageServer.tahoe.privatestorage.io"
+        "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
 
     get_version = RIStorageServer["get_version"]
 
-    allocate_buckets = add_tokens(RIStorageServer["allocate_buckets"])
+    allocate_buckets = add_passes(RIStorageServer["allocate_buckets"])
 
-    add_lease = add_tokens(RIStorageServer["add_lease"])
+    add_lease = add_passes(RIStorageServer["add_lease"])
 
-    renew_lease = add_tokens(RIStorageServer["renew_lease"])
+    renew_lease = add_passes(RIStorageServer["renew_lease"])
 
     get_buckets = RIStorageServer["get_buckets"]
 
     slot_readv = RIStorageServer["slot_readv"]
 
-    slot_testv_and_readv_and_writev = add_tokens(
+    slot_testv_and_readv_and_writev = add_passes(
         RIStorageServer["slot_testv_and_readv_and_writev"],
     )
 
