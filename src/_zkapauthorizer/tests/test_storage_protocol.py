@@ -65,9 +65,13 @@ from foolscap.referenceable import (
 )
 
 from privacypass import (
+    RandomToken,
     random_signing_key,
 )
 
+from .privacypass import (
+    make_passes,
+)
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -90,14 +94,11 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
-from ..foolscap import (
-    TOKEN_LENGTH,
+from ..storage_common import (
+    slot_testv_and_readv_and_writev_message,
 )
 from ..model import (
     Pass,
-)
-from ..storage_common import (
-    slot_testv_and_readv_and_writev_message,
 )
 
 @attr.s
@@ -151,15 +152,15 @@ class ShareTests(TestCase):
         self.signing_key = random_signing_key()
 
         def get_passes(message, count):
-            if not isinstance(message, bytes):
-                raise TypeError("message must be bytes")
-            try:
-                message.decode("utf-8")
-            except UnicodeDecodeError:
-                raise TypeError("message must be valid utf-8")
-
-            return [Pass(u"x" * TOKEN_LENGTH)] * count
-
+            return list(
+                Pass(pass_.decode("ascii"))
+                for pass_
+                in make_passes(
+                    self.signing_key,
+                    message,
+                    list(RandomToken.create() for n in range(count)),
+                )
+            )
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.signing_key,

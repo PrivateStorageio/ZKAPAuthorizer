@@ -22,12 +22,16 @@ from hypothesis.strategies import (
     lists,
 )
 from privacypass import (
-    BatchDLEQProof,
-    PublicKey,
     RandomToken,
     random_signing_key,
 )
+from foolscap.referenceable import (
+    LocalReferenceable,
+)
 
+from .privacypass import (
+    make_passes,
+)
 from .strategies import (
     zkaps,
 )
@@ -39,56 +43,9 @@ from ..api import (
     MorePassesRequired,
 )
 from ..storage_common import (
+    BYTES_PER_PASS,
     allocate_buckets_message,
 )
-
-def make_passes(signing_key, for_message, random_tokens):
-    blinded_tokens = list(
-        token.blind()
-        for token
-        in random_tokens
-    )
-    signatures = list(
-        signing_key.sign(blinded_token)
-        for blinded_token
-        in blinded_tokens
-    )
-    proof = BatchDLEQProof.create(
-        signing_key,
-        blinded_tokens,
-        signatures,
-    )
-    unblinded_signatures = proof.invalid_or_unblind(
-        random_tokens,
-        blinded_tokens,
-        signatures,
-        PublicKey.from_signing_key(signing_key),
-    )
-    preimages = list(
-        unblinded_signature.preimage()
-        for unblinded_signature
-        in unblinded_signatures
-    )
-    verification_keys = list(
-        unblinded_signature.derive_verification_key_sha512()
-        for unblinded_signature
-        in unblinded_signatures
-    )
-    message_signatures = list(
-        verification_key.sign_sha512(for_message.encode("utf-8"))
-        for verification_key
-        in verification_keys
-    )
-    passes = list(
-        u"{} {}".format(
-            preimage.encode_base64().decode("ascii"),
-            signature.encode_base64().decode("ascii"),
-        ).encode("ascii")
-        for (preimage, signature)
-        in zip(preimages, message_signatures)
-    )
-    return passes
-
 
 
 class PassValidationTests(TestCase):
@@ -135,9 +92,8 @@ class PassValidationTests(TestCase):
         stored.
         """
         required_passes = 2
-        bytes_per_pass = self.storage_server._BYTES_PER_PASS
         share_nums = {3, 7}
-        allocated_size = int((required_passes * bytes_per_pass) / len(share_nums))
+        allocated_size = int((required_passes * BYTES_PER_PASS) / len(share_nums))
         storage_index = b"0123456789"
         renew_secret = b"x" * 32
         cancel_secret = b"y" * 32
@@ -155,7 +111,7 @@ class PassValidationTests(TestCase):
              cancel_secret,
              share_nums,
              allocated_size,
-             FakeRemoteReference(),
+             LocalReferenceable(None),
             ),
             {},
         )
@@ -163,8 +119,3 @@ class PassValidationTests(TestCase):
             allocate_buckets,
             raises(MorePassesRequired),
         )
-
-
-class FakeRemoteReference(object):
-    def notifyOnDisconnect(self, callback, *args, **kwargs):
-        pass

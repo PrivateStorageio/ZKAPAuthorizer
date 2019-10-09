@@ -31,6 +31,8 @@ from allmydata.interfaces import (
 )
 
 from .storage_common import (
+    BYTES_PER_PASS,
+    required_passes,
     allocate_buckets_message,
     add_lease_message,
     renew_lease_message,
@@ -99,7 +101,10 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_encoded_passes(allocate_buckets_message(storage_index), 1),
+            self._get_encoded_passes(
+                allocate_buckets_message(storage_index),
+                required_passes(BYTES_PER_PASS, sharenums, allocated_size),
+            ),
             storage_index,
             renew_secret,
             cancel_secret,
