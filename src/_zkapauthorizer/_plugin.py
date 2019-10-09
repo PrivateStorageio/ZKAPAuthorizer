@@ -27,6 +27,9 @@ from zope.interface import (
     implementer,
 )
 
+from twisted.python.filepath import (
+    FilePath,
+)
 from twisted.internet.defer import (
     succeed,
 )
@@ -34,6 +37,9 @@ from twisted.internet.defer import (
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
+)
+from privacypass import (
+    SigningKey,
 )
 
 from .api import (
@@ -104,11 +110,17 @@ class ZKAPAuthorizer(object):
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         kwargs = configuration.copy()
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
+        signing_key = SigningKey.decode_base64(
+            FilePath(
+                kwargs.pop(u"ristretto-signing-key-path"),
+            ).getContent(),
+        )
         announcement = {
             u"ristretto-issuer-root-url": root_url,
         }
         storage_server = ZKAPAuthorizerStorageServer(
             get_anonymous_storage_server(),
+            signing_key,
             **kwargs
         )
         return succeed(

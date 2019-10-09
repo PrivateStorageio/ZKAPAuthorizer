@@ -13,12 +13,14 @@
 # limitations under the License.
 
 __all__ = [
+    "MorePassesRequired",
     "ZKAPAuthorizerStorageServer",
     "ZKAPAuthorizerStorageClient",
     "ZKAPAuthorizer",
 ]
 
 from ._storage_server import (
+    MorePassesRequired,
     ZKAPAuthorizerStorageServer,
 )
 from ._storage_client import (

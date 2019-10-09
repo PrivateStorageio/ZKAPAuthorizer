@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-A Tahoe-LAFS ``IStorageServer`` implementation which presents tokens
+A Tahoe-LAFS ``IStorageServer`` implementation which presents passes
 per-call to prove authorization for writes and lease updates.
 
 This is the client part of a storage access protocol.  The server part is
@@ -30,19 +30,28 @@ from allmydata.interfaces import (
     IStorageServer,
 )
 
+from .storage_common import (
+    BYTES_PER_PASS,
+    required_passes,
+    allocate_buckets_message,
+    add_lease_message,
+    renew_lease_message,
+    slot_testv_and_readv_and_writev_message,
+)
+
 @implementer(IStorageServer)
 @attr.s
 class ZKAPAuthorizerStorageClient(object):
     """
-    An implementation of the client portion of an access-token-based
+    An implementation of the client portion of an access-pass-based
     authorization scheme on top of the basic Tahoe-LAFS storage protocol.
 
     This ``IStorageServer`` implementation aims to offer the same storage
     functionality as Tahoe-LAFS' built-in storage server but with an added
-    layer of token-based authorization for some operations.  The Python
+    layer of pass-based authorization for some operations.  The Python
     interface exposed to application code is the same but the network protocol
-    is augmented with tokens which are automatically inserted by this class.
-    The tokens are interpreted by the corresponding server-side implementation
+    is augmented with passes which are automatically inserted by this class.
+    The passes are interpreted by the corresponding server-side implementation
     of this scheme.
 
     :ivar _get_rref: A no-argument callable which retrieves the most recently
@@ -64,13 +73,16 @@ class ZKAPAuthorizerStorageClient(object):
 
     def _get_encoded_passes(self, message, count):
         """
+        :param unicode message: The message to which to bind the passes.
+
         :return: A list of passes from ``_get_passes`` encoded into their
             ``bytes`` representation.
         """
+        assert isinstance(message, unicode)
         return list(
             t.text.encode("ascii")
             for t
-            in self._get_passes(message.encode("hex"), count)
+            in self._get_passes(message.encode("utf-8"), count)
         )
 
     def get_version(self):
@@ -89,7 +101,10 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "allocate_buckets",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(
+                allocate_buckets_message(storage_index),
+                required_passes(BYTES_PER_PASS, sharenums, allocated_size),
+            ),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -115,7 +130,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "add_lease",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(add_lease_message(storage_index), 1),
             storage_index,
             renew_secret,
             cancel_secret,
@@ -128,7 +143,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "renew_lease",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(renew_lease_message(storage_index), 1),
             storage_index,
             renew_secret,
         )
@@ -157,7 +172,7 @@ class ZKAPAuthorizerStorageClient(object):
     ):
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_encoded_passes(storage_index, 1),
+            self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1),
             storage_index,
             secrets,
             tw_vectors,

@@ -48,3 +48,13 @@ Then also configure the Ristretto-flavored PrivacyPass issuer the server will an
 
   [storageserver.plugins.privatestorageio-zkapauthz-v1]
   ristretto-issuer-root-url = https://issuer.example.invalid/
+
+The storage server must also be configured with the path to the Ristretto-flavored PrivacyPass signing key.
+To avoid placing secret material in tahoe.cfg,
+this configuration is done using a path::
+
+  [storageserver.plugins.privatestorageio-zkapauthz-v1]
+  ristretto-signing-key-path = /path/to/signing.key
+
+The signing key is the keystone secret to the entire system and must be managed with extreme care to prevent unintended disclosure.
+If things go well a future version of ZKAPAuthorizer will remove the requirement that the signing key be distributed to storage servers.

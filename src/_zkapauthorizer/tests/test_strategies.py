@@ -16,6 +16,10 @@
 Tests for our custom Hypothesis strategies.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from testtools import (
     TestCase,
 )

@@ -16,11 +16,13 @@
 Tests for communication between the client and server components.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 import attr
 
 from fixtures import (
-    Fixture,
-    TempDir,
     MonkeyPatch,
 )
 from testtools import (
@@ -62,10 +64,14 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
-from allmydata.storage.server import (
-    StorageServer,
+from privacypass import (
+    RandomToken,
+    random_signing_key,
 )
 
+from .privacypass import (
+    make_passes,
+)
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -81,35 +87,19 @@ from .strategies import (
 from .matchers import (
     matches_version_dictionary,
 )
+from .fixtures import (
+    AnonymousStorageServer,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
-from ..foolscap import (
-    TOKEN_LENGTH,
+from ..storage_common import (
+    slot_testv_and_readv_and_writev_message,
 )
 from ..model import (
     Pass,
 )
-
-class AnonymousStorageServer(Fixture):
-    """
-    Supply an instance of allmydata.storage.server.StorageServer which
-    implements anonymous access to Tahoe-LAFS storage server functionality.
-
-    :ivar FilePath tempdir: The path to the server's storage on the
-        filesystem.
-
-    :ivar allmydata.storage.server.StorageServer storage_server: The storage
-        server.
-    """
-    def _setUp(self):
-        self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
-        self.storage_server = StorageServer(
-            self.tempdir.asBytesMode().path,
-            b"x" * 20,
-        )
-
 
 @attr.s
 class LocalRemote(object):
@@ -159,19 +149,21 @@ class ShareTests(TestCase):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
+        self.signing_key = random_signing_key()
 
         def get_passes(message, count):
-            if not isinstance(message, bytes):
-                raise TypeError("message must be bytes")
-            try:
-                message.decode("utf-8")
-            except UnicodeDecodeError:
-                raise TypeError("message must be valid utf-8")
-
-            return [Pass(u"x" * TOKEN_LENGTH)] * count
-
+            return list(
+                Pass(pass_.decode("ascii"))
+                for pass_
+                in make_passes(
+                    self.signing_key,
+                    message,
+                    list(RandomToken.create() for n in range(count)),
+                )
+            )
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
+            self.signing_key,
         )
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
@@ -520,7 +512,10 @@ class ShareTests(TestCase):
         d = self.client._rref.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
-            self.client._get_encoded_passes(storage_index, 1),
+            self.client._get_encoded_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                1,
+            ),
             # storage_index
             storage_index,
             # secrets
