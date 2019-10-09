@@ -57,3 +57,4 @@ this configuration is done using a path::
   ristretto-signing-key-path = /path/to/signing.key
 
 The signing key is the keystone secret to the entire system and must be managed with extreme care to prevent unintended disclosure.
+If things go well a future version of ZKAPAuthorizer will remove the requirement that the signing key be distributed to storage servers.
