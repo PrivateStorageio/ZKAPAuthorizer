@@ -220,8 +220,10 @@ def zkaps():
     """
     return builds(
         lambda preimage, signature: Pass(u"{} {}".format(preimage, signature)),
-        preimage=binary(min_size=66, max_size=66).map(urlsafe_b64encode),
-        signature=binary(min_size=66, max_size=66).map(urlsafe_b64encode),
+        # Sizes informed by
+        # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
+        preimage=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
+        signature=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
     )
 
 
