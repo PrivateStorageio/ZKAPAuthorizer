@@ -475,10 +475,11 @@ class ShareTests(TestCase):
         ),
         test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
     )
-    def test_mutable_write_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_mutable_rewrite_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
-        When mutable share data is written using *slot_testv_and_readv_and_writev*
-        any leases on the corresponding slot remain the same.
+        When mutable share data is rewritten using
+        *slot_testv_and_readv_and_writev* any leases on the corresponding slot
+        remain the same.
         """
         # XXX
         assume_one_pass(test_and_write_vectors_for_shares)
@@ -487,29 +488,50 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        wrote, read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v)
-                    in test_and_write_vectors_for_shares.items()
-                },
-                r_vector=[],
-            ),
-        )
+        def leases():
+            return list(
+                lease.to_mutable_data()
+                for lease
+                in self.anonymous_storage_server.get_slot_leases(storage_index)
+            )
 
+        def write():
+            return extract_result(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v)
+                        in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                ),
+            )
+
+        # Perform an initial write so there is something to rewrite.
+        wrote, read = write()
         self.assertThat(
             wrote,
             Equals(True),
             u"Server rejected a write to a new mutable slot",
         )
 
-        # There are *no* leases on this newly written slot!
+        # Note the prior state.
+        leases_before = leases()
+
+        # Now perform the rewrite.
+        wrote, read = write()
         self.assertThat(
-            list(self.anonymous_storage_server.get_slot_leases(storage_index)),
-            Equals([]),
+            wrote,
+            Equals(True),
+            u"Server rejected rewrite of an existing mutable slot",
+        )
+
+        # Leases are exactly unchanged.
+        self.assertThat(
+            leases(),
+            Equals(leases_before),
         )
 
     @given(
