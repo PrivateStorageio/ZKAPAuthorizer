@@ -16,6 +16,10 @@
 Functionality shared between the storage client and server.
 """
 
+from __future__ import (
+    division,
+)
+
 from base64 import (
     b64encode,
 )
