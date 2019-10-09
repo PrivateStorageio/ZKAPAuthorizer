@@ -27,18 +27,18 @@ from allmydata.interfaces import (
 # picking a small number here and expect to have to raise.  However, ideally,
 # a client could accomplish a lot with a few passes while also not wasting a
 # lot of value.
-MAXIMUM_PASSES_PER_CALL = 10
+_MAXIMUM_PASSES_PER_CALL = 10
 
 # This is the length of a serialized Ristretto-flavored PrivacyPass pass The
 # pass is a combination of token preimages and unblinded token signatures,
 # each base64-encoded.
-PASS_LENGTH = 177
+_PASS_LENGTH = 177
 
 # Take those values and turn them into the appropriate Foolscap constraint
 # objects.  Foolscap seems to have a convention of representing these as
 # CamelCase module-level values so I replicate that here.
-Pass = ByteStringConstraint(maxLength=PASS_LENGTH, minLength=PASS_LENGTH)
-PassList = ListOf(Pass, maxLength=MAXIMUM_PASSES_PER_CALL)
+_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH)
+_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL)
 
 
 def add_passes(schema):
@@ -51,7 +51,7 @@ def add_passes(schema):
     :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
         ``schema`` but with one additional required argument.
     """
-    return add_arguments(schema, [(b"passes", PassList)])
+    return add_arguments(schema, [(b"passes", _PassList)])
 
 
 def add_arguments(schema, kwargs):
