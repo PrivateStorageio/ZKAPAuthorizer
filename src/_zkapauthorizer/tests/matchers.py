@@ -47,7 +47,7 @@ def matches_version_dictionary():
     """
     Match the dictionary returned by Tahoe-LAFS'
     ``RIStorageServer.get_version`` which is also the dictionary returned by
-    our own ``RITokenAuthorizedStorageServer.get_version``.
+    our own ``RIPrivacyPassAuthorizedStorageServer.get_version``.
     """
     return ContainsDict({
         # It has these two top-level keys, at least.  Try not to be too

@@ -49,7 +49,7 @@ from privacypass import (
     SigningKey,
 )
 from .foolscap import (
-    RITokenAuthorizedStorageServer,
+    RIPrivacyPassAuthorizedStorageServer,
 )
 from .storage_common import (
     BYTES_PER_PASS,
@@ -85,7 +85,7 @@ class MorePassesRequired(Exception):
         return repr(self)
 
 
-@implementer_only(RITokenAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
+@implementer_only(RIPrivacyPassAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
 # attributes on self and it's hard to avoid that.
