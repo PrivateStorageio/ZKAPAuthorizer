@@ -89,6 +89,9 @@ from .matchers import (
 from .fixtures import (
     AnonymousStorageServer,
 )
+from .storage_common import (
+    cleanup_storage_server,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
@@ -682,20 +685,3 @@ def write_toy_shares(
     for (sharenum, writer) in allocated.items():
         writer.remote_write(0, bytes_for_share(sharenum, size))
         writer.remote_close()
-
-
-def cleanup_storage_server(storage_server):
-    """
-    Delete all of the shares held by the given storage server.
-
-    :param allmydata.storage.server.StorageServer storage_server: The storage
-        server with some on-disk shares to delete.
-    """
-    starts = [
-        FilePath(storage_server.sharedir),
-        FilePath(storage_server.corruption_advisory_dir),
-    ]
-    for start in starts:
-        for p in start.walk():
-            if p is not start:
-                p.remove()
