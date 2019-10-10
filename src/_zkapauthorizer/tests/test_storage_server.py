@@ -61,6 +61,9 @@ from .strategies import (
 from .fixtures import (
     AnonymousStorageServer,
 )
+from .storage_common import (
+    cleanup_storage_server,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     MorePassesRequired,
@@ -107,13 +110,16 @@ class PassValidationTests(TestCase):
             ),
         )
 
-
     def test_allocate_buckets_fails_without_enough_passes(self):
         """
         ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
         passed fewer passes than it requires for the amount of data to be
         stored.
         """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
         required_passes = 2
         share_nums = {3, 7}
         allocated_size = int((required_passes * BYTES_PER_PASS) / len(share_nums))
@@ -158,6 +164,10 @@ class PassValidationTests(TestCase):
         initial writes on shares without supplying passes, the operation fails
         with ``MorePassesRequired``.
         """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
         data = b"01234567"
         offset = 0
         sharenum = 0
