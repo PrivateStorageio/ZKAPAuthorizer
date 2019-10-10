@@ -246,7 +246,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 self._clock.seconds(),
             ):
                 # Passes may be supplied with the write to create the
-                # necessary lease as part of the same operation.
+                # necessary lease as part of the same operation.  This must be
+                # supported because there is no separate protocol action to
+                # *create* a slot.  Clients just begin writing to it.
                 valid_passes = self._validate_passes(
                     slot_testv_and_readv_and_writev_message(storage_index),
                     passes,

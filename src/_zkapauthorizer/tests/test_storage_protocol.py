@@ -159,14 +159,21 @@ def assume_one_pass(test_and_write_vectors_for_shares):
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
+
+    :ivar int spent_passes: The number of passes which have been spent so far
+        in the course of a single test (in the case of Hypothesis, every
+        iteration of the test so far, probably; so make relative comparisons
+        instead of absolute ones).
     """
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
+        self.spent_passes = 0
 
         def get_passes(message, count):
+            self.spent_passes += count
             return list(
                 Pass(pass_.decode("ascii"))
                 for pass_
@@ -397,7 +404,7 @@ class ShareTests(TestCase):
     def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
-        read back.
+        read back as-written and without spending any more passes.
         """
         # XXX
         assume_one_pass(test_and_write_vectors_for_shares)
@@ -418,19 +425,24 @@ class ShareTests(TestCase):
                 r_vector=[],
             ),
         )
-
         self.assertThat(
             wrote,
             Equals(True),
             u"Server rejected a write to a new mutable slot",
         )
-
         self.assertThat(
             read,
             Equals({}),
             u"Server gave back read results when we asked for none.",
         )
+        # Now we can read it back without spending any more passes.
+        before_spent_passes = self.spent_passes
         assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
+        after_spent_passes = self.spent_passes
+        self.assertThat(
+            before_spent_passes,
+            Equals(after_spent_passes),
+        )
 
     @given(
         storage_index=storage_indexes(),
