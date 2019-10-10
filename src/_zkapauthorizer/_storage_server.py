@@ -24,6 +24,10 @@ from __future__ import (
     absolute_import,
 )
 
+from errno import (
+    ENOENT,
+)
+
 from functools import (
     partial,
 )
@@ -233,6 +237,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         issues with the system without incurring any cost to themselves.
         """
         return self._original.remote_advise_corrupt_share(*a, **kw)
+
+    def remote_slot_share_sizes(self, storage_index, sharenums):
+        try:
+            return get_slot_share_size(self._original, storage_index, sharenums)
+        except OSError as e:
+            if e.errno == ENOENT:
+                return None
+            raise
 
     def remote_slot_testv_and_readv_and_writev(
             self,

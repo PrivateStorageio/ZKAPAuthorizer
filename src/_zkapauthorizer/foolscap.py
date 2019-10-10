@@ -6,7 +6,9 @@ from foolscap.constraint import (
     ByteStringConstraint,
 )
 from foolscap.api import (
+    SetOf,
     ListOf,
+    ChoiceOf,
 )
 from foolscap.remoteinterface import (
     RemoteMethodSchema,
@@ -14,7 +16,10 @@ from foolscap.remoteinterface import (
 )
 
 from allmydata.interfaces import (
+    MAX_BUCKETS,
+    StorageIndex,
     RIStorageServer,
+    Offset,
 )
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
@@ -109,6 +114,16 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     renew_lease = add_passes(RIStorageServer["renew_lease"])
 
     get_buckets = RIStorageServer["get_buckets"]
+
+    def slot_share_sizes(
+            storage_index=StorageIndex,
+            sharenums=SetOf(int, maxLength=MAX_BUCKETS),
+    ):
+        """
+        Get the size of the given shares in the given storage index.  If there are
+        no shares, ``None``.
+        """
+        return ChoiceOf(None, Offset)
 
     slot_readv = RIStorageServer["slot_readv"]
 

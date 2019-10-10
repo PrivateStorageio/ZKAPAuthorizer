@@ -25,7 +25,10 @@ import attr
 from zope.interface import (
     implementer,
 )
-
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+)
 from allmydata.interfaces import (
     IStorageServer,
 )
@@ -38,6 +41,7 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
+    get_implied_data_length,
 )
 
 @implementer(IStorageServer)
@@ -164,6 +168,7 @@ class ZKAPAuthorizerStorageClient(object):
             reason,
         )
 
+    @inlineCallbacks
     def slot_testv_and_readv_and_writev(
             self,
             storage_index,
@@ -172,17 +177,41 @@ class ZKAPAuthorizerStorageClient(object):
             r_vector,
     ):
         if has_writes(tw_vectors):
-            passes = self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1)
+            current_size = yield self._rref.callRemote(
+                "slot_share_sizes",
+                storage_index,
+                set(tw_vectors),
+            )
+            if current_size is None:
+                current_pass_count = 0
+            else:
+                current_pass_count = required_passes(BYTES_PER_PASS, {0}, current_size)
+            new_size = sum(
+                (
+                    get_implied_data_length(data_vector, length)
+                    for (_, data_vector, length)
+                    in tw_vectors.values()
+                ),
+                0,
+            )
+            new_pass_count = required_passes(BYTES_PER_PASS, {0}, new_size)
+            pass_count_increase = new_pass_count - current_pass_count
+            passes = self._get_encoded_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                pass_count_increase,
+            )
         else:
             passes = []
-        return self._rref.callRemote(
-            "slot_testv_and_readv_and_writev",
-            passes,
-            storage_index,
-            secrets,
-            tw_vectors,
-            r_vector,
-        )
+        returnValue((
+            yield self._rref.callRemote(
+                "slot_testv_and_readv_and_writev",
+                passes,
+                storage_index,
+                secrets,
+                tw_vectors,
+                r_vector,
+            )
+        ))
 
     def slot_readv(
             self,
