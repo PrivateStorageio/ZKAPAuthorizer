@@ -47,7 +47,6 @@ from testtools.twistedsupport._deferred import (
 from hypothesis import (
     given,
     assume,
-    note,
 )
 from hypothesis.strategies import (
     tuples,
@@ -140,18 +139,41 @@ class LocalRemote(object):
         )
 
 
+def assume_one_pass(test_and_write_vectors_for_shares):
+    """
+    Assume that the writes represented by the given ``TestAndWriteVectors``
+    will cost at most one pass.
+    """
+    from .._storage_server import (
+        BYTES_PER_PASS,
+        get_sharenums,
+        get_allocated_size,
+        required_passes,
+    )
+    tw_vectors = {k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()}
+    sharenums = get_sharenums(tw_vectors)
+    allocated_size = get_allocated_size(tw_vectors)
+    assume(required_passes(BYTES_PER_PASS, sharenums, allocated_size) <= 1)
+
 
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
+
+    :ivar int spent_passes: The number of passes which have been spent so far
+        in the course of a single test (in the case of Hypothesis, every
+        iteration of the test so far, probably; so make relative comparisons
+        instead of absolute ones).
     """
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
+        self.spent_passes = 0
 
         def get_passes(message, count):
+            self.spent_passes += count
             return list(
                 Pass(pass_.decode("ascii"))
                 for pass_
@@ -194,6 +216,9 @@ class ShareTests(TestCase):
         resulting buckets can be read back using *get_buckets* and methods of
         those resulting buckets.
         """
+        # XXX
+        assume(len(sharenums) * size < 128 * 1024 * 10)
+
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -379,8 +404,11 @@ class ShareTests(TestCase):
     def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
-        read back.
+        read back as-written and without spending any more passes.
         """
+        # XXX
+        assume_one_pass(test_and_write_vectors_for_shares)
+
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -397,53 +425,25 @@ class ShareTests(TestCase):
                 r_vector=[],
             ),
         )
-
         self.assertThat(
             wrote,
             Equals(True),
             u"Server rejected a write to a new mutable slot",
         )
-
         self.assertThat(
             read,
             Equals({}),
             u"Server gave back read results when we asked for none.",
         )
+        # Now we can read it back without spending any more passes.
+        before_spent_passes = self.spent_passes
+        assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
+        after_spent_passes = self.spent_passes
+        self.assertThat(
+            before_spent_passes,
+            Equals(after_spent_passes),
+        )
 
-        for sharenum, vectors in test_and_write_vectors_for_shares.items():
-            r_vector = list(map(write_vector_to_read_vector, vectors.write_vector))
-            read = extract_result(
-                self.client.slot_readv(
-                    storage_index,
-                    shares=[sharenum],
-                    r_vector=r_vector,
-                ),
-            )
-            note("read vector {}".format(r_vector))
-            # Create a buffer and pile up all the write operations in it.
-            # This lets us make correct assertions about overlapping writes.
-            length = max(
-                offset + len(data)
-                for (offset, data)
-                in vectors.write_vector
-            )
-            expected = b"\x00" * length
-            for (offset, data) in vectors.write_vector:
-                expected = expected[:offset] + data + expected[offset + len(data):]
-            if vectors.new_length is not None and vectors.new_length < length:
-                expected = expected[:vectors.new_length]
-            self.assertThat(
-                read,
-                Equals({sharenum: list(
-                    # Get the expected value out of our scratch buffer.
-                    expected[offset:offset + len(data)]
-                    for (offset, data)
-                    in vectors.write_vector
-                )}),
-                u"Server didn't reliably read back data just written for share {}".format(
-                    sharenum,
-                ),
-            )
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
@@ -453,38 +453,63 @@ class ShareTests(TestCase):
         ),
         test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
     )
-    def test_mutable_write_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_mutable_rewrite_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
-        When mutable share data is written using *slot_testv_and_readv_and_writev*
-        any leases on the corresponding slot remain the same.
+        When mutable share data is rewritten using
+        *slot_testv_and_readv_and_writev* any leases on the corresponding slot
+        remain the same.
         """
+        # XXX
+        assume_one_pass(test_and_write_vectors_for_shares)
+
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        wrote, read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v)
-                    in test_and_write_vectors_for_shares.items()
-                },
-                r_vector=[],
-            ),
-        )
+        def leases():
+            return list(
+                lease.to_mutable_data()
+                for lease
+                in self.anonymous_storage_server.get_slot_leases(storage_index)
+            )
 
+        def write():
+            return extract_result(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v)
+                        in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                ),
+            )
+
+        # Perform an initial write so there is something to rewrite.
+        wrote, read = write()
         self.assertThat(
             wrote,
             Equals(True),
             u"Server rejected a write to a new mutable slot",
         )
 
-        # There are *no* leases on this newly written slot!
+        # Note the prior state.
+        leases_before = leases()
+
+        # Now perform the rewrite.
+        wrote, read = write()
         self.assertThat(
-            list(self.anonymous_storage_server.get_slot_leases(storage_index)),
-            Equals([]),
+            wrote,
+            Equals(True),
+            u"Server rejected rewrite of an existing mutable slot",
+        )
+
+        # Leases are exactly unchanged.
+        self.assertThat(
+            leases(),
+            Equals(leases_before),
         )
 
     @given(
@@ -565,6 +590,56 @@ class ShareTests(TestCase):
         self.expectThat(
             list(self.anonymous_storage_server.get_slot_leases(storage_index)),
             Equals([]),
+        )
+
+
+def assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    """
+    Assert that the data written by ``test_and_write_vectors_for_shares`` can
+    be read back from ``storage_index``.
+
+    :param ShareTests self: The test case which performed the write and can be
+        used for assertions.
+
+    :param bytes storage_index: The storage index where the data should be
+        found.
+
+    :raise: A test-failing assertion if the data cannot be read back.
+    """
+    # Create a buffer and pile up all the write operations in it.
+    # This lets us make correct assertions about overlapping writes.
+    for sharenum, vectors in test_and_write_vectors_for_shares.items():
+        length = max(
+            offset + len(data)
+            for (offset, data)
+            in vectors.write_vector
+        )
+        expected = b"\x00" * length
+        for (offset, data) in vectors.write_vector:
+            expected = expected[:offset] + data + expected[offset + len(data):]
+        if vectors.new_length is not None and vectors.new_length < length:
+            expected = expected[:vectors.new_length]
+
+        expected_result = list(
+            # Get the expected value out of our scratch buffer.
+            expected[offset:offset + len(data)]
+            for (offset, data)
+            in vectors.write_vector
+        )
+
+        _, single_read = extract_result(
+            self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={},
+                r_vector=list(map(write_vector_to_read_vector, vectors.write_vector)),
+            ),
+        )
+
+        self.assertThat(
+            single_read[sharenum],
+            Equals(expected_result),
+            u"Server didn't reliably read back data just written",
         )
 
 

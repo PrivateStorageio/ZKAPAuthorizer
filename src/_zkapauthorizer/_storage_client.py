@@ -37,6 +37,7 @@ from .storage_common import (
     add_lease_message,
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
+    has_writes,
 )
 
 @implementer(IStorageServer)
@@ -170,9 +171,13 @@ class ZKAPAuthorizerStorageClient(object):
             tw_vectors,
             r_vector,
     ):
+        if has_writes(tw_vectors):
+            passes = self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1)
+        else:
+            passes = []
         return self._rref.callRemote(
             "slot_testv_and_readv_and_writev",
-            self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1),
+            passes,
             storage_index,
             secrets,
             tw_vectors,

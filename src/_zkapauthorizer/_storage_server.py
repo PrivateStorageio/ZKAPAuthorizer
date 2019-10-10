@@ -24,6 +24,10 @@ from __future__ import (
     absolute_import,
 )
 
+from functools import (
+    partial,
+)
+
 import attr
 from attr.validators import (
     provides,
@@ -48,6 +52,14 @@ from privacypass import (
     VerificationSignature,
     SigningKey,
 )
+
+from twisted.python.reflect import (
+    namedAny,
+)
+from twisted.internet.interfaces import (
+    IReactorTime,
+)
+
 from .foolscap import (
     RIPrivacyPassAuthorizedStorageServer,
 )
@@ -58,6 +70,7 @@ from .storage_common import (
     add_lease_message,
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
+    has_writes,
 )
 
 class MorePassesRequired(Exception):
@@ -85,6 +98,14 @@ class MorePassesRequired(Exception):
         return repr(self)
 
 
+class LeaseRenewalRequired(Exception):
+    """
+    Mutable write operations fail with ``LeaseRenewalRequired`` when the slot
+    which is the target of the write does not have an active lease and no
+    passes are supplied to create one.
+    """
+
+
 @implementer_only(RIPrivacyPassAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
@@ -97,6 +118,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     """
     _original = attr.ib(validator=provides(RIStorageServer))
     _signing_key = attr.ib(validator=instance_of(SigningKey))
+    _clock = attr.ib(
+        validator=provides(IReactorTime),
+        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
+    )
 
     def _is_invalid_pass(self, message, pass_):
         """
@@ -154,12 +179,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocate_buckets_message(storage_index),
             passes,
         )
-        required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
-        if len(valid_passes) < required_pass_count:
-            raise MorePassesRequired(
-                len(valid_passes),
-                required_pass_count,
-            )
+        check_pass_quantity_for_write(len(valid_passes), sharenums, allocated_size)
 
         return self._original.remote_allocate_buckets(
             storage_index,
@@ -216,7 +236,26 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             data in already-allocated storage.  These cases may not be the
             same from the perspective of pass validation.
         """
-        self._validate_passes(slot_testv_and_readv_and_writev_message(storage_index), passes)
+        renew_leases = False
+
+        if has_writes(tw_vectors):
+            # Writes are allowed to shares with active leases.
+            if not has_active_lease(
+                self._original,
+                storage_index,
+                self._clock.seconds(),
+            ):
+                # Passes may be supplied with the write to create the
+                # necessary lease as part of the same operation.  This must be
+                # supported because there is no separate protocol action to
+                # *create* a slot.  Clients just begin writing to it.
+                valid_passes = self._validate_passes(
+                    slot_testv_and_readv_and_writev_message(storage_index),
+                    passes,
+                )
+                check_pass_quantity_for_mutable_write(len(valid_passes), tw_vectors)
+                renew_leases = True
+
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
         # about (and don't expose over the network): renew_leases.  We always
@@ -227,7 +266,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             secrets,
             tw_vectors,
             r_vector,
-            renew_leases=False,
+            renew_leases=renew_leases,
         )
 
     def remote_slot_readv(self, *a, **kw):
@@ -236,6 +275,97 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         long as those shares exist.
         """
         return self._original.remote_slot_readv(*a, **kw)
+
+
+def get_sharenums(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return set[int]: The share numbers which the given test/write vectors would write to.
+    """
+    return set(
+        sharenum
+        for (sharenum, (test, data, new_length))
+        in tw_vectors.items()
+        if data
+    )
+
+
+def get_allocated_size(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return int: The largest position ``tw_vectors`` writes in any share.
+    """
+    return max(
+        list(
+            max(offset + len(s) for (offset, s) in data)
+            for (sharenum, (test, data, new_length))
+            in tw_vectors.items()
+            if data
+        ),
+    )
+
+
+def has_active_lease(storage_server, storage_index, now):
+    """
+    :param allmydata.storage.server.StorageServer storage_server: A storage
+        server to use to look up lease information.
+
+    :param bytes storage_index: A storage index to use to look up lease
+        information.
+
+    :param float now: The current time as a POSIX timestamp.
+
+    :return bool: ``True`` if any only if the given storage index has a lease
+        with an expiration time after ``now``.
+    """
+    leases = storage_server.get_slot_leases(storage_index)
+    return any(
+        lease.get_expiration_time() > now
+        for lease
+        in leases
+    )
+
+
+def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
+    """
+    Determine if the given number of valid passes is sufficient for an
+    attempted write.
+
+    :param int valid_count: The number of valid passes to consider.
+    :param set[int] sharenums: The shares being written to.
+    :param int allocated_size: The size of each share.
+
+    :raise MorePassedRequired: If the number of valid passes given is too
+        small.
+
+    :return: ``None`` if the number of valid passes given is sufficient.
+    """
+    required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
+    if valid_count < required_pass_count:
+        raise MorePassesRequired(
+            valid_count,
+            required_pass_count,
+        )
+
+
+def check_pass_quantity_for_mutable_write(valid_count, tw_vectors):
+    """
+    Determine if the given number of valid passes is sufficient for an
+    attempted write to a slot.
+
+    :param int valid_count: The number of valid passes to consider.
+
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+    """
+    sharenums = get_sharenums(tw_vectors)
+    allocated_size = get_allocated_size(tw_vectors)
+    check_pass_quantity_for_write(valid_count, sharenums, allocated_size)
+
 
 # I don't understand why this is required.
 # ZKAPAuthorizerStorageServer is-a Referenceable.  It seems like

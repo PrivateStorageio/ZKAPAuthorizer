@@ -16,6 +16,10 @@
 Functionality shared between the storage client and server.
 """
 
+from __future__ import (
+    division,
+)
+
 from base64 import (
     b64encode,
 )
@@ -60,4 +64,18 @@ def required_passes(bytes_per_pass, share_nums, share_size):
         ceil(
             (len(share_nums) * share_size) / bytes_per_pass,
         ),
+    )
+
+
+def has_writes(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
+    """
+    return any(
+        data
+        for (test, data, new_length)
+        in tw_vectors.values()
     )

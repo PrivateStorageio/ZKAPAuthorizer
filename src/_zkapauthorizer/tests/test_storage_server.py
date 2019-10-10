@@ -38,6 +38,7 @@ from hypothesis import (
 from hypothesis.strategies import (
     integers,
     lists,
+    tuples,
 )
 from privacypass import (
     RandomToken,
@@ -52,6 +53,10 @@ from .privacypass import (
 )
 from .strategies import (
     zkaps,
+    storage_indexes,
+    write_enabler_secrets,
+    lease_renew_secrets,
+    lease_cancel_secrets,
 )
 from .fixtures import (
     AnonymousStorageServer,
@@ -137,3 +142,48 @@ class PassValidationTests(TestCase):
             allocate_buckets,
             raises(MorePassesRequired),
         )
+
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+    )
+    def test_create_mutable_fails_without_passes(self, storage_index, secrets):
+        """
+        If ``remote_slot_testv_and_readv_and_writev`` is invoked to perform
+        initial writes on shares without supplying passes, the operation fails
+        with ``LeaseRenewalRequired``.
+        """
+        data = b"01234567"
+        offset = 0
+        sharenum = 0
+        mutable_write = lambda: self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=[],
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    sharenum: ([], [(offset, data)], None),
+                },
+                r_vector=[],
+            ),
+        )
+
+        try:
+            result = mutable_write()
+        except MorePassesRequired as e:
+            self.assertThat(
+                e.required_count,
+                Equals(1),
+            )
+        else:
+            self.fail("expected LeaseRenewalRequired, got {}".format(result))
+
+    # TODO
+    # a write that increases the storage cost of the share requires passes too
