@@ -65,3 +65,17 @@ def required_passes(bytes_per_pass, share_nums, share_size):
             (len(share_nums) * share_size) / bytes_per_pass,
         ),
     )
+
+
+def has_writes(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
+    """
+    return any(
+        data
+        for (test, data, new_length)
+        in tw_vectors.values()
+    )

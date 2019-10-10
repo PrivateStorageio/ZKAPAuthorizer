@@ -70,6 +70,7 @@ from .storage_common import (
     add_lease_message,
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
+    has_writes,
 )
 
 class MorePassesRequired(Exception):
@@ -272,20 +273,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         long as those shares exist.
         """
         return self._original.remote_slot_readv(*a, **kw)
-
-
-def has_writes(tw_vectors):
-    """
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-
-    :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
-    """
-    return any(
-        data
-        for (test, data, new_length)
-        in tw_vectors.values()
-    )
 
 
 def get_sharenums(tw_vectors):
