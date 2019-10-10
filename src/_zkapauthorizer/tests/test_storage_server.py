@@ -177,8 +177,11 @@ class PassValidationTests(TestCase):
 
         try:
             result = mutable_write()
-        except MorePassesRequired:
-            pass
+        except MorePassesRequired as e:
+            self.assertThat(
+                e.required_count,
+                Equals(1),
+            )
         else:
             self.fail("expected LeaseRenewalRequired, got {}".format(result))
 
