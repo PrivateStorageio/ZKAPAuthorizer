@@ -156,7 +156,7 @@ class PassValidationTests(TestCase):
         """
         If ``remote_slot_testv_and_readv_and_writev`` is invoked to perform
         initial writes on shares without supplying passes, the operation fails
-        with ``LeaseRenewalRequired``.
+        with ``MorePassesRequired``.
         """
         data = b"01234567"
         offset = 0
@@ -183,7 +183,7 @@ class PassValidationTests(TestCase):
                 Equals(1),
             )
         else:
-            self.fail("expected LeaseRenewalRequired, got {}".format(result))
+            self.fail("expected MorePassesRequired, got {}".format(result))
 
     # TODO
     # a write that increases the storage cost of the share requires passes too
