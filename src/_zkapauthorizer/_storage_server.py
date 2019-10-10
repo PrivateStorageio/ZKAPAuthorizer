@@ -178,12 +178,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocate_buckets_message(storage_index),
             passes,
         )
-        required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
-        if len(valid_passes) < required_pass_count:
-            raise MorePassesRequired(
-                len(valid_passes),
-                required_pass_count,
-            )
+        check_pass_quantity_for_write(len(valid_passes), sharenums, allocated_size)
 
         return self._original.remote_allocate_buckets(
             storage_index,
@@ -255,15 +250,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                     slot_testv_and_readv_and_writev_message(storage_index),
                     passes,
                 )
-                sharenums = get_sharenums(tw_vectors)
-                allocated_size = get_allocated_size(tw_vectors)
-                required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
-                if len(valid_passes) < required_pass_count:
-                    raise MorePassesRequired(
-                        len(valid_passes),
-                        required_pass_count,
-                    )
-
+                check_pass_quantity_for_mutable_write(len(valid_passes), tw_vectors)
                 renew_leases = True
 
         # Skip over the remotely exposed method and jump to the underlying
@@ -332,6 +319,7 @@ def get_allocated_size(tw_vectors):
         ),
     )
 
+
 def has_active_lease(storage_server, storage_index, now):
     """
     :param allmydata.storage.server.StorageServer storage_server: A storage
@@ -351,6 +339,43 @@ def has_active_lease(storage_server, storage_index, now):
         for lease
         in leases
     )
+
+
+def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
+    """
+    Determine if the given number of valid passes is sufficient for an
+    attempted write.
+
+    :param int valid_count: The number of valid passes to consider.
+    :param set[int] sharenums: The shares being written to.
+    :param int allocated_size: The size of each share.
+
+    :raise MorePassedRequired: If the number of valid passes given is too
+        small.
+
+    :return: ``None`` if the number of valid passes given is sufficient.
+    """
+    required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
+    if valid_count < required_pass_count:
+        raise MorePassesRequired(
+            valid_count,
+            required_pass_count,
+        )
+
+
+def check_pass_quantity_for_mutable_write(valid_count, tw_vectors):
+    """
+    Determine if the given number of valid passes is sufficient for an
+    attempted write to a slot.
+
+    :param int valid_count: The number of valid passes to consider.
+
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+    """
+    sharenums = get_sharenums(tw_vectors)
+    allocated_size = get_allocated_size(tw_vectors)
+    check_pass_quantity_for_write(valid_count, sharenums, allocated_size)
 
 
 # I don't understand why this is required.
