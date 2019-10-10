@@ -28,6 +28,14 @@ from functools import (
     partial,
 )
 
+from os.path import (
+    join,
+)
+from os import (
+    listdir,
+    stat,
+)
+
 import attr
 from attr.validators import (
     provides,
@@ -46,6 +54,9 @@ from foolscap.ipb import (
 )
 from allmydata.interfaces import (
     RIStorageServer,
+)
+from allmydata.storage.common import (
+    storage_index_to_dir,
 )
 from privacypass import (
     TokenPreimage,
@@ -71,6 +82,9 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
+    get_sharenums,
+    get_allocated_size,
+    get_implied_data_length,
 )
 
 class MorePassesRequired(Exception):
@@ -239,22 +253,35 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         renew_leases = False
 
         if has_writes(tw_vectors):
-            # Writes are allowed to shares with active leases.
-            if not has_active_lease(
-                self._original,
-                storage_index,
-                self._clock.seconds(),
-            ):
-                # Passes may be supplied with the write to create the
-                # necessary lease as part of the same operation.  This must be
-                # supported because there is no separate protocol action to
-                # *create* a slot.  Clients just begin writing to it.
-                valid_passes = self._validate_passes(
-                    slot_testv_and_readv_and_writev_message(storage_index),
-                    passes,
+            # Passes may be supplied with the write to create the
+            # necessary lease as part of the same operation.  This must be
+            # supported because there is no separate protocol action to
+            # *create* a slot.  Clients just begin writing to it.
+            valid_passes = self._validate_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                passes,
+            )
+            if has_active_lease(self._original, storage_index, self._clock.seconds()):
+                current_length = get_slot_share_size(self._original, storage_index, tw_vectors.keys())
+                new_length = sum(
+                    (
+                        get_implied_data_length(data_vector, new_length)
+                        for (_, data_vector, new_length)
+                        in tw_vectors.values()
+                    ),
+                    0,
                 )
+                required_new_passes = (
+                    required_passes(BYTES_PER_PASS, {0}, new_length)
+                    - required_passes(BYTES_PER_PASS, {0}, current_length)
+                )
+                if required_new_passes > len(valid_passes):
+                    raise MorePassesRequired(len(valid_passes), required_new_passes)
+            else:
                 check_pass_quantity_for_mutable_write(len(valid_passes), tw_vectors)
                 renew_leases = True
+
+
 
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
@@ -275,38 +302,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         long as those shares exist.
         """
         return self._original.remote_slot_readv(*a, **kw)
-
-
-def get_sharenums(tw_vectors):
-    """
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-
-    :return set[int]: The share numbers which the given test/write vectors would write to.
-    """
-    return set(
-        sharenum
-        for (sharenum, (test, data, new_length))
-        in tw_vectors.items()
-        if data
-    )
-
-
-def get_allocated_size(tw_vectors):
-    """
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-
-    :return int: The largest position ``tw_vectors`` writes in any share.
-    """
-    return max(
-        list(
-            max(offset + len(s) for (offset, s) in data)
-            for (sharenum, (test, data, new_length))
-            in tw_vectors.items()
-            if data
-        ),
-    )
 
 
 def has_active_lease(storage_server, storage_index, now):
@@ -365,6 +360,41 @@ def check_pass_quantity_for_mutable_write(valid_count, tw_vectors):
     sharenums = get_sharenums(tw_vectors)
     allocated_size = get_allocated_size(tw_vectors)
     check_pass_quantity_for_write(valid_count, sharenums, allocated_size)
+
+
+def get_slot_share_size(storage_server, storage_index, sharenums):
+    """
+    Total the on-disk storage committed to the given shares in the given
+    storage index.
+
+    :param allmydata.storage.server.StorageServer storage_server: The storage
+        server which owns the on-disk storage.
+
+    :param bytes storage_index: The storage index to inspect.
+
+    :param list[int] sharenums: The share numbers to consider.
+
+    :return int: The number of bytes the given shares use on disk.  Note this
+        is naive with respect to filesystem features like compression or
+        sparse files.  It is just a total of the size reported by the
+        filesystem.
+    """
+    total = 0
+    bucket = join(storage_server.sharedir, storage_index_to_dir(storage_index))
+    for candidate in listdir(bucket):
+        try:
+            sharenum = int(candidate)
+        except ValueError:
+            pass
+        else:
+            if sharenum in sharenums:
+                try:
+                    metadata = stat(join(bucket, candidate))
+                except Exception as e:
+                    print(e)
+                else:
+                    total += metadata.st_size
+    return total
 
 
 # I don't understand why this is required.

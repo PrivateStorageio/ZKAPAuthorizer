@@ -57,6 +57,7 @@ from .strategies import (
     write_enabler_secrets,
     lease_renew_secrets,
     lease_cancel_secrets,
+    test_and_write_vectors_for_shares,
 )
 from .fixtures import (
     AnonymousStorageServer,
@@ -71,6 +72,12 @@ from ..api import (
 from ..storage_common import (
     BYTES_PER_PASS,
     allocate_buckets_message,
+    slot_testv_and_readv_and_writev_message,
+    required_passes,
+    get_sharenums,
+    get_allocated_size,
+    get_implied_data_length,
+
 )
 
 
@@ -195,5 +202,93 @@ class PassValidationTests(TestCase):
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
 
-    # TODO
-    # a write that increases the storage cost of the share requires passes too
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_extend_mutable_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase the
+        storage used by shares without supplying passes, the operation fails
+        with ``MorePassesRequired``.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        tw_vectors = {
+            k: v.for_call()
+            for (k, v)
+            in test_and_write_vectors_for_shares.items()
+        }
+        sharenums = get_sharenums(tw_vectors)
+        allocated_size = get_allocated_size(tw_vectors)
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(
+                RandomToken.create()
+                for i
+                in range(required_passes(BYTES_PER_PASS, sharenums, allocated_size))
+            ),
+        )
+
+        # Create an initial share to toy with.
+        test, read = self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            ),
+        )
+        self.assertThat(
+            test,
+            Equals(True),
+            "Server denied initial write.",
+        )
+
+        # Try to grow one of the shares by BYTES_PER_PASS which should cost 1
+        # pass.
+        sharenum = sorted(tw_vectors.keys())[0]
+        _, data_vector, new_length = tw_vectors[sharenum]
+        current_length = get_implied_data_length(data_vector, new_length)
+
+        do_extend = lambda: self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=[],
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    sharenum: (
+                        [],
+                        # Do it by writing past the end.  Another thing we
+                        # could do is just specify new_length with a large
+                        # enough value.
+                        [(current_length, b"x" * BYTES_PER_PASS)],
+                        None,
+                    ),
+                },
+                r_vector=[],
+            ),
+        )
+
+        try:
+            result = do_extend()
+        except MorePassesRequired as e:
+            self.assertThat(
+                e.required_count,
+                Equals(1),
+            )
+        else:
+            self.fail("expected MorePassesRequired, got {}".format(result))
