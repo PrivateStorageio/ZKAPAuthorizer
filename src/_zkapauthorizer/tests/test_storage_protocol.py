@@ -47,7 +47,6 @@ from testtools.twistedsupport._deferred import (
 from hypothesis import (
     given,
     assume,
-    note,
 )
 from hypothesis.strategies import (
     tuples,
@@ -431,41 +430,8 @@ class ShareTests(TestCase):
             Equals({}),
             u"Server gave back read results when we asked for none.",
         )
+        assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
 
-        for sharenum, vectors in test_and_write_vectors_for_shares.items():
-            r_vector = list(map(write_vector_to_read_vector, vectors.write_vector))
-            read = extract_result(
-                self.client.slot_readv(
-                    storage_index,
-                    shares=[sharenum],
-                    r_vector=r_vector,
-                ),
-            )
-            note("read vector {}".format(r_vector))
-            # Create a buffer and pile up all the write operations in it.
-            # This lets us make correct assertions about overlapping writes.
-            length = max(
-                offset + len(data)
-                for (offset, data)
-                in vectors.write_vector
-            )
-            expected = b"\x00" * length
-            for (offset, data) in vectors.write_vector:
-                expected = expected[:offset] + data + expected[offset + len(data):]
-            if vectors.new_length is not None and vectors.new_length < length:
-                expected = expected[:vectors.new_length]
-            self.assertThat(
-                read,
-                Equals({sharenum: list(
-                    # Get the expected value out of our scratch buffer.
-                    expected[offset:offset + len(data)]
-                    for (offset, data)
-                    in vectors.write_vector
-                )}),
-                u"Server didn't reliably read back data just written for share {}".format(
-                    sharenum,
-                ),
-            )
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
@@ -612,6 +578,56 @@ class ShareTests(TestCase):
         self.expectThat(
             list(self.anonymous_storage_server.get_slot_leases(storage_index)),
             Equals([]),
+        )
+
+
+def assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    """
+    Assert that the data written by ``test_and_write_vectors_for_shares`` can
+    be read back from ``storage_index``.
+
+    :param ShareTests self: The test case which performed the write and can be
+        used for assertions.
+
+    :param bytes storage_index: The storage index where the data should be
+        found.
+
+    :raise: A test-failing assertion if the data cannot be read back.
+    """
+    # Create a buffer and pile up all the write operations in it.
+    # This lets us make correct assertions about overlapping writes.
+    for sharenum, vectors in test_and_write_vectors_for_shares.items():
+        length = max(
+            offset + len(data)
+            for (offset, data)
+            in vectors.write_vector
+        )
+        expected = b"\x00" * length
+        for (offset, data) in vectors.write_vector:
+            expected = expected[:offset] + data + expected[offset + len(data):]
+        if vectors.new_length is not None and vectors.new_length < length:
+            expected = expected[:vectors.new_length]
+
+        expected_result = list(
+            # Get the expected value out of our scratch buffer.
+            expected[offset:offset + len(data)]
+            for (offset, data)
+            in vectors.write_vector
+        )
+
+        _, single_read = extract_result(
+            self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={},
+                r_vector=list(map(write_vector_to_read_vector, vectors.write_vector)),
+            ),
+        )
+
+        self.assertThat(
+            single_read[sharenum],
+            Equals(expected_result),
+            u"Server didn't reliably read back data just written",
         )
 
 
