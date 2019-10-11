@@ -57,9 +57,13 @@ from .strategies import (
     write_enabler_secrets,
     lease_renew_secrets,
     lease_cancel_secrets,
+    test_and_write_vectors_for_shares,
 )
 from .fixtures import (
     AnonymousStorageServer,
+)
+from .storage_common import (
+    cleanup_storage_server,
 )
 from ..api import (
     ZKAPAuthorizerStorageServer,
@@ -68,6 +72,12 @@ from ..api import (
 from ..storage_common import (
     BYTES_PER_PASS,
     allocate_buckets_message,
+    slot_testv_and_readv_and_writev_message,
+    required_passes,
+    get_sharenums,
+    get_allocated_size,
+    get_implied_data_length,
+
 )
 
 
@@ -107,13 +117,16 @@ class PassValidationTests(TestCase):
             ),
         )
 
-
     def test_allocate_buckets_fails_without_enough_passes(self):
         """
         ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
         passed fewer passes than it requires for the amount of data to be
         stored.
         """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
         required_passes = 2
         share_nums = {3, 7}
         allocated_size = int((required_passes * BYTES_PER_PASS) / len(share_nums))
@@ -156,8 +169,12 @@ class PassValidationTests(TestCase):
         """
         If ``remote_slot_testv_and_readv_and_writev`` is invoked to perform
         initial writes on shares without supplying passes, the operation fails
-        with ``LeaseRenewalRequired``.
+        with ``MorePassesRequired``.
         """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
         data = b"01234567"
         offset = 0
         sharenum = 0
@@ -183,7 +200,143 @@ class PassValidationTests(TestCase):
                 Equals(1),
             )
         else:
-            self.fail("expected LeaseRenewalRequired, got {}".format(result))
+            self.fail("expected MorePassesRequired, got {}".format(result))
 
-    # TODO
-    # a write that increases the storage cost of the share requires passes too
+
+    def _test_extend_mutable_fails_without_passes(
+            self,
+            storage_index,
+            secrets,
+            test_and_write_vectors_for_shares,
+            make_data_vector,
+    ):
+        """
+        Verify that increasing the storage requirements of a slot without
+        supplying more passes fails.
+
+        :param make_data_vector: A one-argument callable.  It will be called
+            with the current length of a slot share.  It should return a write
+            vector which will increase the storage requirements of that slot
+            share by at least BYTES_PER_PASS.
+        """
+        # hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        tw_vectors = {
+            k: v.for_call()
+            for (k, v)
+            in test_and_write_vectors_for_shares.items()
+        }
+        sharenums = get_sharenums(tw_vectors)
+        allocated_size = get_allocated_size(tw_vectors)
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(
+                RandomToken.create()
+                for i
+                in range(required_passes(BYTES_PER_PASS, sharenums, allocated_size))
+            ),
+        )
+
+        # Create an initial share to toy with.
+        test, read = self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            ),
+        )
+        self.assertThat(
+            test,
+            Equals(True),
+            "Server denied initial write.",
+        )
+
+        # Try to grow one of the shares by BYTES_PER_PASS which should cost 1
+        # pass.
+        sharenum = sorted(tw_vectors.keys())[0]
+        _, data_vector, new_length = tw_vectors[sharenum]
+        current_length = get_implied_data_length(data_vector, new_length)
+
+        do_extend = lambda: self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=[],
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    sharenum: make_data_vector(current_length),
+                },
+                r_vector=[],
+            ),
+        )
+
+        try:
+            result = do_extend()
+        except MorePassesRequired as e:
+            self.assertThat(
+                e.required_count,
+                Equals(1),
+            )
+        else:
+            self.fail("expected MorePassesRequired, got {}".format(result))
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_extend_mutable_with_new_length_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
+        storage usage by supplying a ``new_length`` greater than the current
+        share size and without supplying passes, the operation fails with
+        ``MorePassesRequired``.
+        """
+        return self._test_extend_mutable_fails_without_passes(
+            storage_index,
+            secrets,
+            test_and_write_vectors_for_shares,
+            lambda current_length: (
+                [],
+                [],
+                current_length + BYTES_PER_PASS,
+            ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_extend_mutable_with_write_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
+        """
+        If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
+        storage usage by performing a write past the end of a share without
+        supplying passes, the operation fails with ``MorePassesRequired``.
+        """
+        return self._test_extend_mutable_fails_without_passes(
+            storage_index,
+            secrets,
+            test_and_write_vectors_for_shares,
+            lambda current_length: (
+                [],
+                [(current_length, "x" * BYTES_PER_PASS)],
+                None,
+            ),
+        )

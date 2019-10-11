@@ -75,7 +75,61 @@ def has_writes(tw_vectors):
     :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
     """
     return any(
-        data
+        data or (new_length is not None)
         for (test, data, new_length)
         in tw_vectors.values()
     )
+
+
+def get_sharenums(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return set[int]: The share numbers which the given test/write vectors would write to.
+    """
+    return set(
+        sharenum
+        for (sharenum, (test, data, new_length))
+        in tw_vectors.items()
+        if data
+    )
+
+
+def get_allocated_size(tw_vectors):
+    """
+    :param tw_vectors: See
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
+
+    :return int: The largest position ``tw_vectors`` writes in any share.
+    """
+    return max(
+        list(
+            max(offset + len(s) for (offset, s) in data)
+            for (sharenum, (test, data, new_length))
+            in tw_vectors.items()
+            if data
+        ),
+    )
+
+
+def get_implied_data_length(data_vector, length):
+    """
+    :param data_vector: See ``allmydata.interfaces.DataVector``.
+
+    :param length: ``None`` or an overriding value for the length of the data.
+        This corresponds to the *new length* in
+        ``allmydata.interfaces.TestAndWriteVectorsForShares``.  It may be
+        smaller than the result would be considering only ``data_vector`` if
+        there is a trunctation or larger if there is a zero-filled extension.
+
+    :return int: The amount of data, in bytes, implied by a data vector and a
+        size.
+    """
+    if length is None:
+        return max(
+            offset + len(data)
+            for (offset, data)
+            in data_vector
+        )
+    return length

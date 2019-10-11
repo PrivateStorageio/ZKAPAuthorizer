@@ -25,7 +25,10 @@ import attr
 from zope.interface import (
     implementer,
 )
-
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+)
 from allmydata.interfaces import (
     IStorageServer,
 )
@@ -38,6 +41,7 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
+    get_implied_data_length,
 )
 
 @implementer(IStorageServer)
@@ -164,6 +168,7 @@ class ZKAPAuthorizerStorageClient(object):
             reason,
         )
 
+    @inlineCallbacks
     def slot_testv_and_readv_and_writev(
             self,
             storage_index,
@@ -172,17 +177,64 @@ class ZKAPAuthorizerStorageClient(object):
             r_vector,
     ):
         if has_writes(tw_vectors):
-            passes = self._get_encoded_passes(slot_testv_and_readv_and_writev_message(storage_index), 1)
+            # When performing writes, if we're increasing the storage
+            # requirement, we need to spend more passes.  Unfortunately we
+            # don't know what the current storage requirements are at this
+            # layer of the system.  It's *likely* that a higher layer does but
+            # that doesn't help us, even if it were guaranteed.  So, instead,
+            # ask the server.  Invoke a ZKAPAuthorizer-supplied remote method
+            # on the storage server that will give us a really good estimate
+            # of the current size of all of the specified shares (keys of
+            # tw_vectors).
+            current_size = yield self._rref.callRemote(
+                "slot_share_sizes",
+                storage_index,
+                set(tw_vectors),
+            )
+            if current_size is None:
+                # The server says it doesn't even know about these shares for
+                # this storage index.  Thus, we have not yet paid anything for
+                # it and we're about to create it.
+                current_pass_count = 0
+            else:
+                # Compute how much has already been paid for the storage
+                # that's already allocated.  We're not required to pay this
+                # again.
+                current_pass_count = required_passes(BYTES_PER_PASS, {0}, current_size)
+
+            # Determine what the share size which will result from the write
+            # we're about to perform.
+            implied_sizes = (
+                get_implied_data_length(data_vector, length)
+                for (_, data_vector, length)
+                in tw_vectors.values()
+            )
+            # Total that across all of the shares and figure how many passes
+            # it it would cost if we had to pay for all of it.
+            new_size = sum(implied_sizes, 0)
+            new_pass_count = required_passes(BYTES_PER_PASS, {0}, new_size)
+            # Now compute how much hasn't yet been paid.
+            pass_count_increase = new_pass_count - current_pass_count
+            # And prepare to pay it.
+            passes = self._get_encoded_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                pass_count_increase,
+            )
         else:
+            # Non-write operations on slots are free.
             passes = []
-        return self._rref.callRemote(
-            "slot_testv_and_readv_and_writev",
-            passes,
-            storage_index,
-            secrets,
-            tw_vectors,
-            r_vector,
-        )
+
+        # Perform the operation with the passes we determined are required.
+        returnValue((
+            yield self._rref.callRemote(
+                "slot_testv_and_readv_and_writev",
+                passes,
+                storage_index,
+                secrets,
+                tw_vectors,
+                r_vector,
+            )
+        ))
 
     def slot_readv(
             self,

@@ -89,6 +89,9 @@ from .matchers import (
 from .fixtures import (
     AnonymousStorageServer,
 )
+from .storage_common import (
+    cleanup_storage_server,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
@@ -137,23 +140,6 @@ class LocalRemote(object):
             args,
             kwargs,
         )
-
-
-def assume_one_pass(test_and_write_vectors_for_shares):
-    """
-    Assume that the writes represented by the given ``TestAndWriteVectors``
-    will cost at most one pass.
-    """
-    from .._storage_server import (
-        BYTES_PER_PASS,
-        get_sharenums,
-        get_allocated_size,
-        required_passes,
-    )
-    tw_vectors = {k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()}
-    sharenums = get_sharenums(tw_vectors)
-    allocated_size = get_allocated_size(tw_vectors)
-    assume(required_passes(BYTES_PER_PASS, sharenums, allocated_size) <= 1)
 
 
 class ShareTests(TestCase):
@@ -216,9 +202,6 @@ class ShareTests(TestCase):
         resulting buckets can be read back using *get_buckets* and methods of
         those resulting buckets.
         """
-        # XXX
-        assume(len(sharenums) * size < 128 * 1024 * 10)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -406,9 +389,6 @@ class ShareTests(TestCase):
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
-        # XXX
-        assume_one_pass(test_and_write_vectors_for_shares)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -459,9 +439,6 @@ class ShareTests(TestCase):
         *slot_testv_and_readv_and_writev* any leases on the corresponding slot
         remain the same.
         """
-        # XXX
-        assume_one_pass(test_and_write_vectors_for_shares)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -682,20 +659,3 @@ def write_toy_shares(
     for (sharenum, writer) in allocated.items():
         writer.remote_write(0, bytes_for_share(sharenum, size))
         writer.remote_close()
-
-
-def cleanup_storage_server(storage_server):
-    """
-    Delete all of the shares held by the given storage server.
-
-    :param allmydata.storage.server.StorageServer storage_server: The storage
-        server with some on-disk shares to delete.
-    """
-    starts = [
-        FilePath(storage_server.sharedir),
-        FilePath(storage_server.corruption_advisory_dir),
-    ]
-    for start in starts:
-        for p in start.walk():
-            if p is not start:
-                p.remove()

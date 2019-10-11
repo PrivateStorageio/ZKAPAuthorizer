@@ -319,9 +319,7 @@ def sharenum_sets():
     return sets(
         sharenums(),
         min_size=1,
-        # This could go as high as 255 but to avoid tripping over the limits
-        # discussed in sizes(), keep it smaller.
-        max_size=8,
+        max_size=256,
     )
 
 
@@ -335,7 +333,7 @@ def sizes():
         # For the moment there are some assumptions in the test suite that
         # limit us to an amount of storage that can be paid for with one ZKAP.
         # That will be fixed eventually.  For now, keep the sizes pretty low.
-        max_value=2 ** 8,
+        max_value=2 ** 16,
     )
 
 
@@ -346,7 +344,7 @@ def offsets():
     return integers(
         min_value=0,
         # Just for practical purposes...
-        max_value=2 ** 8,
+        max_value=2 ** 16,
     )
 
 

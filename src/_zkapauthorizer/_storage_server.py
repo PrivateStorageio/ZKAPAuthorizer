@@ -24,8 +24,20 @@ from __future__ import (
     absolute_import,
 )
 
+from errno import (
+    ENOENT,
+)
+
 from functools import (
     partial,
+)
+
+from os.path import (
+    join,
+)
+from os import (
+    listdir,
+    stat,
 )
 
 import attr
@@ -46,6 +58,9 @@ from foolscap.ipb import (
 )
 from allmydata.interfaces import (
     RIStorageServer,
+)
+from allmydata.storage.common import (
+    storage_index_to_dir,
 )
 from privacypass import (
     TokenPreimage,
@@ -71,7 +86,12 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
+    get_implied_data_length,
 )
+
+# See allmydata/storage/mutable.py
+SLOT_HEADER_SIZE = 468
+LEASE_TRAILER_SIZE = 4
 
 class MorePassesRequired(Exception):
     """
@@ -220,6 +240,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
+    def remote_slot_share_sizes(self, storage_index, sharenums):
+        try:
+            return get_slot_share_size(self._original, storage_index, sharenums)
+        except OSError as e:
+            if e.errno == ENOENT:
+                return None
+            raise
+
     def remote_slot_testv_and_readv_and_writev(
             self,
             passes,
@@ -236,23 +264,45 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             data in already-allocated storage.  These cases may not be the
             same from the perspective of pass validation.
         """
+        # print("passes = {}".format(len(passes)))
+        # print("tw_vectors = {}".format(tw_vectors))
         renew_leases = False
 
         if has_writes(tw_vectors):
-            # Writes are allowed to shares with active leases.
-            if not has_active_lease(
-                self._original,
-                storage_index,
-                self._clock.seconds(),
-            ):
-                # Passes may be supplied with the write to create the
-                # necessary lease as part of the same operation.  This must be
-                # supported because there is no separate protocol action to
-                # *create* a slot.  Clients just begin writing to it.
-                valid_passes = self._validate_passes(
-                    slot_testv_and_readv_and_writev_message(storage_index),
-                    passes,
+            # Passes may be supplied with the write to create the
+            # necessary lease as part of the same operation.  This must be
+            # supported because there is no separate protocol action to
+            # *create* a slot.  Clients just begin writing to it.
+            valid_passes = self._validate_passes(
+                slot_testv_and_readv_and_writev_message(storage_index),
+                passes,
+            )
+            if has_active_lease(self._original, storage_index, self._clock.seconds()):
+                current_length = get_slot_share_size(self._original, storage_index, tw_vectors.keys())
+                # Perform a sum() here because we're going to lie to
+                # required_passes and tell it the allocated size is for a
+                # single share.  The tw_vectors API lets different shares be
+                # different sizes, though I don't think the Tahoe-LAFS client
+                # intentionally causes this to happen.  Letting such a case
+                # pass by the pass calculation would possibly offer free
+                # storage to altered clients.
+                implied_sizes = (
+                    get_implied_data_length(data_vector, new_length)
+                    for (_, data_vector, new_length)
+                    in tw_vectors.values()
                 )
+                new_length = sum(implied_sizes, 0)
+                current_passes = required_passes(BYTES_PER_PASS, {0}, current_length)
+                new_passes = required_passes(BYTES_PER_PASS, {0}, new_length)
+                required_new_passes = new_passes - current_passes
+                # print("Current length: {}".format(current_length))
+                # print("New length: {}".format(new_length))
+                # print("Current passes: {}".format(current_passes))
+                # print("New passes: {}".format(new_passes))
+                # print("Required new passes: {}".format(required_new_passes))
+                if required_new_passes > len(valid_passes):
+                    raise MorePassesRequired(len(valid_passes), required_new_passes)
+            else:
                 check_pass_quantity_for_mutable_write(len(valid_passes), tw_vectors)
                 renew_leases = True
 
@@ -275,38 +325,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         long as those shares exist.
         """
         return self._original.remote_slot_readv(*a, **kw)
-
-
-def get_sharenums(tw_vectors):
-    """
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-
-    :return set[int]: The share numbers which the given test/write vectors would write to.
-    """
-    return set(
-        sharenum
-        for (sharenum, (test, data, new_length))
-        in tw_vectors.items()
-        if data
-    )
-
-
-def get_allocated_size(tw_vectors):
-    """
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-
-    :return int: The largest position ``tw_vectors`` writes in any share.
-    """
-    return max(
-        list(
-            max(offset + len(s) for (offset, s) in data)
-            for (sharenum, (test, data, new_length))
-            in tw_vectors.items()
-            if data
-        ),
-    )
 
 
 def has_active_lease(storage_server, storage_index, now):
@@ -345,6 +363,10 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
     :return: ``None`` if the number of valid passes given is sufficient.
     """
     required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
+    # print("valid_count = {}".format(valid_count))
+    # print("sharenums = {}".format(len(sharenums)))
+    # print("allocated size = {}".format(allocated_size))
+    # print("required_pass_count = {}".format(required_pass_count))
     if valid_count < required_pass_count:
         raise MorePassesRequired(
             valid_count,
@@ -362,9 +384,60 @@ def check_pass_quantity_for_mutable_write(valid_count, tw_vectors):
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
     """
-    sharenums = get_sharenums(tw_vectors)
-    allocated_size = get_allocated_size(tw_vectors)
-    check_pass_quantity_for_write(valid_count, sharenums, allocated_size)
+    implied_sizes = (
+        get_implied_data_length(data_vector, new_length)
+        for (_, data_vector, new_length)
+        in tw_vectors.values()
+    )
+    total_implied_size = sum(implied_sizes, 0)
+    check_pass_quantity_for_write(valid_count, {0}, total_implied_size)
+
+
+def get_slot_share_size(storage_server, storage_index, sharenums):
+    """
+    Total the on-disk storage committed to the given shares in the given
+    storage index.
+
+    :param allmydata.storage.server.StorageServer storage_server: The storage
+        server which owns the on-disk storage.
+
+    :param bytes storage_index: The storage index to inspect.
+
+    :param list[int] sharenums: The share numbers to consider.
+
+    :return int: The number of bytes the given shares use on disk.  Note this
+        is naive with respect to filesystem features like compression or
+        sparse files.  It is just a total of the size reported by the
+        filesystem.
+    """
+    total = 0
+    bucket = join(storage_server.sharedir, storage_index_to_dir(storage_index))
+    for candidate in listdir(bucket):
+        try:
+            sharenum = int(candidate)
+        except ValueError:
+            pass
+        else:
+            if sharenum in sharenums:
+                try:
+                    metadata = stat(join(bucket, candidate))
+                except Exception as e:
+                    print(e)
+                else:
+                    # Compared to calculating how much *user* data we're
+                    # storing, the on-disk file is larger by at *least*
+                    # SLOT_HEADER_SIZE.  There is also a variable sized
+                    # trailer which is harder to compute but which is at least
+                    # LEASE_TRAILER_SIZE.  Fortunately it's often exactly
+                    # LEASE_TRAILER_SIZE so I'm just going to ignore it for
+                    # now.
+                    #
+                    # By measuring that the slots are larger than the data the
+                    # user is storing we'll overestimate how many passes are
+                    # required right around the boundary between two costs.
+                    # Oops.
+                    total += (metadata.st_size - SLOT_HEADER_SIZE - LEASE_TRAILER_SIZE)
+    return total
 
 
 # I don't understand why this is required.
