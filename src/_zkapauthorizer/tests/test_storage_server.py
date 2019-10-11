@@ -203,8 +203,23 @@ class PassValidationTests(TestCase):
             self.fail("expected MorePassesRequired, got {}".format(result))
 
 
-    def _test_extend_mutable_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares, make_data_vector):
-        # Hypothesis causes our storage server to be used many times.  Clean
+    def _test_extend_mutable_fails_without_passes(
+            self,
+            storage_index,
+            secrets,
+            test_and_write_vectors_for_shares,
+            make_data_vector,
+    ):
+        """
+        Verify that increasing the storage requirements of a slot without
+        supplying more passes fails.
+
+        :param make_data_vector: A one-argument callable.  It will be called
+            with the current length of a slot share.  It should return a write
+            vector which will increase the storage requirements of that slot
+            share by at least BYTES_PER_PASS.
+        """
+        # hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 

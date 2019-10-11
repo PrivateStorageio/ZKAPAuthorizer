@@ -426,10 +426,11 @@ def get_slot_share_size(storage_server, storage_index, sharenums):
                 else:
                     # Compared to calculating how much *user* data we're
                     # storing, the on-disk file is larger by at *least*
-                    # SLOT_HEADER_SIZE* where various bookkeeping is kept.
-                    # There is also a variable sized trailer which is harder
-                    # to compute.  Fortunately it's generally also a lot
-                    # smaller so I'm just going to ignore it for now.
+                    # SLOT_HEADER_SIZE.  There is also a variable sized
+                    # trailer which is harder to compute but which is at least
+                    # LEASE_TRAILER_SIZE.  Fortunately it's often exactly
+                    # LEASE_TRAILER_SIZE so I'm just going to ignore it for
+                    # now.
                     #
                     # By measuring that the slots are larger than the data the
                     # user is storing we'll overestimate how many passes are
