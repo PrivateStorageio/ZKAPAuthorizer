@@ -129,6 +129,9 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
         """
         Get the size of the given shares in the given storage index.  If there are
         no shares, ``None``.
+
+        The reported size may be larger than the actual share size if there
+        are more than four leases on the share.
         """
         return ChoiceOf(None, Offset)
 
