@@ -28,11 +28,18 @@ from allmydata.interfaces import (
 # well.  Though it may still make sense on a non-Foolscap protocol (eg HTTP)
 # which Tahoe-LAFS may eventually support.
 #
-# In any case, for now, pick some fairly arbitrary value.  I am deliberately
-# picking a small number here and expect to have to raise.  However, ideally,
-# a client could accomplish a lot with a few passes while also not wasting a
-# lot of value.
-_MAXIMUM_PASSES_PER_CALL = 10
+# If a pass is worth 128 KiB of storage for some amount of time, 2 ** 20
+# passes is worth 128 GiB of storage for some amount of time.  It is an
+# arbitrary upper limit on the size of immutable files but maybe it's large
+# enough to not be an issue for a while.
+#
+# The argument for having a limit here at all is protection against denial of
+# service attacks that exhaust server memory but creating unbearably large
+# lists.
+#
+# A limit of 2 ** 20 passes translates to 177 MiB (times some constant factor
+# for Foolscap/Python overhead).  That should be tolerable.
+_MAXIMUM_PASSES_PER_CALL = 2 ** 20
 
 # This is the length of a serialized Ristretto-flavored PrivacyPass pass The
 # pass is a combination of token preimages and unblinded token signatures,
