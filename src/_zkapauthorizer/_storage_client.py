@@ -186,14 +186,12 @@ class ZKAPAuthorizerStorageClient(object):
                 current_pass_count = 0
             else:
                 current_pass_count = required_passes(BYTES_PER_PASS, {0}, current_size)
-            new_size = sum(
-                (
-                    get_implied_data_length(data_vector, length)
-                    for (_, data_vector, length)
-                    in tw_vectors.values()
-                ),
-                0,
+            implied_sizes = (
+                get_implied_data_length(data_vector, length)
+                for (_, data_vector, length)
+                in tw_vectors.values()
             )
+            new_size = sum(implied_sizes, 0)
             new_pass_count = required_passes(BYTES_PER_PASS, {0}, new_size)
             pass_count_increase = new_pass_count - current_pass_count
             passes = self._get_encoded_passes(

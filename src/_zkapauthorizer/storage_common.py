@@ -75,7 +75,7 @@ def has_writes(tw_vectors):
     :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
     """
     return any(
-        data
+        data or (new_length is not None)
         for (test, data, new_length)
         in tw_vectors.values()
     )

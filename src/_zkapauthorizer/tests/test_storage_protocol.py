@@ -142,23 +142,6 @@ class LocalRemote(object):
         )
 
 
-def assume_one_pass(test_and_write_vectors_for_shares):
-    """
-    Assume that the writes represented by the given ``TestAndWriteVectors``
-    will cost at most one pass.
-    """
-    from .._storage_server import (
-        BYTES_PER_PASS,
-        get_sharenums,
-        get_allocated_size,
-        required_passes,
-    )
-    tw_vectors = {k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()}
-    sharenums = get_sharenums(tw_vectors)
-    allocated_size = get_allocated_size(tw_vectors)
-    assume(required_passes(BYTES_PER_PASS, sharenums, allocated_size) <= 1)
-
-
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -219,9 +202,6 @@ class ShareTests(TestCase):
         resulting buckets can be read back using *get_buckets* and methods of
         those resulting buckets.
         """
-        # XXX
-        assume(len(sharenums) * size < 128 * 1024 * 10)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -395,6 +375,7 @@ class ShareTests(TestCase):
             HasLength(1),
         )
 
+#    @reproduce_failure('4.7.3', 'AXicY2CgMWAEQhgTCGBsAADOAAc=')
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
@@ -409,9 +390,6 @@ class ShareTests(TestCase):
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
-        # XXX
-        assume_one_pass(test_and_write_vectors_for_shares)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -462,9 +440,6 @@ class ShareTests(TestCase):
         *slot_testv_and_readv_and_writev* any leases on the corresponding slot
         remain the same.
         """
-        # XXX
-        assume_one_pass(test_and_write_vectors_for_shares)
-
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
