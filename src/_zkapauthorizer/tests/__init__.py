@@ -44,10 +44,12 @@ def _configure_hypothesis():
 
     settings.register_profile(
         "big",
-        max_examples=100000,
+        max_examples=10000,
+        deadline=None,
     )
 
     profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")
     settings.load_profile(profile_name)
+    print("Loaded profile {}".format(profile_name))
 
 _configure_hypothesis()
