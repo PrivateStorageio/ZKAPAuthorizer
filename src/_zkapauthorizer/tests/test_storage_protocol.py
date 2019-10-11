@@ -375,7 +375,6 @@ class ShareTests(TestCase):
             HasLength(1),
         )
 
-#    @reproduce_failure('4.7.3', 'AXicY2CgMWAEQhgTCGBsAADOAAc=')
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
