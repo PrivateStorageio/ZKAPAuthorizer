@@ -91,6 +91,7 @@ from .fixtures import (
 )
 from .storage_common import (
     cleanup_storage_server,
+    write_toy_shares,
 )
 from ..api import (
     ZKAPAuthorizerStorageServer,
@@ -626,36 +627,3 @@ def write_vector_to_read_vector(write_vector):
     write vector.
     """
     return (write_vector[0], len(write_vector[1]))
-
-
-def write_toy_shares(
-        storage_server,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary,
-):
-    """
-    Write some immutable shares to the given storage server.
-
-    :param allmydata.storage.server.StorageServer storage_server:
-    :param bytes storage_index:
-    :param bytes renew_secret:
-    :param bytes cancel_secret:
-    :param set[int] sharenums:
-    :param int size:
-    :param IRemoteReference canary:
-    """
-    _, allocated = storage_server.remote_allocate_buckets(
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary=canary,
-    )
-    for (sharenum, writer) in allocated.items():
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
