@@ -47,7 +47,7 @@ slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_
 # submitted.
 BYTES_PER_PASS = 128 * 1024
 
-def required_passes(bytes_per_pass, share_nums, share_size):
+def required_passes(bytes_per_pass, share_sizes):
     """
     Calculate the number of passes that are required to store ``stored_bytes``
     for one lease period.
@@ -55,14 +55,13 @@ def required_passes(bytes_per_pass, share_nums, share_size):
     :param int bytes_per_pass: The number of bytes the storage of which for
         one lease period one pass covers.
 
-    :param set[int] share_nums: The share numbers which will be stored.
-    :param int share_size: THe number of bytes in a single share.
+    :param set[int] share_sizes: The sizes of the shared which will be stored.
 
     :return int: The number of passes required to cover the storage cost.
     """
     return int(
         ceil(
-            (len(share_nums) * share_size) / bytes_per_pass,
+            sum(share_sizes, 0) / bytes_per_pass,
         ),
     )
 
