@@ -3,9 +3,11 @@
 , fixtures, testtools, hypothesis, pyflakes, treq, coverage
 , hypothesisProfile ? null
 , collectCoverage ? false
+, testSuite ? null
 }:
 let
   hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
+  testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
 in
 buildPythonPackage rec {
   version = "0.0";
@@ -45,7 +47,7 @@ buildPythonPackage rec {
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
       then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
       else ""
-    } twisted.trial _zkapauthorizer
+    } twisted.trial ${testSuite'}
     runHook postCheck
   '';
 
@@ -54,6 +56,7 @@ buildPythonPackage rec {
     python -m coverage html
     mkdir -p "$doc/share/doc/${name}"
     cp -vr .coverage htmlcov "$doc/share/doc/${name}"
+    python -m coverage report
     ''
     else "";
 }
