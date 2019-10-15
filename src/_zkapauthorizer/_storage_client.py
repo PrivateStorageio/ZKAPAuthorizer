@@ -41,7 +41,7 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
-    get_implied_data_length,
+    get_required_new_passes_for_mutable_write,
 )
 
 @implementer(IStorageServer)
@@ -108,7 +108,7 @@ class ZKAPAuthorizerStorageClient(object):
             "allocate_buckets",
             self._get_encoded_passes(
                 allocate_buckets_message(storage_index),
-                required_passes(BYTES_PER_PASS, sharenums, allocated_size),
+                required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums)),
             ),
             storage_index,
             renew_secret,
@@ -176,6 +176,9 @@ class ZKAPAuthorizerStorageClient(object):
             tw_vectors,
             r_vector,
     ):
+        # Non-write operations on slots are free.
+        passes = []
+
         if has_writes(tw_vectors):
             # When performing writes, if we're increasing the storage
             # requirement, we need to spend more passes.  Unfortunately we
@@ -186,43 +189,22 @@ class ZKAPAuthorizerStorageClient(object):
             # on the storage server that will give us a really good estimate
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
-            current_size = yield self._rref.callRemote(
+            current_sizes = yield self._rref.callRemote(
                 "slot_share_sizes",
                 storage_index,
                 set(tw_vectors),
             )
-            if current_size is None:
-                # The server says it doesn't even know about these shares for
-                # this storage index.  Thus, we have not yet paid anything for
-                # it and we're about to create it.
-                current_pass_count = 0
-            else:
-                # Compute how much has already been paid for the storage
-                # that's already allocated.  We're not required to pay this
-                # again.
-                current_pass_count = required_passes(BYTES_PER_PASS, {0}, current_size)
-
-            # Determine what the share size which will result from the write
-            # we're about to perform.
-            implied_sizes = (
-                get_implied_data_length(data_vector, length)
-                for (_, data_vector, length)
-                in tw_vectors.values()
+            # Determine the cost of the new storage for the operation.
+            required_new_passes = get_required_new_passes_for_mutable_write(
+                current_sizes,
+                tw_vectors,
             )
-            # Total that across all of the shares and figure how many passes
-            # it it would cost if we had to pay for all of it.
-            new_size = sum(implied_sizes, 0)
-            new_pass_count = required_passes(BYTES_PER_PASS, {0}, new_size)
-            # Now compute how much hasn't yet been paid.
-            pass_count_increase = new_pass_count - current_pass_count
-            # And prepare to pay it.
-            passes = self._get_encoded_passes(
-                slot_testv_and_readv_and_writev_message(storage_index),
-                pass_count_increase,
-            )
-        else:
-            # Non-write operations on slots are free.
-            passes = []
+            # Prepare to pay it.
+            if required_new_passes:
+                passes = self._get_encoded_passes(
+                    slot_testv_and_readv_and_writev_message(storage_index),
+                    required_new_passes,
+                )
 
         # Perform the operation with the passes we determined are required.
         returnValue((

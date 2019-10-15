@@ -86,7 +86,7 @@ from .storage_common import (
     renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
-    get_implied_data_length,
+    get_required_new_passes_for_mutable_write,
 )
 
 # See allmydata/storage/mutable.py
@@ -241,12 +241,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
     def remote_slot_share_sizes(self, storage_index, sharenums):
-        try:
-            return get_slot_share_size(self._original, storage_index, sharenums)
-        except OSError as e:
-            if e.errno == ENOENT:
-                return None
-            raise
+        return dict(
+            get_slot_share_sizes(self._original, storage_index, sharenums)
+        )
 
     def remote_slot_testv_and_readv_and_writev(
             self,
@@ -264,8 +261,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             data in already-allocated storage.  These cases may not be the
             same from the perspective of pass validation.
         """
-        # print("passes = {}".format(len(passes)))
-        # print("tw_vectors = {}".format(tw_vectors))
+        # Only writes to shares without an active lease will result in a lease
+        # renewal.
         renew_leases = False
 
         if has_writes(tw_vectors):
@@ -278,33 +275,23 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 passes,
             )
             if has_active_lease(self._original, storage_index, self._clock.seconds()):
-                current_length = get_slot_share_size(self._original, storage_index, tw_vectors.keys())
-                # Perform a sum() here because we're going to lie to
-                # required_passes and tell it the allocated size is for a
-                # single share.  The tw_vectors API lets different shares be
-                # different sizes, though I don't think the Tahoe-LAFS client
-                # intentionally causes this to happen.  Letting such a case
-                # pass by the pass calculation would possibly offer free
-                # storage to altered clients.
-                implied_sizes = (
-                    get_implied_data_length(data_vector, new_length)
-                    for (_, data_vector, new_length)
-                    in tw_vectors.values()
-                )
-                new_length = sum(implied_sizes, 0)
-                current_passes = required_passes(BYTES_PER_PASS, {0}, current_length)
-                new_passes = required_passes(BYTES_PER_PASS, {0}, new_length)
-                required_new_passes = new_passes - current_passes
-                # print("Current length: {}".format(current_length))
-                # print("New length: {}".format(new_length))
-                # print("Current passes: {}".format(current_passes))
-                # print("New passes: {}".format(new_passes))
-                # print("Required new passes: {}".format(required_new_passes))
-                if required_new_passes > len(valid_passes):
-                    raise MorePassesRequired(len(valid_passes), required_new_passes)
+                # Some of the storage is paid for already.
+                current_sizes = dict(get_slot_share_sizes(
+                    self._original,
+                    storage_index,
+                    tw_vectors.keys(),
+                ))
             else:
-                check_pass_quantity_for_mutable_write(len(valid_passes), tw_vectors)
+                # None of it is.
+                current_sizes = {}
                 renew_leases = True
+
+            required_new_passes = get_required_new_passes_for_mutable_write(
+                current_sizes,
+                tw_vectors,
+            )
+            if required_new_passes > len(valid_passes):
+                raise MorePassesRequired(len(valid_passes), required_new_passes)
 
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
@@ -362,7 +349,7 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
 
     :return: ``None`` if the number of valid passes given is sufficient.
     """
-    required_pass_count = required_passes(BYTES_PER_PASS, sharenums, allocated_size)
+    required_pass_count = required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums))
     # print("valid_count = {}".format(valid_count))
     # print("sharenums = {}".format(len(sharenums)))
     # print("allocated size = {}".format(allocated_size))
@@ -374,28 +361,9 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
         )
 
 
-def check_pass_quantity_for_mutable_write(valid_count, tw_vectors):
+def get_slot_share_sizes(storage_server, storage_index, sharenums):
     """
-    Determine if the given number of valid passes is sufficient for an
-    attempted write to a slot.
-
-    :param int valid_count: The number of valid passes to consider.
-
-    :param tw_vectors: See
-        ``allmydata.interfaces.TestAndWriteVectorsForShares``.
-    """
-    implied_sizes = (
-        get_implied_data_length(data_vector, new_length)
-        for (_, data_vector, new_length)
-        in tw_vectors.values()
-    )
-    total_implied_size = sum(implied_sizes, 0)
-    check_pass_quantity_for_write(valid_count, {0}, total_implied_size)
-
-
-def get_slot_share_size(storage_server, storage_index, sharenums):
-    """
-    Total the on-disk storage committed to the given shares in the given
+    Retrieve the on-disk storage committed to the given shares in the given
     storage index.
 
     :param allmydata.storage.server.StorageServer storage_server: The storage
@@ -405,14 +373,20 @@ def get_slot_share_size(storage_server, storage_index, sharenums):
 
     :param list[int] sharenums: The share numbers to consider.
 
-    :return int: The number of bytes the given shares use on disk.  Note this
-        is naive with respect to filesystem features like compression or
-        sparse files.  It is just a total of the size reported by the
+    :return generator[(int, int)]: Pairs of share number, bytes on disk of the
+        given shares.  Note this is naive with respect to filesystem features
+        like compression or sparse files.  It is just the size reported by the
         filesystem.
     """
-    total = 0
     bucket = join(storage_server.sharedir, storage_index_to_dir(storage_index))
-    for candidate in listdir(bucket):
+    try:
+        contents = listdir(bucket)
+    except OSError as e:
+        if e.errno == ENOENT:
+            return
+        raise
+
+    for candidate in contents:
         try:
             sharenum = int(candidate)
         except ValueError:
@@ -436,8 +410,10 @@ def get_slot_share_size(storage_server, storage_index, sharenums):
                     # user is storing we'll overestimate how many passes are
                     # required right around the boundary between two costs.
                     # Oops.
-                    total += (metadata.st_size - SLOT_HEADER_SIZE - LEASE_TRAILER_SIZE)
-    return total
+                    yield (
+                        sharenum,
+                        metadata.st_size - SLOT_HEADER_SIZE - LEASE_TRAILER_SIZE,
+                    )
 
 
 # I don't understand why this is required.

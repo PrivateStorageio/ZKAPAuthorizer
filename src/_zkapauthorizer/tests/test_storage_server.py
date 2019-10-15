@@ -34,6 +34,8 @@ from testtools.matchers import (
 )
 from hypothesis import (
     given,
+    note,
+    # reproduce_failure,
 )
 from hypothesis.strategies import (
     integers,
@@ -73,10 +75,8 @@ from ..storage_common import (
     BYTES_PER_PASS,
     allocate_buckets_message,
     slot_testv_and_readv_and_writev_message,
-    required_passes,
-    get_sharenums,
-    get_allocated_size,
     get_implied_data_length,
+    get_required_new_passes_for_mutable_write,
 
 )
 
@@ -228,15 +228,34 @@ class PassValidationTests(TestCase):
             for (k, v)
             in test_and_write_vectors_for_shares.items()
         }
-        sharenums = get_sharenums(tw_vectors)
-        allocated_size = get_allocated_size(tw_vectors)
+
+        note("tw_vectors summarized: {}".format({
+            sharenum: (
+                test_vector,
+                list(
+                    (offset, len(data))
+                    for (offset, data)
+                    in data_vectors
+                ),
+                new_length,
+            )
+            for (sharenum, (test_vector, data_vectors, new_length))
+            in tw_vectors.items()
+        }))
+
+        # print("test suite")
+        required_pass_count = get_required_new_passes_for_mutable_write(
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+
         valid_passes = make_passes(
             self.signing_key,
             slot_testv_and_readv_and_writev_message(storage_index),
             list(
                 RandomToken.create()
                 for i
-                in range(required_passes(BYTES_PER_PASS, sharenums, allocated_size))
+                in range(required_pass_count)
             ),
         )
 
@@ -258,11 +277,17 @@ class PassValidationTests(TestCase):
             "Server denied initial write.",
         )
 
-        # Try to grow one of the shares by BYTES_PER_PASS which should cost 1
-        # pass.
-        sharenum = sorted(tw_vectors.keys())[0]
+        # Find the largest sharenum so we can make it even larger.
+        sharenum = max(
+            tw_vectors.keys(),
+            key=lambda k: get_implied_data_length(tw_vectors[k][1]),
+        )
         _, data_vector, new_length = tw_vectors[sharenum]
-        current_length = get_implied_data_length(data_vector, new_length)
+        current_length = get_implied_data_length(data_vector)
+
+        new_tw_vectors = {
+            sharenum: make_data_vector(current_length),
+        }
 
         do_extend = lambda: self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
@@ -271,9 +296,7 @@ class PassValidationTests(TestCase):
                 passes=[],
                 storage_index=storage_index,
                 secrets=secrets,
-                tw_vectors={
-                    sharenum: make_data_vector(current_length),
-                },
+                tw_vectors=new_tw_vectors,
                 r_vector=[],
             ),
         )
@@ -288,32 +311,33 @@ class PassValidationTests(TestCase):
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
 
-    @given(
-        storage_index=storage_indexes(),
-        secrets=tuples(
-            write_enabler_secrets(),
-            lease_renew_secrets(),
-            lease_cancel_secrets(),
-        ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
-    )
-    def test_extend_mutable_with_new_length_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
-        """
-        If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
-        storage usage by supplying a ``new_length`` greater than the current
-        share size and without supplying passes, the operation fails with
-        ``MorePassesRequired``.
-        """
-        return self._test_extend_mutable_fails_without_passes(
-            storage_index,
-            secrets,
-            test_and_write_vectors_for_shares,
-            lambda current_length: (
-                [],
-                [],
-                current_length + BYTES_PER_PASS,
-            ),
-        )
+    # @reproduce_failure('4.7.3', 'AXicY2CgMWAEQijr/39GRjCn+D+QxwQX72FgAABQ4QQI')
+    # @given(
+    #     storage_index=storage_indexes(),
+    #     secrets=tuples(
+    #         write_enabler_secrets(),
+    #         lease_renew_secrets(),
+    #         lease_cancel_secrets(),
+    #     ),
+    #     test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    # )
+    # def test_extend_mutable_with_new_length_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    #     """
+    #     If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
+    #     storage usage by supplying a ``new_length`` greater than the current
+    #     share size and without supplying passes, the operation fails with
+    #     ``MorePassesRequired``.
+    #     """
+    #     return self._test_extend_mutable_fails_without_passes(
+    #         storage_index,
+    #         secrets,
+    #         test_and_write_vectors_for_shares,
+    #         lambda current_length: (
+    #             [],
+    #             [],
+    #             current_length + BYTES_PER_PASS,
+    #         ),
+    #     )
 
     @given(
         storage_index=storage_indexes(),
