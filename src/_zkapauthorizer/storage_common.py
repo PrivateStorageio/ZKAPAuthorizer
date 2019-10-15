@@ -59,11 +59,13 @@ def required_passes(bytes_per_pass, share_sizes):
 
     :return int: The number of passes required to cover the storage cost.
     """
-    return int(
+    result = int(
         ceil(
             sum(share_sizes, 0) / bytes_per_pass,
         ),
     )
+    # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
+    return result
 
 
 def has_writes(tw_vectors):
@@ -112,21 +114,26 @@ def get_allocated_size(tw_vectors):
     )
 
 
-def get_implied_data_length(data_vector):
+def get_implied_data_length(data_vector, new_length):
     """
     :param data_vector: See ``allmydata.interfaces.DataVector``.
 
     :return int: The amount of data, in bytes, implied by a data vector and a
         size.
     """
-    return max(
+    data_based_size = max(
         offset + len(data)
         for (offset, data)
         in data_vector
     ) if data_vector else 0
+    if new_length is None:
+        return data_based_size
+    # new_length is only allowed to truncate, not expand.
+    return min(new_length, data_based_size)
 
 
 def get_required_new_passes_for_mutable_write(current_sizes, tw_vectors):
+    # print("get_required_new_passes_for_mutable_write({}, {})".format(current_sizes, summarize(tw_vectors)))
     current_passes = required_passes(
         BYTES_PER_PASS,
         current_sizes.values(),
@@ -134,7 +141,7 @@ def get_required_new_passes_for_mutable_write(current_sizes, tw_vectors):
 
     new_sizes = current_sizes.copy()
     size_updates = {
-        sharenum: get_implied_data_length(data_vector)
+        sharenum: get_implied_data_length(data_vector, new_length)
         for (sharenum, (_, data_vector, new_length))
         in tw_vectors.items()
     }
@@ -150,7 +157,22 @@ def get_required_new_passes_for_mutable_write(current_sizes, tw_vectors):
     required_new_passes = new_passes - current_passes
 
     # print("Current sizes: {}".format(current_sizes))
-    # print("Current passeS: {}".format(current_passes))
+    # print("Current passes: {}".format(current_passes))
     # print("New sizes: {}".format(new_sizes))
     # print("New passes: {}".format(new_passes))
     return required_new_passes
+
+def summarize(tw_vectors):
+    return {
+        sharenum: (
+            test_vector,
+            list(
+                (offset, len(data))
+                for (offset, data)
+                in data_vectors
+            ),
+            new_length,
+        )
+        for (sharenum, (test_vector, data_vectors, new_length))
+        in tw_vectors.items()
+    }

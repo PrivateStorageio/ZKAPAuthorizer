@@ -24,6 +24,10 @@ from __future__ import (
     absolute_import,
 )
 
+from struct import (
+    unpack,
+)
+
 from errno import (
     ENOENT,
 )
@@ -37,9 +41,10 @@ from os.path import (
 )
 from os import (
     listdir,
-    stat,
 )
-
+from datetime import (
+    timedelta,
+)
 import attr
 from attr.validators import (
     provides,
@@ -136,6 +141,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     A class which wraps an ``RIStorageServer`` to insert pass validity checks
     before allowing certain functionality.
     """
+    LEASE_PERIOD = timedelta(days=31)
+
     _original = attr.ib(validator=provides(RIStorageServer))
     _signing_key = attr.ib(validator=instance_of(SigningKey))
     _clock = attr.ib(
@@ -176,12 +183,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
         :return list[bytes]: The passes which are found to be valid.
         """
-        return list(
+        result = list(
             pass_
             for pass_
             in passes
             if not self._is_invalid_pass(message, pass_)
         )
+        # print("{}: {} passes, {} valid".format(message, len(passes), len(result)))
+        return result
 
     def remote_get_version(self):
         """
@@ -222,7 +231,17 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        self._validate_passes(add_lease_message(storage_index), passes)
+        # print("server add_lease({}, {!r})".format(len(passes), storage_index))
+        valid_passes = self._validate_passes(add_lease_message(storage_index), passes)
+        allocated_sizes = dict(
+            get_share_sizes(
+                self._original, storage_index,
+                list(get_all_share_numbers(self._original, storage_index)),
+            ),
+        ).values()
+        # print("allocated_sizes: {}".format(allocated_sizes))
+        check_pass_quantity(len(valid_passes), allocated_sizes)
+        # print("Checked out")
         return self._original.remote_add_lease(storage_index, *a, **kw)
 
     def remote_renew_lease(self, passes, storage_index, *a, **kw):
@@ -240,9 +259,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
-    def remote_slot_share_sizes(self, storage_index, sharenums):
+    def remote_share_sizes(self, storage_index_or_slot, sharenums):
         return dict(
-            get_slot_share_sizes(self._original, storage_index, sharenums)
+            get_share_sizes(self._original, storage_index_or_slot, sharenums)
         )
 
     def remote_slot_testv_and_readv_and_writev(
@@ -276,11 +295,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             )
             if has_active_lease(self._original, storage_index, self._clock.seconds()):
                 # Some of the storage is paid for already.
-                current_sizes = dict(get_slot_share_sizes(
+                current_sizes = dict(get_share_sizes(
                     self._original,
                     storage_index,
                     tw_vectors.keys(),
                 ))
+                # print("has writes, has active lease, current sizes: {}".format(current_sizes))
             else:
                 # None of it is.
                 current_sizes = {}
@@ -335,6 +355,14 @@ def has_active_lease(storage_server, storage_index, now):
     )
 
 
+def check_pass_quantity(valid_count, share_sizes):
+    required_pass_count = required_passes(BYTES_PER_PASS, share_sizes)
+    if valid_count < required_pass_count:
+        raise MorePassesRequired(
+            valid_count,
+            required_pass_count,
+        )
+
 def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
     """
     Determine if the given number of valid passes is sufficient for an
@@ -349,35 +377,10 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
 
     :return: ``None`` if the number of valid passes given is sufficient.
     """
-    required_pass_count = required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums))
-    # print("valid_count = {}".format(valid_count))
-    # print("sharenums = {}".format(len(sharenums)))
-    # print("allocated size = {}".format(allocated_size))
-    # print("required_pass_count = {}".format(required_pass_count))
-    if valid_count < required_pass_count:
-        raise MorePassesRequired(
-            valid_count,
-            required_pass_count,
-        )
+    check_pass_quantity(valid_count, [allocated_size] * len(sharenums))
 
 
-def get_slot_share_sizes(storage_server, storage_index, sharenums):
-    """
-    Retrieve the on-disk storage committed to the given shares in the given
-    storage index.
-
-    :param allmydata.storage.server.StorageServer storage_server: The storage
-        server which owns the on-disk storage.
-
-    :param bytes storage_index: The storage index to inspect.
-
-    :param list[int] sharenums: The share numbers to consider.
-
-    :return generator[(int, int)]: Pairs of share number, bytes on disk of the
-        given shares.  Note this is naive with respect to filesystem features
-        like compression or sparse files.  It is just the size reported by the
-        filesystem.
-    """
+def get_all_share_paths(storage_server, storage_index):
     bucket = join(storage_server.sharedir, storage_index_to_dir(storage_index))
     try:
         contents = listdir(bucket)
@@ -392,28 +395,44 @@ def get_slot_share_sizes(storage_server, storage_index, sharenums):
         except ValueError:
             pass
         else:
-            if sharenum in sharenums:
-                try:
-                    metadata = stat(join(bucket, candidate))
-                except Exception as e:
-                    print(e)
+            yield sharenum, join(bucket, candidate)
+
+
+def get_all_share_numbers(storage_server, storage_index):
+    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index):
+        yield sharenum
+
+
+def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
+    """
+    Get the sizes of the given share numbers for the given storage index *or*
+    slot.
+    """
+    get_size = None
+    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
+        if get_size is None:
+            # Figure out if it is a storage index or a slot.
+            with open(sharepath) as share_file:
+                magic = share_file.read(32)
+                if magic == "Tahoe mutable container v1\n" + "\x75\x09\x44\x03\x8e":
+                    get_size = get_slot_share_size
                 else:
-                    # Compared to calculating how much *user* data we're
-                    # storing, the on-disk file is larger by at *least*
-                    # SLOT_HEADER_SIZE.  There is also a variable sized
-                    # trailer which is harder to compute but which is at least
-                    # LEASE_TRAILER_SIZE.  Fortunately it's often exactly
-                    # LEASE_TRAILER_SIZE so I'm just going to ignore it for
-                    # now.
-                    #
-                    # By measuring that the slots are larger than the data the
-                    # user is storing we'll overestimate how many passes are
-                    # required right around the boundary between two costs.
-                    # Oops.
-                    yield (
-                        sharenum,
-                        metadata.st_size - SLOT_HEADER_SIZE - LEASE_TRAILER_SIZE,
-                    )
+                    get_size = get_storage_index_share_size
+        yield sharenum, get_size(sharepath)
+
+
+def get_storage_index_share_size(sharepath):
+    with open(sharepath) as share_file:
+        share_data_length_bytes = share_file.read(8)[4:]
+        (share_data_length,) = unpack('>L', share_data_length_bytes)
+        return share_data_length
+
+
+def get_slot_share_size(sharepath):
+    with open(sharepath) as share_file:
+        share_data_length_bytes = share_file.read(92)[-8:]
+        (share_data_length,) = unpack('>Q', share_data_length_bytes)
+        return share_data_length
 
 
 # I don't understand why this is required.

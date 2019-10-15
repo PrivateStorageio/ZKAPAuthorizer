@@ -21,6 +21,9 @@ from __future__ import (
     division,
 )
 
+from time import (
+    time,
+)
 from random import (
     shuffle,
 )
@@ -30,12 +33,12 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     AfterPreprocessing,
+    MatchesStructure,
     raises,
 )
 from hypothesis import (
     given,
     note,
-    # reproduce_failure,
 )
 from hypothesis.strategies import (
     integers,
@@ -46,6 +49,11 @@ from privacypass import (
     RandomToken,
     random_signing_key,
 )
+
+from twisted.internet.task import (
+    Clock,
+)
+
 from foolscap.referenceable import (
     LocalReferenceable,
 )
@@ -55,6 +63,8 @@ from .privacypass import (
 )
 from .strategies import (
     zkaps,
+    sizes,
+    sharenum_sets,
     storage_indexes,
     write_enabler_secrets,
     lease_renew_secrets,
@@ -66,6 +76,7 @@ from .fixtures import (
 )
 from .storage_common import (
     cleanup_storage_server,
+    write_toy_shares,
 )
 from ..api import (
     ZKAPAuthorizerStorageServer,
@@ -73,13 +84,14 @@ from ..api import (
 )
 from ..storage_common import (
     BYTES_PER_PASS,
+    required_passes,
     allocate_buckets_message,
+    add_lease_message,
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
     get_required_new_passes_for_mutable_write,
 
 )
-
 
 class PassValidationTests(TestCase):
     """
@@ -87,11 +99,17 @@ class PassValidationTests(TestCase):
     """
     def setUp(self):
         super(PassValidationTests, self).setUp()
+        self.clock = Clock()
+        # anonymous_storage_server uses time.time() so get our Clock close to
+        # the same time so we can do lease expiration calculations more
+        # easily.
+        self.clock.advance(time())
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.signing_key,
+            self.clock,
         )
 
     @given(integers(min_value=0, max_value=64), lists(zkaps(), max_size=64))
@@ -229,19 +247,22 @@ class PassValidationTests(TestCase):
             in test_and_write_vectors_for_shares.items()
         }
 
-        note("tw_vectors summarized: {}".format({
-            sharenum: (
-                test_vector,
-                list(
-                    (offset, len(data))
-                    for (offset, data)
-                    in data_vectors
-                ),
-                new_length,
-            )
-            for (sharenum, (test_vector, data_vectors, new_length))
-            in tw_vectors.items()
-        }))
+        def summarize(tw_vectors):
+            return {
+                sharenum: (
+                    test_vector,
+                    list(
+                        (offset, len(data))
+                        for (offset, data)
+                        in data_vectors
+                    ),
+                    new_length,
+                )
+                for (sharenum, (test_vector, data_vectors, new_length))
+                in tw_vectors.items()
+            }
+
+        note("tw_vectors summarized: {}".format(summarize(tw_vectors)))
 
         # print("test suite")
         required_pass_count = get_required_new_passes_for_mutable_write(
@@ -277,17 +298,16 @@ class PassValidationTests(TestCase):
             "Server denied initial write.",
         )
 
-        # Find the largest sharenum so we can make it even larger.
-        sharenum = max(
-            tw_vectors.keys(),
-            key=lambda k: get_implied_data_length(tw_vectors[k][1]),
-        )
+        # Pick any share to make larger.
+        sharenum = next(iter(tw_vectors))
         _, data_vector, new_length = tw_vectors[sharenum]
-        current_length = get_implied_data_length(data_vector)
+        current_length = get_implied_data_length(data_vector, new_length)
 
         new_tw_vectors = {
             sharenum: make_data_vector(current_length),
         }
+
+        note("new tw_vectors: {}".format(summarize(new_tw_vectors)))
 
         do_extend = lambda: self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
@@ -305,39 +325,14 @@ class PassValidationTests(TestCase):
             result = do_extend()
         except MorePassesRequired as e:
             self.assertThat(
-                e.required_count,
-                Equals(1),
+                e,
+                MatchesStructure(
+                    valid_count=Equals(0),
+                    required_count=Equals(1),
+                ),
             )
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
-
-    # @reproduce_failure('4.7.3', 'AXicY2CgMWAEQijr/39GRjCn+D+QxwQX72FgAABQ4QQI')
-    # @given(
-    #     storage_index=storage_indexes(),
-    #     secrets=tuples(
-    #         write_enabler_secrets(),
-    #         lease_renew_secrets(),
-    #         lease_cancel_secrets(),
-    #     ),
-    #     test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
-    # )
-    # def test_extend_mutable_with_new_length_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
-    #     """
-    #     If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
-    #     storage usage by supplying a ``new_length`` greater than the current
-    #     share size and without supplying passes, the operation fails with
-    #     ``MorePassesRequired``.
-    #     """
-    #     return self._test_extend_mutable_fails_without_passes(
-    #         storage_index,
-    #         secrets,
-    #         test_and_write_vectors_for_shares,
-    #         lambda current_length: (
-    #             [],
-    #             [],
-    #             current_length + BYTES_PER_PASS,
-    #         ),
-    #     )
 
     @given(
         storage_index=storage_indexes(),
@@ -363,4 +358,193 @@ class PassValidationTests(TestCase):
                 [(current_length, "x" * BYTES_PER_PASS)],
                 None,
             ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
+        """
+        If ``remote_add_lease`` is invoked without supplying enough passes to
+        cover the storage for all shares on the given storage index, the
+        operation fails with ``MorePassesRequired``.
+        """
+        # hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        renew_secret, cancel_secret = secrets
+
+        required_count = required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums))
+        # Create some shares at a slot which will require lease renewal.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
+
+        # Advance time to a point where the lease is expired.  This simplifies
+        # the logic behind how many passes will be required by the add_leases
+        # call (all of them).  If there is prorating for partially expired
+        # leases then the calculation for a non-expired lease involves more
+        # work.
+        #
+        # Add some slop here because time.time() is used by some parts of the
+        # system. :/
+        self.clock.advance(self.storage_server.LEASE_PERIOD.total_seconds() + 10.0)
+
+        # Attempt to take out a new lease with one fewer pass than is
+        # required.
+        passes = make_passes(
+            self.signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(required_count - 1)),
+        )
+        # print("tests add_lease({}, {!r})".format(len(passes), storage_index))
+        try:
+            result = self.storage_server.doRemoteCall(
+                "add_lease", (
+                    passes,
+                    storage_index,
+                    renew_secret,
+                    cancel_secret,
+                ),
+                {},
+            )
+        except MorePassesRequired as e:
+            self.assertThat(
+                e.valid_count,
+                Equals(len(passes)),
+            )
+            self.assertThat(
+                e.required_count,
+                Equals(required_count),
+            )
+        else:
+            self.fail("Expected MorePassesRequired, got {}".format(result))
+
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_immutable_share_sizes(self, storage_index, secrets, sharenums, allocated_size):
+        """
+        ``share_sizes`` returns the size of the requested shares in the requested
+        storage_index
+        """
+        # hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        renew_secret, cancel_secret = secrets
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
+
+        actual_sizes = self.storage_server.doRemoteCall(
+            "share_sizes", (
+                storage_index,
+                sharenums,
+            ),
+            {},
+        )
+        self.assertThat(
+            actual_sizes,
+            Equals({
+                sharenum: allocated_size
+                for sharenum
+                in sharenums
+            }),
+        )
+
+    @given(
+        slot=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenums=sharenum_sets(),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_share_sizes(self, slot, secrets, sharenums, test_and_write_vectors_for_shares):
+        # hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        tw_vectors = {
+            k: v.for_call()
+            for (k, v)
+            in test_and_write_vectors_for_shares.items()
+        }
+
+        # Create an initial share to toy with.
+        required_pass_count = get_required_new_passes_for_mutable_write(
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(slot),
+            list(
+                RandomToken.create()
+                for i
+                in range(required_pass_count)
+            ),
+        )
+        test, read = self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=slot,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            ),
+        )
+        self.assertThat(
+            test,
+            Equals(True),
+            "Server denied initial write.",
+        )
+
+        expected_sizes = {
+            sharenum: get_implied_data_length(data_vector, new_length)
+            for (sharenum, (testv, data_vector, new_length))
+            in tw_vectors.items()
+        }
+
+        actual_sizes = self.storage_server.doRemoteCall(
+            "share_sizes", (
+                slot,
+                sharenums,
+            ),
+            {},
+        )
+        self.assertThat(
+            actual_sizes,
+            Equals(expected_sizes),
         )

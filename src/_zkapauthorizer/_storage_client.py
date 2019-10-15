@@ -190,7 +190,7 @@ class ZKAPAuthorizerStorageClient(object):
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
             current_sizes = yield self._rref.callRemote(
-                "slot_share_sizes",
+                "share_sizes",
                 storage_index,
                 set(tw_vectors),
             )
