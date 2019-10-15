@@ -1,9 +1,12 @@
 { buildPythonPackage, sphinx, circleci-cli
 , attrs, zope_interface, twisted, tahoe-lafs, privacypass
 , fixtures, testtools, hypothesis, pyflakes, treq, coverage
-, hypothesisProfile ? "default"
+, hypothesisProfile ? null
 , collectCoverage ? false
 }:
+let
+  hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
+in
 buildPythonPackage rec {
   version = "0.0";
   pname = "zero-knowledge-access-pass-authorizer";
@@ -39,7 +42,7 @@ buildPythonPackage rec {
   checkPhase = ''
     runHook preCheck
     "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
-    ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile} python -m ${if collectCoverage
+    ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
       then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
       else ""
     } twisted.trial _zkapauthorizer
