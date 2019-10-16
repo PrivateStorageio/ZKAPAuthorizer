@@ -155,17 +155,26 @@ class ZKAPAuthorizerStorageClient(object):
             )
         ))
 
+    @inlineCallbacks
     def renew_lease(
             self,
             storage_index,
             renew_secret,
     ):
-        return self._rref.callRemote(
-            "renew_lease",
-            self._get_encoded_passes(renew_lease_message(storage_index), 1),
+        share_sizes = (yield self._rref.callRemote(
+            "share_sizes",
             storage_index,
-            renew_secret,
-        )
+            None,
+        )).values()
+        num_passes = required_passes(BYTES_PER_PASS, share_sizes)
+        returnValue((
+            yield self._rref.callRemote(
+                "renew_lease",
+                self._get_encoded_passes(renew_lease_message(storage_index), num_passes),
+                storage_index,
+                renew_secret,
+            )
+        ))
 
     def advise_corrupt_share(
             self,

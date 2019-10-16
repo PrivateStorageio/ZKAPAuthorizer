@@ -89,6 +89,7 @@ from ..storage_common import (
     required_passes,
     allocate_buckets_message,
     add_lease_message,
+    renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
     get_required_new_passes_for_mutable_write,
@@ -347,20 +348,26 @@ class PassValidationTests(TestCase):
             ),
         )
 
-    @given(
-        storage_index=storage_indexes(),
-        secrets=tuples(
-            lease_renew_secrets(),
-            lease_cancel_secrets(),
-        ),
-        sharenums=sharenum_sets(),
-        allocated_size=sizes(),
-    )
-    def test_add_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
+    def _test_lease_operation_fails_without_passes(
+            self,
+            storage_index,
+            secrets,
+            sharenums,
+            allocated_size,
+            lease_operation,
+            lease_operation_message,
+    ):
         """
-        If ``remote_add_lease`` is invoked without supplying enough passes to
-        cover the storage for all shares on the given storage index, the
-        operation fails with ``MorePassesRequired``.
+        Assert that a lease-taking operation fails if it is not supplied with
+        enough passes to cover the cost of the lease.
+
+        :param lease_operation: A two-argument callable.  It is called with a
+            storage server and a list of passes.  It should perform the
+            lease-taking operation.
+
+        :param lease_operation_message: A one-argument callable.  It is called
+            with a storage index.  It should return the ZKAPAuthorizer binding
+            message for the lease-taking operation.
         """
         # hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
@@ -381,33 +388,23 @@ class PassValidationTests(TestCase):
         )
 
         # Advance time to a point where the lease is expired.  This simplifies
-        # the logic behind how many passes will be required by the add_leases
-        # call (all of them).  If there is prorating for partially expired
-        # leases then the calculation for a non-expired lease involves more
-        # work.
+        # the logic behind how many passes will be required by the lease
+        # operation (all of them).  If there is prorating for partially
+        # expired leases then the calculation for a non-expired lease involves
+        # more work.
         #
         # Add some slop here because time.time() is used by some parts of the
         # system. :/
         self.clock.advance(self.storage_server.LEASE_PERIOD.total_seconds() + 10.0)
 
-        # Attempt to take out a new lease with one fewer pass than is
-        # required.
+        # Attempt the lease operation with one fewer pass than is required.
         passes = make_passes(
             self.signing_key,
-            add_lease_message(storage_index),
+            lease_operation_message(storage_index),
             list(RandomToken.create() for i in range(required_count - 1)),
         )
-        # print("tests add_lease({}, {!r})".format(len(passes), storage_index))
         try:
-            result = self.storage_server.doRemoteCall(
-                "add_lease", (
-                    passes,
-                    storage_index,
-                    renew_secret,
-                    cancel_secret,
-                ),
-                {},
-            )
+            result = lease_operation(self.storage_server, passes)
         except MorePassesRequired as e:
             self.assertThat(
                 e,
@@ -419,6 +416,40 @@ class PassValidationTests(TestCase):
         else:
             self.fail("Expected MorePassesRequired, got {}".format(result))
 
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
+        """
+        If ``remote_add_lease`` is invoked without supplying enough passes to
+        cover the storage for all shares on the given storage index, the
+        operation fails with ``MorePassesRequired``.
+        """
+        renew_secret, cancel_secret = secrets
+        def add_lease(storage_server, passes):
+            return storage_server.doRemoteCall(
+                "add_lease", (
+                    passes,
+                    storage_index,
+                    renew_secret,
+                    cancel_secret,
+                ),
+                {},
+            )
+        return self._test_lease_operation_fails_without_passes(
+            storage_index,
+            secrets,
+            sharenums,
+            allocated_size,
+            add_lease,
+            add_lease_message,
+        )
 
     @given(
         storage_index=storage_indexes(),
@@ -429,40 +460,29 @@ class PassValidationTests(TestCase):
         sharenums=sharenum_sets(),
         allocated_size=sizes(),
     )
-    def test_immutable_share_sizes(self, storage_index, secrets, sharenums, allocated_size):
+    def test_renew_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
         """
-        ``share_sizes`` returns the size of the requested iimutable shares in the
-        requested storage index.
+        If ``remote_renew_lease`` is invoked without supplying enough passes to
+        cover the storage for all shares on the given storage index, the
+        operation fails with ``MorePassesRequired``.
         """
-        # hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         renew_secret, cancel_secret = secrets
-        write_toy_shares(
-            self.anonymous_storage_server,
+        def renew_lease(storage_server, passes):
+            return storage_server.doRemoteCall(
+                "renew_lease", (
+                    passes,
+                    storage_index,
+                    renew_secret,
+                ),
+                {},
+            )
+        return self._test_lease_operation_fails_without_passes(
             storage_index,
-            renew_secret,
-            cancel_secret,
+            secrets,
             sharenums,
             allocated_size,
-            LocalReferenceable(None),
-        )
-
-        actual_sizes = self.storage_server.doRemoteCall(
-            "share_sizes", (
-                storage_index,
-                sharenums,
-            ),
-            {},
-        )
-        self.assertThat(
-            actual_sizes,
-            Equals({
-                sharenum: allocated_size
-                for sharenum
-                in sharenums
-            }),
+            renew_lease,
+            renew_lease_message,
         )
 
     @given(
