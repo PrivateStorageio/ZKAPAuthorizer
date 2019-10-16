@@ -480,6 +480,13 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
 
 
 def get_storage_index_share_size(sharepath):
+    """
+    Get the size of a share belonging to a storage index (an immutable share).
+
+    :param bytes sharepath: The path to the share file.
+
+    :return int: The data size of the share in bytes.
+    """
     with open(sharepath) as share_file:
         share_data_length_bytes = share_file.read(8)[4:]
         (share_data_length,) = unpack('>L', share_data_length_bytes)
@@ -487,6 +494,13 @@ def get_storage_index_share_size(sharepath):
 
 
 def get_slot_share_size(sharepath):
+    """
+    Get the size of a share belonging to a slot (a mutable share).
+
+    :param bytes sharepath: The path to the share file.
+
+    :return int: The data size of the share in bytes.
+    """
     with open(sharepath) as share_file:
         share_data_length_bytes = share_file.read(92)[-8:]
         (share_data_length,) = unpack('>Q', share_data_length_bytes)
