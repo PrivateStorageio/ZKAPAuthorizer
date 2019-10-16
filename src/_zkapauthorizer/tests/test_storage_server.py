@@ -90,7 +90,7 @@ from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
     get_required_new_passes_for_mutable_write,
-
+    summarize,
 )
 
 class PassValidationTests(TestCase):
@@ -246,21 +246,6 @@ class PassValidationTests(TestCase):
             for (k, v)
             in test_and_write_vectors_for_shares.items()
         }
-
-        def summarize(tw_vectors):
-            return {
-                sharenum: (
-                    test_vector,
-                    list(
-                        (offset, len(data))
-                        for (offset, data)
-                        in data_vectors
-                    ),
-                    new_length,
-                )
-                for (sharenum, (test_vector, data_vectors, new_length))
-                in tw_vectors.items()
-            }
 
         note("tw_vectors summarized: {}".format(summarize(tw_vectors)))
 
