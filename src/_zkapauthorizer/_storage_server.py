@@ -363,6 +363,19 @@ def has_active_lease(storage_server, storage_index, now):
 
 
 def check_pass_quantity(valid_count, share_sizes):
+    """
+    Check that the given number of passes is sufficient to cover leases for
+    one period for shares of the given sizes.
+
+    :param int valid_count: The number of passes.
+    :param list[int] share_sizes: The sizes of the shares for which the lease
+        is being created.
+
+    :raise MorePassesRequired: If the given number of passes is too few for
+        the given share sizes.
+
+    :return: ``None`` if the given number of passes is sufficient.
+    """
     required_pass_count = required_passes(BYTES_PER_PASS, share_sizes)
     if valid_count < required_pass_count:
         raise MorePassesRequired(
@@ -388,6 +401,18 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
 
 
 def get_all_share_paths(storage_server, storage_index):
+    """
+    Get the paths of all shares in the given storage index (or slot).
+
+    :param allmydata.storage.server.StorageServer storage_server: The storage
+        server which owns the storage index.
+
+    :param bytes storage_index: The storage index (or slot) in which to look
+        up shares.
+
+    :return: A generator of tuples of (int, bytes) giving a share number and
+        the path to storage for that share number.
+    """
     bucket = join(storage_server.sharedir, storage_index_to_dir(storage_index))
     try:
         contents = listdir(bucket)
@@ -406,6 +431,17 @@ def get_all_share_paths(storage_server, storage_index):
 
 
 def get_all_share_numbers(storage_server, storage_index):
+    """
+    Get all share numbers in the given storage index (or slot).
+
+    :param allmydata.storage.server.StorageServer storage_server: The storage
+        server which owns the storage index.
+
+    :param bytes storage_index: The storage index (or slot) in which to look
+        up share numbers.
+
+    :return: A generator of int giving share numbers.
+    """
     for sharenum, sharepath in get_all_share_paths(storage_server, storage_index):
         yield sharenum
 
@@ -414,6 +450,20 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
     """
     Get the sizes of the given share numbers for the given storage index *or*
     slot.
+
+    :param allmydata.storage.server.StorageServer storage_server: The storage
+        server which owns the storage index.
+
+    :param bytes storage_index_or_slot: The storage index (or slot) in which
+        to look up share numbers.
+
+    :param sharenums: A container of share numbers to use to filter the
+        results.  Only information about share numbers in this container is
+        included in the result.
+
+    :return: A generator of tuples of (int, int) where the first element is a
+        share number and the second element is the data size for that share
+        number.
     """
     get_size = None
     for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
