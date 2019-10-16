@@ -141,6 +141,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     A class which wraps an ``RIStorageServer`` to insert pass validity checks
     before allowing certain functionality.
     """
+
+    # This is the amount of time an added or renewed lease will last.  We
+    # duplicate the value used by the underlying anonymous-access storage
+    # server which does not expose it via a Python API or allow it to be
+    # configured or overridden.  It would be great if the anonymous-access
+    # storage server eventually made lease time a parameter so we could just
+    # control it ourselves.
     LEASE_PERIOD = timedelta(days=31)
 
     _original = attr.ib(validator=provides(RIStorageServer))
