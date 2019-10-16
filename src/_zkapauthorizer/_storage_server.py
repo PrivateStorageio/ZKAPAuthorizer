@@ -475,7 +475,8 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
                     get_size = get_slot_share_size
                 else:
                     get_size = get_storage_index_share_size
-        yield sharenum, get_size(sharepath)
+        if sharenum in sharenums:
+            yield sharenum, get_size(sharepath)
 
 
 def get_storage_index_share_size(sharepath):

@@ -535,6 +535,7 @@ class PassValidationTests(TestCase):
             sharenum: get_implied_data_length(data_vector, new_length)
             for (sharenum, (testv, data_vector, new_length))
             in tw_vectors.items()
+            if sharenum in sharenums
         }
 
         actual_sizes = self.storage_server.doRemoteCall(
