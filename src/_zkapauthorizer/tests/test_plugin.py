@@ -104,6 +104,9 @@ from .strategies import (
     unblinded_tokens,
     storage_indexes,
     lease_renew_secrets,
+    lease_cancel_secrets,
+    sharenum_sets,
+    sizes,
 )
 from .matchers import (
     Provides,
@@ -313,6 +316,9 @@ class ClientPluginTests(TestCase):
         unblinded_tokens(),
         storage_indexes(),
         lease_renew_secrets(),
+        lease_cancel_secrets(),
+        sharenum_sets(),
+        sizes(),
     )
     def test_unblinded_tokens_extracted(
             self,
@@ -323,6 +329,9 @@ class ClientPluginTests(TestCase):
             unblinded_token,
             storage_index,
             renew_secret,
+            cancel_secret,
+            sharenums,
+            size,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
@@ -344,13 +353,16 @@ class ClientPluginTests(TestCase):
             get_rref,
         )
 
-        # This is hooked up to a garbage reference.  We don't care about its
-        # _result_, anyway, right now.
-        d = storage_client.renew_lease(
+        # For now, merely making the call spends the passes - regardless of
+        # the ultimate success or failure of the operation.
+        storage_client.allocate_buckets(
             storage_index,
             renew_secret,
+            cancel_secret,
+            sharenums,
+            size,
+            LocalReferenceable(None),
         )
-        d.addBoth(lambda ignored: None)
 
         # There should be no unblinded tokens left to extract.
         remaining = store.extract_unblinded_tokens(1)

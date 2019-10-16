@@ -240,15 +240,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         # print("server add_lease({}, {!r})".format(len(passes), storage_index))
         valid_passes = self._validate_passes(add_lease_message(storage_index), passes)
-        allocated_sizes = dict(
-            get_share_sizes(
-                self._original, storage_index,
-                list(get_all_share_numbers(self._original, storage_index)),
-            ),
-        ).values()
-        # print("allocated_sizes: {}".format(allocated_sizes))
-        check_pass_quantity(len(valid_passes), allocated_sizes)
-        # print("Checked out")
+        check_pass_quantity_for_lease(
+            storage_index,
+            valid_passes,
+            self._original,
+        )
         return self._original.remote_add_lease(storage_index, *a, **kw)
 
     def remote_renew_lease(self, passes, storage_index, *a, **kw):
@@ -256,7 +252,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        self._validate_passes(renew_lease_message(storage_index), passes)
+        valid_passes = self._validate_passes(renew_lease_message(storage_index), passes)
+        check_pass_quantity_for_lease(
+            storage_index,
+            valid_passes,
+            self._original,
+        )
         return self._original.remote_renew_lease(storage_index, *a, **kw)
 
     def remote_advise_corrupt_share(self, *a, **kw):
@@ -361,6 +362,22 @@ def has_active_lease(storage_server, storage_index, now):
         in leases
     )
 
+
+def check_pass_quantity_for_lease(storage_index, valid_passes, storage_server):
+    """
+    Check that the given number of passes is sufficient to add or renew a
+    lease for one period for the given storage index.
+    """
+    allocated_sizes = dict(
+        get_share_sizes(
+            storage_server,
+            storage_index,
+            list(get_all_share_numbers(storage_server, storage_index)),
+        ),
+    ).values()
+    # print("allocated_sizes: {}".format(allocated_sizes))
+    check_pass_quantity(len(valid_passes), allocated_sizes)
+    # print("Checked out")
 
 def check_pass_quantity(valid_count, share_sizes):
     """
