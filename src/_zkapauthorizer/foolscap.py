@@ -6,8 +6,9 @@ from foolscap.constraint import (
     ByteStringConstraint,
 )
 from foolscap.api import (
-    DictOf,
+    ChoiceOf,
     SetOf,
+    DictOf,
     ListOf,
 )
 from foolscap.remoteinterface import (
@@ -124,7 +125,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     def share_sizes(
             storage_index_or_slot=StorageIndex,
-            sharenums=SetOf(int, maxLength=MAX_BUCKETS),
+            sharenums=ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)),
     ):
         """
         Get the size of the given shares in the given storage index or slot.  If a

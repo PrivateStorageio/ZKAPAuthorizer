@@ -44,6 +44,8 @@ from hypothesis.strategies import (
     integers,
     lists,
     tuples,
+    one_of,
+    just,
 )
 from privacypass import (
     RandomToken,
@@ -470,7 +472,7 @@ class PassValidationTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        sharenums=sharenum_sets(),
+        sharenums=one_of(just(None), sharenum_sets()),
         test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
     )
     def test_mutable_share_sizes(self, slot, secrets, sharenums, test_and_write_vectors_for_shares):
@@ -523,7 +525,7 @@ class PassValidationTests(TestCase):
             sharenum: get_implied_data_length(data_vector, new_length)
             for (sharenum, (testv, data_vector, new_length))
             in tw_vectors.items()
-            if sharenum in sharenums
+            if sharenums is None or sharenum in sharenums
         }
 
         actual_sizes = self.storage_server.doRemoteCall(

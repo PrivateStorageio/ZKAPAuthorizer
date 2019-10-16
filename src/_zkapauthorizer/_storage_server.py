@@ -459,7 +459,8 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
 
     :param sharenums: A container of share numbers to use to filter the
         results.  Only information about share numbers in this container is
-        included in the result.
+        included in the result.  Or, ``None`` to get sizes for all shares
+        which exist.
 
     :return: A generator of tuples of (int, int) where the first element is a
         share number and the second element is the data size for that share
@@ -475,7 +476,7 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
                     get_size = get_slot_share_size
                 else:
                     get_size = get_storage_index_share_size
-        if sharenum in sharenums:
+        if sharenums is None or sharenum in sharenums:
             yield sharenum, get_size(sharepath)
 
 
