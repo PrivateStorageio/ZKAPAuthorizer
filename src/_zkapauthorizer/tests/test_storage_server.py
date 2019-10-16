@@ -408,12 +408,11 @@ class PassValidationTests(TestCase):
             )
         except MorePassesRequired as e:
             self.assertThat(
-                e.valid_count,
-                Equals(len(passes)),
-            )
-            self.assertThat(
-                e.required_count,
-                Equals(required_count),
+                e,
+                MatchesStructure(
+                    valid_count=Equals(len(passes)),
+                    required_count=Equals(required_count),
+                ),
             )
         else:
             self.fail("Expected MorePassesRequired, got {}".format(result))
