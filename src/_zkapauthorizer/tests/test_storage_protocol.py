@@ -252,10 +252,10 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         renew_secrets=tuples(lease_renew_secrets(), lease_renew_secrets()),
         cancel_secret=lease_cancel_secrets(),
-        sharenum=sharenums(),
+        sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_add_lease(self, storage_index, renew_secrets, cancel_secret, sharenum, size):
+    def test_add_lease(self, storage_index, renew_secrets, cancel_secret, sharenums, size):
         """
         A lease can be added to an existing immutable share.
         """
@@ -274,7 +274,7 @@ class ShareTests(TestCase):
             storage_index,
             add_lease_secret,
             cancel_secret,
-            {sharenum},
+            sharenums,
             size,
             canary=self.canary,
         )
@@ -293,10 +293,10 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),
         cancel_secret=lease_cancel_secrets(),
-        sharenum=sharenums(),
+        sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenum, size):
+    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenums, size):
         """
         A lease on an immutable share can be updated to expire at a later time.
         """
@@ -315,7 +315,7 @@ class ShareTests(TestCase):
             storage_index,
             renew_secret,
             cancel_secret,
-            {sharenum},
+            sharenums,
             size,
             canary=self.canary,
         )
@@ -328,13 +328,10 @@ class ShareTests(TestCase):
             ),
         )
 
-        # Based on Tahoe-LAFS' hard-coded renew time.
-        RENEW_INTERVAL = 60 * 60 * 24 * 31
-
         [lease] = self.anonymous_storage_server.get_leases(storage_index)
         self.assertThat(
             lease.get_expiration_time(),
-            Equals(int(now + RENEW_INTERVAL)),
+            Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
         )
 
     @given(
