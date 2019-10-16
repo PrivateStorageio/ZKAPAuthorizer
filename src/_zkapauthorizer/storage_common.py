@@ -118,6 +118,9 @@ def get_implied_data_length(data_vector, new_length):
     """
     :param data_vector: See ``allmydata.interfaces.DataVector``.
 
+    :param new_length: See
+        ``allmydata.interfaces.RIStorageServer.slot_testv_and_readv_and_writev``.
+
     :return int: The amount of data, in bytes, implied by a data vector and a
         size.
     """

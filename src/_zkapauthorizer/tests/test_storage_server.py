@@ -429,8 +429,8 @@ class PassValidationTests(TestCase):
     )
     def test_immutable_share_sizes(self, storage_index, secrets, sharenums, allocated_size):
         """
-        ``share_sizes`` returns the size of the requested shares in the requested
-        storage_index
+        ``share_sizes`` returns the size of the requested iimutable shares in the
+        requested storage index.
         """
         # hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
@@ -474,6 +474,10 @@ class PassValidationTests(TestCase):
         test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
     )
     def test_mutable_share_sizes(self, slot, secrets, sharenums, test_and_write_vectors_for_shares):
+        """
+        ``share_sizes`` returns the size of the requested mutable shares in the
+        requested slot.
+        """
         # hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
