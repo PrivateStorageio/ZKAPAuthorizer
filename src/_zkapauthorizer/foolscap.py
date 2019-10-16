@@ -6,8 +6,9 @@ from foolscap.constraint import (
     ByteStringConstraint,
 )
 from foolscap.api import (
-    DictOf,
+    ChoiceOf,
     SetOf,
+    DictOf,
     ListOf,
 )
 from foolscap.remoteinterface import (
@@ -122,16 +123,13 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     get_buckets = RIStorageServer["get_buckets"]
 
-    def slot_share_sizes(
-            storage_index=StorageIndex,
-            sharenums=SetOf(int, maxLength=MAX_BUCKETS),
+    def share_sizes(
+            storage_index_or_slot=StorageIndex,
+            sharenums=ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)),
     ):
         """
-        Get the size of the given shares in the given storage index.  If a share
-        has no stored state, its size is reported as 0.
-
-        The reported size may be larger than the actual share size if there
-        are more than four leases on the share.
+        Get the size of the given shares in the given storage index or slot.  If a
+        share has no stored state, its size is reported as 0.
         """
         return DictOf(int, Offset)
 

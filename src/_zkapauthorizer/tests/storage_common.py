@@ -20,6 +20,11 @@ from twisted.python.filepath import (
     FilePath,
 )
 
+from .strategies import (
+    # Not really a strategy...
+    bytes_for_share,
+)
+
 def cleanup_storage_server(storage_server):
     """
     Delete all of the shares held by the given storage server.
@@ -35,3 +40,36 @@ def cleanup_storage_server(storage_server):
         for p in start.walk():
             if p is not start:
                 p.remove()
+
+
+def write_toy_shares(
+        storage_server,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        size,
+        canary,
+):
+    """
+    Write some immutable shares to the given storage server.
+
+    :param allmydata.storage.server.StorageServer storage_server:
+    :param bytes storage_index:
+    :param bytes renew_secret:
+    :param bytes cancel_secret:
+    :param set[int] sharenums:
+    :param int size:
+    :param IRemoteReference canary:
+    """
+    _, allocated = storage_server.remote_allocate_buckets(
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        size,
+        canary=canary,
+    )
+    for (sharenum, writer) in allocated.items():
+        writer.remote_write(0, bytes_for_share(sharenum, size))
+        writer.remote_close()

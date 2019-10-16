@@ -127,19 +127,33 @@ class ZKAPAuthorizerStorageClient(object):
             storage_index,
         )
 
+    @inlineCallbacks
     def add_lease(
             self,
             storage_index,
             renew_secret,
             cancel_secret,
     ):
-        return self._rref.callRemote(
-            "add_lease",
-            self._get_encoded_passes(add_lease_message(storage_index), 1),
+        share_sizes = (yield self._rref.callRemote(
+            "share_sizes",
             storage_index,
-            renew_secret,
-            cancel_secret,
-        )
+            None,
+        )).values()
+        num_passes = required_passes(BYTES_PER_PASS, share_sizes)
+        # print("Adding lease to {!r} with sizes {} with {} passes".format(
+        #     storage_index,
+        #     share_sizes,
+        #     num_passes,
+        # ))
+        returnValue((
+            yield self._rref.callRemote(
+                "add_lease",
+                self._get_encoded_passes(add_lease_message(storage_index), num_passes),
+                storage_index,
+                renew_secret,
+                cancel_secret,
+            )
+        ))
 
     def renew_lease(
             self,
@@ -190,7 +204,7 @@ class ZKAPAuthorizerStorageClient(object):
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
             current_sizes = yield self._rref.callRemote(
-                "slot_share_sizes",
+                "share_sizes",
                 storage_index,
                 set(tw_vectors),
             )

@@ -91,6 +91,7 @@ from .fixtures import (
 )
 from .storage_common import (
     cleanup_storage_server,
+    write_toy_shares,
 )
 from ..api import (
     ZKAPAuthorizerStorageServer,
@@ -251,10 +252,10 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         renew_secrets=tuples(lease_renew_secrets(), lease_renew_secrets()),
         cancel_secret=lease_cancel_secrets(),
-        sharenum=sharenums(),
+        sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_add_lease(self, storage_index, renew_secrets, cancel_secret, sharenum, size):
+    def test_add_lease(self, storage_index, renew_secrets, cancel_secret, sharenums, size):
         """
         A lease can be added to an existing immutable share.
         """
@@ -273,7 +274,7 @@ class ShareTests(TestCase):
             storage_index,
             add_lease_secret,
             cancel_secret,
-            {sharenum},
+            sharenums,
             size,
             canary=self.canary,
         )
@@ -292,10 +293,10 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),
         cancel_secret=lease_cancel_secrets(),
-        sharenum=sharenums(),
+        sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenum, size):
+    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenums, size):
         """
         A lease on an immutable share can be updated to expire at a later time.
         """
@@ -314,7 +315,7 @@ class ShareTests(TestCase):
             storage_index,
             renew_secret,
             cancel_secret,
-            {sharenum},
+            sharenums,
             size,
             canary=self.canary,
         )
@@ -327,13 +328,10 @@ class ShareTests(TestCase):
             ),
         )
 
-        # Based on Tahoe-LAFS' hard-coded renew time.
-        RENEW_INTERVAL = 60 * 60 * 24 * 31
-
         [lease] = self.anonymous_storage_server.get_leases(storage_index)
         self.assertThat(
             lease.get_expiration_time(),
-            Equals(int(now + RENEW_INTERVAL)),
+            Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
         )
 
     @given(
@@ -626,36 +624,3 @@ def write_vector_to_read_vector(write_vector):
     write vector.
     """
     return (write_vector[0], len(write_vector[1]))
-
-
-def write_toy_shares(
-        storage_server,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary,
-):
-    """
-    Write some immutable shares to the given storage server.
-
-    :param allmydata.storage.server.StorageServer storage_server:
-    :param bytes storage_index:
-    :param bytes renew_secret:
-    :param bytes cancel_secret:
-    :param set[int] sharenums:
-    :param int size:
-    :param IRemoteReference canary:
-    """
-    _, allocated = storage_server.remote_allocate_buckets(
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary=canary,
-    )
-    for (sharenum, writer) in allocated.items():
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()

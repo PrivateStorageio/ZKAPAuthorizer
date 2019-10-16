@@ -42,10 +42,7 @@ from twisted.web.test.requesthelper import (
 )
 
 from allmydata.interfaces import (
-    StorageIndex,
-    LeaseRenewSecret,
-    LeaseCancelSecret,
-    WriteEnablerSecret,
+    HASH_SIZE,
 )
 
 from allmydata.client import (
@@ -267,8 +264,11 @@ def storage_indexes():
     Build Tahoe-LAFS storage indexes.
     """
     return binary(
-        min_size=StorageIndex.minLength,
-        max_size=StorageIndex.maxLength,
+        # It is tempting to use StorageIndex.minLength and
+        # StorageIndex.maxLength but these are effectively garbage.  See the
+        # implementation of ByteStringConstraint for details.
+        min_size=16,
+        max_size=16,
     )
 
 
@@ -277,8 +277,8 @@ def lease_renew_secrets():
     Build Tahoe-LAFS lease renewal secrets.
     """
     return binary(
-        min_size=LeaseRenewSecret.minLength,
-        max_size=LeaseRenewSecret.maxLength,
+        min_size=HASH_SIZE,
+        max_size=HASH_SIZE,
     )
 
 
@@ -287,8 +287,8 @@ def lease_cancel_secrets():
     Build Tahoe-LAFS lease cancellation secrets.
     """
     return binary(
-        min_size=LeaseCancelSecret.minLength,
-        max_size=LeaseCancelSecret.maxLength,
+        min_size=HASH_SIZE,
+        max_size=HASH_SIZE,
     )
 
 
@@ -297,8 +297,8 @@ def write_enabler_secrets():
     Build Tahoe-LAFS write enabler secrets.
     """
     return binary(
-        min_size=WriteEnablerSecret.minLength,
-        max_size=WriteEnablerSecret.maxLength,
+        min_size=HASH_SIZE,
+        max_size=HASH_SIZE,
     )
 
 
