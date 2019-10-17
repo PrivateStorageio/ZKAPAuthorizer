@@ -1,6 +1,4 @@
 self: super: {
-  openssl = super.openssl_1_1;
-
   ristretto = super.callPackage ./ristretto.nix { };
 
   python27 = super.python27.override {
