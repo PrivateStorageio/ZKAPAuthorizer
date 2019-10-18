@@ -17,13 +17,6 @@ self: super: {
 
       # new tahoe-lafs dependency
       eliot = python-super.callPackage ./eliot.nix { };
-      # new autobahn requires a newer cryptography
-      cryptography = python-super.callPackage ./cryptography.nix { };
-      # new cryptography requires a newer cryptography_vectors
-      cryptography_vectors = python-super.callPackage ./cryptography_vectors.nix { };
-      # new tahoe-lafs depends on a very recent autobahn for better
-      # websocket testing features.
-      autobahn = python-super.callPackage ./autobahn.nix { };
 
       # tahoe-lafs in nixpkgs is packaged as an application!  so we have to
       # re-package it ourselves as a library.
