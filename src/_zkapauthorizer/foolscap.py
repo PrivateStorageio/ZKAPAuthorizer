@@ -125,7 +125,10 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     def share_sizes(
             storage_index_or_slot=StorageIndex,
-            sharenums=ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)),
+            # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
+            # However, support for such a construction appears to be
+            # unimplemented in Foolscap.  So, instead...
+            sharenums=Any(),
     ):
         """
         Get the size of the given shares in the given storage index or slot.  If a
