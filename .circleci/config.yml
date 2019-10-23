@@ -60,7 +60,7 @@ jobs:
       # time of this comment.  We can bump it to a newer version when that
       # makes sense.  Meanwhile, the platform won't shift around beneath us
       # unexpectedly.
-      NIXPKGS_REV: "5d5cd70516001e79516d2ade8bcf31df208a4ef3"
+      NIXPKGS_REV: "8bf142e001b6876b021c8ee90c2c7cec385fe8e9"
 
     steps:
       - run:
