@@ -6,8 +6,7 @@ from foolscap.constraint import (
     ByteStringConstraint,
 )
 from foolscap.api import (
-    ChoiceOf,
-    SetOf,
+    Any,
     DictOf,
     ListOf,
 )
@@ -17,7 +16,6 @@ from foolscap.remoteinterface import (
 )
 
 from allmydata.interfaces import (
-    MAX_BUCKETS,
     StorageIndex,
     RIStorageServer,
     Offset,
