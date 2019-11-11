@@ -48,3 +48,20 @@ The response is **OK** with ``application/json`` content-type response body like
   {"vouchers": [<voucher status object>, ...]}
 
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
+
+``GET /storage-plugins/privatestorageio/zkapauthz-v1/zkap``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This endpoint allows an external agent to retrieve unused ZKAPs present in the node's ZKAP database.
+ZKAPs are returned in ascending text sorted order.
+This endpoint accepts several query arguments:
+
+  * limit: An integer limiting the number of ZKAPs to retrieve.
+  * position: A string which can be compared against ZKAP values.
+    Only ZKAPs which sort as great than this value are returned.
+
+This endpoint accepts no request body.
+
+The response is **OK** with ``application/json`` content-type response body like::
+
+  {"total": <integer>, "zkaps": [<zkap string>, ...]}
