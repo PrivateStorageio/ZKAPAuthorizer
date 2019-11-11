@@ -78,8 +78,8 @@ def from_configuration(node_config, store, redeemer=None):
         ),
     )
     root.putChild(
-        b"zkap",
-        _ZKAPCollection(
+        b"blinded-token",
+        _BlindedTokenCollection(
             store,
             controller,
         ),
@@ -96,10 +96,10 @@ def application_json(request):
     request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
 
 
-class _ZKAPCollection(Resource):
+class _BlindedTokenCollection(Resource):
     """
-    This class implements inspection of ZKAPs.  Users **GET** this resource to
-    find out about ZKAPs in the system.
+    This class implements inspection of blinded tokens.  Users **GET** this
+    resource to find out about blinded tokens in the system.
     """
     _log = Logger()
 
@@ -110,10 +110,10 @@ class _ZKAPCollection(Resource):
 
     def render_GET(self, request):
         """
-        Retrieve some ZKAPs and associated informatin.
+        Retrieve some blinded tokens and associated information.
         """
         application_json(request)
-        return dumps({u"total": 0, u"zkaps": []})
+        return dumps({u"total": 0, u"blinded-tokens": []})
 
 
 

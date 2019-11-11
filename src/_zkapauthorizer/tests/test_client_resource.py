@@ -209,7 +209,7 @@ class ResourceTests(TestCase):
     """
     General tests for the resources exposed by the plugin.
     """
-    @given(tahoe_configs(), requests(just([u"zkap"]) | just([u"voucher"])))
+    @given(tahoe_configs(), requests(just([u"blinded-token"]) | just([u"voucher"])))
     def test_reachable(self, get_config, request):
         """
         A resource is reachable at a child of the resource returned by
@@ -224,19 +224,22 @@ class ResourceTests(TestCase):
         )
 
 
-class ZKAPTests(TestCase):
+class BlindedTokenTests(TestCase):
     """
-    Tests relating to ``/zkap`` as implemented by the
+    Tests relating to ``/blinded-token`` as implemented by the
     ``_zkapauthorizer.resource`` module.
     """
     def setUp(self):
-        super(ZKAPTests, self).setUp()
+        super(BlindedTokenTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
 
     @given(tahoe_configs())
     def test_get(self, get_config):
         """
+        When the blinded token collection receives a **GET**, the response is the
+        total number of blinded tokens in the system and the blinded tokens
+        themselves.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -244,7 +247,7 @@ class ZKAPTests(TestCase):
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
-            b"http://127.0.0.1/zkap",
+            b"http://127.0.0.1/blinded-token",
         )
         self.addDetail(
             u"requesting result",
@@ -260,7 +263,7 @@ class ZKAPTests(TestCase):
                         succeeded(
                             Equals({
                                 u"total": 0,
-                                u"zkaps": [],
+                                u"blinded-tokens": [],
                             }),
                         )
                     ),
