@@ -80,6 +80,15 @@ def from_configuration(node_config, store, redeemer=None):
     return root
 
 
+def application_json(request):
+    """
+    Set the given request's response content-type to ``application/json``.
+
+    :param twisted.web.iweb.IRequest request: The request to modify.
+    """
+    request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+
+
 class _VoucherCollection(Resource):
     """
     This class implements redemption of vouchers.  Users **PUT** such numbers
@@ -115,7 +124,7 @@ class _VoucherCollection(Resource):
 
 
     def render_GET(self, request):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        application_json(request)
         return dumps({
             u"vouchers": list(
                 voucher.marshal()
@@ -172,7 +181,7 @@ class VoucherView(Resource):
 
 
     def render_GET(self, request):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        application_json(request)
         return self._voucher.to_json()
 
 
