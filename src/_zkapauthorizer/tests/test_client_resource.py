@@ -205,6 +205,70 @@ def root_from_config(config):
     )
 
 
+class ResourceTests(TestCase):
+    """
+    General tests for the resources exposed by the plugin.
+    """
+    @given(tahoe_configs(), requests(just([u"zkap"]) | just([u"voucher"])))
+    def test_reachable(self, get_config, request):
+        """
+        A resource is reachable at a child of the resource returned by
+        ``from_configuration``.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+        self.assertThat(
+            getChildForRequest(root, request),
+            Provides([IResource]),
+        )
+
+
+class ZKAPTests(TestCase):
+    """
+    Tests relating to ``/zkap`` as implemented by the
+    ``_zkapauthorizer.resource`` module.
+    """
+    def setUp(self):
+        super(ZKAPTests, self).setUp()
+        self.useFixture(CaptureTwistedLogs())
+
+
+    @given(tahoe_configs())
+    def test_get(self, get_config):
+        """
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/zkap",
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded(
+                MatchesAll(
+                    ok_response(headers=application_json()),
+                    AfterPreprocessing(
+                        json_content,
+                        succeeded(
+                            Equals({
+                                u"total": 0,
+                                u"zkaps": [],
+                            }),
+                        )
+                    ),
+                ),
+            ),
+        )
+
+
 class VoucherTests(TestCase):
     """
     Tests relating to ``/voucher`` as implemented by the
@@ -214,21 +278,6 @@ class VoucherTests(TestCase):
     def setUp(self):
         super(VoucherTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
-
-
-    @given(tahoe_configs(), requests(just([u"voucher"])))
-    def test_reachable(self, get_config, request):
-        """
-        A resource is reachable at the ``voucher`` child of a the resource
-        returned by ``from_configuration``.
-        """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
-        self.assertThat(
-            getChildForRequest(root, request),
-            Provides([IResource]),
-        )
 
 
     @given(tahoe_configs(), vouchers())

@@ -77,6 +77,13 @@ def from_configuration(node_config, store, redeemer=None):
             controller,
         ),
     )
+    root.putChild(
+        b"zkap",
+        _ZKAPCollection(
+            store,
+            controller,
+        ),
+    )
     return root
 
 
@@ -87,6 +94,27 @@ def application_json(request):
     :param twisted.web.iweb.IRequest request: The request to modify.
     """
     request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+
+
+class _ZKAPCollection(Resource):
+    """
+    This class implements inspection of ZKAPs.  Users **GET** this resource to
+    find out about ZKAPs in the system.
+    """
+    _log = Logger()
+
+    def __init__(self, store, controller):
+        self._store = store
+        self._controller = controller
+        Resource.__init__(self)
+
+    def render_GET(self, request):
+        """
+        Retrieve some ZKAPs and associated informatin.
+        """
+        application_json(request)
+        return dumps({u"total": 0, u"zkaps": []})
+
 
 
 class _VoucherCollection(Resource):
