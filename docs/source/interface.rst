@@ -50,7 +50,7 @@ The response is **OK** with ``application/json`` content-type response body like
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
 
 ``GET /storage-plugins/privatestorageio/zkapauthz-v1/unblinded-token``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve unused unblinded tokens present in the node's database.
 Unblinded tokens are returned in ascending text sorted order.
