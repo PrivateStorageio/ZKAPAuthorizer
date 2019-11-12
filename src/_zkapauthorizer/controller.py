@@ -128,6 +128,10 @@ class NonRedeemer(object):
     """
     A ``NonRedeemer`` never tries to redeem vouchers for ZKAPs.
     """
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls()
+
     def random_tokens_for_voucher(self, voucher, count):
         # It doesn't matter because we're never going to try to redeem them.
         return list(
@@ -443,6 +447,7 @@ def get_redeemer(plugin_name, node_config, announcement, reactor):
 
 
 _REDEEMERS = {
+    u"non": NonRedeemer.make,
     u"dummy": DummyRedeemer.make,
     u"ristretto": RistrettoRedeemer.make,
 }
