@@ -20,6 +20,9 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
+from sys import (
+    maxint,
+)
 from itertools import (
     islice,
 )
@@ -139,7 +142,7 @@ class _UnblindedTokenCollection(Resource):
 
         limit = request.args.get(b"limit", [None])[0]
         if limit is not None:
-            limit = int(limit)
+            limit = min(maxint, int(limit))
 
         position = request.args.get(b"position", [b""])[0].decode("utf-8")
 
