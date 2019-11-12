@@ -389,9 +389,11 @@ class PaymentController(object):
     store = attr.ib()
     redeemer = attr.ib()
 
-    def redeem(self, voucher):
+    def redeem(self, voucher, num_tokens=100):
         """
         :param unicode voucher: A voucher to redeem.
+
+        :param int num_tokens: A number of tokens to redeem.
         """
         # Pre-generate the random tokens to use when redeeming the voucher.
         # These are persisted with the voucher so the redemption can be made
@@ -403,7 +405,7 @@ class PaymentController(object):
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
         self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
-        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), 100)
+        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
 
         # Persist the voucher and tokens so they're available if we fail.
         self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
