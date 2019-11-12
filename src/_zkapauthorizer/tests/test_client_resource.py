@@ -44,6 +44,7 @@ from testtools import (
 from testtools.matchers import (
     MatchesStructure,
     MatchesAll,
+    MatchesPredicate,
     AllMatch,
     HasLength,
     IsInstance,
@@ -79,6 +80,11 @@ from hypothesis.strategies import (
     text,
 )
 
+from twisted.internet.defer import (
+    Deferred,
+    maybeDeferred,
+    gatherResults,
+)
 from twisted.internet.task import (
     Cooperator,
 )
@@ -349,6 +355,61 @@ class UnblindedTokenTests(TestCase):
                         GreaterThan(position),
                         IsInstance(unicode),
                     ),
+                ),
+            ),
+        )
+
+    @given(tahoe_configs(), vouchers(), integers(min_value=1, max_value=100))
+    def test_get_order_matches_use_order(self, get_config, voucher, num_tokens):
+        """
+        The first unblinded token returned in a response to a **GET** request is
+        the first token to be used to authorize a storage request.
+        """
+        def after(d, f):
+            new_d = Deferred()
+            def f_and_continue(result):
+                maybeDeferred(f).chainDeferred(new_d)
+                return result
+            d.addCallback(f_and_continue)
+            return new_d
+
+        def get_tokens():
+            d = agent.request(
+                b"GET",
+                b"http://127.0.0.1/unblinded-token",
+            )
+            d.addCallback(readBody)
+            d.addCallback(
+                lambda body: loads(body)[u"unblinded-tokens"],
+            )
+            return d
+
+        def use_a_token():
+            root.store.extract_unblinded_tokens(1)
+
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        # Put in a number of tokens with which to test.
+        redeeming = root.controller.redeem(voucher, num_tokens)
+        # Make sure the operation completed before proceeding.
+        self.assertThat(
+            redeeming,
+            succeeded(Always()),
+        )
+
+        agent = RequestTraversalAgent(root)
+        getting_initial_tokens = get_tokens()
+        using_a_token = after(getting_initial_tokens, use_a_token)
+        getting_tokens_after = after(using_a_token, get_tokens)
+
+        self.assertThat(
+            gatherResults([getting_initial_tokens, getting_tokens_after]),
+            succeeded(
+                MatchesPredicate(
+                    lambda (initial_tokens, tokens_after): initial_tokens[1:] == tokens_after,
+                    u"initial, after (%s): initial[1:] != after",
                 ),
             ),
         )
