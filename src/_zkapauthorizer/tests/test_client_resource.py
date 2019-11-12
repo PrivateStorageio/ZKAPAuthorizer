@@ -209,7 +209,7 @@ class ResourceTests(TestCase):
     """
     General tests for the resources exposed by the plugin.
     """
-    @given(tahoe_configs(), requests(just([u"blinded-token"]) | just([u"voucher"])))
+    @given(tahoe_configs(), requests(just([u"unblinded-token"]) | just([u"voucher"])))
     def test_reachable(self, get_config, request):
         """
         A resource is reachable at a child of the resource returned by
