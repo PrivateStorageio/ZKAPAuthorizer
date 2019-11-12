@@ -230,21 +230,21 @@ class ResourceTests(TestCase):
         )
 
 
-class BlindedTokenTests(TestCase):
+class UnblindedTokenTests(TestCase):
     """
-    Tests relating to ``/blinded-token`` as implemented by the
+    Tests relating to ``/unblinded-token`` as implemented by the
     ``_zkapauthorizer.resource`` module.
     """
     def setUp(self):
-        super(BlindedTokenTests, self).setUp()
+        super(UnblindedTokenTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
 
     @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
     def test_get(self, get_config, voucher, num_tokens):
         """
-        When the blinded token collection receives a **GET**, the response is the
-        total number of blinded tokens in the system and the blinded tokens
+        When the unblinded token collection receives a **GET**, the response is the
+        total number of unblinded tokens in the system and the unblinded tokens
         themselves.
         """
         tempdir = self.useFixture(TempDir())
