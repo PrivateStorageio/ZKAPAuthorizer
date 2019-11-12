@@ -20,10 +20,18 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
+from sys import (
+    maxint,
+)
+from itertools import (
+    islice,
+)
 from json import (
     loads, dumps,
 )
-
+from zope.interface import (
+    Attribute,
+)
 from twisted.logger import (
     Logger,
 )
@@ -31,6 +39,7 @@ from twisted.web.http import (
     BAD_REQUEST,
 )
 from twisted.web.resource import (
+    IResource,
     ErrorPage,
     NoResource,
     Resource,
@@ -42,8 +51,16 @@ from ._base64 import (
 
 from .controller import (
     PaymentController,
-    NonRedeemer,
+    get_redeemer,
 )
+
+class IZKAPRoot(IResource):
+    """
+    The root of the resource tree of this plugin's client web presence.
+    """
+    store = Attribute("The ``VoucherStore`` used by this resource tree.")
+    controller = Attribute("The ``PaymentController`` used by this resource tree.")
+
 
 def from_configuration(node_config, store, redeemer=None):
     """
@@ -63,13 +80,20 @@ def from_configuration(node_config, store, redeemer=None):
     :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
         sensible one is constructed.
 
-    :return IResource: The root of the resource hierarchy presented by the
+    :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
     if redeemer is None:
-        redeemer = NonRedeemer()
+        redeemer = get_redeemer(
+            u"privatestorageio-zkapauthz-v1",
+            node_config,
+            None,
+            None,
+        )
     controller = PaymentController(store, redeemer)
     root = Resource()
+    root.store = store
+    root.controller = controller
     root.putChild(
         b"voucher",
         _VoucherCollection(
@@ -77,7 +101,61 @@ def from_configuration(node_config, store, redeemer=None):
             controller,
         ),
     )
+    root.putChild(
+        b"unblinded-token",
+        _UnblindedTokenCollection(
+            store,
+            controller,
+        ),
+    )
     return root
+
+
+def application_json(request):
+    """
+    Set the given request's response content-type to ``application/json``.
+
+    :param twisted.web.iweb.IRequest request: The request to modify.
+    """
+    request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+
+
+class _UnblindedTokenCollection(Resource):
+    """
+    This class implements inspection of unblinded tokens.  Users **GET** this
+    resource to find out about unblinded tokens in the system.
+    """
+    _log = Logger()
+
+    def __init__(self, store, controller):
+        self._store = store
+        self._controller = controller
+        Resource.__init__(self)
+
+    def render_GET(self, request):
+        """
+        Retrieve some unblinded tokens and associated information.
+        """
+        application_json(request)
+        state = self._store.backup()
+        unblinded_tokens = state[u"unblinded-tokens"]
+
+        limit = request.args.get(b"limit", [None])[0]
+        if limit is not None:
+            limit = min(maxint, int(limit))
+
+        position = request.args.get(b"position", [b""])[0].decode("utf-8")
+
+        return dumps({
+            u"total": len(unblinded_tokens),
+            u"unblinded-tokens": list(islice((
+                token
+                for token
+                in unblinded_tokens
+                if token > position
+            ), limit)),
+        })
+
 
 
 class _VoucherCollection(Resource):
@@ -115,7 +193,7 @@ class _VoucherCollection(Resource):
 
 
     def render_GET(self, request):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        application_json(request)
         return dumps({
             u"vouchers": list(
                 voucher.marshal()
@@ -172,7 +250,7 @@ class VoucherView(Resource):
 
 
     def render_GET(self, request):
-        request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+        application_json(request)
         return self._voucher.to_json()
 
 

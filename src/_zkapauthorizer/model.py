@@ -340,6 +340,22 @@ class VoucherStore(object):
             in texts
         )
 
+    @with_cursor
+    def backup(self, cursor):
+        """
+        Read out all state necessary to recreate this database in the event it is
+        lost.
+        """
+        cursor.execute(
+            """
+            SELECT [token] FROM [unblinded-tokens] ORDER BY [token]
+            """,
+        )
+        tokens = cursor.fetchall()
+        return {
+            u"unblinded-tokens": list(token for (token,) in tokens),
+        }
+
 
 @attr.s(frozen=True)
 class UnblindedToken(object):

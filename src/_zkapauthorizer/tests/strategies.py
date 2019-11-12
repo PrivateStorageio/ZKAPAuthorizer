@@ -133,16 +133,6 @@ def minimal_tahoe_configs(storage_client_plugins=None):
     )
 
 
-def tahoe_configs():
-    """
-    Build complete Tahoe-LAFS configurations including the zkapauthorizer
-    client plugin section.
-    """
-    return minimal_tahoe_configs({
-        u"privatestorageio-zkapauthz-v1": client_configurations(),
-    })
-
-
 def node_nicknames():
     """
     Builds Tahoe-LAFS node nicknames.
@@ -174,12 +164,41 @@ def server_configurations(signing_key_path):
     })
 
 
-def client_configurations():
+def client_ristrettoredeemer_configurations():
     """
-    Build configuration values for the client-side plugin.
+    Build Ristretto-using configuration values for the client-side plugin.
     """
     return just({
         u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+        u"redeemer": u"ristretto",
+    })
+
+
+def client_dummyredeemer_configurations():
+    """
+    Build DummyRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"dummy",
+    })
+
+
+def client_nonredeemer_configurations():
+    """
+    Build NonRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"non",
+    })
+
+
+def tahoe_configs(zkapauthz_v1_configuration=client_dummyredeemer_configurations()):
+    """
+    Build complete Tahoe-LAFS configurations including the zkapauthorizer
+    client plugin section.
+    """
+    return minimal_tahoe_configs({
+        u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
     })
 
 

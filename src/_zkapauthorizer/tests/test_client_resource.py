@@ -44,9 +44,14 @@ from testtools import (
 from testtools.matchers import (
     MatchesStructure,
     MatchesAll,
+    AllMatch,
+    HasLength,
+    IsInstance,
+    ContainsDict,
     AfterPreprocessing,
     Equals,
     Always,
+    GreaterThan,
 )
 from testtools.twistedsupport import (
     CaptureTwistedLogs,
@@ -106,6 +111,8 @@ from ..resource import (
 
 from .strategies import (
     tahoe_configs,
+    client_dummyredeemer_configurations,
+    client_nonredeemer_configurations,
     vouchers,
     requests,
 )
@@ -205,6 +212,194 @@ def root_from_config(config):
     )
 
 
+class ResourceTests(TestCase):
+    """
+    General tests for the resources exposed by the plugin.
+    """
+    @given(tahoe_configs(), requests(just([u"unblinded-token"]) | just([u"voucher"])))
+    def test_reachable(self, get_config, request):
+        """
+        A resource is reachable at a child of the resource returned by
+        ``from_configuration``.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+        self.assertThat(
+            getChildForRequest(root, request),
+            Provides([IResource]),
+        )
+
+
+class UnblindedTokenTests(TestCase):
+    """
+    Tests relating to ``/unblinded-token`` as implemented by the
+    ``_zkapauthorizer.resource`` module.
+    """
+    def setUp(self):
+        super(UnblindedTokenTests, self).setUp()
+        self.useFixture(CaptureTwistedLogs())
+
+
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
+    def test_get(self, get_config, voucher, num_tokens):
+        """
+        When the unblinded token collection receives a **GET**, the response is the
+        total number of unblinded tokens in the system and the unblinded tokens
+        themselves.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token",
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded_with_unblinded_tokens(num_tokens, num_tokens),
+        )
+
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), integers(min_value=0))
+    def test_get_limit(self, get_config, voucher, num_tokens, limit):
+        """
+        When the unblinded token collection receives a **GET** with a **limit**
+        query argument, it returns no more unblinded tokens than indicated by
+        the limit.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token?limit={}".format(limit),
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded_with_unblinded_tokens(num_tokens, min(num_tokens, limit)),
+        )
+
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), text(max_size=64))
+    def test_get_position(self, get_config, voucher, num_tokens, position):
+        """
+        When the unblinded token collection receives a **GET** with a **position**
+        query argument, it returns all unblinded tokens which sort greater
+        than the position and no others.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token?position={}".format(
+                quote(position.encode("utf-8"), safe=b""),
+            ),
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded_with_unblinded_tokens_with_matcher(
+                num_tokens,
+                AllMatch(
+                    MatchesAll(
+                        GreaterThan(position),
+                        IsInstance(unicode),
+                    ),
+                ),
+            ),
+        )
+
+
+def succeeded_with_unblinded_tokens_with_matcher(all_token_count, match_unblinded_tokens):
+    """
+    :return: A matcher which matches a Deferred which fires with a response
+        like the one returned by the **unblinded-tokens** endpoint.
+
+    :param int all_token_count: The expected value in the ``total`` field of
+        the response.
+
+    :param match_unblinded_tokens: A matcher for the ``unblinded-tokens``
+        field of the response.
+    """
+    return succeeded(
+        MatchesAll(
+            ok_response(headers=application_json()),
+            AfterPreprocessing(
+                json_content,
+                succeeded(
+                    ContainsDict({
+                        u"total": Equals(all_token_count),
+                        u"unblinded-tokens": match_unblinded_tokens,
+                    }),
+                ),
+            ),
+        ),
+    )
+
+def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
+    """
+    :return: A matcher which matches a Deferred which fires with a response
+        like the one returned by the **unblinded-tokens** endpoint.
+
+    :param int all_token_count: The expected value in the ``total`` field of
+        the response.
+
+    :param int returned_token_count: The expected number of tokens in the
+       ``unblinded-tokens`` field of the response.
+    """
+    return succeeded_with_unblinded_tokens_with_matcher(
+        all_token_count,
+        MatchesAll(
+            HasLength(returned_token_count),
+            AllMatch(IsInstance(unicode)),
+        )
+    )
+
+
 class VoucherTests(TestCase):
     """
     Tests relating to ``/voucher`` as implemented by the
@@ -214,21 +409,6 @@ class VoucherTests(TestCase):
     def setUp(self):
         super(VoucherTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
-
-
-    @given(tahoe_configs(), requests(just([u"voucher"])))
-    def test_reachable(self, get_config, request):
-        """
-        A resource is reachable at the ``voucher`` child of a the resource
-        returned by ``from_configuration``.
-        """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
-        self.assertThat(
-            getChildForRequest(root, request),
-            Provides([IResource]),
-        )
 
 
     @given(tahoe_configs(), vouchers())
@@ -343,13 +523,31 @@ class VoucherTests(TestCase):
             ),
         )
 
-
-    @given(tahoe_configs(), vouchers())
-    def test_get_known_voucher(self, get_config, voucher):
+    @given(tahoe_configs(client_nonredeemer_configurations()), vouchers())
+    def test_get_known_voucher_unredeemed(self, get_config, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details about the
         voucher are included in a json-encoded response body.
+        """
+        return self._test_get_known_voucher(get_config, voucher, False)
+
+    @given(tahoe_configs(client_dummyredeemer_configurations()), vouchers())
+    def test_get_known_voucher_redeemed(self, get_config, voucher):
+        """
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details about the
+        voucher are included in a json-encoded response body.
+        """
+        return self._test_get_known_voucher(get_config, voucher, True)
+
+    def _test_get_known_voucher(self, get_config, voucher, redeemed):
+        """
+        Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
+        the JSON response.
+
+        :param bool redeemed: Whether the voucher is expected to be redeemed
+            or not in the response.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -390,7 +588,7 @@ class VoucherTests(TestCase):
                     AfterPreprocessing(
                         json_content,
                         succeeded(
-                            Equals(Voucher(voucher).marshal()),
+                            Equals(Voucher(voucher, redeemed=redeemed).marshal()),
                         ),
                     ),
                 ),
@@ -446,7 +644,7 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"vouchers": list(
-                                    Voucher(voucher).marshal()
+                                    Voucher(voucher, redeemed=True).marshal()
                                     for voucher
                                     in vouchers
                                 ),
