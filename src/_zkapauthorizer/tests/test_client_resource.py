@@ -51,6 +51,7 @@ from testtools.matchers import (
     AfterPreprocessing,
     Equals,
     Always,
+    GreaterThan,
 )
 from testtools.twistedsupport import (
     CaptureTwistedLogs,
@@ -308,6 +309,76 @@ class UnblindedTokenTests(TestCase):
             succeeded_with_unblinded_tokens(num_tokens, min(num_tokens, limit)),
         )
 
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), text(max_size=64))
+    def test_get_position(self, get_config, voucher, num_tokens, position):
+        """
+        When the unblinded token collection receives a **GET** with a **position**
+        query argument, it returns all unblinded tokens which sort greater
+        than the position and no others.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token?position={}".format(
+                quote(position.encode("utf-8"), safe=b""),
+            ),
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded_with_unblinded_tokens_with_matcher(
+                num_tokens,
+                AllMatch(
+                    MatchesAll(
+                        GreaterThan(position),
+                        IsInstance(unicode),
+                    ),
+                ),
+            ),
+        )
+
+
+def succeeded_with_unblinded_tokens_with_matcher(all_token_count, match_unblinded_tokens):
+    """
+    :return: A matcher which matches a Deferred which fires with a response
+        like the one returned by the **unblinded-tokens** endpoint.
+
+    :param int all_token_count: The expected value in the ``total`` field of
+        the response.
+
+    :param match_unblinded_tokens: A matcher for the ``unblinded-tokens``
+        field of the response.
+    """
+    return succeeded(
+        MatchesAll(
+            ok_response(headers=application_json()),
+            AfterPreprocessing(
+                json_content,
+                succeeded(
+                    ContainsDict({
+                        u"total": Equals(all_token_count),
+                        u"unblinded-tokens": match_unblinded_tokens,
+                    }),
+                ),
+            ),
+        ),
+    )
 
 def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
     """
@@ -320,22 +391,12 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
     :param int returned_token_count: The expected number of tokens in the
        ``unblinded-tokens`` field of the response.
     """
-    return succeeded(
+    return succeeded_with_unblinded_tokens_with_matcher(
+        all_token_count,
         MatchesAll(
-            ok_response(headers=application_json()),
-            AfterPreprocessing(
-                json_content,
-                succeeded(
-                    ContainsDict({
-                        u"total": Equals(all_token_count),
-                        u"unblinded-tokens": MatchesAll(
-                            HasLength(returned_token_count),
-                            AllMatch(IsInstance(unicode)),
-                        ),
-                    }),
-                ),
-            ),
-        ),
+            HasLength(returned_token_count),
+            AllMatch(IsInstance(unicode)),
+        )
     )
 
 

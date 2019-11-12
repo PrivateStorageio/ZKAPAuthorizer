@@ -20,6 +20,9 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
+from itertools import (
+    islice,
+)
 from json import (
     loads, dumps,
 )
@@ -137,9 +140,17 @@ class _UnblindedTokenCollection(Resource):
         limit = request.args.get(b"limit", [None])[0]
         if limit is not None:
             limit = int(limit)
+
+        position = request.args.get(b"position", [b""])[0].decode("utf-8")
+
         return dumps({
             u"total": len(unblinded_tokens),
-            u"unblinded-tokens": unblinded_tokens[:limit],
+            u"unblinded-tokens": list(islice((
+                token
+                for token
+                in unblinded_tokens
+                if token > position
+            ), limit)),
         })
 
 
