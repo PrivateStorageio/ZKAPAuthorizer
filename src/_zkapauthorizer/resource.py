@@ -133,9 +133,13 @@ class _UnblindedTokenCollection(Resource):
         application_json(request)
         state = self._store.backup()
         unblinded_tokens = state[u"unblinded-tokens"]
+
+        limit = request.args.get(b"limit", [None])[0]
+        if limit is not None:
+            limit = int(limit)
         return dumps({
             u"total": len(unblinded_tokens),
-            u"unblinded-tokens": unblinded_tokens,
+            u"unblinded-tokens": unblinded_tokens[:limit],
         })
 
 

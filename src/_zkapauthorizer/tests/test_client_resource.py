@@ -271,24 +271,72 @@ class UnblindedTokenTests(TestCase):
         )
         self.assertThat(
             requesting,
-            succeeded(
-                MatchesAll(
-                    ok_response(headers=application_json()),
-                    AfterPreprocessing(
-                        json_content,
-                        succeeded(
-                            ContainsDict({
-                                u"total": Equals(num_tokens),
-                                u"unblinded-tokens": MatchesAll(
-                                    HasLength(num_tokens),
-                                    AllMatch(IsInstance(unicode)),
-                                ),
-                            }),
+            succeeded_with_unblinded_tokens(num_tokens, num_tokens),
+        )
+
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), integers(min_value=0))
+    def test_get_limit(self, get_config, voucher, num_tokens, limit):
+        """
+        When the unblinded token collection receives a **GET** with a **limit**
+        query argument, it returns no more unblinded tokens than indicated by
+        the limit.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token?limit={}".format(limit),
+        )
+        self.addDetail(
+            u"requesting result",
+            text_content(u"{}".format(vars(requesting.result))),
+        )
+        self.assertThat(
+            requesting,
+            succeeded_with_unblinded_tokens(num_tokens, min(num_tokens, limit)),
+        )
+
+
+def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
+    """
+    :return: A matcher which matches a Deferred which fires with a response
+        like the one returned by the **unblinded-tokens** endpoint.
+
+    :param int all_token_count: The expected value in the ``total`` field of
+        the response.
+
+    :param int returned_token_count: The expected number of tokens in the
+       ``unblinded-tokens`` field of the response.
+    """
+    return succeeded(
+        MatchesAll(
+            ok_response(headers=application_json()),
+            AfterPreprocessing(
+                json_content,
+                succeeded(
+                    ContainsDict({
+                        u"total": Equals(all_token_count),
+                        u"unblinded-tokens": MatchesAll(
+                            HasLength(returned_token_count),
+                            AllMatch(IsInstance(unicode)),
                         ),
-                    ),
+                    }),
                 ),
             ),
-        )
+        ),
+    )
 
 
 class VoucherTests(TestCase):
