@@ -4,10 +4,12 @@
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
+, trialArgs ? []
 }:
 let
   hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
   testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
+  extraTrialArgs = builtins.concatStringsSep " " trialArgs;
 in
 buildPythonPackage rec {
   version = "0.0";
@@ -39,15 +41,14 @@ buildPythonPackage rec {
     treq
   ];
 
-
-
   checkPhase = ''
     runHook preCheck
+    set -x
     "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
       then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
       else ""
-    } twisted.trial ${testSuite'}
+    } twisted.trial ${extraTrialArgs} ${testSuite'}
     runHook postCheck
   '';
 
