@@ -276,7 +276,7 @@ class UnblindedTokenStoreTests(TestCase):
         )
         store.insert_unblinded_tokens_for_voucher(voucher_value, tokens)
         retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
-        self.expectThat(tokens, Equals(retrieved_tokens))
+        self.expectThat(tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
 
         # After extraction, the unblinded tokens are no longer available.
         more_unblinded_tokens = store.extract_unblinded_tokens(1)
