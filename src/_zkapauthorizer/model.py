@@ -314,7 +314,7 @@ class VoucherStore(object):
             """
             CREATE TEMPORARY TABLE [extracting]
             AS
-            SELECT [token] FROM [unblinded-tokens] LIMIT ?
+            SELECT [token] FROM [unblinded-tokens] ORDER BY [token] LIMIT ?
             """,
             (count,),
         )
