@@ -23,7 +23,9 @@ In the future it should also allow users to read statistics about token usage.
 from json import (
     loads, dumps,
 )
-
+from zope.interface import (
+    Attribute,
+)
 from twisted.logger import (
     Logger,
 )
@@ -31,6 +33,7 @@ from twisted.web.http import (
     BAD_REQUEST,
 )
 from twisted.web.resource import (
+    IResource,
     ErrorPage,
     NoResource,
     Resource,
@@ -42,8 +45,16 @@ from ._base64 import (
 
 from .controller import (
     PaymentController,
-    NonRedeemer,
+    get_redeemer,
 )
+
+class IZKAPRoot(IResource):
+    """
+    The root of the resource tree of this plugin's client web presence.
+    """
+    store = Attribute("The ``VoucherStore`` used by this resource tree.")
+    controller = Attribute("The ``PaymentController`` used by this resource tree.")
+
 
 def from_configuration(node_config, store, redeemer=None):
     """
@@ -63,13 +74,20 @@ def from_configuration(node_config, store, redeemer=None):
     :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
         sensible one is constructed.
 
-    :return IResource: The root of the resource hierarchy presented by the
+    :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
     if redeemer is None:
-        redeemer = NonRedeemer()
+        redeemer = get_redeemer(
+            u"privatestorageio-zkapauthz-v1",
+            node_config,
+            None,
+            None,
+        )
     controller = PaymentController(store, redeemer)
     root = Resource()
+    root.store = store
+    root.controller = controller
     root.putChild(
         b"voucher",
         _VoucherCollection(
@@ -78,8 +96,8 @@ def from_configuration(node_config, store, redeemer=None):
         ),
     )
     root.putChild(
-        b"blinded-token",
-        _BlindedTokenCollection(
+        b"unblinded-token",
+        _UnblindedTokenCollection(
             store,
             controller,
         ),
@@ -96,10 +114,10 @@ def application_json(request):
     request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
 
 
-class _BlindedTokenCollection(Resource):
+class _UnblindedTokenCollection(Resource):
     """
-    This class implements inspection of blinded tokens.  Users **GET** this
-    resource to find out about blinded tokens in the system.
+    This class implements inspection of unblinded tokens.  Users **GET** this
+    resource to find out about unblinded tokens in the system.
     """
     _log = Logger()
 
@@ -110,10 +128,15 @@ class _BlindedTokenCollection(Resource):
 
     def render_GET(self, request):
         """
-        Retrieve some blinded tokens and associated information.
+        Retrieve some unblinded tokens and associated information.
         """
         application_json(request)
-        return dumps({u"total": 0, u"blinded-tokens": []})
+        state = self._store.backup()
+        unblinded_tokens = state[u"unblinded-tokens"]
+        return dumps({
+            u"total": len(unblinded_tokens),
+            u"unblinded-tokens": unblinded_tokens,
+        })
 
 
 

@@ -44,6 +44,10 @@ from testtools import (
 from testtools.matchers import (
     MatchesStructure,
     MatchesAll,
+    AllMatch,
+    HasLength,
+    IsInstance,
+    ContainsDict,
     AfterPreprocessing,
     Equals,
     Always,
@@ -106,6 +110,8 @@ from ..resource import (
 
 from .strategies import (
     tahoe_configs,
+    client_dummyredeemer_configurations,
+    client_nonredeemer_configurations,
     vouchers,
     requests,
 )
@@ -234,8 +240,8 @@ class BlindedTokenTests(TestCase):
         self.useFixture(CaptureTwistedLogs())
 
 
-    @given(tahoe_configs())
-    def test_get(self, get_config):
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
+    def test_get(self, get_config, voucher, num_tokens):
         """
         When the blinded token collection receives a **GET**, the response is the
         total number of blinded tokens in the system and the blinded tokens
@@ -244,10 +250,20 @@ class BlindedTokenTests(TestCase):
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config)
+
+        if num_tokens:
+            # Put in a number of tokens with which to test.
+            redeeming = root.controller.redeem(voucher, num_tokens)
+            # Make sure the operation completed before proceeding.
+            self.assertThat(
+                redeeming,
+                succeeded(Always()),
+            )
+
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
-            b"http://127.0.0.1/blinded-token",
+            b"http://127.0.0.1/unblinded-token",
         )
         self.addDetail(
             u"requesting result",
@@ -261,11 +277,14 @@ class BlindedTokenTests(TestCase):
                     AfterPreprocessing(
                         json_content,
                         succeeded(
-                            Equals({
-                                u"total": 0,
-                                u"blinded-tokens": [],
+                            ContainsDict({
+                                u"total": Equals(num_tokens),
+                                u"unblinded-tokens": MatchesAll(
+                                    HasLength(num_tokens),
+                                    AllMatch(IsInstance(unicode)),
+                                ),
                             }),
-                        )
+                        ),
                     ),
                 ),
             ),
@@ -395,13 +414,31 @@ class VoucherTests(TestCase):
             ),
         )
 
-
-    @given(tahoe_configs(), vouchers())
-    def test_get_known_voucher(self, get_config, voucher):
+    @given(tahoe_configs(client_nonredeemer_configurations()), vouchers())
+    def test_get_known_voucher_unredeemed(self, get_config, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details about the
         voucher are included in a json-encoded response body.
+        """
+        return self._test_get_known_voucher(get_config, voucher, False)
+
+    @given(tahoe_configs(client_dummyredeemer_configurations()), vouchers())
+    def test_get_known_voucher_redeemed(self, get_config, voucher):
+        """
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details about the
+        voucher are included in a json-encoded response body.
+        """
+        return self._test_get_known_voucher(get_config, voucher, True)
+
+    def _test_get_known_voucher(self, get_config, voucher, redeemed):
+        """
+        Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
+        the JSON response.
+
+        :param bool redeemed: Whether the voucher is expected to be redeemed
+            or not in the response.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -442,7 +479,7 @@ class VoucherTests(TestCase):
                     AfterPreprocessing(
                         json_content,
                         succeeded(
-                            Equals(Voucher(voucher).marshal()),
+                            Equals(Voucher(voucher, redeemed=redeemed).marshal()),
                         ),
                     ),
                 ),
@@ -498,7 +535,7 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"vouchers": list(
-                                    Voucher(voucher).marshal()
+                                    Voucher(voucher, redeemed=True).marshal()
                                     for voucher
                                     in vouchers
                                 ),

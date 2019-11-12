@@ -419,6 +419,7 @@ class PaymentController(object):
             partial(self._redeemFailure, voucher),
         )
         d.addErrback(partial(self._finalRedeemError, voucher))
+        return d
 
     def _redeemSuccess(self, voucher, unblinded_tokens):
         """
