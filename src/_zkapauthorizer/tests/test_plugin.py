@@ -52,6 +52,7 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     just,
+    datetimes,
 )
 from foolscap.broker import (
     Broker,
@@ -97,6 +98,7 @@ from ..controller import (
 from .strategies import (
     minimal_tahoe_configs,
     tahoe_configs,
+    client_dummyredeemer_configurations,
     server_configurations,
     announcements,
     vouchers,
@@ -246,9 +248,7 @@ class ServerPluginTests(TestCase):
         )
 
 
-tahoe_configs_with_dummy_redeemer = minimal_tahoe_configs({
-    u"privatestorageio-zkapauthz-v1": just({u"redeemer": u"dummy"}),
-})
+tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
 
 tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs({
     u"privatestorageio-zkapauthz-v1": just({u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}),
@@ -310,6 +310,7 @@ class ClientPluginTests(TestCase):
 
     @given(
         tahoe_configs_with_dummy_redeemer,
+        datetimes(),
         announcements(),
         vouchers(),
         random_tokens(),
@@ -323,6 +324,7 @@ class ClientPluginTests(TestCase):
     def test_unblinded_tokens_extracted(
             self,
             get_config,
+            now,
             announcement,
             voucher,
             token,
@@ -343,7 +345,7 @@ class ClientPluginTests(TestCase):
             b"tub.port",
         )
 
-        store = VoucherStore.from_node_config(node_config)
+        store = VoucherStore.from_node_config(node_config, lambda: now)
         store.add(voucher, [token])
         store.insert_unblinded_tokens_for_voucher(voucher, [unblinded_token])
 
