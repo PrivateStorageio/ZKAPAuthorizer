@@ -221,6 +221,9 @@ def vouchers():
 
 
 def voucher_objects():
+    """
+    Build ``Voucher`` instances.
+    """
     return builds(
         Voucher,
         number=vouchers(),
