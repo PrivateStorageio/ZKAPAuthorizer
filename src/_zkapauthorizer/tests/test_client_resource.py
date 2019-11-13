@@ -27,6 +27,9 @@ from .._base64 import (
     urlsafe_b64decode,
 )
 
+from datetime import (
+    datetime,
+)
 from json import (
     dumps,
     loads,
@@ -50,6 +53,7 @@ from testtools.matchers import (
     IsInstance,
     ContainsDict,
     AfterPreprocessing,
+    Is,
     Equals,
     Always,
     GreaterThan,
@@ -78,6 +82,7 @@ from hypothesis.strategies import (
     integers,
     binary,
     text,
+    datetimes,
 )
 
 from twisted.internet.defer import (
@@ -201,11 +206,14 @@ def invalid_bodies():
     )
 
 
-def root_from_config(config):
+def root_from_config(config, now):
     """
     Create a client root resource from a Tahoe-LAFS configuration.
 
     :param _Config config: The Tahoe-LAFS configuration.
+
+    :param now: A no-argument callable that returns the time of the call as a
+        ``datetime`` instance.
 
     :return IResource: The root client resource.
     """
@@ -213,6 +221,7 @@ def root_from_config(config):
         config,
         VoucherStore.from_node_config(
             config,
+            now,
             memory_connect,
         ),
     )
@@ -230,7 +239,7 @@ class ResourceTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
         self.assertThat(
             getChildForRequest(root, request),
             Provides([IResource]),
@@ -256,7 +265,7 @@ class UnblindedTokenTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
 
         if num_tokens:
             # Put in a number of tokens with which to test.
@@ -290,7 +299,7 @@ class UnblindedTokenTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
 
         if num_tokens:
             # Put in a number of tokens with which to test.
@@ -324,7 +333,7 @@ class UnblindedTokenTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
 
         if num_tokens:
             # Put in a number of tokens with which to test.
@@ -389,7 +398,7 @@ class UnblindedTokenTests(TestCase):
 
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
 
         # Put in a number of tokens with which to test.
         redeeming = root.controller.redeem(voucher, num_tokens)
@@ -481,7 +490,7 @@ class VoucherTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
             BytesIO(dumps({u"voucher": voucher})),
@@ -512,7 +521,7 @@ class VoucherTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         producer = FileBodyProducer(
             BytesIO(body),
@@ -542,7 +551,7 @@ class VoucherTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         url = u"http://127.0.0.1/voucher/{}".format(
             quote(
@@ -571,7 +580,7 @@ class VoucherTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
@@ -584,25 +593,25 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_nonredeemer_configurations()), vouchers())
-    def test_get_known_voucher_unredeemed(self, get_config, voucher):
+    @given(tahoe_configs(client_nonredeemer_configurations()), datetimes(), vouchers())
+    def test_get_known_voucher_unredeemed(self, get_config, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details about the
         voucher are included in a json-encoded response body.
         """
-        return self._test_get_known_voucher(get_config, voucher, False)
+        return self._test_get_known_voucher(get_config, now, voucher, False)
 
-    @given(tahoe_configs(client_dummyredeemer_configurations()), vouchers())
-    def test_get_known_voucher_redeemed(self, get_config, voucher):
+    @given(tahoe_configs(client_dummyredeemer_configurations()), datetimes(), vouchers())
+    def test_get_known_voucher_redeemed(self, get_config, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details about the
         voucher are included in a json-encoded response body.
         """
-        return self._test_get_known_voucher(get_config, voucher, True)
+        return self._test_get_known_voucher(get_config, now, voucher, True)
 
-    def _test_get_known_voucher(self, get_config, voucher, redeemed):
+    def _test_get_known_voucher(self, get_config, now, voucher, redeemed):
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
@@ -612,7 +621,7 @@ class VoucherTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, lambda: now)
         agent = RequestTraversalAgent(root)
 
         producer = FileBodyProducer(
@@ -640,6 +649,12 @@ class VoucherTests(TestCase):
                 ).decode("utf-8"),
             ).encode("ascii"),
         )
+        if redeemed:
+            # Value duplicated from PaymentController.redeem default.  Should
+            # do this better.
+            token_count_comparison = Equals(100)
+        else:
+            token_count_comparison = Is(None)
 
         self.assertThat(
             getting,
@@ -647,17 +662,25 @@ class VoucherTests(TestCase):
                 MatchesAll(
                     ok_response(headers=application_json()),
                     AfterPreprocessing(
-                        json_content,
+                        readBody,
                         succeeded(
-                            Equals(Voucher(voucher, redeemed=redeemed).marshal()),
+                            AfterPreprocessing(
+                                Voucher.from_json,
+                                MatchesStructure(
+                                    number=Equals(voucher),
+                                    created=Equals(now),
+                                    redeemed=Equals(redeemed),
+                                    token_count=token_count_comparison,
+                                ),
+                            ),
                         ),
                     ),
                 ),
             ),
         )
 
-    @given(tahoe_configs(), lists(vouchers(), unique=True))
-    def test_list_vouchers(self, get_config, vouchers):
+    @given(tahoe_configs(), datetimes(), lists(vouchers(), unique=True))
+    def test_list_vouchers(self, get_config, now, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
@@ -668,7 +691,7 @@ class VoucherTests(TestCase):
         # state behind that invalidates future iterations.
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config)
+        root = root_from_config(config, lambda: now)
         agent = RequestTraversalAgent(root)
 
         note("{} vouchers".format(len(vouchers)))
@@ -705,7 +728,15 @@ class VoucherTests(TestCase):
                         succeeded(
                             Equals({
                                 u"vouchers": list(
-                                    Voucher(voucher, redeemed=True).marshal()
+                                    Voucher(
+                                        voucher,
+                                        created=now,
+                                        redeemed=True,
+                                        # Value duplicated from
+                                        # PaymentController.redeem default.
+                                        # Should do this better.
+                                        token_count=100,
+                                    ).marshal()
                                     for voucher
                                     in vouchers
                                 ),

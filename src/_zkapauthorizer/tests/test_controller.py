@@ -58,6 +58,7 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     integers,
+    datetimes,
 )
 from twisted.python.url import (
     URL,
@@ -116,8 +117,8 @@ class PaymentControllerTests(TestCase):
     """
     Tests for ``PaymentController``.
     """
-    @given(tahoe_configs(), vouchers())
-    def test_not_redeemed_while_redeeming(self, get_config, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_not_redeemed_while_redeeming(self, get_config, now, voucher):
         """
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
         completes.
@@ -128,6 +129,7 @@ class PaymentControllerTests(TestCase):
                 tempdir.join(b"node"),
                 b"tub.port",
             ),
+            now=lambda: now,
             connect=memory_connect,
         )
         controller = PaymentController(
@@ -142,14 +144,15 @@ class PaymentControllerTests(TestCase):
             Equals(False),
         )
 
-    @given(tahoe_configs(), vouchers())
-    def test_redeemed_after_redeeming(self, get_config, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_redeemed_after_redeeming(self, get_config, now, voucher):
         tempdir = self.useFixture(TempDir())
         store = VoucherStore.from_node_config(
             get_config(
                 tempdir.join(b"node"),
                 b"tub.port",
             ),
+            now=lambda: now,
             connect=memory_connect,
         )
         controller = PaymentController(

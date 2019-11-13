@@ -20,6 +20,9 @@ Tahoe-LAFS.
 from weakref import (
     WeakValueDictionary,
 )
+from datetime import (
+    datetime,
+)
 
 import attr
 
@@ -93,7 +96,7 @@ class ZKAPAuthorizer(object):
         try:
             s = self._stores[key]
         except KeyError:
-            s = VoucherStore.from_node_config(node_config)
+            s = VoucherStore.from_node_config(node_config, datetime.now)
             self._stores[key] = s
         return s
 

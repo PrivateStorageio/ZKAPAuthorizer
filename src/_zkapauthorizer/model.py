@@ -24,7 +24,9 @@ from json import (
     loads,
     dumps,
 )
-
+from datetime import (
+    datetime,
+)
 from sqlite3 import (
     OperationalError,
     connect as _connect,
@@ -32,6 +34,9 @@ from sqlite3 import (
 
 import attr
 
+from aniso8601 import (
+    parse_datetime,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -117,7 +122,10 @@ def open_and_initialize(path, required_schema_version, connect=None):
             """
             CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
-                [redeemed] num DEFAULT 0,
+                [created] text,                     -- An ISO8601 date+time string.
+                [redeemed] num DEFAULT 0,           -- 0 if the voucher has not been redeemed, 1 otherwise.
+                [token-count] num DEFAULT NULL,     -- NULL if the voucher has not been redeemed,
+                                                    -- a number of tokens received on its redemption otherwise.
 
                 PRIMARY KEY([number])
             )
@@ -168,18 +176,25 @@ class VoucherStore(object):
 
     :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
         the node that owns the persisted vouchers.
+
+    :ivar now: A no-argument callable that returns the time of the call as a
+        ``datetime`` instance.
     """
     database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
+    now = attr.ib()
+
     _connection = attr.ib()
 
     @classmethod
-    def from_node_config(cls, node_config, connect=None):
+    def from_node_config(cls, node_config, now, connect=None):
         """
         Create or open the ``VoucherStore`` for a given node.
 
         :param allmydata.node._Config node_config: The Tahoe-LAFS
             configuration object for the node for which we want to open a
             store.
+
+        :param now: See ``VoucherStore.now``.
 
         :param connect: An alternate database connection function.  This is
             primarily for the purposes of the test suite.
@@ -192,6 +207,7 @@ class VoucherStore(object):
         )
         return cls(
             db_path,
+            now,
             conn,
         )
 
@@ -205,7 +221,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [redeemed]
+                [number], [created], [redeemed], [token-count]
             FROM
                 [vouchers]
             WHERE
@@ -216,7 +232,7 @@ class VoucherStore(object):
         refs = cursor.fetchall()
         if len(refs) == 0:
             raise KeyError(voucher)
-        return Voucher(refs[0][0], bool(refs[0][1]))
+        return Voucher.from_row(refs[0])
 
     @with_cursor
     def add(self, cursor, voucher, tokens):
@@ -228,11 +244,15 @@ class VoucherStore(object):
 
         :param list[RandomToken]: The tokens to add alongside the voucher.
         """
+        now = self.now()
+        if not isinstance(now, datetime):
+            raise TypeError("{} returned {}, expected datetime".format(self.now, now))
+
         cursor.execute(
             """
-            INSERT OR IGNORE INTO [vouchers] ([number]) VALUES (?)
+            INSERT OR IGNORE INTO [vouchers] ([number], [created]) VALUES (?, ?)
             """,
-            (voucher,)
+            (voucher, self.now())
         )
         if cursor.rowcount:
             # Something was inserted.  Insert the tokens, too.  It's okay to
@@ -259,14 +279,14 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [number], [redeemed] FROM [vouchers]
+            SELECT [number], [created], [redeemed], [token-count] FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
 
         return list(
-            Voucher(number, bool(redeemed))
-            for (number, redeemed)
+            Voucher.from_row(row)
+            for row
             in refs
         )
 
@@ -294,9 +314,12 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            UPDATE [vouchers] SET [redeemed] = 1 WHERE [number] = ?
+            UPDATE [vouchers]
+            SET [redeemed] = 1
+              , [token-count] = ?
+            WHERE [number] = ?
             """,
-            (voucher,),
+            (len(unblinded_tokens), voucher),
         )
 
     @with_cursor
@@ -395,8 +418,38 @@ class RandomToken(object):
 
 @attr.s
 class Voucher(object):
+    """
+    :ivar unicode number: The text string which gives this voucher its
+        identity.
+
+    :ivar datetime created: The time at which this voucher was added to this
+        node.
+
+    :ivar bool redeemed: ``True`` if this voucher has successfully been
+        redeemed with a payment server, ``False`` otherwise.
+
+    :ivar int token_count: A number of tokens received from the redemption of
+        this voucher if it has been redeemed, ``None`` if it has not been
+        redeemed.
+    """
     number = attr.ib()
+    created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
     redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of((int, long))))
+
+    @classmethod
+    def from_row(cls, row):
+        return cls(
+            row[0],
+            # All Python datetime-based date/time libraries fail to handle
+            # leap seconds.  This parse call might raise an exception of the
+            # value represents a leap second.  However, since we also use
+            # Python to generate the data in the first place, it should never
+            # represent a leap second... I hope.
+            parse_datetime(row[1], delimiter=u" "),
+            bool(row[2]),
+            row[3],
+        )
 
     @classmethod
     def from_json(cls, json):
@@ -407,7 +460,12 @@ class Voucher(object):
 
     @classmethod
     def from_json_v1(cls, values):
-        return cls(**values)
+        return cls(
+            number=values[u"number"],
+            created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
+            redeemed=values[u"redeemed"],
+            token_count=values[u"token-count"],
+        )
 
 
     def to_json(self):
@@ -419,6 +477,10 @@ class Voucher(object):
 
 
     def to_json_v1(self):
-        result = attr.asdict(self)
-        result[u"version"] = 1
-        return result
+        return {
+            u"number": self.number,
+            u"created": None if self.created is None else self.created.isoformat(),
+            u"redeemed": self.redeemed,
+            u"token-count": self.token_count,
+            u"version": 1,
+        }

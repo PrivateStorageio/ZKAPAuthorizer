@@ -1,5 +1,5 @@
 { buildPythonPackage, sphinx, circleci-cli
-, attrs, zope_interface, twisted, tahoe-lafs, privacypass
+, attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass
 , fixtures, testtools, hypothesis, pyflakes, treq, coverage
 , hypothesisProfile ? null
 , collectCoverage ? false
@@ -27,6 +27,7 @@ buildPythonPackage rec {
   propagatedBuildInputs = [
     attrs
     zope_interface
+    aniso8601
     twisted
     tahoe-lafs
     privacypass
