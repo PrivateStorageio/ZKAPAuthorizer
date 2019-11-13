@@ -53,8 +53,8 @@ from testtools.matchers import (
     IsInstance,
     ContainsDict,
     AfterPreprocessing,
+    Is,
     Equals,
-    NotEquals,
     Always,
     GreaterThan,
 )
@@ -650,9 +650,11 @@ class VoucherTests(TestCase):
             ).encode("ascii"),
         )
         if redeemed:
-            token_count_comparison = NotEquals
+            # Value duplicated from PaymentController.redeem default.  Should
+            # do this better.
+            token_count_comparison = Equals(100)
         else:
-            token_count_comparison = Equals
+            token_count_comparison = Is(None)
 
         self.assertThat(
             getting,
@@ -668,7 +670,7 @@ class VoucherTests(TestCase):
                                     number=Equals(voucher),
                                     created=Equals(now),
                                     redeemed=Equals(redeemed),
-                                    token_count=token_count_comparison(None),
+                                    token_count=token_count_comparison,
                                 ),
                             ),
                         ),
