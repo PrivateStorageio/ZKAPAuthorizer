@@ -72,6 +72,7 @@ from ..model import (
 from .strategies import (
     tahoe_configs,
     vouchers,
+    voucher_objects,
     random_tokens,
     unblinded_tokens,
 )
@@ -261,15 +262,14 @@ class VoucherTests(TestCase):
     """
     Tests for ``Voucher``.
     """
-    @given(vouchers())
-    def test_json_roundtrip(self, voucher):
+    @given(voucher_objects())
+    def test_json_roundtrip(self, reference):
         """
         ``Voucher.to_json . Voucher.from_json → id``
         """
-        ref = Voucher(voucher)
         self.assertThat(
-            Voucher.from_json(ref.to_json()),
-            Equals(ref),
+            Voucher.from_json(reference.to_json()),
+            Equals(reference),
         )
 
 

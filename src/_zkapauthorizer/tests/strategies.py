@@ -25,6 +25,8 @@ import attr
 from hypothesis.strategies import (
     one_of,
     just,
+    none,
+    booleans,
     binary,
     characters,
     text,
@@ -35,6 +37,7 @@ from hypothesis.strategies import (
     dictionaries,
     fixed_dictionaries,
     builds,
+    datetimes,
 )
 
 from twisted.web.test.requesthelper import (
@@ -52,7 +55,8 @@ from allmydata.client import (
 from ..model import (
     Pass,
     RandomToken,
-    UnblindedToken
+    UnblindedToken,
+    Voucher,
 )
 
 
@@ -213,6 +217,16 @@ def vouchers():
         urlsafe_b64encode,
     ).map(
         lambda voucher: voucher.decode("ascii"),
+    )
+
+
+def voucher_objects():
+    return builds(
+        Voucher,
+        number=vouchers(),
+        created=one_of(none(), datetimes()),
+        redeemed=booleans(),
+        token_count=one_of(none(), integers(min_value=1)),
     )
 
 
