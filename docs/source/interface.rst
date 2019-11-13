@@ -32,11 +32,15 @@ If the voucher is not known then the response is **NOT FOUND**.
 For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  {"value": <string>, "created": <iso8601 timestamp>, "redeemed": bool, "version": 1}
+  {"value": <string>, "created": <iso8601 timestamp>, "redeemed": <boolean>, "token-count": <number>, "version": 1}
 
 The ``value`` property merely indicates the voucher which was requested.
 The ``created`` property indicates when the voucher was first added to the node.
 The ``redeemed`` property indicates whether or not the voucher has successfully been redeemed with a payment server yet.
+The ``token-count`` property gives the number of blinded token signatures the client received in exchange for redemption of the voucher
+(each blinded token signature can be used to construct a one ZKAP),
+if it has been redeemed.
+If it has not been redeemed then it is ``null``.
 
 The ``version`` property indicates the semantic version of the data being returned.
 When properties are removed or the meaning of a property is changed,

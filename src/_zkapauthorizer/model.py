@@ -464,7 +464,7 @@ class Voucher(object):
             number=values[u"number"],
             created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
             redeemed=values[u"redeemed"],
-            token_count=values[u"token_count"],
+            token_count=values[u"token-count"],
         )
 
 
@@ -481,6 +481,6 @@ class Voucher(object):
             u"number": self.number,
             u"created": None if self.created is None else self.created.isoformat(),
             u"redeemed": self.redeemed,
-            u"token_count": self.token_count,
+            u"token-count": self.token_count,
             u"version": 1,
         }
