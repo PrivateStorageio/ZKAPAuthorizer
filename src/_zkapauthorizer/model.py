@@ -413,6 +413,16 @@ class RandomToken(object):
 
 @attr.s
 class Voucher(object):
+    """
+    :ivar unicode number: The text string which gives this voucher its
+        identity.
+
+    :ivar datetime created: The time at which this voucher was added to this
+        node.
+
+    :ivar bool redeemed: ``True`` if this voucher has successfully been
+        redeemed with a payment server, ``False`` otherwise.
+    """
     number = attr.ib()
     created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
     redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
