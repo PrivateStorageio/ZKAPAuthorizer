@@ -48,9 +48,12 @@ from fixtures import (
 from hypothesis import (
     given,
 )
+
 from hypothesis.strategies import (
+    data,
     lists,
     datetimes,
+    integers,
 )
 
 from twisted.python.filepath import (
@@ -155,6 +158,8 @@ class VoucherStoreTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
+                redeemed=Equals(False),
+                token_count=Equals(None),
             ),
         )
 
@@ -292,12 +297,35 @@ class UnblindedTokenStoreTests(TestCase):
         more_unblinded_tokens = store.extract_unblinded_tokens(1)
         self.expectThat([], Equals(more_unblinded_tokens))
 
-    @given(tahoe_configs(), datetimes(), vouchers(), random_tokens(), unblinded_tokens())
-    def test_mark_vouchers_redeemed(self, get_config, now, voucher_value, token, one_token):
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        integers(min_value=1, max_value=100),
+        data(),
+    )
+    def test_mark_vouchers_redeemed(self, get_config, now, voucher_value, num_tokens, data):
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
         """
+        random = data.draw(
+            lists(
+                random_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+        unblinded = data.draw(
+            lists(
+                unblinded_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"node"), b"tub.port")
         store = VoucherStore.from_node_config(
@@ -305,7 +333,13 @@ class UnblindedTokenStoreTests(TestCase):
             lambda: now,
             memory_connect,
         )
-        store.add(voucher_value, [token])
-        store.insert_unblinded_tokens_for_voucher(voucher_value, [one_token])
+        store.add(voucher_value, random)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         loaded_voucher = store.get(voucher_value)
-        self.assertThat(loaded_voucher.redeemed, Equals(True))
+        self.assertThat(
+            loaded_voucher,
+            MatchesStructure(
+                redeemed=Equals(True),
+                token_count=Equals(num_tokens),
+            ),
+        )

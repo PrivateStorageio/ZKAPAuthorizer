@@ -122,8 +122,10 @@ def open_and_initialize(path, required_schema_version, connect=None):
             """
             CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
-                [created] text,            -- An ISO8601 date+time string.
-                [redeemed] num DEFAULT 0,
+                [created] text,                     -- An ISO8601 date+time string.
+                [redeemed] num DEFAULT 0,           -- 0 if the voucher has not been redeemed, 1 otherwise.
+                [token-count] num DEFAULT NULL,     -- NULL if the voucher has not been redeemed,
+                                                    -- a number of tokens received on its redemption otherwise.
 
                 PRIMARY KEY([number])
             )
@@ -219,7 +221,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [redeemed]
+                [number], [created], [redeemed], [token-count]
             FROM
                 [vouchers]
             WHERE
@@ -277,7 +279,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [number], [created], [redeemed] FROM [vouchers]
+            SELECT [number], [created], [redeemed], [token-count] FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
@@ -312,9 +314,12 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            UPDATE [vouchers] SET [redeemed] = 1 WHERE [number] = ?
+            UPDATE [vouchers]
+            SET [redeemed] = 1
+              , [token-count] = ?
+            WHERE [number] = ?
             """,
-            (voucher,),
+            (len(unblinded_tokens), voucher),
         )
 
     @with_cursor
@@ -422,14 +427,18 @@ class Voucher(object):
 
     :ivar bool redeemed: ``True`` if this voucher has successfully been
         redeemed with a payment server, ``False`` otherwise.
+
+    :ivar int token_count: A number of tokens received from the redemption of
+        this voucher if it has been redeemed, ``None`` if it has not been
+        redeemed.
     """
     number = attr.ib()
     created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
     redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
 
     @classmethod
     def from_row(cls, row):
-        print(row[1])
         return cls(
             row[0],
             # All Python datetime-based date/time libraries fail to handle
@@ -439,6 +448,7 @@ class Voucher(object):
             # represent a leap second... I hope.
             parse_datetime(row[1], delimiter=u" "),
             bool(row[2]),
+            row[3],
         )
 
     @classmethod
