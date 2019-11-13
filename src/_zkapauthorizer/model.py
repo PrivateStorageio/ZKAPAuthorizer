@@ -435,7 +435,7 @@ class Voucher(object):
     number = attr.ib()
     created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
     redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
-    token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
+    token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of((int, long))))
 
     @classmethod
     def from_row(cls, row):
