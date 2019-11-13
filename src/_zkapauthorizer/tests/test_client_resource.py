@@ -54,6 +54,7 @@ from testtools.matchers import (
     ContainsDict,
     AfterPreprocessing,
     Equals,
+    NotEquals,
     Always,
     GreaterThan,
 )
@@ -648,6 +649,10 @@ class VoucherTests(TestCase):
                 ).decode("utf-8"),
             ).encode("ascii"),
         )
+        if redeemed:
+            token_count_comparison = NotEquals
+        else:
+            token_count_comparison = Equals
 
         self.assertThat(
             getting,
@@ -655,13 +660,17 @@ class VoucherTests(TestCase):
                 MatchesAll(
                     ok_response(headers=application_json()),
                     AfterPreprocessing(
-                        json_content,
+                        readBody,
                         succeeded(
-                            Equals(Voucher(
-                                voucher,
-                                created=now,
-                                redeemed=redeemed,
-                            ).marshal()),
+                            AfterPreprocessing(
+                                Voucher.from_json,
+                                MatchesStructure(
+                                    number=Equals(voucher),
+                                    created=Equals(now),
+                                    redeemed=Equals(redeemed),
+                                    token_count=token_count_comparison(None),
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -721,6 +730,10 @@ class VoucherTests(TestCase):
                                         voucher,
                                         created=now,
                                         redeemed=True,
+                                        # Value duplicated from
+                                        # PaymentController.redeem default.
+                                        # Should do this better.
+                                        token_count=100,
                                     ).marshal()
                                     for voucher
                                     in vouchers
