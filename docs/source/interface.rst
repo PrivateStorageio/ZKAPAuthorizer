@@ -52,9 +52,13 @@ The following values are possible::
   { "name": "pending"
   }
 
+::
+
   { "name": "redeeming"
   , "started": <iso8601 timestamp>
   }
+
+::
 
   { "name": "error"
   , "started": <iso8601 timestamp>
@@ -63,15 +67,21 @@ The following values are possible::
   , "error-details": <text>
   }
 
+::
+
   { "name": "unpaid"
   , "started": <iso8601 timestamp>
   , "error-at": <iso8601 timestamp>
   }
 
+::
+
   { "name": "double-spend"
   , "started": <iso8601 timestamp>
   , "error-at": <iso8601 timestamp>
   }
+
+::
 
   { "name": "redeemed"
   , "started": <iso8601 timestamp>
