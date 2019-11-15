@@ -96,7 +96,7 @@ from ..controller import (
     IRedeemer,
     NonRedeemer,
     DummyRedeemer,
-    DoubleSpentRedeemer,
+    DoubleSpendRedeemer,
     RistrettoRedeemer,
     PaymentController,
     AlreadySpent,
@@ -191,7 +191,7 @@ class PaymentControllerTests(TestCase):
         )
         controller = PaymentController(
             store,
-            DoubleSpentRedeemer(),
+            DoubleSpendRedeemer(),
         )
         controller.redeem(voucher)
 

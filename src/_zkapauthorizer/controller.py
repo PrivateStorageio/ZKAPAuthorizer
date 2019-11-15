@@ -163,11 +163,15 @@ class NonRedeemer(object):
 
 @implementer(IRedeemer)
 @attr.s
-class DoubleSpentRedeemer(object):
+class DoubleSpendRedeemer(object):
     """
-    A ``DoubleSpentRedeemer`` pretends to try to redeem vouchers for ZKAPs but
+    A ``DoubleSpendRedeemer`` pretends to try to redeem vouchers for ZKAPs but
     always fails with an error indicating the voucher has already been spent.
     """
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls()
+
     def random_tokens_for_voucher(self, voucher, count):
         return dummy_random_tokens(voucher, count)
 
@@ -495,5 +499,6 @@ def get_redeemer(plugin_name, node_config, announcement, reactor):
 _REDEEMERS = {
     u"non": NonRedeemer.make,
     u"dummy": DummyRedeemer.make,
+    u"double-spend": DoubleSpendRedeemer.make,
     u"ristretto": RistrettoRedeemer.make,
 }
