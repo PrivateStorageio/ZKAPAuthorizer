@@ -56,6 +56,9 @@ from ..model import (
     RandomToken,
     UnblindedToken,
     Voucher,
+    Pending,
+    DoubleSpend,
+    Redeemed,
 )
 
 
@@ -233,9 +236,16 @@ def voucher_states():
     Build unicode strings giving states a Voucher can be in.
     """
     return one_of(
-        just(u"pending"),
-        just(u"double-spend"),
-        just(u"redeemed"),
+        just(Pending()),
+        builds(
+            DoubleSpend,
+            finished=datetimes(),
+        ),
+        builds(
+            Redeemed,
+            finished=datetimes(),
+            token_count=one_of(integers(min_value=1)),
+        ),
     )
 
 
@@ -248,7 +258,6 @@ def voucher_objects():
         number=vouchers(),
         created=one_of(none(), datetimes()),
         state=voucher_states(),
-        token_count=one_of(none(), integers(min_value=1)),
     )
 
 

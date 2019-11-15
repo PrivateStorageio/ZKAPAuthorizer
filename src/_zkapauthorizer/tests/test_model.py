@@ -65,6 +65,9 @@ from ..model import (
     StoreOpenError,
     VoucherStore,
     Voucher,
+    Pending,
+    DoubleSpend,
+    Redeemed,
     open_and_initialize,
     memory_connect,
 )
@@ -122,7 +125,7 @@ class VoucherStoreTests(TestCase):
             store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
-                state=Equals(u"pending"),
+                state=Equals(Pending()),
                 created=Equals(now),
             ),
         )
@@ -141,8 +144,7 @@ class VoucherStoreTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(u"pending"),
-                token_count=Equals(None),
+                state=Equals(Pending()),
             ),
         )
 
@@ -302,8 +304,10 @@ class UnblindedTokenStoreTests(TestCase):
         self.assertThat(
             loaded_voucher,
             MatchesStructure(
-                state=Equals(u"redeemed"),
-                token_count=Equals(num_tokens),
+                state=Equals(Redeemed(
+                    finished=now,
+                    token_count=num_tokens,
+                )),
             ),
         )
 
@@ -325,7 +329,9 @@ class UnblindedTokenStoreTests(TestCase):
         self.assertThat(
             voucher,
             MatchesStructure(
-                state=Equals(u"double-spend"),
+                state=Equals(DoubleSpend(
+                    finished=now,
+                )),
             ),
         )
 

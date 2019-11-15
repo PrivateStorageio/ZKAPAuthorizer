@@ -53,7 +53,6 @@ from testtools.matchers import (
     IsInstance,
     ContainsDict,
     AfterPreprocessing,
-    Is,
     Equals,
     Always,
     GreaterThan,
@@ -113,6 +112,9 @@ from treq.testing import (
 
 from ..model import (
     Voucher,
+    Pending,
+    Redeemed,
+    DoubleSpend,
     VoucherStore,
     memory_connect,
 )
@@ -609,8 +611,7 @@ class VoucherTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(u"pending"),
-                token_count=Is(None),
+                state=Equals(Pending()),
             ),
         )
 
@@ -629,10 +630,12 @@ class VoucherTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(u"redeemed"),
-                # Value duplicated from PaymentController.redeem default.
-                # Should do this better.
-                token_count=Equals(100),
+                state=Equals(Redeemed(
+                    finished=now,
+                    # Value duplicated from PaymentController.redeem default.
+                    # Should do this better.
+                    token_count=100,
+                )),
             ),
         )
 
@@ -652,8 +655,9 @@ class VoucherTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(u"double-spend"),
-                token_count=Is(None),
+                state=Equals(DoubleSpend(
+                    finished=now,
+                )),
             ),
         )
 
@@ -765,11 +769,13 @@ class VoucherTests(TestCase):
                                     Voucher(
                                         voucher,
                                         created=now,
-                                        state=u"redeemed",
-                                        # Value duplicated from
-                                        # PaymentController.redeem default.
-                                        # Should do this better.
-                                        token_count=100,
+                                        state=Redeemed(
+                                            finished=now,
+                                            # Value duplicated from
+                                            # PaymentController.redeem
+                                            # default.  Should do this better.
+                                            token_count=100,
+                                        ),
                                     ).marshal()
                                     for voucher
                                     in vouchers

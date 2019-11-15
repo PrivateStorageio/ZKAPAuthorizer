@@ -126,7 +126,10 @@ def open_and_initialize(path, required_schema_version, connect=None):
                 [created] text,                     -- An ISO8601 date+time string.
                 [state] text DEFAULT "pending",     -- pending, double-spend, redeemed
 
-                [token-count] num DEFAULT NULL,     -- Set in the redeemed state to  the number
+                [finished] text DEFAULT NULL,       -- ISO8601 date+time string when
+                                                    -- the current terminal state was entered.
+
+                [token-count] num DEFAULT NULL,     -- Set in the redeemed state to the number
                                                     -- of tokens received on this voucher's
                                                     -- redemption.
 
@@ -224,7 +227,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [token-count]
+                [number], [created], [state], [finished], [token-count]
             FROM
                 [vouchers]
             WHERE
@@ -282,7 +285,10 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [number], [created], [state], [token-count] FROM [vouchers]
+            SELECT
+                [number], [created], [state], [finished], [token-count]
+            FROM
+                [vouchers]
             """,
         )
         refs = cursor.fetchall()
@@ -320,9 +326,10 @@ class VoucherStore(object):
             UPDATE [vouchers]
             SET [state] = "redeemed"
               , [token-count] = ?
+              , [finished] = ?
             WHERE [number] = ?
             """,
-            (len(unblinded_tokens), voucher),
+            (len(unblinded_tokens), self.now(), voucher),
         )
 
     @with_cursor
@@ -335,10 +342,11 @@ class VoucherStore(object):
             """
             UPDATE [vouchers]
             SET [state] = "double-spend"
+              , [finished] = ?
             WHERE [number] = ?
               AND [state] = "pending"
             """,
-            (voucher,)
+            (self.now(), voucher),
         )
         if cursor.rowcount == 0:
             # Was there no matching voucher or was it in the wrong state?
@@ -456,6 +464,22 @@ class RandomToken(object):
     token_value = attr.ib(validator=attr.validators.instance_of(unicode))
 
 
+@attr.s(frozen=True)
+class Pending(object):
+    pass
+
+
+@attr.s(frozen=True)
+class Redeemed(object):
+    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+
+
+@attr.s(frozen=True)
+class DoubleSpend(object):
+    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+
+
 @attr.s
 class Voucher(object):
     """
@@ -473,22 +497,38 @@ class Voucher(object):
         redeemed.
     """
     number = attr.ib()
-    created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
-    state = attr.ib(default=u"pending", validator=attr.validators.in_((u"pending", u"double-spend", u"redeemed")))
-    token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of((int, long))))
+    created = attr.ib(
+        default=None,
+        validator=attr.validators.optional(attr.validators.instance_of(datetime)),
+    )
+    state = attr.ib(default=Pending())
 
     @classmethod
     def from_row(cls, row):
+        def state_from_row(state, row):
+            if state == u"pending":
+                return Pending()
+            if state == u"double-spend":
+                return DoubleSpend(
+                    parse_datetime(row[0], delimiter=u" "),
+                )
+            if state == u"redeemed":
+                return Redeemed(
+                    parse_datetime(row[0], delimiter=u" "),
+                    row[1],
+                )
+            raise ValueError("Unknown voucher state {}".format(state))
+
+        number, created, state = row[:3]
         return cls(
-            row[0],
+            number,
             # All Python datetime-based date/time libraries fail to handle
             # leap seconds.  This parse call might raise an exception of the
             # value represents a leap second.  However, since we also use
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
-            parse_datetime(row[1], delimiter=u" "),
-            row[2],
-            row[3],
+            parse_datetime(created, delimiter=u" "),
+            state_from_row(state, row[3:])
         )
 
     @classmethod
@@ -500,11 +540,26 @@ class Voucher(object):
 
     @classmethod
     def from_json_v1(cls, values):
+        state_json = values[u"state"]
+        state_name = state_json[u"name"]
+        if state_name == u"pending":
+            state = Pending()
+        elif state_name == u"double-spend":
+            state = DoubleSpend(
+                finished=parse_datetime(state_json[u"finished"]),
+            )
+        elif state_name == u"redeemed":
+            state = Redeemed(
+                finished=parse_datetime(state_json[u"finished"]),
+                token_count=state_json[u"token-count"],
+            )
+        else:
+            raise ValueError("Unrecognized state {}".format(state_json))
+
         return cls(
             number=values[u"number"],
             created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
-            state=values[u"state"],
-            token_count=values[u"token-count"],
+            state=state,
         )
 
 
@@ -517,10 +572,24 @@ class Voucher(object):
 
 
     def to_json_v1(self):
+        if isinstance(self.state, Pending):
+            state = {
+                u"name": u"pending",
+            }
+        elif isinstance(self.state, DoubleSpend):
+            state = {
+                u"name": u"double-spend",
+                u"finished": self.state.finished.isoformat(),
+            }
+        elif isinstance(self.state, Redeemed):
+            state = {
+                u"name": u"redeemed",
+                u"finished": self.state.finished.isoformat(),
+                u"token-count": self.state.token_count,
+            }
         return {
             u"number": self.number,
             u"created": None if self.created is None else self.created.isoformat(),
-            u"state": self.state,
-            u"token-count": self.token_count,
+            u"state": state,
             u"version": 1,
         }
