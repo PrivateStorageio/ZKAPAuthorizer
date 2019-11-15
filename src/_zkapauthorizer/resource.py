@@ -211,7 +211,8 @@ class _VoucherCollection(Resource):
             voucher = self._store.get(voucher)
         except KeyError:
             return NoResource()
-        return VoucherView(voucher)
+        # TODO Apply the same treatment to the list result
+        return VoucherView(self._controller.incorporate_transient_state(voucher))
 
 
 def is_syntactic_voucher(voucher):

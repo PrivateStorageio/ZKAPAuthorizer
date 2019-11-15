@@ -394,6 +394,9 @@ class UnblindedTokenStoreTests(TestCase):
             self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
 
 
+    # TODO: Other error states and transient states
+
+
 def store_for_test(testcase, get_config, get_now):
     """
     Create a ``VoucherStore`` in a temporary directory associated with the

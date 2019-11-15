@@ -480,6 +480,16 @@ class DoubleSpend(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
 
 
+@attr.s(frozen=True)
+class Unpaid(object):
+    """
+    This is a non-persistent state in which a voucher exists when the database
+    state is **pending** but the most recent redemption attempt has failed due
+    to lack of payment.
+    """
+    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+
+
 @attr.s
 class Voucher(object):
     """
@@ -553,8 +563,12 @@ class Voucher(object):
                 finished=parse_datetime(state_json[u"finished"]),
                 token_count=state_json[u"token-count"],
             )
+        elif state_name == u"unpaid":
+            state = Unpaid(
+                finished=parse_datetime(state_json[u"finished"]),
+            )
         else:
-            raise ValueError("Unrecognized state {}".format(state_json))
+            raise ValueError("Unrecognized state {!r}".format(state_json))
 
         return cls(
             number=values[u"number"],
@@ -587,6 +601,13 @@ class Voucher(object):
                 u"finished": self.state.finished.isoformat(),
                 u"token-count": self.state.token_count,
             }
+        elif isinstance(self.state, Unpaid):
+            state = {
+                u"name": u"unpaid",
+                u"finished": self.state.finished.isoformat(),
+            }
+        else:
+            raise ValueError("Unrecognized state {!r}".format(self.state.__class__))
         return {
             u"number": self.number,
             u"created": None if self.created is None else self.created.isoformat(),

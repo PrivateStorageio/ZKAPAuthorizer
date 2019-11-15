@@ -115,6 +115,7 @@ from ..model import (
     Pending,
     Redeemed,
     DoubleSpend,
+    Unpaid,
     VoucherStore,
     memory_connect,
 )
@@ -124,6 +125,7 @@ from ..resource import (
 
 from .strategies import (
     tahoe_configs,
+    client_unpaidredeemer_configurations,
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
     client_nonredeemer_configurations,
@@ -656,6 +658,28 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 created=Equals(now),
                 state=Equals(DoubleSpend(
+                    finished=now,
+                )),
+            ),
+        )
+
+    @given(tahoe_configs(client_unpaidredeemer_configurations()), datetimes(), vouchers())
+    def test_get_known_voucher_unpaid(self, get_config, now, voucher):
+        """
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details, including
+        those relevant to a voucher which has failed redemption because it has
+        not been paid for yet, about the voucher are included in a
+        json-encoded response body.
+        """
+        return self._test_get_known_voucher(
+            get_config,
+            now,
+            voucher,
+            MatchesStructure(
+                number=Equals(voucher),
+                created=Equals(now),
+                state=Equals(Unpaid(
                     finished=now,
                 )),
             ),
