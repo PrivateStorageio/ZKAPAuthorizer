@@ -39,6 +39,7 @@ from twisted.python.url import (
 from twisted.internet.defer import (
     Deferred,
     succeed,
+    fail,
     inlineCallbacks,
     returnValue,
 )
@@ -60,6 +61,13 @@ from .model import (
     Voucher,
     Pass,
 )
+
+
+class AlreadySpent(Exception):
+    """
+    An attempt was made to redeem a voucher which has already been redeemed.
+    The redemption cannot succeed and should not be retried automatically.
+    """
 
 
 class IRedeemer(Interface):
@@ -100,7 +108,10 @@ class IRedeemer(Interface):
 
         :return: A ``Deferred`` which fires with a list of ``UnblindedToken``
             instances on successful redemption or which fails with any error
-            to allow a retry to be made at some future point.
+            to allow a retry to be made at some future point.  It may also
+            fail with an ``AlreadySpent`` error to indicate the redemption
+            server considers the voucher to have been redeemed already and
+            will not allow it to be redeemed.
         """
 
     def tokens_to_passes(message, unblinded_tokens):
@@ -152,6 +163,28 @@ class NonRedeemer(object):
 
 @implementer(IRedeemer)
 @attr.s
+class DoubleSpentRedeemer(object):
+    """
+    A ``DoubleSpentRedeemer`` pretends to try to redeem vouchers for ZKAPs but
+    always fails with an error indicating the voucher has already been spent.
+    """
+    def random_tokens_for_voucher(self, voucher, count):
+        return dummy_random_tokens(voucher, count)
+
+    def redeem(self, voucher, random_tokens):
+        return fail(AlreadySpent(voucher))
+
+
+def dummy_random_tokens(voucher, count):
+    return list(
+        RandomToken(u"{}-{}".format(voucher.number, n))
+        for n
+        in range(count)
+    )
+
+
+@implementer(IRedeemer)
+@attr.s
 class DummyRedeemer(object):
     """
     A ``DummyRedeemer`` pretends to redeem vouchers for ZKAPs.  Instead of
@@ -167,12 +200,7 @@ class DummyRedeemer(object):
         Generate some number of random tokens to submit along with a voucher for
         redemption.
         """
-        # Dummy token generation.
-        return list(
-            RandomToken(u"{}-{}".format(voucher.number, n))
-            for n
-            in range(count)
-        )
+        return dummy_random_tokens(voucher, count)
 
     def redeem(self, voucher, random_tokens):
         """
@@ -431,7 +459,18 @@ class PaymentController(object):
         self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
 
     def _redeemFailure(self, voucher, reason):
-        self._log.failure("Redeeming random tokens for a voucher ({voucher}) failed.", reason, voucher=voucher)
+        if reason.check(AlreadySpent):
+            self._log.error(
+                "Voucher {voucher} reported as already spent during redemption.",
+                voucher=voucher,
+            )
+            self.store.mark_voucher_double_spent(voucher)
+        else:
+            self._log.failure(
+                "Redeeming random tokens for a voucher ({voucher}) failed.",
+                reason,
+                voucher=voucher,
+            )
         return None
 
     def _finalRedeemError(self, voucher, reason):

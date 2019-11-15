@@ -43,6 +43,7 @@ from testtools.matchers import (
     IsInstance,
     HasLength,
     AfterPreprocessing,
+    MatchesStructure,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -94,6 +95,7 @@ from ..controller import (
     IRedeemer,
     NonRedeemer,
     DummyRedeemer,
+    DoubleSpentRedeemer,
     RistrettoRedeemer,
     PaymentController,
 )
@@ -146,6 +148,9 @@ class PaymentControllerTests(TestCase):
 
     @given(tahoe_configs(), datetimes(), vouchers())
     def test_redeemed_after_redeeming(self, get_config, now, voucher):
+        """
+        A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
+        """
         tempdir = self.useFixture(TempDir())
         store = VoucherStore.from_node_config(
             get_config(
@@ -165,6 +170,35 @@ class PaymentControllerTests(TestCase):
         self.assertThat(
             persisted_voucher.state,
             Equals(u"redeemed"),
+        )
+
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_double_spent_after_double_spend(self, get_config, now, voucher):
+        """
+        A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
+        with ``AlreadySpent``.
+        """
+        tempdir = self.useFixture(TempDir())
+        store = VoucherStore.from_node_config(
+            get_config(
+                tempdir.join(b"node"),
+                b"tub.port",
+            ),
+            now=lambda: now,
+            connect=memory_connect,
+        )
+        controller = PaymentController(
+            store,
+            DoubleSpentRedeemer(),
+        )
+        controller.redeem(voucher)
+
+        persisted_voucher = store.get(voucher)
+        self.assertThat(
+            persisted_voucher,
+            MatchesStructure(
+                state=Equals(u"double-spend"),
+            ),
         )
 
 
