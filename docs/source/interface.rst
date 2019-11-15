@@ -77,14 +77,12 @@ The following values are possible::
 ::
 
   { "name": "double-spend"
-  , "started": <iso8601 timestamp>
-  , "error-at": <iso8601 timestamp>
+  , "finished": <iso8601 timestamp>
   }
 
 ::
 
   { "name": "redeemed"
-  , "started": <iso8601 timestamp>
   , "finished": <iso8601 timestamp>
   , "token-count": <number>
   }
