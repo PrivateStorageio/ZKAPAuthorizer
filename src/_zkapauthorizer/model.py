@@ -326,6 +326,43 @@ class VoucherStore(object):
         )
 
     @with_cursor
+    def mark_voucher_double_spent(self, cursor, voucher):
+        """
+        Mark a voucher as having failed redemption because it has already been
+        spent.
+        """
+        cursor.execute(
+            """
+            UPDATE [vouchers]
+            SET [state] = "double-spend"
+            WHERE [number] = ?
+              AND [state] = "pending"
+            """,
+            (voucher,)
+        )
+        if cursor.rowcount == 0:
+            # Was there no matching voucher or was it in the wrong state?
+            cursor.execute(
+                """
+                SELECT [state]
+                FROM [vouchers]
+                WHERE [number] = ?
+                """,
+                (voucher,)
+            )
+            rows = cursor.fetchall()
+            if len(rows) == 0:
+                raise ValueError("Voucher {} not found".format(voucher))
+            else:
+                raise ValueError(
+                    "Voucher {} in state {} cannot transition to double-spend".format(
+                        voucher,
+                        rows[0][0],
+                    ),
+                )
+
+
+    @with_cursor
     def extract_unblinded_tokens(self, cursor, count):
         """
         Remove and return some unblinded tokens.
