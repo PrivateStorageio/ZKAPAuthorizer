@@ -76,6 +76,7 @@ from twisted.web.resource import (
 )
 from twisted.web.http import (
     UNSUPPORTED_MEDIA_TYPE,
+    BAD_REQUEST,
 )
 from treq.testing import (
     StubTreq,
@@ -98,18 +99,19 @@ from ..controller import (
     DoubleSpentRedeemer,
     RistrettoRedeemer,
     PaymentController,
+    AlreadySpent,
 )
 
 from ..model import (
     memory_connect,
     VoucherStore,
-    Voucher,
     UnblindedToken,
 )
 
 from .strategies import (
     tahoe_configs,
     vouchers,
+    voucher_objects,
 )
 from .matchers import (
     Provides,
@@ -218,7 +220,7 @@ class RistrettoRedeemerTests(TestCase):
             Provides([IRedeemer]),
         )
 
-    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    @given(voucher_objects(), integers(min_value=1, max_value=100))
     def test_good_ristretto_redemption(self, voucher, num_tokens):
         """
         If the issuer returns a successful result then
@@ -246,7 +248,33 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    @given(voucher_objects(), integers(min_value=1, max_value=100))
+    def test_redemption_denied_alreadyspent(self, voucher, num_tokens):
+        """
+        If the issuer declines to allow the voucher to be redeemed and gives a
+        reason that the voucher has already been spent, ``RistrettoRedeem``
+        returns a ``Deferred`` that fires with a ``Failure`` wrapping
+        ``AlreadySpent``.
+        """
+        issuer = AlreadySpentRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        d = redeemer.redeem(
+            voucher,
+            random_tokens,
+        )
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(AlreadySpent),
+                ),
+            ),
+        )
+
+    @given(voucher_objects(), integers(min_value=1, max_value=100))
     def test_bad_ristretto_redemption(self, voucher, num_tokens):
         """
         If the issuer returns a successful result with an invalid proof then
@@ -279,7 +307,7 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(vouchers().map(Voucher), integers(min_value=1, max_value=100))
+    @given(voucher_objects(), integers(min_value=1, max_value=100))
     def test_ristretto_pass_construction(self, voucher, num_tokens):
         """
         The passes constructed using unblinded tokens and messages pass the
@@ -393,6 +421,20 @@ def stub_agent():
     return _StubAgent()
 
 
+class AlreadySpentRedemption(Resource):
+    """
+    An ``AlreadySpentRedemption`` simulates the Ristretto redemption server
+    but always refuses to allow vouchers to be redeemed and reports an error
+    that the voucher has already been redeemed.
+    """
+    def render_POST(self, request):
+        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
+            return bad_content_type(request)
+
+        return bad_request(request, {u"failed": True, u"reason": u"double-spend"})
+
+
+
 class RistrettoRedemption(Resource):
     def __init__(self, signing_key):
         Resource.__init__(self)
@@ -436,6 +478,13 @@ class RistrettoRedemption(Resource):
             u"signatures": marshaled_signed_tokens,
             u"proof": marshaled_proof,
         })
+
+
+def bad_request(request, body_object):
+    request.setResponseCode(BAD_REQUEST)
+    request.setHeader(b"content-type", b"application/json")
+    request.write(dumps(body_object))
+    return b""
 
 
 def bad_content_type(request):

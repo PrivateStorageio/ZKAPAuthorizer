@@ -325,6 +325,10 @@ class RistrettoRedeemer(object):
             self._log.failure("Parsing redeem response failed", response=response)
             raise
 
+        if result.get(u"failed", False):
+            if result.get(u"reason", None) == u"double-spend":
+                raise AlreadySpent(voucher)
+
         self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
 
         marshaled_signed_tokens = result[u"signatures"]
