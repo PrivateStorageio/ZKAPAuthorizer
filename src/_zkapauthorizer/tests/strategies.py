@@ -186,6 +186,15 @@ def client_dummyredeemer_configurations():
     })
 
 
+def client_doublespendredeemer_configurations():
+    """
+    Build DummyRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"double-spend",
+    })
+
+
 def client_nonredeemer_configurations():
     """
     Build NonRedeemer-using configuration values for the client-side plugin.

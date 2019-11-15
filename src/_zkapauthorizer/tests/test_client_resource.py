@@ -122,6 +122,7 @@ from ..resource import (
 
 from .strategies import (
     tahoe_configs,
+    client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
     client_nonredeemer_configurations,
     vouchers,
@@ -594,30 +595,75 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs(client_nonredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_unredeemed(self, get_config, now, voucher):
+    def test_get_known_voucher_pending(self, get_config, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
-        same voucher then the response code is **OK** and details about the
-        voucher are included in a json-encoded response body.
+        same voucher then the response code is **OK** and details, including
+        those relevant to a voucher which is still pending redemption, about
+        the voucher are included in a json-encoded response body.
         """
-        return self._test_get_known_voucher(get_config, now, voucher, False)
+        return self._test_get_known_voucher(
+            get_config,
+            now,
+            voucher,
+            MatchesStructure(
+                number=Equals(voucher),
+                created=Equals(now),
+                state=Equals(u"pending"),
+                token_count=Is(None),
+            ),
+        )
 
     @given(tahoe_configs(client_dummyredeemer_configurations()), datetimes(), vouchers())
     def test_get_known_voucher_redeemed(self, get_config, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
-        same voucher then the response code is **OK** and details about the
-        voucher are included in a json-encoded response body.
+        same voucher then the response code is **OK** and details, including
+        those relevant to a voucher which has been redeemed, about the voucher
+        are included in a json-encoded response body.
         """
-        return self._test_get_known_voucher(get_config, now, voucher, True)
+        return self._test_get_known_voucher(
+            get_config,
+            now,
+            voucher,
+            MatchesStructure(
+                number=Equals(voucher),
+                created=Equals(now),
+                state=Equals(u"redeemed"),
+                # Value duplicated from PaymentController.redeem default.
+                # Should do this better.
+                token_count=Equals(100),
+            ),
+        )
 
-    def _test_get_known_voucher(self, get_config, now, voucher, redeemed):
+    @given(tahoe_configs(client_doublespendredeemer_configurations()), datetimes(), vouchers())
+    def test_get_known_voucher_doublespend(self, get_config, now, voucher):
+        """
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details, including
+        those relevant to a voucher which has failed redemption because it was
+        already redeemed, about the voucher are included in a json-encoded
+        response body.
+        """
+        return self._test_get_known_voucher(
+            get_config,
+            now,
+            voucher,
+            MatchesStructure(
+                number=Equals(voucher),
+                created=Equals(now),
+                state=Equals(u"double-spend"),
+                token_count=Is(None),
+            ),
+        )
+
+    def _test_get_known_voucher(self, get_config, now, voucher, voucher_matcher):
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
 
-        :param bool redeemed: Whether the voucher is expected to be redeemed
-            or not in the response.
+        :param voucher_matcher: A matcher which matches the voucher expected
+            to be returned by the ``GET``.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -649,13 +695,6 @@ class VoucherTests(TestCase):
                 ).decode("utf-8"),
             ).encode("ascii"),
         )
-        if redeemed:
-            # Value duplicated from PaymentController.redeem default.  Should
-            # do this better.
-            token_count_comparison = Equals(100)
-        else:
-            token_count_comparison = Is(None)
-
         self.assertThat(
             getting,
             succeeded(
@@ -666,12 +705,7 @@ class VoucherTests(TestCase):
                         succeeded(
                             AfterPreprocessing(
                                 Voucher.from_json,
-                                MatchesStructure(
-                                    number=Equals(voucher),
-                                    created=Equals(now),
-                                    state=Equals(u"redeemed" if redeemed else u"pending"),
-                                    token_count=token_count_comparison,
-                                ),
+                                voucher_matcher,
                             ),
                         ),
                     ),
