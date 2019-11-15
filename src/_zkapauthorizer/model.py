@@ -119,13 +119,16 @@ def open_and_initialize(path, required_schema_version, connect=None):
             )
 
         cursor.execute(
+            # A denormalized schema because, for now, it's simpler. :/
             """
             CREATE TABLE IF NOT EXISTS [vouchers] (
                 [number] text,
                 [created] text,                     -- An ISO8601 date+time string.
-                [redeemed] num DEFAULT 0,           -- 0 if the voucher has not been redeemed, 1 otherwise.
-                [token-count] num DEFAULT NULL,     -- NULL if the voucher has not been redeemed,
-                                                    -- a number of tokens received on its redemption otherwise.
+                [state] text DEFAULT "pending",     -- pending, double-spend, redeemed
+
+                [token-count] num DEFAULT NULL,     -- Set in the redeemed state to  the number
+                                                    -- of tokens received on this voucher's
+                                                    -- redemption.
 
                 PRIMARY KEY([number])
             )
@@ -221,7 +224,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [redeemed], [token-count]
+                [number], [created], [state], [token-count]
             FROM
                 [vouchers]
             WHERE
@@ -279,7 +282,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [number], [created], [redeemed], [token-count] FROM [vouchers]
+            SELECT [number], [created], [state], [token-count] FROM [vouchers]
             """,
         )
         refs = cursor.fetchall()
@@ -315,7 +318,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             UPDATE [vouchers]
-            SET [redeemed] = 1
+            SET [state] = "redeemed"
               , [token-count] = ?
             WHERE [number] = ?
             """,
@@ -434,7 +437,7 @@ class Voucher(object):
     """
     number = attr.ib()
     created = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(datetime)))
-    redeemed = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    state = attr.ib(default=u"pending", validator=attr.validators.in_((u"pending", u"double-spend", u"redeemed")))
     token_count = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of((int, long))))
 
     @classmethod
@@ -447,7 +450,7 @@ class Voucher(object):
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
             parse_datetime(row[1], delimiter=u" "),
-            bool(row[2]),
+            row[2],
             row[3],
         )
 
@@ -463,7 +466,7 @@ class Voucher(object):
         return cls(
             number=values[u"number"],
             created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
-            redeemed=values[u"redeemed"],
+            state=values[u"state"],
             token_count=values[u"token-count"],
         )
 
@@ -480,7 +483,7 @@ class Voucher(object):
         return {
             u"number": self.number,
             u"created": None if self.created is None else self.created.isoformat(),
-            u"redeemed": self.redeemed,
+            u"state": self.state,
             u"token-count": self.token_count,
             u"version": 1,
         }

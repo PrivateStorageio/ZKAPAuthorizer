@@ -669,7 +669,7 @@ class VoucherTests(TestCase):
                                 MatchesStructure(
                                     number=Equals(voucher),
                                     created=Equals(now),
-                                    redeemed=Equals(redeemed),
+                                    state=Equals(u"redeemed" if redeemed else u"pending"),
                                     token_count=token_count_comparison,
                                 ),
                             ),
@@ -731,7 +731,7 @@ class VoucherTests(TestCase):
                                     Voucher(
                                         voucher,
                                         created=now,
-                                        redeemed=True,
+                                        state=u"redeemed",
                                         # Value duplicated from
                                         # PaymentController.redeem default.
                                         # Should do this better.

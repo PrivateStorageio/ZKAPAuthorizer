@@ -26,7 +26,6 @@ from hypothesis.strategies import (
     one_of,
     just,
     none,
-    booleans,
     binary,
     characters,
     text,
@@ -220,6 +219,17 @@ def vouchers():
     )
 
 
+def voucher_states():
+    """
+    Build unicode strings giving states a Voucher can be in.
+    """
+    return one_of(
+        just(u"pending"),
+        just(u"double-spend"),
+        just(u"redeemed"),
+    )
+
+
 def voucher_objects():
     """
     Build ``Voucher`` instances.
@@ -228,7 +238,7 @@ def voucher_objects():
         Voucher,
         number=vouchers(),
         created=one_of(none(), datetimes()),
-        redeemed=booleans(),
+        state=voucher_states(),
         token_count=one_of(none(), integers(min_value=1)),
     )
 

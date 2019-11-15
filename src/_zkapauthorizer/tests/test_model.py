@@ -134,7 +134,7 @@ class VoucherStoreTests(TestCase):
             store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
-                redeemed=Equals(False),
+                state=Equals(u"pending"),
                 created=Equals(now),
             ),
         )
@@ -159,7 +159,7 @@ class VoucherStoreTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                redeemed=Equals(False),
+                state=Equals(u"pending"),
                 token_count=Equals(None),
             ),
         )
@@ -339,7 +339,7 @@ class UnblindedTokenStoreTests(TestCase):
         self.assertThat(
             loaded_voucher,
             MatchesStructure(
-                redeemed=Equals(True),
+                state=Equals(u"redeemed"),
                 token_count=Equals(num_tokens),
             ),
         )
