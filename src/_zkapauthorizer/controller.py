@@ -17,6 +17,13 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
+from sys import (
+    exc_info,
+)
+from operator import (
+    setitem,
+    delitem,
+)
 from functools import (
     partial,
 )
@@ -60,8 +67,9 @@ from .model import (
     UnblindedToken,
     Voucher,
     Pass,
-    Pending,
+    Pending as model_Pending,
     Unpaid as model_Unpaid,
+    Redeeming as model_Redeeming,
 )
 
 
@@ -434,11 +442,13 @@ class PaymentController(object):
     The ``PaymentController`` coordinates the process of turning a voucher
     into a collection of ZKAPs:
 
-      1. A voucher to be consumed is handed to the controller.
-         Once a voucher is handed over to the controller the controller takes all responsibility for it.
+      1. A voucher to be consumed is handed to the controller.  Once a voucher
+         is handed over to the controller the controller takes all
+         responsibility for it.
 
-      2. The controller tells the data store to remember the voucher.
-         The data store provides durability for the voucher which represents an investment (ie, a purchase) on the part of the client.
+      2. The controller tells the data store to remember the voucher.  The
+         data store provides durability for the voucher which represents an
+         investment (ie, a purchase) on the part of the client.
 
       3. The controller hands the voucher and some random tokens to a redeemer.
          In the future, this step will need to be retried in the case of failures.
@@ -447,6 +457,10 @@ class PaymentController(object):
          pass construction), the controller hands them to the data store with
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
+
+    :ivar dict[voucher, datetime] _active: A mapping from voucher identifiers
+        which currently have redemption attempts in progress to timestamps
+        when the attempt began.
 
     :ivar dict[voucher, datetime] _unpaid: A mapping from voucher identifiers
         which have recently failed a redemption attempt due to an unpaid
@@ -459,6 +473,7 @@ class PaymentController(object):
     redeemer = attr.ib()
 
     _unpaid = attr.ib(default=attr.Factory(dict))
+    _active = attr.ib(default=attr.Factory(dict))
 
     def redeem(self, voucher, num_tokens=100):
         """
@@ -484,7 +499,11 @@ class PaymentController(object):
 
         # Ask the redeemer to do the real task of redemption.
         self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
-        d = self.redeemer.redeem(Voucher(voucher), tokens)
+        d = bracket(
+            lambda: setitem(self._active, voucher, self.store.now()),
+            lambda: delitem(self._active, voucher),
+            lambda: self.redeemer.redeem(Voucher(voucher), tokens),
+        )
         d.addCallbacks(
             partial(self._redeemSuccess, voucher),
             partial(self._redeemFailure, voucher),
@@ -533,11 +552,17 @@ class PaymentController(object):
         example, if a redemption attempt is current in progress, this is
         incorporated.
         """
-        if isinstance(voucher.state, Pending) and voucher.number in self._unpaid:
-            return attr.evolve(
-                voucher,
-                state=model_Unpaid(finished=self._unpaid[voucher.number]),
-            )
+        if isinstance(voucher.state, model_Pending):
+            if voucher.number in self._active:
+                return attr.evolve(
+                    voucher,
+                    state=model_Redeeming(started=self._active[voucher.number]),
+                )
+            if voucher.number in self._unpaid:
+                return attr.evolve(
+                    voucher,
+                    state=model_Unpaid(finished=self._unpaid[voucher.number]),
+                )
         return voucher
 
 
@@ -558,3 +583,34 @@ _REDEEMERS = {
     u"unpaid": UnpaidRedeemer.make,
     u"ristretto": RistrettoRedeemer.make,
 }
+
+
+@inlineCallbacks
+def bracket(first, last, between):
+    """
+    Invoke an action between two other actions.
+
+    :param first: A no-argument function that may return a Deferred.  It is
+        called first.
+
+    :param last: A no-argument function that may return a Deferred.  It is
+        called last.
+
+    :param between: A no-argument function that may return a Deferred.  It is
+        called after ``first`` is done and completes before ``last`` is called.
+
+    :return Deferred: A ``Deferred`` which fires with the result of
+        ``between``.
+    """
+    yield first()
+    try:
+        result = yield between()
+    except GeneratorExit:
+        raise
+    except:
+        info = exc_info()
+        yield last()
+        raise info
+    else:
+        yield last()
+        returnValue(result)

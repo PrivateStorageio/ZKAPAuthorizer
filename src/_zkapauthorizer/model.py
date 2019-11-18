@@ -466,7 +466,26 @@ class RandomToken(object):
 
 @attr.s(frozen=True)
 class Pending(object):
-    pass
+    def to_json_v1(self):
+        return {
+            u"name": u"pending",
+        }
+
+
+@attr.s(frozen=True)
+class Redeeming(object):
+    """
+    This is a non-persistent state in which a voucher exists when the database
+    state is **pending** but for which there is a redemption operation in
+    progress.
+    """
+    started = attr.ib(validator=attr.validators.instance_of(datetime))
+
+    def to_json_v1(self):
+        return {
+            u"name": u"redeeming",
+            u"started": self.started.isoformat(),
+        }
 
 
 @attr.s(frozen=True)
@@ -474,10 +493,23 @@ class Redeemed(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
 
+    def to_json_v1(self):
+        return {
+            u"name": u"redeemed",
+            u"finished": self.finished.isoformat(),
+            u"token-count": self.token_count,
+        }
+
 
 @attr.s(frozen=True)
 class DoubleSpend(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
+
+    def to_json_v1(self):
+        return {
+            u"name": u"double-spend",
+            u"finished": self.finished.isoformat(),
+        }
 
 
 @attr.s(frozen=True)
@@ -488,6 +520,12 @@ class Unpaid(object):
     to lack of payment.
     """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
+
+    def to_json_v1(self):
+        return {
+            u"name": u"unpaid",
+            u"finished": self.finished.isoformat(),
+        }
 
 
 @attr.s
@@ -554,6 +592,10 @@ class Voucher(object):
         state_name = state_json[u"name"]
         if state_name == u"pending":
             state = Pending()
+        elif state_name == u"redeeming":
+            state = Redeeming(
+                started=parse_datetime(state_json[u"started"]),
+            )
         elif state_name == u"double-spend":
             state = DoubleSpend(
                 finished=parse_datetime(state_json[u"finished"]),
@@ -586,28 +628,7 @@ class Voucher(object):
 
 
     def to_json_v1(self):
-        if isinstance(self.state, Pending):
-            state = {
-                u"name": u"pending",
-            }
-        elif isinstance(self.state, DoubleSpend):
-            state = {
-                u"name": u"double-spend",
-                u"finished": self.state.finished.isoformat(),
-            }
-        elif isinstance(self.state, Redeemed):
-            state = {
-                u"name": u"redeemed",
-                u"finished": self.state.finished.isoformat(),
-                u"token-count": self.state.token_count,
-            }
-        elif isinstance(self.state, Unpaid):
-            state = {
-                u"name": u"unpaid",
-                u"finished": self.state.finished.isoformat(),
-            }
-        else:
-            raise ValueError("Unrecognized state {!r}".format(self.state.__class__))
+        state = self.state.to_json_v1()
         return {
             u"number": self.number,
             u"created": None if self.created is None else self.created.isoformat(),

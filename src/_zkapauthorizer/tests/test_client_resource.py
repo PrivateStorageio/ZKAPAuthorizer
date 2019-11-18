@@ -112,7 +112,7 @@ from treq.testing import (
 
 from ..model import (
     Voucher,
-    Pending,
+    Redeeming,
     Redeemed,
     DoubleSpend,
     Unpaid,
@@ -599,11 +599,11 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs(client_nonredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_pending(self, get_config, now, voucher):
+    def test_get_known_voucher_redeeming(self, get_config, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
-        those relevant to a voucher which is still pending redemption, about
+        those relevant to a voucher which is actively being redeemed, about
         the voucher are included in a json-encoded response body.
         """
         return self._test_get_known_voucher(
@@ -613,7 +613,9 @@ class VoucherTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(Pending()),
+                state=Equals(Redeeming(
+                    started=now,
+                )),
             ),
         )
 
