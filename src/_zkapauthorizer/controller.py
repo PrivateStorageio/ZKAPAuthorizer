@@ -70,6 +70,7 @@ from .model import (
     Pending as model_Pending,
     Unpaid as model_Unpaid,
     Redeeming as model_Redeeming,
+    Error as model_Error,
 )
 
 
@@ -172,6 +173,35 @@ class NonRedeemer(object):
     def redeem(self, voucher, random_tokens):
         # Don't try to redeem them.
         return Deferred()
+
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise Exception(
+            "Cannot be called because no unblinded tokens are ever returned."
+        )
+
+
+@implementer(IRedeemer)
+@attr.s(frozen=True)
+class ErrorRedeemer(object):
+    """
+    An ``ErrorRedeemer`` immediately locally fails voucher redemption with a
+    configured error.
+    """
+    details = attr.ib(validator=attr.validators.instance_of(unicode))
+
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        details = node_config.get_config(
+            section=section_name,
+            option=u"details",
+        ).decode("ascii")
+        return cls(details)
+
+    def random_tokens_for_voucher(self, voucher, count):
+        return dummy_random_tokens(voucher, count)
+
+    def redeem(self, voucher, random_tokens):
+        return fail(Exception(self.details))
 
     def tokens_to_passes(self, message, unblinded_tokens):
         raise Exception(
@@ -462,6 +492,9 @@ class PaymentController(object):
         which currently have redemption attempts in progress to timestamps
         when the attempt began.
 
+    :ivar dict[voucher, datetime] _error: A mapping from voucher identifiers
+        which have recently failed with an unrecognized, transient error.
+
     :ivar dict[voucher, datetime] _unpaid: A mapping from voucher identifiers
         which have recently failed a redemption attempt due to an unpaid
         response from the redemption server to timestamps when the failure was
@@ -472,6 +505,7 @@ class PaymentController(object):
     store = attr.ib()
     redeemer = attr.ib()
 
+    _error = attr.ib(default=attr.Factory(dict))
     _unpaid = attr.ib(default=attr.Factory(dict))
     _active = attr.ib(default=attr.Factory(dict))
 
@@ -534,10 +568,14 @@ class PaymentController(object):
             )
             self._unpaid[voucher] = self.store.now()
         else:
-            self._log.failure(
-                "Redeeming random tokens for a voucher ({voucher}) failed.",
-                reason,
+            self._log.error(
+                "Redeeming random tokens for a voucher ({voucher}) failed: {reason}",
+                reason=reason,
                 voucher=voucher,
+            )
+            self._error[voucher] = model_Error(
+                finished=self.store.now(),
+                details=reason.getErrorMessage().decode("utf-8", "replace"),
             )
         return None
 
@@ -563,6 +601,11 @@ class PaymentController(object):
                     voucher,
                     state=model_Unpaid(finished=self._unpaid[voucher.number]),
                 )
+            if voucher.number in self._error:
+                return attr.evolve(
+                    voucher,
+                    state=self._error[voucher.number],
+                )
         return voucher
 
 
@@ -581,6 +624,7 @@ _REDEEMERS = {
     u"dummy": DummyRedeemer.make,
     u"double-spend": DoubleSpendRedeemer.make,
     u"unpaid": UnpaidRedeemer.make,
+    u"error": ErrorRedeemer.make,
     u"ristretto": RistrettoRedeemer.make,
 }
 
@@ -610,7 +654,7 @@ def bracket(first, last, between):
     except:
         info = exc_info()
         yield last()
-        raise info
+        raise info[0], info[1], info[2]
     else:
         yield last()
         returnValue(result)

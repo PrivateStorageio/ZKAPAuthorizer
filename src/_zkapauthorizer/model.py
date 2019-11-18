@@ -528,6 +528,24 @@ class Unpaid(object):
         }
 
 
+@attr.s(frozen=True)
+class Error(object):
+    """
+    This is a non-persistent state in which a voucher exists when the database
+    state is **pending** but the most recent redemption attempt has failed due
+    to an error that is not handled by any other part of the system.
+    """
+    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    details = attr.ib(validator=attr.validators.instance_of(unicode))
+
+    def to_json_v1(self):
+        return {
+            u"name": u"error",
+            u"finished": self.finished.isoformat(),
+            u"details": self.details,
+        }
+
+
 @attr.s
 class Voucher(object):
     """
@@ -608,6 +626,11 @@ class Voucher(object):
         elif state_name == u"unpaid":
             state = Unpaid(
                 finished=parse_datetime(state_json[u"finished"]),
+            )
+        elif state_name == u"error":
+            state = Error(
+                finished=parse_datetime(state_json[u"finished"]),
+                details=state_json[u"details"],
             )
         else:
             raise ValueError("Unrecognized state {!r}".format(state_json))

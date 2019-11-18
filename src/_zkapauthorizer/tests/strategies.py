@@ -216,6 +216,16 @@ def client_nonredeemer_configurations():
     })
 
 
+def client_errorredeemer_configurations(details):
+    """
+    Build ErrorRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"error",
+        u"details": details,
+    })
+
+
 def tahoe_configs(zkapauthz_v1_configuration=client_dummyredeemer_configurations()):
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer

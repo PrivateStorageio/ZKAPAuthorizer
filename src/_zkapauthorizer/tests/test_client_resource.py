@@ -116,6 +116,7 @@ from ..model import (
     Redeemed,
     DoubleSpend,
     Unpaid,
+    Error,
     VoucherStore,
     memory_connect,
 )
@@ -129,12 +130,15 @@ from .strategies import (
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
     client_nonredeemer_configurations,
+    client_errorredeemer_configurations,
     vouchers,
     requests,
 )
 from .matchers import (
     Provides,
 )
+
+TRANSIENT_ERROR = u"something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
@@ -683,6 +687,29 @@ class VoucherTests(TestCase):
                 created=Equals(now),
                 state=Equals(Unpaid(
                     finished=now,
+                )),
+            ),
+        )
+
+    @given(tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)), datetimes(), vouchers())
+    def test_get_known_voucher_error(self, get_config, now, voucher):
+        """
+        When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
+        same voucher then the response code is **OK** and details, including
+        those relevant to a voucher which has failed redemption due to any
+        kind of transient conditions, about the voucher are included in a
+        json-encoded response body.
+        """
+        return self._test_get_known_voucher(
+            get_config,
+            now,
+            voucher,
+            MatchesStructure(
+                number=Equals(voucher),
+                created=Equals(now),
+                state=Equals(Error(
+                    finished=now,
+                    details=TRANSIENT_ERROR,
                 )),
             ),
         )
