@@ -60,18 +60,9 @@ The following values are possible::
 
 ::
 
-  { "name": "error"
-  , "started": <iso8601 timestamp>
-  , "error-at": <iso8601 timestamp>
-  , "next-try-at": <iso8601 timestamp>
-  , "error-details": <text>
-  }
-
-::
-
-  { "name": "unpaid"
-  , "started": <iso8601 timestamp>
-  , "error-at": <iso8601 timestamp>
+  { "name": "redeemed"
+  , "finished": <iso8601 timestamp>
+  , "token-count": <number>
   }
 
 ::
@@ -82,9 +73,15 @@ The following values are possible::
 
 ::
 
-  { "name": "redeemed"
+  { "name": "unpaid"
   , "finished": <iso8601 timestamp>
-  , "token-count": <number>
+  }
+
+::
+
+  { "name": "error"
+    "finished": <iso8601 timestamp>
+  , "details": <text>
   }
 
 The ``version`` property indicates the semantic version of the data being returned.
