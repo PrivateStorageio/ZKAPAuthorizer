@@ -395,9 +395,13 @@ class RistrettoRedeemer(object):
             self._log.failure("Parsing redeem response failed", response=response)
             raise
 
-        if result.get(u"failed", False):
-            if result.get(u"reason", None) == u"double-spend":
+        success = result.get(u"success", False)
+        if not success:
+            reason = result.get(u"reason", None)
+            if reason == u"double-spend":
                 raise AlreadySpent(voucher)
+            elif reason == u"unpaid":
+                raise Unpaid(voucher)
 
         self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
 
