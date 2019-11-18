@@ -26,7 +26,6 @@ from hypothesis.strategies import (
     one_of,
     just,
     none,
-    booleans,
     binary,
     characters,
     text,
@@ -57,6 +56,9 @@ from ..model import (
     RandomToken,
     UnblindedToken,
     Voucher,
+    Pending,
+    DoubleSpend,
+    Redeemed,
 )
 
 
@@ -187,12 +189,40 @@ def client_dummyredeemer_configurations():
     })
 
 
+def client_doublespendredeemer_configurations():
+    """
+    Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"double-spend",
+    })
+
+
+def client_unpaidredeemer_configurations():
+    """
+    Build UnpaidRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"unpaid",
+    })
+
+
 def client_nonredeemer_configurations():
     """
     Build NonRedeemer-using configuration values for the client-side plugin.
     """
     return just({
         u"redeemer": u"non",
+    })
+
+
+def client_errorredeemer_configurations(details):
+    """
+    Build ErrorRedeemer-using configuration values for the client-side plugin.
+    """
+    return just({
+        u"redeemer": u"error",
+        u"details": details,
     })
 
 
@@ -220,6 +250,24 @@ def vouchers():
     )
 
 
+def voucher_states():
+    """
+    Build unicode strings giving states a Voucher can be in.
+    """
+    return one_of(
+        just(Pending()),
+        builds(
+            DoubleSpend,
+            finished=datetimes(),
+        ),
+        builds(
+            Redeemed,
+            finished=datetimes(),
+            token_count=one_of(integers(min_value=1)),
+        ),
+    )
+
+
 def voucher_objects():
     """
     Build ``Voucher`` instances.
@@ -228,8 +276,7 @@ def voucher_objects():
         Voucher,
         number=vouchers(),
         created=one_of(none(), datetimes()),
-        redeemed=booleans(),
-        token_count=one_of(none(), integers(min_value=1)),
+        state=voucher_states(),
     )
 
 

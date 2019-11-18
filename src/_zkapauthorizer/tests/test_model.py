@@ -65,6 +65,9 @@ from ..model import (
     StoreOpenError,
     VoucherStore,
     Voucher,
+    Pending,
+    DoubleSpend,
+    Redeemed,
     open_and_initialize,
     memory_connect,
 )
@@ -104,13 +107,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
+        store = store_for_test(self, get_config, lambda: now)
         self.assertThat(
             lambda: store.get(voucher),
             raises(KeyError),
@@ -122,19 +119,13 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
+        store = store_for_test(self, get_config, lambda: now)
         store.add(voucher, tokens)
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
-                redeemed=Equals(False),
+                state=Equals(Pending()),
                 created=Equals(now),
             ),
         )
@@ -145,13 +136,7 @@ class VoucherStoreTests(TestCase):
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
+        store = store_for_test(self, get_config, lambda: now)
         store.add(voucher, tokens)
         store.add(voucher, [])
         self.assertThat(
@@ -159,8 +144,7 @@ class VoucherStoreTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                redeemed=Equals(False),
-                token_count=Equals(None),
+                state=Equals(Pending()),
             ),
         )
 
@@ -171,15 +155,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
         """
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        config = get_config(nodedir, b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
-
+        store = store_for_test(self, get_config, lambda: now)
         for voucher in vouchers:
             store.add(voucher, [])
 
@@ -238,6 +214,7 @@ class VoucherStoreTests(TestCase):
         If the underlying database file cannot be opened then
         ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
+
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
 
@@ -282,13 +259,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         Unblinded tokens that are added to the store can later be retrieved.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
+        store = store_for_test(self, get_config, lambda: now)
         store.insert_unblinded_tokens_for_voucher(voucher_value, tokens)
         retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
         self.expectThat(tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
@@ -326,20 +297,123 @@ class UnblindedTokenStoreTests(TestCase):
             ),
         )
 
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"node"), b"tub.port")
-        store = VoucherStore.from_node_config(
-            config,
-            lambda: now,
-            memory_connect,
-        )
+        store = store_for_test(self, get_config, lambda: now)
         store.add(voucher_value, random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         loaded_voucher = store.get(voucher_value)
         self.assertThat(
             loaded_voucher,
             MatchesStructure(
-                redeemed=Equals(True),
-                token_count=Equals(num_tokens),
+                state=Equals(Redeemed(
+                    finished=now,
+                    token_count=num_tokens,
+                )),
             ),
         )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        lists(random_tokens(), unique=True),
+    )
+    def test_mark_vouchers_double_spent(self, get_config, now, voucher_value, random_tokens):
+        """
+        A voucher which is reported as double-spent is marked in the database as
+        such.
+        """
+        store = store_for_test(self, get_config, lambda: now)
+        store.add(voucher_value, random_tokens)
+        store.mark_voucher_double_spent(voucher_value)
+        voucher = store.get(voucher_value)
+        self.assertThat(
+            voucher,
+            MatchesStructure(
+                state=Equals(DoubleSpend(
+                    finished=now,
+                )),
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        integers(min_value=1, max_value=100),
+        data(),
+    )
+    def test_mark_spent_vouchers_double_spent(self, get_config, now, voucher_value, num_tokens, data):
+        """
+        A voucher which has already been spent cannot be marked as double-spent.
+        """
+        random = data.draw(
+            lists(
+                random_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+        unblinded = data.draw(
+            lists(
+                unblinded_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+        store = store_for_test(self, get_config, lambda: now)
+        store.add(voucher_value, random)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
+        try:
+            result = store.mark_voucher_double_spent(voucher_value)
+        except ValueError:
+            pass
+        except Exception as e:
+            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
+        else:
+            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_mark_invalid_vouchers_double_spent(self, get_config, now, voucher_value):
+        """
+        A voucher which is not known cannot be marked as double-spent.
+        """
+        store = store_for_test(self, get_config, lambda: now)
+        try:
+            result = store.mark_voucher_double_spent(voucher_value)
+        except ValueError:
+            pass
+        except Exception as e:
+            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
+        else:
+            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+
+
+    # TODO: Other error states and transient states
+
+
+def store_for_test(testcase, get_config, get_now):
+    """
+    Create a ``VoucherStore`` in a temporary directory associated with the
+    given test case.
+
+    :param TestCase testcase: The test case for which to build the store.
+    :param get_config: A function like the one built by ``tahoe_configs``.
+    :param get_now: A no-argument callable that returns a datetime giving a
+        time to consider as "now".
+
+    :return VoucherStore: A newly created temporary store.
+    """
+    tempdir = testcase.useFixture(TempDir())
+    config = get_config(tempdir.join(b"node"), b"tub.port")
+    store = VoucherStore.from_node_config(
+        config,
+        get_now,
+        memory_connect,
+    )
+    return store

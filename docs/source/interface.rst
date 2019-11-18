@@ -32,7 +32,11 @@ If the voucher is not known then the response is **NOT FOUND**.
 For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  {"value": <string>, "created": <iso8601 timestamp>, "redeemed": <boolean>, "token-count": <number>, "version": 1}
+  { "value": <string>
+  , "created": <iso8601 timestamp>
+  , "state": <state object>
+  , "version": 1
+  }
 
 The ``value`` property merely indicates the voucher which was requested.
 The ``created`` property indicates when the voucher was first added to the node.
@@ -41,6 +45,44 @@ The ``token-count`` property gives the number of blinded token signatures the cl
 (each blinded token signature can be used to construct a one ZKAP),
 if it has been redeemed.
 If it has not been redeemed then it is ``null``.
+
+The ``state`` property is an object that gives more details about the current state of the voucher.
+The following values are possible::
+
+  { "name": "pending"
+  }
+
+::
+
+  { "name": "redeeming"
+  , "started": <iso8601 timestamp>
+  }
+
+::
+
+  { "name": "redeemed"
+  , "finished": <iso8601 timestamp>
+  , "token-count": <number>
+  }
+
+::
+
+  { "name": "double-spend"
+  , "finished": <iso8601 timestamp>
+  }
+
+::
+
+  { "name": "unpaid"
+  , "finished": <iso8601 timestamp>
+  }
+
+::
+
+  { "name": "error"
+    "finished": <iso8601 timestamp>
+  , "details": <text>
+  }
 
 The ``version`` property indicates the semantic version of the data being returned.
 When properties are removed or the meaning of a property is changed,

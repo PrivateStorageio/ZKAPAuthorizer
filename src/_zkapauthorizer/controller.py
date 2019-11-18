@@ -17,6 +17,13 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
+from sys import (
+    exc_info,
+)
+from operator import (
+    setitem,
+    delitem,
+)
 from functools import (
     partial,
 )
@@ -39,6 +46,7 @@ from twisted.python.url import (
 from twisted.internet.defer import (
     Deferred,
     succeed,
+    fail,
     inlineCallbacks,
     returnValue,
 )
@@ -59,7 +67,26 @@ from .model import (
     UnblindedToken,
     Voucher,
     Pass,
+    Pending as model_Pending,
+    Unpaid as model_Unpaid,
+    Redeeming as model_Redeeming,
+    Error as model_Error,
 )
+
+
+class AlreadySpent(Exception):
+    """
+    An attempt was made to redeem a voucher which has already been redeemed.
+    The redemption cannot succeed and should not be retried automatically.
+    """
+
+
+class Unpaid(Exception):
+    """
+    An attempt was made to redeem a voucher which has not yet been paid for.
+
+    The redemption attempt may be automatically retried at some point.
+    """
 
 
 class IRedeemer(Interface):
@@ -100,7 +127,10 @@ class IRedeemer(Interface):
 
         :return: A ``Deferred`` which fires with a list of ``UnblindedToken``
             instances on successful redemption or which fails with any error
-            to allow a retry to be made at some future point.
+            to allow a retry to be made at some future point.  It may also
+            fail with an ``AlreadySpent`` error to indicate the redemption
+            server considers the voucher to have been redeemed already and
+            will not allow it to be redeemed.
         """
 
     def tokens_to_passes(message, unblinded_tokens):
@@ -151,6 +181,79 @@ class NonRedeemer(object):
 
 
 @implementer(IRedeemer)
+@attr.s(frozen=True)
+class ErrorRedeemer(object):
+    """
+    An ``ErrorRedeemer`` immediately locally fails voucher redemption with a
+    configured error.
+    """
+    details = attr.ib(validator=attr.validators.instance_of(unicode))
+
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        details = node_config.get_config(
+            section=section_name,
+            option=u"details",
+        ).decode("ascii")
+        return cls(details)
+
+    def random_tokens_for_voucher(self, voucher, count):
+        return dummy_random_tokens(voucher, count)
+
+    def redeem(self, voucher, random_tokens):
+        return fail(Exception(self.details))
+
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise Exception(
+            "Cannot be called because no unblinded tokens are ever returned."
+        )
+
+
+@implementer(IRedeemer)
+@attr.s
+class DoubleSpendRedeemer(object):
+    """
+    A ``DoubleSpendRedeemer`` pretends to try to redeem vouchers for ZKAPs but
+    always fails with an error indicating the voucher has already been spent.
+    """
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls()
+
+    def random_tokens_for_voucher(self, voucher, count):
+        return dummy_random_tokens(voucher, count)
+
+    def redeem(self, voucher, random_tokens):
+        return fail(AlreadySpent(voucher))
+
+
+@implementer(IRedeemer)
+@attr.s
+class UnpaidRedeemer(object):
+    """
+    An ``UnpaidRedeemer`` pretends to try to redeem vouchers for ZKAPs but
+    always fails with an error indicating the voucher has not been paid for.
+    """
+    @classmethod
+    def make(cls, section_name, node_config, announcement, reactor):
+        return cls()
+
+    def random_tokens_for_voucher(self, voucher, count):
+        return dummy_random_tokens(voucher, count)
+
+    def redeem(self, voucher, random_tokens):
+        return fail(Unpaid(voucher))
+
+
+def dummy_random_tokens(voucher, count):
+    return list(
+        RandomToken(u"{}-{}".format(voucher.number, n))
+        for n
+        in range(count)
+    )
+
+
+@implementer(IRedeemer)
 @attr.s
 class DummyRedeemer(object):
     """
@@ -167,12 +270,7 @@ class DummyRedeemer(object):
         Generate some number of random tokens to submit along with a voucher for
         redemption.
         """
-        # Dummy token generation.
-        return list(
-            RandomToken(u"{}-{}".format(voucher.number, n))
-            for n
-            in range(count)
-        )
+        return dummy_random_tokens(voucher, count)
 
     def redeem(self, voucher, random_tokens):
         """
@@ -297,6 +395,10 @@ class RistrettoRedeemer(object):
             self._log.failure("Parsing redeem response failed", response=response)
             raise
 
+        if result.get(u"failed", False):
+            if result.get(u"reason", None) == u"double-spend":
+                raise AlreadySpent(voucher)
+
         self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
 
         marshaled_signed_tokens = result[u"signatures"]
@@ -370,11 +472,13 @@ class PaymentController(object):
     The ``PaymentController`` coordinates the process of turning a voucher
     into a collection of ZKAPs:
 
-      1. A voucher to be consumed is handed to the controller.
-         Once a voucher is handed over to the controller the controller takes all responsibility for it.
+      1. A voucher to be consumed is handed to the controller.  Once a voucher
+         is handed over to the controller the controller takes all
+         responsibility for it.
 
-      2. The controller tells the data store to remember the voucher.
-         The data store provides durability for the voucher which represents an investment (ie, a purchase) on the part of the client.
+      2. The controller tells the data store to remember the voucher.  The
+         data store provides durability for the voucher which represents an
+         investment (ie, a purchase) on the part of the client.
 
       3. The controller hands the voucher and some random tokens to a redeemer.
          In the future, this step will need to be retried in the case of failures.
@@ -383,11 +487,27 @@ class PaymentController(object):
          pass construction), the controller hands them to the data store with
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
+
+    :ivar dict[voucher, datetime] _active: A mapping from voucher identifiers
+        which currently have redemption attempts in progress to timestamps
+        when the attempt began.
+
+    :ivar dict[voucher, datetime] _error: A mapping from voucher identifiers
+        which have recently failed with an unrecognized, transient error.
+
+    :ivar dict[voucher, datetime] _unpaid: A mapping from voucher identifiers
+        which have recently failed a redemption attempt due to an unpaid
+        response from the redemption server to timestamps when the failure was
+        observed.
     """
     _log = Logger()
 
     store = attr.ib()
     redeemer = attr.ib()
+
+    _error = attr.ib(default=attr.Factory(dict))
+    _unpaid = attr.ib(default=attr.Factory(dict))
+    _active = attr.ib(default=attr.Factory(dict))
 
     def redeem(self, voucher, num_tokens=100):
         """
@@ -413,7 +533,11 @@ class PaymentController(object):
 
         # Ask the redeemer to do the real task of redemption.
         self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
-        d = self.redeemer.redeem(Voucher(voucher), tokens)
+        d = bracket(
+            lambda: setitem(self._active, voucher, self.store.now()),
+            lambda: delitem(self._active, voucher),
+            lambda: self.redeemer.redeem(Voucher(voucher), tokens),
+        )
         d.addCallbacks(
             partial(self._redeemSuccess, voucher),
             partial(self._redeemFailure, voucher),
@@ -431,12 +555,58 @@ class PaymentController(object):
         self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
 
     def _redeemFailure(self, voucher, reason):
-        self._log.failure("Redeeming random tokens for a voucher ({voucher}) failed.", reason, voucher=voucher)
+        if reason.check(AlreadySpent):
+            self._log.error(
+                "Voucher {voucher} reported as already spent during redemption.",
+                voucher=voucher,
+            )
+            self.store.mark_voucher_double_spent(voucher)
+        elif reason.check(Unpaid):
+            self._log.error(
+                "Voucher {voucher} reported as not paid for during redemption.",
+                voucher=voucher,
+            )
+            self._unpaid[voucher] = self.store.now()
+        else:
+            self._log.error(
+                "Redeeming random tokens for a voucher ({voucher}) failed: {reason}",
+                reason=reason,
+                voucher=voucher,
+            )
+            self._error[voucher] = model_Error(
+                finished=self.store.now(),
+                details=reason.getErrorMessage().decode("utf-8", "replace"),
+            )
         return None
 
     def _finalRedeemError(self, voucher, reason):
         self._log.failure("Redeeming random tokens for a voucher ({voucher}) encountered error.", reason, voucher=voucher)
         return None
+
+    def incorporate_transient_state(self, voucher):
+        """
+        Create a new ``Voucher`` which represents the given voucher but which also
+        incorporates relevant transient state known to the controller.  For
+        example, if a redemption attempt is current in progress, this is
+        incorporated.
+        """
+        if isinstance(voucher.state, model_Pending):
+            if voucher.number in self._active:
+                return attr.evolve(
+                    voucher,
+                    state=model_Redeeming(started=self._active[voucher.number]),
+                )
+            if voucher.number in self._unpaid:
+                return attr.evolve(
+                    voucher,
+                    state=model_Unpaid(finished=self._unpaid[voucher.number]),
+                )
+            if voucher.number in self._error:
+                return attr.evolve(
+                    voucher,
+                    state=self._error[voucher.number],
+                )
+        return voucher
 
 
 def get_redeemer(plugin_name, node_config, announcement, reactor):
@@ -452,5 +622,39 @@ def get_redeemer(plugin_name, node_config, announcement, reactor):
 _REDEEMERS = {
     u"non": NonRedeemer.make,
     u"dummy": DummyRedeemer.make,
+    u"double-spend": DoubleSpendRedeemer.make,
+    u"unpaid": UnpaidRedeemer.make,
+    u"error": ErrorRedeemer.make,
     u"ristretto": RistrettoRedeemer.make,
 }
+
+
+@inlineCallbacks
+def bracket(first, last, between):
+    """
+    Invoke an action between two other actions.
+
+    :param first: A no-argument function that may return a Deferred.  It is
+        called first.
+
+    :param last: A no-argument function that may return a Deferred.  It is
+        called last.
+
+    :param between: A no-argument function that may return a Deferred.  It is
+        called after ``first`` is done and completes before ``last`` is called.
+
+    :return Deferred: A ``Deferred`` which fires with the result of
+        ``between``.
+    """
+    yield first()
+    try:
+        result = yield between()
+    except GeneratorExit:
+        raise
+    except:
+        info = exc_info()
+        yield last()
+        raise info[0], info[1], info[2]
+    else:
+        yield last()
+        returnValue(result)
