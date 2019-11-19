@@ -196,7 +196,7 @@ class _VoucherCollection(Resource):
         application_json(request)
         return dumps({
             u"vouchers": list(
-                voucher.marshal()
+                self._controller.incorporate_transient_state(voucher).marshal()
                 for voucher
                 in self._store.list()
             ),
@@ -211,7 +211,6 @@ class _VoucherCollection(Resource):
             voucher = self._store.get(voucher)
         except KeyError:
             return NoResource()
-        # TODO Apply the same treatment to the list result
         return VoucherView(self._controller.incorporate_transient_state(voucher))
 
 
