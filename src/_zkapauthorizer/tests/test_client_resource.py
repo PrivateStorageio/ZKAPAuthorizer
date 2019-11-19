@@ -776,6 +776,59 @@ class VoucherTests(TestCase):
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
         """
+        return self._test_list_vouchers(
+            get_config,
+            now,
+            vouchers,
+            Equals({
+                u"vouchers": list(
+                    Voucher(
+                        voucher,
+                        created=now,
+                        state=Redeemed(
+                            finished=now,
+                            # Value duplicated from
+                            # PaymentController.redeem
+                            # default.  Should do this better.
+                            token_count=100,
+                        ),
+                    ).marshal()
+                    for voucher
+                    in vouchers
+                ),
+            }),
+        )
+
+    @given(
+        tahoe_configs(client_unpaidredeemer_configurations()),
+        datetimes(),
+        lists(vouchers(), unique=True),
+    )
+    def test_list_vouchers_transient_states(self, get_config, now, vouchers):
+        """
+        A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
+        vouchers including state information that reflects transient states.
+        """
+        return self._test_list_vouchers(
+            get_config,
+            now,
+            vouchers,
+            Equals({
+                u"vouchers": list(
+                    Voucher(
+                        voucher,
+                        created=now,
+                        state=Unpaid(
+                            finished=now,
+                        ),
+                    ).marshal()
+                    for voucher
+                    in vouchers
+                ),
+            }),
+        )
+
+    def _test_list_vouchers(self, get_config, now, vouchers, match_response_object):
         # Hypothesis causes our test case instances to be re-used many times
         # between setUp and tearDown.  Avoid re-using the same temporary
         # directory for every Hypothesis iteration because this test leaves
@@ -817,23 +870,7 @@ class VoucherTests(TestCase):
                     AfterPreprocessing(
                         json_content,
                         succeeded(
-                            Equals({
-                                u"vouchers": list(
-                                    Voucher(
-                                        voucher,
-                                        created=now,
-                                        state=Redeemed(
-                                            finished=now,
-                                            # Value duplicated from
-                                            # PaymentController.redeem
-                                            # default.  Should do this better.
-                                            token_count=100,
-                                        ),
-                                    ).marshal()
-                                    for voucher
-                                    in vouchers
-                                ),
-                            }),
+                            match_response_object,
                         ),
                     ),
                 ),

@@ -100,6 +100,7 @@ from ..controller import (
     RistrettoRedeemer,
     PaymentController,
     AlreadySpent,
+    Unpaid,
 )
 
 from ..model import (
@@ -283,6 +284,32 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), integers(min_value=1, max_value=100))
+    def test_redemption_denied_unpaid(self, voucher, num_tokens):
+        """
+        If the issuer declines to allow the voucher to be redeemed and gives a
+        reason that the voucher has not been paid for, ``RistrettoRedeem``
+        returns a ``Deferred`` that fires with a ``Failure`` wrapping
+        ``Unpaid``.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        d = redeemer.redeem(
+            voucher,
+            random_tokens,
+        )
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(Unpaid),
+                ),
+            ),
+        )
+
+    @given(voucher_objects(), integers(min_value=1, max_value=100))
     def test_bad_ristretto_redemption(self, voucher, num_tokens):
         """
         If the issuer returns a successful result with an invalid proof then
@@ -439,8 +466,20 @@ class AlreadySpentRedemption(Resource):
         if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
             return bad_content_type(request)
 
-        return bad_request(request, {u"failed": True, u"reason": u"double-spend"})
+        return bad_request(request, {u"success": False, u"reason": u"double-spend"})
 
+
+class UnpaidRedemption(Resource):
+    """
+    An ``UnpaidRedemption`` simulates the Ristretto redemption server but
+    always refuses to allow vouchers to be redeemed and reports an error that
+    the voucher has not been paid for.
+    """
+    def render_POST(self, request):
+        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
+            return bad_content_type(request)
+
+        return bad_request(request, {u"success": False, u"reason": u"unpaid"})
 
 
 class RistrettoRedemption(Resource):
