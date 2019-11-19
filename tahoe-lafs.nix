@@ -2,7 +2,7 @@
 , twisted, foolscap, nevow, zfec
 , setuptools, setuptoolsTrial, pyasn1, zope_interface
 , service-identity, pyyaml, magic-wormhole, treq, appdirs
-, eliot, autobahn, cryptography
+, beautifulsoup4, eliot, autobahn, cryptography
 }:
 python.pkgs.buildPythonPackage rec {
   version = "1.14.0.dev";
@@ -10,10 +10,10 @@ python.pkgs.buildPythonPackage rec {
   src = fetchFromGitHub {
     owner = "LeastAuthority";
     repo = "tahoe-lafs";
-    # HEAD of an integration branch for all of the storage plugin stuff.  Last
-    # updated October 4 2019.
-    rev = "8c1f536ba4fbc01f3bc5f08412edbefc56ff7037";
-    sha256 = "17d7pkbsgss3rhqf7ac7ylzbddi555rnkzz48zjqwq1zx1z2jhy6";
+    # A branch of master with the storage plugin web resource reuse issue
+    # resolved.  https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3265
+    rev = "1fef61981940bbd63ffc4242c3b589258622d117";
+    sha256 = "0kgkg7wd0nkj8f5p46341vjkr6nz3kf0fimd44d9kypm4rn8xczv";
   };
 
   postPatch = ''
@@ -33,8 +33,7 @@ python.pkgs.buildPythonPackage rec {
     twisted foolscap nevow zfec appdirs
     setuptoolsTrial pyasn1 zope_interface
     service-identity pyyaml magic-wormhole treq
-
-    eliot autobahn cryptography setuptools
+    beautifulsoup4 eliot autobahn cryptography setuptools
   ];
 
   checkInputs = with python.pkgs; [
