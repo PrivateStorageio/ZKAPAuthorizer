@@ -107,9 +107,9 @@ from ..model import (
     memory_connect,
     VoucherStore,
     UnblindedToken,
-    Pending,
-    DoubleSpend,
-    Redeemed,
+    Pending as model_Pending,
+    DoubleSpend as model_DoubleSpend,
+    Redeemed as model_Redeemed,
 )
 
 from .strategies import (
@@ -149,7 +149,7 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(Pending()),
+            Equals(model_Pending()),
         )
 
     @given(tahoe_configs(), datetimes(), vouchers())
@@ -175,7 +175,7 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(Redeemed(
+            Equals(model_Redeemed(
                 finished=now,
                 token_count=100,
             )),
@@ -206,7 +206,7 @@ class PaymentControllerTests(TestCase):
         self.assertThat(
             persisted_voucher,
             MatchesStructure(
-                state=Equals(DoubleSpend(
+                state=Equals(model_DoubleSpend(
                     finished=now,
                 )),
             ),
