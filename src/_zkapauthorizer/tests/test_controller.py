@@ -97,6 +97,7 @@ from ..controller import (
     NonRedeemer,
     DummyRedeemer,
     DoubleSpendRedeemer,
+    UnpaidRedeemer,
     RistrettoRedeemer,
     PaymentController,
     AlreadySpent,
@@ -110,6 +111,7 @@ from ..model import (
     Pending as model_Pending,
     DoubleSpend as model_DoubleSpend,
     Redeemed as model_Redeemed,
+    Unpaid as model_Unpaid,
 )
 
 from .strategies import (
@@ -210,6 +212,48 @@ class PaymentControllerTests(TestCase):
                     finished=now,
                 )),
             ),
+        )
+
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_redeem_pending_on_startup(self, get_config, now, voucher):
+        """
+        When ``PaymentController`` is created, any vouchers in the store in the
+        pending state are redeemed.
+        """
+        tempdir = self.useFixture(TempDir())
+        store = VoucherStore.from_node_config(
+            get_config(
+                tempdir.join(b"node"),
+                b"tub.port",
+            ),
+            now=lambda: now,
+            connect=memory_connect,
+        )
+        # Create the voucher state in the store with a redemption that will
+        # certainly fail.
+        unpaid_controller = PaymentController(
+            store,
+            UnpaidRedeemer(),
+        )
+        unpaid_controller.redeem(voucher)
+
+        # Make sure we got where we wanted.
+        self.assertThat(
+            unpaid_controller.get_voucher(voucher).state,
+            IsInstance(model_Unpaid),
+        )
+
+        # Create another controller with the same store.  It will see the
+        # voucher state and attempt a redemption on its own.  It has I/O as an
+        # `__init__` side-effect. :/
+        success_controller = PaymentController(
+            store,
+            DummyRedeemer(),
+        )
+
+        self.assertThat(
+            success_controller.get_voucher(voucher).state,
+            IsInstance(model_Redeemed),
         )
 
 
