@@ -494,14 +494,14 @@ class PaymentController(object):
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
 
-    :ivar dict[voucher, datetime] _active: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to timestamps
         when the attempt began.
 
-    :ivar dict[voucher, datetime] _error: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _error: A mapping from voucher identifiers
         which have recently failed with an unrecognized, transient error.
 
-    :ivar dict[voucher, datetime] _unpaid: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _unpaid: A mapping from voucher identifiers
         which have recently failed a redemption attempt due to an unpaid
         response from the redemption server to timestamps when the failure was
         observed.
