@@ -27,6 +27,10 @@ from json import (
 from functools import (
     partial,
 )
+from datetime import (
+    datetime,
+    timedelta,
+)
 from zope.interface import (
     implementer,
 )
@@ -59,6 +63,9 @@ from hypothesis.strategies import (
 )
 from twisted.python.url import (
     URL,
+)
+from twisted.internet.task import (
+    Clock,
 )
 from twisted.internet.defer import (
     fail,
@@ -120,6 +127,7 @@ from .fixtures import (
     TemporaryVoucherStore,
 )
 
+POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
 class PaymentControllerTests(TestCase):
     """
@@ -220,6 +228,69 @@ class PaymentControllerTests(TestCase):
         self.assertThat(
             success_controller.get_voucher(voucher).state,
             IsInstance(model_Redeemed),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(
+            # I don't know that time-based parts of the system break down
+            # before the POSIX epoch but I don't know that they work, either.
+            # Don't time travel with this code.
+            min_value=POSIX_EPOCH,
+            # Once we get far enough into the future we lose the ability to
+            # represent a timestamp with microsecond precision in a floating
+            # point number, which we do with Clock.  So don't go far enough
+            # into the future.
+            max_value=datetime(2200, 1, 1),
+        ),
+        vouchers(),
+    )
+    def test_redeem_error_after_delay(self, get_config, now, voucher):
+        """
+        When ``PaymentController`` receives a non-terminal error trying to redeem
+        a voucher, after some time passes it tries to redeem the voucher
+        again.
+        """
+        clock = Clock()
+        clock.advance((now - POSIX_EPOCH).total_seconds())
+
+        store = self.useFixture(
+            TemporaryVoucherStore(
+                get_config,
+                lambda: datetime.utcfromtimestamp(clock.seconds()),
+            ),
+        ).store
+        controller = PaymentController(
+            store,
+            UnpaidRedeemer(),
+            clock,
+        )
+        controller.redeem(voucher)
+        # It fails this time.
+        self.assertThat(
+            controller.get_voucher(voucher).state,
+            MatchesAll(
+                IsInstance(model_Unpaid),
+                MatchesStructure(
+                    finished=Equals(now),
+                ),
+            )
+        )
+
+        # Some time passes.
+        interval = timedelta(hours=1)
+        clock.advance(interval.total_seconds())
+
+        # It failed again.
+        self.assertThat(
+            controller.get_voucher(voucher).state,
+            MatchesAll(
+                IsInstance(model_Unpaid),
+                MatchesStructure(
+                    # At the new time, demonstrating the retry was performed.
+                    finished=Equals(now + interval),
+                ),
+            ),
         )
 
 

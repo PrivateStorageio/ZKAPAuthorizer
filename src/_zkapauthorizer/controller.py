@@ -30,6 +30,10 @@ from functools import (
 from json import (
     dumps,
 )
+from datetime import (
+    timedelta,
+)
+
 import attr
 
 from zope.interface import (
@@ -37,6 +41,9 @@ from zope.interface import (
     implementer,
 )
 
+from twisted.python.reflect import (
+    namedAny,
+)
 from twisted.logger import (
     Logger,
 )
@@ -49,6 +56,9 @@ from twisted.internet.defer import (
     fail,
     inlineCallbacks,
     returnValue,
+)
+from twisted.internet.task import (
+    LoopingCall,
 )
 from twisted.web.client import (
     Agent,
@@ -75,6 +85,8 @@ from .model import (
 
 # The number of tokens to submit with a voucher redemption.
 NUM_TOKENS = 100
+
+RETRY_INTERVAL = timedelta(minutes=3)
 
 class AlreadySpent(Exception):
     """
@@ -511,6 +523,10 @@ class PaymentController(object):
     store = attr.ib()
     redeemer = attr.ib()
 
+    _clock = attr.ib(
+        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
+    )
+
     _error = attr.ib(default=attr.Factory(dict))
     _unpaid = attr.ib(default=attr.Factory(dict))
     _active = attr.ib(default=attr.Factory(dict))
@@ -522,6 +538,29 @@ class PaymentController(object):
         This is an initialization-time hook called by attrs.
         """
         self._check_pending_vouchers()
+        # Also start a time-based polling loop to retry redemption of vouchers
+        # in retryable error states.
+        self._schedule_retries()
+
+    def _schedule_retries(self):
+        # TODO: should not eagerly schedule calls.  If there are no vouchers
+        # in an error state we shouldn't wake up at all.
+        #
+        # TODO: should schedule retries on a bounded exponential backoff
+        # instead, perhaps on a per-voucher basis.
+        self._retry_task = LoopingCall(self._retry_redemption)
+        self._retry_task.clock = self._clock
+        self._retry_task.start(
+            RETRY_INTERVAL.total_seconds(),
+            now=False,
+        )
+
+    def _retry_redemption(self):
+        for voucher in self._error.keys() + self._unpaid.keys():
+            if voucher in self._active:
+                continue
+            if self.get_voucher(voucher).state.should_start_redemption():
+                self.redeem(voucher)
 
     def _check_pending_vouchers(self):
         """
@@ -535,8 +574,7 @@ class PaymentController(object):
                     "Controller found voucher ({}) at startup that needs redemption.",
                     voucher=voucher.number,
                 )
-                random_tokens = self._get_random_tokens_for_voucher(voucher.number, NUM_TOKENS)
-                self._perform_redeem(voucher.number, random_tokens)
+                self.redeem(voucher.number)
             else:
                 self._log.info(
                     "Controller found voucher ({}) at startup that does not need redemption.",
