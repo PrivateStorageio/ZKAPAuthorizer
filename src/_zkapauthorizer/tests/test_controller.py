@@ -50,10 +50,6 @@ from testtools.twistedsupport import (
     failed,
 )
 
-from fixtures import (
-    TempDir,
-)
-
 from hypothesis import (
     given,
 )
@@ -105,8 +101,6 @@ from ..controller import (
 )
 
 from ..model import (
-    memory_connect,
-    VoucherStore,
     UnblindedToken,
     Pending as model_Pending,
     DoubleSpend as model_DoubleSpend,
@@ -122,6 +116,10 @@ from .strategies import (
 from .matchers import (
     Provides,
 )
+from .fixtures import (
+    TemporaryVoucherStore,
+)
+
 
 class PaymentControllerTests(TestCase):
     """
@@ -133,15 +131,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
         completes.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             NonRedeemer(),
@@ -159,15 +149,7 @@ class PaymentControllerTests(TestCase):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             DummyRedeemer(),
@@ -189,15 +171,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
         with ``AlreadySpent``.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
@@ -220,15 +194,7 @@ class PaymentControllerTests(TestCase):
         When ``PaymentController`` is created, any vouchers in the store in the
         pending state are redeemed.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         # Create the voucher state in the store with a redemption that will
         # certainly fail.
         unpaid_controller = PaymentController(

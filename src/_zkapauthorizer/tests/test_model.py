@@ -79,6 +79,9 @@ from .strategies import (
     random_tokens,
     unblinded_tokens,
 )
+from .fixtures import (
+    TemporaryVoucherStore,
+)
 
 
 class VoucherStoreTests(TestCase):
@@ -107,7 +110,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         self.assertThat(
             lambda: store.get(voucher),
             raises(KeyError),
@@ -119,7 +122,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher, tokens)
         self.assertThat(
             store.get(voucher),
@@ -136,7 +139,7 @@ class VoucherStoreTests(TestCase):
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher, tokens)
         store.add(voucher, [])
         self.assertThat(
@@ -155,7 +158,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         for voucher in vouchers:
             store.add(voucher, [])
 
@@ -259,7 +262,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         Unblinded tokens that are added to the store can later be retrieved.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.insert_unblinded_tokens_for_voucher(voucher_value, tokens)
         retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
         self.expectThat(tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
@@ -297,7 +300,7 @@ class UnblindedTokenStoreTests(TestCase):
             ),
         )
 
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         loaded_voucher = store.get(voucher_value)
@@ -322,7 +325,7 @@ class UnblindedTokenStoreTests(TestCase):
         A voucher which is reported as double-spent is marked in the database as
         such.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, random_tokens)
         store.mark_voucher_double_spent(voucher_value)
         voucher = store.get(voucher_value)
@@ -362,7 +365,7 @@ class UnblindedTokenStoreTests(TestCase):
                 unique=True,
             ),
         )
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         try:
@@ -383,7 +386,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         A voucher which is not known cannot be marked as double-spent.
         """
-        store = store_for_test(self, get_config, lambda: now)
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         try:
             result = store.mark_voucher_double_spent(voucher_value)
         except ValueError:
