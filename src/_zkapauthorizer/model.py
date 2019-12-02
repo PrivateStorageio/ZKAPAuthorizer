@@ -466,6 +466,9 @@ class RandomToken(object):
 
 @attr.s(frozen=True)
 class Pending(object):
+    def should_start_redemption(self):
+        return True
+
     def to_json_v1(self):
         return {
             u"name": u"pending",
@@ -481,6 +484,9 @@ class Redeeming(object):
     """
     started = attr.ib(validator=attr.validators.instance_of(datetime))
 
+    def should_start_redemption(self):
+        return False
+
     def to_json_v1(self):
         return {
             u"name": u"redeeming",
@@ -493,6 +499,9 @@ class Redeemed(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
 
+    def should_start_redemption(self):
+        return False
+
     def to_json_v1(self):
         return {
             u"name": u"redeemed",
@@ -504,6 +513,9 @@ class Redeemed(object):
 @attr.s(frozen=True)
 class DoubleSpend(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
+
+    def should_start_redemption(self):
+        return False
 
     def to_json_v1(self):
         return {
@@ -521,6 +533,9 @@ class Unpaid(object):
     """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
 
+    def should_start_redemption(self):
+        return True
+
     def to_json_v1(self):
         return {
             u"name": u"unpaid",
@@ -537,6 +552,9 @@ class Error(object):
     """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     details = attr.ib(validator=attr.validators.instance_of(unicode))
+
+    def should_start_redemption(self):
+        return True
 
     def to_json_v1(self):
         return {

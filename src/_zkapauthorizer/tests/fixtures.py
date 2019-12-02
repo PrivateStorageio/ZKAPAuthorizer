@@ -20,6 +20,8 @@ from __future__ import (
     absolute_import,
 )
 
+import attr
+
 from fixtures import (
     Fixture,
     TempDir,
@@ -31,6 +33,11 @@ from twisted.python.filepath import (
 
 from allmydata.storage.server import (
     StorageServer,
+)
+
+from ..model import (
+    VoucherStore,
+    memory_connect,
 )
 
 class AnonymousStorageServer(Fixture):
@@ -49,4 +56,29 @@ class AnonymousStorageServer(Fixture):
         self.storage_server = StorageServer(
             self.tempdir.asBytesMode().path,
             b"x" * 20,
+        )
+
+
+@attr.s
+class TemporaryVoucherStore(Fixture):
+    """
+    Create a ``VoucherStore`` in a temporary directory associated with the
+    given test case.
+
+    :ivar get_config: A function like the one built by ``tahoe_configs``.
+    :ivar get_now: A no-argument callable that returns a datetime giving a
+        time to consider as "now".
+
+    :ivar store: A newly created temporary store.
+    """
+    get_config = attr.ib()
+    get_now = attr.ib()
+
+    def _setUp(self):
+        self.tempdir = self.useFixture(TempDir())
+        self.config = self.get_config(self.tempdir.join(b"node"), b"tub.port")
+        self.store = VoucherStore.from_node_config(
+            self.config,
+            self.get_now,
+            memory_connect,
         )

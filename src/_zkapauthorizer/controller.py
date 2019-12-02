@@ -30,6 +30,10 @@ from functools import (
 from json import (
     dumps,
 )
+from datetime import (
+    timedelta,
+)
+
 import attr
 
 from zope.interface import (
@@ -37,6 +41,9 @@ from zope.interface import (
     implementer,
 )
 
+from twisted.python.reflect import (
+    namedAny,
+)
 from twisted.logger import (
     Logger,
 )
@@ -49,6 +56,9 @@ from twisted.internet.defer import (
     fail,
     inlineCallbacks,
     returnValue,
+)
+from twisted.internet.task import (
+    LoopingCall,
 )
 from twisted.web.client import (
     Agent,
@@ -73,6 +83,10 @@ from .model import (
     Error as model_Error,
 )
 
+# The number of tokens to submit with a voucher redemption.
+NUM_TOKENS = 100
+
+RETRY_INTERVAL = timedelta(minutes=3)
 
 class AlreadySpent(Exception):
     """
@@ -492,14 +506,14 @@ class PaymentController(object):
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
 
-    :ivar dict[voucher, datetime] _active: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to timestamps
         when the attempt began.
 
-    :ivar dict[voucher, datetime] _error: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _error: A mapping from voucher identifiers
         which have recently failed with an unrecognized, transient error.
 
-    :ivar dict[voucher, datetime] _unpaid: A mapping from voucher identifiers
+    :ivar dict[unicode, datetime] _unpaid: A mapping from voucher identifiers
         which have recently failed a redemption attempt due to an unpaid
         response from the redemption server to timestamps when the failure was
         observed.
@@ -509,11 +523,103 @@ class PaymentController(object):
     store = attr.ib()
     redeemer = attr.ib()
 
+    _clock = attr.ib(
+        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
+    )
+
     _error = attr.ib(default=attr.Factory(dict))
     _unpaid = attr.ib(default=attr.Factory(dict))
     _active = attr.ib(default=attr.Factory(dict))
 
-    def redeem(self, voucher, num_tokens=100):
+    def __attrs_post_init__(self):
+        """
+        Check the voucher store for any vouchers in need of redemption.
+
+        This is an initialization-time hook called by attrs.
+        """
+        self._check_pending_vouchers()
+        # Also start a time-based polling loop to retry redemption of vouchers
+        # in retryable error states.
+        self._schedule_retries()
+
+    def _schedule_retries(self):
+        # TODO: should not eagerly schedule calls.  If there are no vouchers
+        # in an error state we shouldn't wake up at all.
+        #
+        # TODO: should schedule retries on a bounded exponential backoff
+        # instead, perhaps on a per-voucher basis.
+        self._retry_task = LoopingCall(self._retry_redemption)
+        self._retry_task.clock = self._clock
+        self._retry_task.start(
+            RETRY_INTERVAL.total_seconds(),
+            now=False,
+        )
+
+    def _retry_redemption(self):
+        for voucher in self._error.keys() + self._unpaid.keys():
+            if voucher in self._active:
+                continue
+            if self.get_voucher(voucher).state.should_start_redemption():
+                self.redeem(voucher)
+
+    def _check_pending_vouchers(self):
+        """
+        Find vouchers in the voucher store that need to be redeemed and try to
+        redeem them.
+        """
+        vouchers = self.store.list()
+        for voucher in vouchers:
+            if voucher.state.should_start_redemption():
+                self._log.info(
+                    "Controller found voucher ({}) at startup that needs redemption.",
+                    voucher=voucher.number,
+                )
+                self.redeem(voucher.number)
+            else:
+                self._log.info(
+                    "Controller found voucher ({}) at startup that does not need redemption.",
+                    voucher=voucher.number,
+                )
+
+    def _perform_redeem(self, voucher, random_tokens):
+        """
+        Use the redeemer to redeem the given voucher and random tokens.
+
+        This will not persist the voucher or random tokens but it will persist
+        the result.
+        """
+        # Ask the redeemer to do the real task of redemption.
+        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
+        d = bracket(
+            lambda: setitem(self._active, voucher, self.store.now()),
+            lambda: delitem(self._active, voucher),
+            lambda: self.redeemer.redeem(Voucher(voucher), random_tokens),
+        )
+        d.addCallbacks(
+            partial(self._redeemSuccess, voucher),
+            partial(self._redeemFailure, voucher),
+        )
+        d.addErrback(partial(self._finalRedeemError, voucher))
+        return d
+
+    def _get_random_tokens_for_voucher(self, voucher, num_tokens):
+        """
+        Generate or load random tokens for a redemption attempt of a voucher.
+        """
+        self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
+        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
+
+        self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
+        self.store.add(voucher, tokens)
+
+        # XXX If the voucher is already in the store then the tokens passed to
+        # `add` are dropped and we need to get the tokens already persisted in
+        # the store.  add should probably return them so we can use them.  Or
+        # maybe we should pass the generator in so it can be called only if
+        # necessary.
+        return tokens
+
+    def redeem(self, voucher, num_tokens=None):
         """
         :param unicode voucher: A voucher to redeem.
 
@@ -528,26 +634,10 @@ class PaymentController(object):
         # server signs a given set of random tokens once or many times, the
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
-        self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
-        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
-
-        # Persist the voucher and tokens so they're available if we fail.
-        self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
-        self.store.add(voucher, tokens)
-
-        # Ask the redeemer to do the real task of redemption.
-        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
-        d = bracket(
-            lambda: setitem(self._active, voucher, self.store.now()),
-            lambda: delitem(self._active, voucher),
-            lambda: self.redeemer.redeem(Voucher(voucher), tokens),
-        )
-        d.addCallbacks(
-            partial(self._redeemSuccess, voucher),
-            partial(self._redeemFailure, voucher),
-        )
-        d.addErrback(partial(self._finalRedeemError, voucher))
-        return d
+        if num_tokens is None:
+            num_tokens = NUM_TOKENS
+        tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
+        return self._perform_redeem(voucher, tokens)
 
     def _redeemSuccess(self, voucher, unblinded_tokens):
         """
@@ -586,6 +676,11 @@ class PaymentController(object):
     def _finalRedeemError(self, voucher, reason):
         self._log.failure("Redeeming random tokens for a voucher ({voucher}) encountered error.", reason, voucher=voucher)
         return None
+
+    def get_voucher(self, number):
+        return self.incorporate_transient_state(
+            self.store.get(number),
+        )
 
     def incorporate_transient_state(self, voucher):
         """

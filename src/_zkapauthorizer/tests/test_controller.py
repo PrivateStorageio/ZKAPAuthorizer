@@ -27,6 +27,10 @@ from json import (
 from functools import (
     partial,
 )
+from datetime import (
+    datetime,
+    timedelta,
+)
 from zope.interface import (
     implementer,
 )
@@ -50,10 +54,6 @@ from testtools.twistedsupport import (
     failed,
 )
 
-from fixtures import (
-    TempDir,
-)
-
 from hypothesis import (
     given,
 )
@@ -63,6 +63,9 @@ from hypothesis.strategies import (
 )
 from twisted.python.url import (
     URL,
+)
+from twisted.internet.task import (
+    Clock,
 )
 from twisted.internet.defer import (
     fail,
@@ -97,6 +100,7 @@ from ..controller import (
     NonRedeemer,
     DummyRedeemer,
     DoubleSpendRedeemer,
+    UnpaidRedeemer,
     RistrettoRedeemer,
     PaymentController,
     AlreadySpent,
@@ -104,12 +108,11 @@ from ..controller import (
 )
 
 from ..model import (
-    memory_connect,
-    VoucherStore,
     UnblindedToken,
-    Pending,
-    DoubleSpend,
-    Redeemed,
+    Pending as model_Pending,
+    DoubleSpend as model_DoubleSpend,
+    Redeemed as model_Redeemed,
+    Unpaid as model_Unpaid,
 )
 
 from .strategies import (
@@ -120,6 +123,11 @@ from .strategies import (
 from .matchers import (
     Provides,
 )
+from .fixtures import (
+    TemporaryVoucherStore,
+)
+
+POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
 class PaymentControllerTests(TestCase):
     """
@@ -131,15 +139,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
         completes.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             NonRedeemer(),
@@ -149,7 +149,7 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(Pending()),
+            Equals(model_Pending()),
         )
 
     @given(tahoe_configs(), datetimes(), vouchers())
@@ -157,15 +157,7 @@ class PaymentControllerTests(TestCase):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             DummyRedeemer(),
@@ -175,7 +167,7 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(Redeemed(
+            Equals(model_Redeemed(
                 finished=now,
                 token_count=100,
             )),
@@ -187,15 +179,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
         with ``AlreadySpent``.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(
-                tempdir.join(b"node"),
-                b"tub.port",
-            ),
-            now=lambda: now,
-            connect=memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
@@ -206,9 +190,106 @@ class PaymentControllerTests(TestCase):
         self.assertThat(
             persisted_voucher,
             MatchesStructure(
-                state=Equals(DoubleSpend(
+                state=Equals(model_DoubleSpend(
                     finished=now,
                 )),
+            ),
+        )
+
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_redeem_pending_on_startup(self, get_config, now, voucher):
+        """
+        When ``PaymentController`` is created, any vouchers in the store in the
+        pending state are redeemed.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        # Create the voucher state in the store with a redemption that will
+        # certainly fail.
+        unpaid_controller = PaymentController(
+            store,
+            UnpaidRedeemer(),
+        )
+        unpaid_controller.redeem(voucher)
+
+        # Make sure we got where we wanted.
+        self.assertThat(
+            unpaid_controller.get_voucher(voucher).state,
+            IsInstance(model_Unpaid),
+        )
+
+        # Create another controller with the same store.  It will see the
+        # voucher state and attempt a redemption on its own.  It has I/O as an
+        # `__init__` side-effect. :/
+        success_controller = PaymentController(
+            store,
+            DummyRedeemer(),
+        )
+
+        self.assertThat(
+            success_controller.get_voucher(voucher).state,
+            IsInstance(model_Redeemed),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(
+            # I don't know that time-based parts of the system break down
+            # before the POSIX epoch but I don't know that they work, either.
+            # Don't time travel with this code.
+            min_value=POSIX_EPOCH,
+            # Once we get far enough into the future we lose the ability to
+            # represent a timestamp with microsecond precision in a floating
+            # point number, which we do with Clock.  So don't go far enough
+            # into the future.
+            max_value=datetime(2200, 1, 1),
+        ),
+        vouchers(),
+    )
+    def test_redeem_error_after_delay(self, get_config, now, voucher):
+        """
+        When ``PaymentController`` receives a non-terminal error trying to redeem
+        a voucher, after some time passes it tries to redeem the voucher
+        again.
+        """
+        clock = Clock()
+        clock.advance((now - POSIX_EPOCH).total_seconds())
+
+        store = self.useFixture(
+            TemporaryVoucherStore(
+                get_config,
+                lambda: datetime.utcfromtimestamp(clock.seconds()),
+            ),
+        ).store
+        controller = PaymentController(
+            store,
+            UnpaidRedeemer(),
+            clock,
+        )
+        controller.redeem(voucher)
+        # It fails this time.
+        self.assertThat(
+            controller.get_voucher(voucher).state,
+            MatchesAll(
+                IsInstance(model_Unpaid),
+                MatchesStructure(
+                    finished=Equals(now),
+                ),
+            )
+        )
+
+        # Some time passes.
+        interval = timedelta(hours=1)
+        clock.advance(interval.total_seconds())
+
+        # It failed again.
+        self.assertThat(
+            controller.get_voucher(voucher).state,
+            MatchesAll(
+                IsInstance(model_Unpaid),
+                MatchesStructure(
+                    # At the new time, demonstrating the retry was performed.
+                    finished=Equals(now + interval),
+                ),
             ),
         )
 
