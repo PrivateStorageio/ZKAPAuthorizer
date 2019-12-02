@@ -44,7 +44,6 @@ buildPythonPackage rec {
 
   checkPhase = ''
     runHook preCheck
-    set -x
     "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
       then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
