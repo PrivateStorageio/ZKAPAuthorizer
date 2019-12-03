@@ -514,12 +514,24 @@ def get_storage_index_share_size(sharepath):
 
 
 def get_lease_expiration(get_leases, storage_index_or_slot):
+    """
+    Get the lease expiration time for the shares in a bucket or slot, or None
+    if there is no lease on them.
+
+    :param get_leases: A one-argument callable which returns the leases.
+
+    :param storage_index_or_slot: Either a storage index or a slot identifying
+        the shares the leases of which to inspect.
+    """
     for lease in get_leases(storage_index_or_slot):
         return lease.get_expiration_time()
     return None
 
 
 def stat_bucket(storage_server, storage_index, sharepath):
+    """
+    Get a ``ShareStat`` for the shares in a bucket.
+    """
     return ShareStat(
         size=get_storage_index_share_size(sharepath),
         lease_expiration=get_lease_expiration(storage_server.get_leases, storage_index),
@@ -527,6 +539,9 @@ def stat_bucket(storage_server, storage_index, sharepath):
 
 
 def stat_slot(storage_server, slot, sharepath):
+    """
+    Get a ``ShareStat`` for the shares in a slot.
+    """
     return ShareStat(
         size=get_slot_share_size(sharepath),
         lease_expiration=get_lease_expiration(storage_server.get_slot_leases, slot),
@@ -548,6 +563,12 @@ def get_slot_share_size(sharepath):
 
 
 def stat_share(storage_server, storage_index_or_slot):
+    """
+    Get a ``ShareStat`` for each share in a bucket or a slot.
+
+    :return: An iterator of two-tuples of share number and corresponding
+        ``ShareStat``.
+    """
     stat = None
     for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
         if stat is None:
@@ -556,6 +577,12 @@ def stat_share(storage_server, storage_index_or_slot):
 
 
 def get_stat(sharepath):
+    """
+    Get a function that can retrieve the metadata from the share at the given
+    path.
+
+    This is necessary to differentiate between buckets and slots.
+    """
     # Figure out if it is a storage index or a slot.
     with open(sharepath) as share_file:
         magic = share_file.read(32)
