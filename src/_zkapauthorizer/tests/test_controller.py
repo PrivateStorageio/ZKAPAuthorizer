@@ -64,9 +64,6 @@ from hypothesis.strategies import (
 from twisted.python.url import (
     URL,
 )
-from twisted.internet.task import (
-    Clock,
-)
 from twisted.internet.defer import (
     fail,
 )
@@ -119,6 +116,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
     voucher_objects,
+    clocks,
 )
 from .matchers import (
     Provides,
@@ -126,8 +124,6 @@ from .matchers import (
 from .fixtures import (
     TemporaryVoucherStore,
 )
-
-POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
 class PaymentControllerTests(TestCase):
     """
@@ -232,32 +228,20 @@ class PaymentControllerTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(
-            # I don't know that time-based parts of the system break down
-            # before the POSIX epoch but I don't know that they work, either.
-            # Don't time travel with this code.
-            min_value=POSIX_EPOCH,
-            # Once we get far enough into the future we lose the ability to
-            # represent a timestamp with microsecond precision in a floating
-            # point number, which we do with Clock.  So don't go far enough
-            # into the future.
-            max_value=datetime(2200, 1, 1),
-        ),
+        clocks(),
         vouchers(),
     )
-    def test_redeem_error_after_delay(self, get_config, now, voucher):
+    def test_redeem_error_after_delay(self, get_config, clock, voucher):
         """
         When ``PaymentController`` receives a non-terminal error trying to redeem
         a voucher, after some time passes it tries to redeem the voucher
         again.
         """
-        clock = Clock()
-        clock.advance((now - POSIX_EPOCH).total_seconds())
-
+        datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
         store = self.useFixture(
             TemporaryVoucherStore(
                 get_config,
-                lambda: datetime.utcfromtimestamp(clock.seconds()),
+                datetime_now,
             ),
         ).store
         controller = PaymentController(
@@ -272,7 +256,7 @@ class PaymentControllerTests(TestCase):
             MatchesAll(
                 IsInstance(model_Unpaid),
                 MatchesStructure(
-                    finished=Equals(now),
+                    finished=Equals(datetime_now()),
                 ),
             )
         )
@@ -288,7 +272,7 @@ class PaymentControllerTests(TestCase):
                 IsInstance(model_Unpaid),
                 MatchesStructure(
                     # At the new time, demonstrating the retry was performed.
-                    finished=Equals(now + interval),
+                    finished=Equals(datetime_now()),
                 ),
             ),
         )

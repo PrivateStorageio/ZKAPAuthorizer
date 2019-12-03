@@ -80,6 +80,7 @@ from .strategies import (
     sharenum_sets,
     sizes,
     test_and_write_vectors_for_shares,
+    clocks,
     # Not really a strategy...
     bytes_for_share,
 )
@@ -99,9 +100,13 @@ from ..api import (
 )
 from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
+    get_implied_data_length,
 )
 from ..model import (
     Pass,
+)
+from ..foolscap import (
+    ShareStat,
 )
 
 @attr.s
@@ -333,6 +338,125 @@ class ShareTests(TestCase):
             lease.get_expiration_time(),
             Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
         )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenum=sharenums(),
+        size=sizes(),
+        clock=clocks(),
+    )
+    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock):
+        """
+        Size and lease information about immutable shares can be retrieved from a
+        storage server.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # anonymous_storage_server uses time.time(), unfortunately.  And
+        # useFixture does not interact very well with Hypothesis.
+        patch = MonkeyPatch("time.time", clock.seconds)
+        try:
+            patch.setUp()
+            # Create a share we can toy with.
+            write_toy_shares(
+                self.anonymous_storage_server,
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                {sharenum},
+                size,
+                canary=self.canary,
+            )
+        finally:
+            patch.cleanUp()
+
+        stats = extract_result(
+            self.client.stat_shares([storage_index]),
+        )
+        # Hard-coded in Tahoe-LAFS
+        LEASE_INTERVAL = 60 * 60 * 24 * 31
+        expected = [{
+            sharenum: ShareStat(
+                size=size,
+                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+            ),
+        }]
+        self.assertThat(
+            stats,
+            Equals(expected),
+        )
+
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        clock=clocks(),
+    )
+    def test_stat_shares_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares, clock):
+        """
+        Size and lease information about mutable shares can be retrieved from a
+        storage server.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # anonymous_storage_server uses time.time(), unfortunately.  And
+        # useFixture does not interact very well with Hypothesis.
+        patch = MonkeyPatch("time.time", clock.seconds)
+        try:
+            patch.setUp()
+            # Create a share we can toy with.
+            wrote, read = extract_result(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v)
+                        in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                ),
+            )
+        finally:
+            patch.cleanUp()
+        self.assertThat(
+            wrote,
+            Equals(True),
+            u"Server rejected a write to a new mutable slot",
+        )
+
+        stats = extract_result(
+            self.client.stat_shares([storage_index]),
+        )
+        # Hard-coded in Tahoe-LAFS
+        LEASE_INTERVAL = 60 * 60 * 24 * 31
+        expected = [{
+            sharenum: ShareStat(
+                size=get_implied_data_length(
+                    vectors.write_vector,
+                    vectors.new_length,
+                ),
+                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+            )
+            for (sharenum, vectors)
+            in test_and_write_vectors_for_shares.items()
+        }]
+        self.assertThat(
+            stats,
+            Equals(expected),
+        )
+
 
     @given(
         storage_index=storage_indexes(),

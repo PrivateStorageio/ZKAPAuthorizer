@@ -1,6 +1,27 @@
+# Copyright 2019 PrivateStorage.io, LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
+to communicate between storage clients and servers.
+"""
+
 from __future__ import (
     absolute_import,
 )
+
+import attr
 
 from foolscap.constraint import (
     ByteStringConstraint,
@@ -9,6 +30,7 @@ from foolscap.api import (
     Any,
     DictOf,
     ListOf,
+    Copyable,
 )
 from foolscap.remoteinterface import (
     RemoteMethodSchema,
@@ -20,6 +42,20 @@ from allmydata.interfaces import (
     RIStorageServer,
     Offset,
 )
+
+@attr.s
+class ShareStat(Copyable):
+    """
+    Represent some metadata about a share.
+
+    :ivar int size: The size. in bytes, of the share.
+
+    :ivar int lease_expiration: The POSIX timestamp of the time at which the
+        lease on this share expires, or None if there is no lease.
+    """
+    size = attr.ib()
+    lease_expiration = attr.ib()
+
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
 # values.  So we'll try to limit the number of passes a client can supply.
@@ -133,6 +169,15 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
         share has no stored state, its size is reported as 0.
         """
         return DictOf(int, Offset)
+
+    def stat_shares(
+            storage_indexes_or_slots=ListOf(StorageIndex),
+    ):
+        """
+        Get various metadata about shares in the given storage index or slot.
+        """
+        # Any() should be ShareStat but I don't know how to spell that.
+        return ListOf(ListOf(DictOf(int, Any())))
 
     slot_readv = RIStorageServer["slot_readv"]
 

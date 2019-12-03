@@ -176,6 +176,12 @@ class ZKAPAuthorizerStorageClient(object):
             )
         ))
 
+    def stat_shares(self, storage_indexes):
+        return self._rref.callRemote(
+            "stat_shares",
+            storage_indexes,
+        )
+
     def advise_corrupt_share(
             self,
             share_type,
