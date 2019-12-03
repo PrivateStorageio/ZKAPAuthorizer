@@ -81,6 +81,7 @@ from twisted.internet.interfaces import (
 )
 
 from .foolscap import (
+    ShareStat,
     RIPrivacyPassAuthorizedStorageServer,
 )
 from .storage_common import (
@@ -270,6 +271,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         return dict(
             get_share_sizes(self._original, storage_index_or_slot, sharenums)
+        )
+
+    def remote_stat_shares(self, storage_indexes_or_slots):
+        return list(
+            dict(stat_share(self._original, storage_index_or_slot))
+            for storage_index_or_slot
+            in storage_indexes_or_slots
         )
 
     def remote_slot_testv_and_readv_and_writev(
@@ -483,18 +491,12 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
         share number and the second element is the data size for that share
         number.
     """
-    get_size = None
+    stat = None
     for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
-        if get_size is None:
-            # Figure out if it is a storage index or a slot.
-            with open(sharepath) as share_file:
-                magic = share_file.read(32)
-                if magic == "Tahoe mutable container v1\n" + "\x75\x09\x44\x03\x8e":
-                    get_size = get_slot_share_size
-                else:
-                    get_size = get_storage_index_share_size
+        if stat is None:
+            stat = get_stat(sharepath)
         if sharenums is None or sharenum in sharenums:
-            yield sharenum, get_size(sharepath)
+            yield sharenum, stat(storage_server, storage_index_or_slot, sharepath).size
 
 
 def get_storage_index_share_size(sharepath):
@@ -511,6 +513,26 @@ def get_storage_index_share_size(sharepath):
         return share_data_length
 
 
+def get_lease_expiration(get_leases, storage_index_or_slot):
+    for lease in get_leases(storage_index_or_slot):
+        return lease.get_expiration_time()
+    return None
+
+
+def stat_bucket(storage_server, storage_index, sharepath):
+    return ShareStat(
+        size=get_storage_index_share_size(sharepath),
+        lease_expiration=get_lease_expiration(storage_server.get_leases, storage_index),
+    )
+
+
+def stat_slot(storage_server, slot, sharepath):
+    return ShareStat(
+        size=get_slot_share_size(sharepath),
+        lease_expiration=get_lease_expiration(storage_server.get_slot_leases, slot),
+    )
+
+
 def get_slot_share_size(sharepath):
     """
     Get the size of a share belonging to a slot (a mutable share).
@@ -523,6 +545,24 @@ def get_slot_share_size(sharepath):
         share_data_length_bytes = share_file.read(92)[-8:]
         (share_data_length,) = unpack('>Q', share_data_length_bytes)
         return share_data_length
+
+
+def stat_share(storage_server, storage_index_or_slot):
+    stat = None
+    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
+        if stat is None:
+            stat = get_stat(sharepath)
+        yield (sharenum, stat(storage_server, storage_index_or_slot, sharepath))
+
+
+def get_stat(sharepath):
+    # Figure out if it is a storage index or a slot.
+    with open(sharepath) as share_file:
+        magic = share_file.read(32)
+        if magic == "Tahoe mutable container v1\n" + "\x75\x09\x44\x03\x8e":
+            return stat_slot
+        else:
+            return stat_bucket
 
 
 # I don't understand why this is required.
