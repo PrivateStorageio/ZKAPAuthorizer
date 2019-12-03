@@ -19,6 +19,9 @@ Hypothesis strategies for property testing.
 from base64 import (
     urlsafe_b64encode,
 )
+from datetime import (
+    datetime,
+)
 
 import attr
 
@@ -39,6 +42,9 @@ from hypothesis.strategies import (
     datetimes,
 )
 
+from twisted.internet.task import (
+    Clock,
+)
 from twisted.web.test.requesthelper import (
     DummyRequest,
 )
@@ -541,3 +547,36 @@ def announcements():
     return just({
         u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
     })
+
+
+_POSIX_EPOCH = datetime.utcfromtimestamp(0)
+
+def posix_safe_datetimes():
+    """
+    Build datetime instances in a range that can be represented as floats
+    without losing microsecond precision.
+    """
+    return datetimes(
+        # I don't know that time-based parts of the system break down
+        # before the POSIX epoch but I don't know that they work, either.
+        # Don't time travel with this code.
+        min_value=_POSIX_EPOCH,
+        # Once we get far enough into the future we lose the ability to
+        # represent a timestamp with microsecond precision in a floating point
+        # number, which we do with any POSIX timestamp-like API (eg
+        # twisted.internet.task.Clock).  So don't go far enough into the
+        # future.
+        max_value=datetime(2200, 1, 1),
+    )
+
+
+def clocks(now=posix_safe_datetimes()):
+    """
+    Build ``twisted.internet.task.Clock`` instances set to a time built by
+    ``now``.
+    """
+    def clock_at_time(when):
+        c = Clock()
+        c.advance((when - _POSIX_EPOCH).total_seconds())
+        return c
+    return now.map(clock_at_time)
