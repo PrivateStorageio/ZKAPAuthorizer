@@ -565,8 +565,11 @@ def posix_safe_datetimes():
         # represent a timestamp with microsecond precision in a floating point
         # number, which we do with any POSIX timestamp-like API (eg
         # twisted.internet.task.Clock).  So don't go far enough into the
-        # future.
-        max_value=datetime(2200, 1, 1),
+        # future.  Furthermore, once we don't fit into an unsigned 4 byte
+        # integers, we can't round-trip through all the things that expect a
+        # time_t.  Stay back from the absolute top to give tests a little
+        # space to advance time, too.
+        max_value=datetime.utcfromtimestamp(2 ** 31),
     )
 
 
