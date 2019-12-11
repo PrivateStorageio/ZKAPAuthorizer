@@ -108,6 +108,13 @@ def from_configuration(node_config, store, redeemer=None):
             controller,
         ),
     )
+
+    from twisted.internet import reactor
+    from .lease_maintenance import lease_maintenance_service
+    maintenance = lease_maintenance_service()
+    maintenance.startService()
+    reactor.addSystemEventTrigger("before", "shutdown", maintenance.stopService)
+
     return root
 
 
