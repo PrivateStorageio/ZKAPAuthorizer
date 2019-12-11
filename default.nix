@@ -1,2 +1,10 @@
-{ pkgs ? import ./nixpkgs.nix { }, hypothesisProfile ? null, collectCoverage ? false, testSuite ? null, trialArgs ? null }:
-pkgs.python27Packages.zkapauthorizer.override { inherit hypothesisProfile collectCoverage testSuite trialArgs; }
+{ pkgs ? import <nixpkgs> { }
+, hypothesisProfile ? null
+, collectCoverage ? false
+, testSuite ? null
+, trialArgs ? null
+}:
+let pkgs' = pkgs.extend (import ./overlays.nix);
+in pkgs'.python27Packages.zkapauthorizer.override {
+  inherit hypothesisProfile collectCoverage testSuite trialArgs;
+}
