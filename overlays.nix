@@ -20,7 +20,7 @@ self: super: {
 
       # tahoe-lafs in nixpkgs is packaged as an application!  so we have to
       # re-package it ourselves as a library.
-      tahoe-lafs = python-self.callPackage ./tahoe-lafs.nix { };
+      tahoe-lafs = python-self.callPackage ((import ./tahoe-lafs.nix) + "/nix") { };
 
       # we depend on the privacypass python library, a set of bindings to the
       # challenge-bypass-ristretto Rust library
