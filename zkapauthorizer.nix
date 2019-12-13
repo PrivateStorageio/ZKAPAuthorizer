@@ -1,4 +1,4 @@
-{ buildPythonPackage, sphinx,
+{ buildPythonPackage, sphinx
 , attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass
 , fixtures, testtools, hypothesis, pyflakes, treq, coverage
 , hypothesisProfile ? null
