@@ -22,7 +22,7 @@ from __future__ import (
 )
 
 from datetime import (
-    # datetime,
+    datetime,
     timedelta,
 )
 
@@ -33,6 +33,7 @@ from testtools import (
 )
 from hypothesis import (
     given,
+    note,
 )
 from hypothesis.strategies import (
     builds,
@@ -71,11 +72,29 @@ from .matchers import (
 )
 from .strategies import (
     storage_indexes,
+    clocks,
 )
 
 from ..lease_maintenance import (
     lease_maintenance_service,
 )
+
+
+def interval_means():
+    return floats(
+        # It doesn't make sense to have a negative check interval mean.
+        min_value=0,
+        # We can't make this value too large or it isn't convertable to a
+        # timedelta.  Also, even values as large as this one are of
+        # questionable value.
+        max_value=60 * 60 * 24 * 365,
+    ).map(
+        # By representing the result as a timedelta we avoid the cases where
+        # the lower precision of timedelta compared to float drops the whole
+        # value (anything between 0 and 1 microsecond).  This is just on
+        # example of how working with timedeltas is nicer, in general.
+        lambda s: timedelta(seconds=s),
+    )
 
 
 @attr.s
@@ -170,13 +189,7 @@ class LeaseMaintenanceServiceTests(TestCase):
 
     @given(
         randoms(),
-        floats(
-            # It doesn't make sense to have a negative check interval mean.
-            min_value=0,
-            # We can't make this value too large or it isn't convertable to a
-            # timedelta.  Also, even values as large as this one are of
-            # questionable value.
-            max_value=60 * 60 * 24 * 365),
+        interval_means(),
     )
     def test_initial_interval(self, random, mean):
         """
@@ -191,7 +204,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         convergence_secret = b"\1" * CRYPTO_VAL_SIZE
 
         # Construct a range that fits in with the mean
-        range_ = random.uniform(0, mean)
+        range_ = timedelta(
+            seconds=random.uniform(0, mean.total_seconds()),
+        )
 
         service = lease_maintenance_service(
             clock,
@@ -200,13 +215,76 @@ class LeaseMaintenanceServiceTests(TestCase):
             SecretHolder(lease_secret, convergence_secret),
             None,
             random,
-            timedelta(seconds=mean),
-            timedelta(seconds=range_),
+            mean,
+            range_,
         )
         service.startService()
-
         [maintenance_call] = clock.getDelayedCalls()
+
+        datetime_now = datetime.utcfromtimestamp(clock.seconds())
+        low = datetime_now + mean - (range_ / 2)
+        high = datetime_now + mean + (range_ / 2)
         self.assertThat(
-            maintenance_call.getTime(),
-            between(mean - (range_ / 2), mean + (range_ / 2)),
+            datetime.utcfromtimestamp(maintenance_call.getTime()),
+            between(low, high),
+        )
+
+    @given(
+        randoms(),
+        clocks(),
+        interval_means(),
+        interval_means(),
+    )
+    def test_initial_interval_with_last_run(self, random, clock, mean, since_last_run):
+        """
+        When constructed with a value for ``last_run``,
+        ``lease_maintenance_service`` schedules its first run to take place
+        sooner than it otherwise would, by at most the time since the last
+        run.
+        """
+        datetime_now = datetime.utcfromtimestamp(clock.seconds())
+        root_node = object()
+        lease_secret = b"\0" * CRYPTO_VAL_SIZE
+        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
+
+        # Construct a range that fits in with the mean
+        range_ = timedelta(
+            seconds=random.uniform(0, mean.total_seconds()),
+        )
+
+        # Figure out the absolute last run time.
+        last_run = datetime_now - since_last_run
+
+        service = lease_maintenance_service(
+            clock,
+            root_node,
+            DummyStorageBroker(clock, []),
+            SecretHolder(lease_secret, convergence_secret),
+            last_run,
+            random,
+            mean,
+            range_,
+        )
+        service.startService()
+        [maintenance_call] = clock.getDelayedCalls()
+
+        low = datetime_now + max(
+            timedelta(0),
+            mean - (range_ / 2) - since_last_run,
+        )
+        high = max(
+            # If since_last_run is one microsecond (precision of timedelta)
+            # then the range is indivisible.  Avoid putting the expected high
+            # below the expected low.
+            low,
+            datetime_now + mean + (range_ / 2) - since_last_run,
+        )
+
+        note("mean: {}\nrange: {}\nnow: {}\nlow: {}\nhigh: {}\nsince last: {}".format(
+            mean, range_, datetime_now, low, high, since_last_run,
+        ))
+
+        self.assertThat(
+            datetime.utcfromtimestamp(maintenance_call.getTime()),
+            between(low, high),
         )
