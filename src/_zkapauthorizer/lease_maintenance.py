@@ -256,16 +256,14 @@ class _FuzzyTimerService(Service):
         Schedule the next run of the operation.
         """
         self._call = self.reactor.callLater(
-            self.sample_interval_distribution(),
+            self.sample_interval_distribution().total_seconds(),
             self._iterate,
         )
 
 
 def lease_maintenance_service(
+        maintain_leases,
         reactor,
-        root_node,
-        storage_broker,
-        secret_holder,
         last_run,
         random,
         interval_mean=None,
@@ -278,17 +276,6 @@ def lease_maintenance_service(
     :param IReactorClock reactor: A Twisted reactor for scheduling renewal
         activity.
 
-    :param IFilesystemNode root_node: A Tahoe-LAFS filesystem node to use as
-        the root of a node hierarchy to be maintained.
-
-    :param StorageFarmBroker storage_broker: The storage broker which can put
-        us in touch with storage servers where shares of the nodes to maintain
-        might be found.
-
-    :param SecretHolder secret_holder: The Tahoe-LAFS client node secret
-        holder which can give us the lease renewal secrets needed to renew
-        leases.
-
     :param datetime last_run: The time at which lease maintenance last ran to
         inform an adjustment to the first interval before running it again, or
         ``None`` not to make such an adjustment.
@@ -300,6 +287,9 @@ def lease_maintenance_service(
 
     :param timedelta interval_range: The range of the uniform distribution of
         lease renewal checks (centered on ``interval_mean``).
+
+    :param maintain_leases: A no-argument callable which performs a round of
+        lease-maintenance.  The resulting service calls this periodically.
     """
     if interval_mean is None:
         interval_mean = timedelta(days=26)
@@ -307,7 +297,6 @@ def lease_maintenance_service(
         interval_range = timedelta(days=4)
     halfrange = interval_range / 2
 
-    min_lease_remaining = timedelta(days=3)
     def sample_interval_distribution():
         return timedelta(
             seconds=random.uniform(
@@ -327,19 +316,40 @@ def lease_maintenance_service(
             initial_interval,
             timedelta(0),
         )
+
     return _FuzzyTimerService(
-        partial(
-            renew_leases,
-            partial(visit_filesystem_nodes, root_node),
-            storage_broker,
-            secret_holder,
-            min_lease_remaining,
-            lambda: datetime.utcfromtimestamp(reactor.seconds()),
-        ),
+        maintain_leases,
         initial_interval,
         sample_interval_distribution,
         reactor,
     )
+
+
+def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_lease_remaining, get_now):
+    """
+    :param IFilesystemNode root_node: A Tahoe-LAFS filesystem node to use as
+        the root of a node hierarchy to be maintained.
+
+    :param StorageFarmBroker storage_broker: The storage broker which can put
+        us in touch with storage servers where shares of the nodes to maintain
+        might be found.
+
+    :param SecretHolder secret_holder: The Tahoe-LAFS client node secret
+        holder which can give us the lease renewal secrets needed to renew
+        leases.
+
+    :param get_now: A no-argument callable that returns the current time as a
+        ``datetime`` instance.
+    """
+    return partial(
+        renew_leases,
+        partial(visit_filesystem_nodes, root_node),
+        storage_broker,
+        secret_holder,
+        min_lease_remaining,
+        get_now,
+    )
+
 
 def calculate_initial_interval(sample_interval_distribution, last_run, now):
     """

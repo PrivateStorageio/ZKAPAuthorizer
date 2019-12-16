@@ -31,6 +31,9 @@ import attr
 from testtools import (
     TestCase,
 )
+from testtools.matchers import (
+    Equals,
+)
 from hypothesis import (
     given,
     note,
@@ -58,9 +61,9 @@ from twisted.application.service import (
 from allmydata.util.hashutil import (
     CRYPTO_VAL_SIZE,
 )
-from allmydata.client import (
-    SecretHolder,
-)
+# from allmydata.client import (
+#     SecretHolder,
+# )
 
 from ..foolscap import (
     ShareStat,
@@ -95,6 +98,10 @@ def interval_means():
         # example of how working with timedeltas is nicer, in general.
         lambda s: timedelta(seconds=s),
     )
+
+
+def dummy_maintain_leases():
+    pass
 
 
 @attr.s
@@ -171,14 +178,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         The service provides ``IService``.
         """
         clock = Clock()
-        root_node = object()
-        lease_secret = b"\0" * CRYPTO_VAL_SIZE
-        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
         service = lease_maintenance_service(
+            dummy_maintain_leases,
             clock,
-            root_node,
-            DummyStorageBroker(clock, []),
-            SecretHolder(lease_secret, convergence_secret),
             None,
             random,
         )
@@ -199,20 +201,14 @@ class LeaseMaintenanceServiceTests(TestCase):
         with a size of ``range``.
         """
         clock = Clock()
-        root_node = object()
-        lease_secret = b"\0" * CRYPTO_VAL_SIZE
-        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
-
         # Construct a range that fits in with the mean
         range_ = timedelta(
             seconds=random.uniform(0, mean.total_seconds()),
         )
 
         service = lease_maintenance_service(
+            dummy_maintain_leases,
             clock,
-            root_node,
-            DummyStorageBroker(clock, []),
-            SecretHolder(lease_secret, convergence_secret),
             None,
             random,
             mean,
@@ -243,10 +239,6 @@ class LeaseMaintenanceServiceTests(TestCase):
         run.
         """
         datetime_now = datetime.utcfromtimestamp(clock.seconds())
-        root_node = object()
-        lease_secret = b"\0" * CRYPTO_VAL_SIZE
-        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
-
         # Construct a range that fits in with the mean
         range_ = timedelta(
             seconds=random.uniform(0, mean.total_seconds()),
@@ -256,10 +248,8 @@ class LeaseMaintenanceServiceTests(TestCase):
         last_run = datetime_now - since_last_run
 
         service = lease_maintenance_service(
+            dummy_maintain_leases,
             clock,
-            root_node,
-            DummyStorageBroker(clock, []),
-            SecretHolder(lease_secret, convergence_secret),
             last_run,
             random,
             mean,
@@ -287,4 +277,31 @@ class LeaseMaintenanceServiceTests(TestCase):
         self.assertThat(
             datetime.utcfromtimestamp(maintenance_call.getTime()),
             between(low, high),
+        )
+
+    @given(
+        randoms(),
+        clocks(),
+    )
+    def test_nodes_visited(self, random, clock):
+        """
+        When the service runs, it calls the ``maintain_leases`` object.
+        """
+        leases_maintained_at = []
+        def maintain_leases():
+            leases_maintained_at.append(datetime.utcfromtimestamp(clock.seconds()))
+
+        service = lease_maintenance_service(
+            maintain_leases,
+            clock,
+            None,
+            random,
+        )
+        service.startService()
+        [maintenance_call] = clock.getDelayedCalls()
+        clock.advance(maintenance_call.getTime() - clock.seconds())
+
+        self.assertThat(
+            leases_maintained_at,
+            Equals([datetime.utcfromtimestamp(clock.seconds())]),
         )
