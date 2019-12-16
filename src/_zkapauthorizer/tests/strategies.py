@@ -583,3 +583,57 @@ def clocks(now=posix_safe_datetimes()):
         c.advance((when - _POSIX_EPOCH).total_seconds())
         return c
     return now.map(clock_at_time)
+
+
+
+
+@implementer(IFilesystemNode)
+@attr.ib
+class _LeafNode(object):
+    _storage_index = attr.ib()
+
+    def get_storage_index(self):
+        return self._storage_index
+
+
+def leaf_nodes():
+    return storage_indexes().map(_LeafNode)
+
+
+@implementer(IDirectoryNode)
+@attr.s
+class _DirectoryNode(object):
+    _storage_index = attr.ib()
+    _children = attr.ib()
+
+    def list(self):
+        return succeed(self._children)
+
+
+def directory_nodes(child_strategy):
+    """
+    Build directory nodes with children drawn from the given strategy.
+    """
+    children = dictionaries(
+        text(),
+        tuples(
+            child_strategy,
+            just({}),
+        ),
+    )
+    return builds(
+        _DirectoryNode,
+        storage_indexes(),
+        children,
+    )
+
+
+def node_hierarchies():
+    """
+    Build hierarchies of ``IDirectoryNode`` and other ``IFilesystemNode``
+    (incomplete) providers.
+    """
+    return recursive(
+        leaf_nodes(),
+        directory_nodes,
+    )

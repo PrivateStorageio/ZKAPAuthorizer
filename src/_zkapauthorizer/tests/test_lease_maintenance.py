@@ -34,6 +34,9 @@ from testtools import (
 from testtools.matchers import (
     Equals,
 )
+from testtools.twistedsupport import (
+    succeeds,
+)
 from hypothesis import (
     given,
     note,
@@ -61,9 +64,9 @@ from twisted.application.service import (
 from allmydata.util.hashutil import (
     CRYPTO_VAL_SIZE,
 )
-# from allmydata.client import (
-#     SecretHolder,
-# )
+from allmydata.client import (
+    SecretHolder,
+)
 
 from ..foolscap import (
     ShareStat,
@@ -76,10 +79,12 @@ from .matchers import (
 from .strategies import (
     storage_indexes,
     clocks,
+    node_hierarchies,
 )
 
 from ..lease_maintenance import (
     lease_maintenance_service,
+    maintain_leases_from_root,
 )
 
 
@@ -304,4 +309,36 @@ class LeaseMaintenanceServiceTests(TestCase):
         self.assertThat(
             leases_maintained_at,
             Equals([datetime.utcfromtimestamp(clock.seconds())]),
+        )
+
+
+class MaintainLeasesFromRootTests(TestCase):
+    """
+    Tests for ``maintain_leases_from_root``.
+    """
+    @given(node_hierarchies(), clocks())
+    def test_visits_all_nodes(self, root_node, clock):
+        """
+        The operation calls the specified visitor with every node from the root to
+        its deepest children.
+        """
+        visited = []
+        def visitor(node):
+            visited.append(node)
+
+        storage_broker = DummyStorageBroker(clock, [])
+        secret_holder = SecretHolder(lease_secret, convergence_secret)
+
+        operation = maintain_leases_from_root(
+            visitor,
+            root_node,
+            storage_broker,
+            secret_holder,
+            timedelta(days=3),
+            lambda: datetime.utcfromtimestamp(clock.seconds()),
+        )
+
+        self.assertThat(
+            operation(root_node),
+            succeeds(Always()),
         )

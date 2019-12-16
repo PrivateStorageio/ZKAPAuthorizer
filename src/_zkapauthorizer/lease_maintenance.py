@@ -327,6 +327,10 @@ def lease_maintenance_service(
 
 def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_lease_remaining, get_now):
     """
+    An operation for ``lease_maintenance_service`` which visits ``root_node``
+    and all its children and renews their leases if they have
+    ``min_lease_remaining`` or less on them.
+
     :param IFilesystemNode root_node: A Tahoe-LAFS filesystem node to use as
         the root of a node hierarchy to be maintained.
 
@@ -337,6 +341,9 @@ def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_leas
     :param SecretHolder secret_holder: The Tahoe-LAFS client node secret
         holder which can give us the lease renewal secrets needed to renew
         leases.
+
+    :param timedelta min_lease_remaining: The minimum amount of time remaining
+        to allow on a lease without renewing it.
 
     :param get_now: A no-argument callable that returns the current time as a
         ``datetime`` instance.
