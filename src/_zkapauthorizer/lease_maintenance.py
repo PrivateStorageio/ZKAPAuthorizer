@@ -268,6 +268,8 @@ def lease_maintenance_service(
         secret_holder,
         last_run,
         random,
+        interval_mean=None,
+        interval_range=None,
 ):
     """
     Get an ``IService`` which will maintain leases on ``root_node`` and any
@@ -293,15 +295,26 @@ def lease_maintenance_service(
 
     :param random: An object like ``random.Random`` which can be used as a
         source of scheduling delay.
+
+    :param timedelta interval_mean: The mean time between lease renewal checks.
+
+    :param timedelta interval_range: The range of the uniform distribution of
+        lease renewal checks (centered on ``interval_mean``).
     """
-    mean = timedelta(days=26).total_seconds()
-    halfrange = timedelta(days=2).total_seconds()
+    if interval_mean is None:
+        interval_mean = timedelta(days=26)
+    if interval_range is None:
+        interval_range = timedelta(days=4)
+    halfrange = interval_range / 2
+
     min_lease_remaining = timedelta(days=3)
-    sample_interval_distribution = partial(
-        random.uniform,
-        mean - halfrange,
-        mean + halfrange,
-    )
+    def sample_interval_distribution():
+        return timedelta(
+            seconds=random.uniform(
+                (interval_mean - halfrange).total_seconds(),
+                (interval_mean + halfrange).total_seconds(),
+            ),
+        )
     if last_run is None:
         initial_interval = sample_interval_distribution()
     else:

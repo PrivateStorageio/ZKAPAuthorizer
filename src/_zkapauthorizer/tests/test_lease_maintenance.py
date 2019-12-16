@@ -22,7 +22,7 @@ from __future__ import (
 )
 
 from datetime import (
-    datetime,
+    # datetime,
     timedelta,
 )
 
@@ -31,12 +31,17 @@ import attr
 from testtools import (
     TestCase,
 )
+from hypothesis import (
+    given,
+)
 from hypothesis.strategies import (
     builds,
     binary,
     integers,
     lists,
+    floats,
     dictionaries,
+    randoms,
 )
 
 from twisted.internet.task import (
@@ -62,12 +67,13 @@ from ..foolscap import (
 
 from .matchers import (
     Provides,
+    between,
 )
 from .strategies import (
     storage_indexes,
 )
 
-from ..lease_maintenace import (
+from ..lease_maintenance import (
     lease_maintenance_service,
 )
 
@@ -140,13 +146,13 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
     Tests for the service returned by ``lease_maintenance_service``.
     """
-    def test_interface(self):
+    @given(randoms())
+    def test_interface(self, random):
         """
         The service provides ``IService``.
         """
         clock = Clock()
         root_node = object()
-        random = object()
         lease_secret = b"\0" * CRYPTO_VAL_SIZE
         convergence_secret = b"\1" * CRYPTO_VAL_SIZE
         service = lease_maintenance_service(
@@ -154,10 +160,53 @@ class LeaseMaintenanceServiceTests(TestCase):
             root_node,
             DummyStorageBroker(clock, []),
             SecretHolder(lease_secret, convergence_secret),
-            datetime.utcfromtimestamp(0),
+            None,
             random,
         )
         self.assertThat(
             service,
-            Provides(IService),
+            Provides([IService]),
+        )
+
+    @given(
+        randoms(),
+        floats(
+            # It doesn't make sense to have a negative check interval mean.
+            min_value=0,
+            # We can't make this value too large or it isn't convertable to a
+            # timedelta.  Also, even values as large as this one are of
+            # questionable value.
+            max_value=60 * 60 * 24 * 365),
+    )
+    def test_initial_interval(self, random, mean):
+        """
+        When constructed without a value for ``last_run``,
+        ``lease_maintenance_service`` schedules its first run to take place
+        after an interval that falls uniformly in range centered on ``mean``
+        with a size of ``range``.
+        """
+        clock = Clock()
+        root_node = object()
+        lease_secret = b"\0" * CRYPTO_VAL_SIZE
+        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
+
+        # Construct a range that fits in with the mean
+        range_ = random.uniform(0, mean)
+
+        service = lease_maintenance_service(
+            clock,
+            root_node,
+            DummyStorageBroker(clock, []),
+            SecretHolder(lease_secret, convergence_secret),
+            None,
+            random,
+            timedelta(seconds=mean),
+            timedelta(seconds=range_),
+        )
+        service.startService()
+
+        [maintenance_call] = clock.getDelayedCalls()
+        self.assertThat(
+            maintenance_call.getTime(),
+            between(mean - (range_ / 2), mean + (range_ / 2)),
         )

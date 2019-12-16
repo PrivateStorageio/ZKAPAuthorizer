@@ -23,6 +23,11 @@ from testtools.matchers import (
     Mismatch,
     ContainsDict,
     Always,
+    MatchesAll,
+    MatchesAny,
+    GreaterThan,
+    LessThan,
+    Equals,
 )
 
 @attr.s
@@ -78,3 +83,19 @@ class _Returns(Matcher):
 
     def __str__(self):
         return "Returns({})".format(self.result_matcher)
+
+
+def between(low, high):
+    """
+    Matches a value in the range [low, high].
+    """
+    return MatchesAll(
+        MatchesAny(
+            Equals(low),
+            GreaterThan(low),
+        ),
+        MatchesAny(
+            Equals(high),
+            LessThan(high),
+        ),
+    )
