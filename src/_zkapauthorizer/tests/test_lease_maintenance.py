@@ -36,6 +36,8 @@ from testtools.matchers import (
     Always,
     HasLength,
     MatchesAll,
+    AllMatch,
+    GreaterThan,
     AfterPreprocessing,
 )
 from testtools.twistedsupport import (
@@ -53,6 +55,8 @@ from hypothesis.strategies import (
     floats,
     dictionaries,
     randoms,
+    composite,
+    just,
 )
 
 from twisted.internet.task import (
@@ -68,9 +72,9 @@ from twisted.application.service import (
 from allmydata.util.hashutil import (
     CRYPTO_VAL_SIZE,
 )
-# from allmydata.client import (
-#     SecretHolder,
-# )
+from allmydata.client import (
+    SecretHolder,
+)
 
 from ..foolscap import (
     ShareStat,
@@ -83,6 +87,7 @@ from .matchers import (
 from .strategies import (
     storage_indexes,
     clocks,
+    leaf_nodes,
     node_hierarchies,
 )
 
@@ -90,6 +95,7 @@ from ..lease_maintenance import (
     lease_maintenance_service,
     # maintain_leases_from_root,
     visit_storage_indexes_from_root,
+    renew_leases,
 )
 
 
@@ -129,6 +135,7 @@ class DummyStorageServer(object):
             self.buckets[idx]
             for idx
             in storage_indexes
+            if idx in self.buckets
         ))
 
     def get_lease_seed(self):
@@ -142,9 +149,10 @@ class DummyStorageServer(object):
 
 def lease_seeds():
     return binary(
-        min_size=CRYPTO_VAL_SIZE,
-        max_size=CRYPTO_VAL_SIZE,
+        min_size=20,
+        max_size=20,
     )
+
 
 def share_stats():
     return builds(
@@ -152,6 +160,7 @@ def share_stats():
         size=integers(min_value=0),
         lease_expiration=integers(min_value=0, max_value=2 ** 31),
     )
+
 
 def storage_servers(clocks):
     return builds(
@@ -171,10 +180,12 @@ class DummyStorageBroker(object):
         return self._storage_servers
 
 
-def storage_brokers(clocks):
-    return builds(
-        DummyStorageBroker,
-        lists(storage_servers(clocks)),
+@composite
+def storage_brokers(draw, clocks):
+    clock = draw(clocks)
+    return DummyStorageBroker(
+        clock,
+        draw(lists(storage_servers(just(clock)))),
     )
 
 
@@ -352,6 +363,77 @@ class VisitStorageIndexesFromRootTests(TestCase):
                         for node
                         in expected
                     )),
+                ),
+            ),
+        )
+
+
+class RenewLeasesTests(TestCase):
+    """
+    Tests for ``renew_leases``.
+    """
+    @given(storage_brokers(clocks()), lists(leaf_nodes()))
+    def test_renewed(self, storage_broker, nodes):
+        """
+        ``renew_leases`` renews the leases of shares on all storage servers which
+        have no more than the specified amount of time remaining on their
+        current lease.
+        """
+        lease_secret = b"\0" * CRYPTO_VAL_SIZE
+        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
+        secret_holder = SecretHolder(lease_secret, convergence_secret)
+        min_lease_remaining = timedelta(days=3)
+
+        def get_now():
+            return datetime.utcfromtimestamp(
+                storage_broker.clock.seconds(),
+            )
+
+        def visit_assets(visit):
+            for node in nodes:
+                visit(node.get_storage_index())
+            return succeed(None)
+
+        d = renew_leases(
+            visit_assets,
+            storage_broker,
+            secret_holder,
+            min_lease_remaining,
+            get_now,
+        )
+        self.assertThat(
+            d,
+            succeeded(Always()),
+        )
+
+        relevant_storage_indexes = set(
+            node.get_storage_index()
+            for node
+            in nodes
+        )
+
+        self.assertThat(
+            storage_broker.get_connected_servers(),
+            AllMatch(
+                AfterPreprocessing(
+                    # Get share stats for storage indexes we should have
+                    # visited and maintained.
+                    lambda storage_server: list(
+                        stat
+                        for (storage_index, stat)
+                        in storage_server.buckets.items()
+                        if storage_index in relevant_storage_indexes
+                    ),
+                    AllMatch(
+                        AfterPreprocessing(
+                            # Lease expiration for anything visited must be
+                            # further in the future than min_lease_remaining,
+                            # either because it had time left or because we
+                            # renewed it.
+                            lambda share_stat: datetime.utcfromtimestamp(share_stat.lease_expiration),
+                            GreaterThan(get_now() + min_lease_remaining),
+                        ),
+                    ),
                 ),
             ),
         )
