@@ -211,7 +211,7 @@ def needs_lease_renew(min_lease_remaining, stat, now):
     :return bool: ``True`` if the lease needs to be renewed, ``False``
         otherwise.
     """
-    remaining = now - datetime.utcfromtimestamp(stat.lease_expiration)
+    remaining = datetime.utcfromtimestamp(stat.lease_expiration) - now
     return remaining < min_lease_remaining
 
 
