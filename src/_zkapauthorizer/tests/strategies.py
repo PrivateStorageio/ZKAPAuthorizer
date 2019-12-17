@@ -25,6 +25,10 @@ from datetime import (
 
 import attr
 
+from zope.interface import (
+    implementer,
+)
+
 from hypothesis.strategies import (
     one_of,
     just,
@@ -40,8 +44,12 @@ from hypothesis.strategies import (
     fixed_dictionaries,
     builds,
     datetimes,
+    recursive,
 )
 
+from twisted.internet.defer import (
+    succeed,
+)
 from twisted.internet.task import (
     Clock,
 )
@@ -50,6 +58,8 @@ from twisted.web.test.requesthelper import (
 )
 
 from allmydata.interfaces import (
+    IFilesystemNode,
+    IDirectoryNode,
     HASH_SIZE,
 )
 
@@ -588,12 +598,16 @@ def clocks(now=posix_safe_datetimes()):
 
 
 @implementer(IFilesystemNode)
-@attr.ib
+@attr.s
 class _LeafNode(object):
     _storage_index = attr.ib()
 
     def get_storage_index(self):
         return self._storage_index
+
+    # For testing
+    def flatten(self):
+        return [self]
 
 
 def leaf_nodes():
@@ -608,6 +622,16 @@ class _DirectoryNode(object):
 
     def list(self):
         return succeed(self._children)
+
+    def get_storage_index(self):
+        return self._storage_index
+
+    # For testing
+    def flatten(self):
+        result = [self]
+        for (node, _) in self._children.values():
+            result.extend(node.flatten())
+        return result
 
 
 def directory_nodes(child_strategy):

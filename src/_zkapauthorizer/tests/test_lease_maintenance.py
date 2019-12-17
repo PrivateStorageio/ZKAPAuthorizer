@@ -33,9 +33,13 @@ from testtools import (
 )
 from testtools.matchers import (
     Equals,
+    Always,
+    HasLength,
+    MatchesAll,
+    AfterPreprocessing,
 )
 from testtools.twistedsupport import (
-    succeeds,
+    succeeded,
 )
 from hypothesis import (
     given,
@@ -64,9 +68,9 @@ from twisted.application.service import (
 from allmydata.util.hashutil import (
     CRYPTO_VAL_SIZE,
 )
-from allmydata.client import (
-    SecretHolder,
-)
+# from allmydata.client import (
+#     SecretHolder,
+# )
 
 from ..foolscap import (
     ShareStat,
@@ -84,7 +88,8 @@ from .strategies import (
 
 from ..lease_maintenance import (
     lease_maintenance_service,
-    maintain_leases_from_root,
+    # maintain_leases_from_root,
+    visit_storage_indexes_from_root,
 )
 
 
@@ -312,9 +317,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         )
 
 
-class MaintainLeasesFromRootTests(TestCase):
+class VisitStorageIndexesFromRootTests(TestCase):
     """
-    Tests for ``maintain_leases_from_root``.
+    Tests for ``visit_storage_indexes_from_root``.
     """
     @given(node_hierarchies(), clocks())
     def test_visits_all_nodes(self, root_node, clock):
@@ -323,22 +328,30 @@ class MaintainLeasesFromRootTests(TestCase):
         its deepest children.
         """
         visited = []
-        def visitor(node):
-            visited.append(node)
+        def perform_visit(visit_assets):
+            return visit_assets(visited.append)
 
-        storage_broker = DummyStorageBroker(clock, [])
-        secret_holder = SecretHolder(lease_secret, convergence_secret)
-
-        operation = maintain_leases_from_root(
-            visitor,
+        operation = visit_storage_indexes_from_root(
+            perform_visit,
             root_node,
-            storage_broker,
-            secret_holder,
-            timedelta(days=3),
-            lambda: datetime.utcfromtimestamp(clock.seconds()),
         )
 
         self.assertThat(
-            operation(root_node),
-            succeeds(Always()),
+            operation(),
+            succeeded(Always()),
+        )
+        expected = root_node.flatten()
+        self.assertThat(
+            visited,
+            MatchesAll(
+                HasLength(len(expected)),
+                AfterPreprocessing(
+                    set,
+                    Equals(set(
+                        node.get_storage_index()
+                        for node
+                        in expected
+                    )),
+                ),
+            ),
         )

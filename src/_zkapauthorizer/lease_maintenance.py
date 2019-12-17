@@ -47,7 +47,7 @@ from allmydata.util.hashutil import (
 )
 
 @inlineCallbacks
-def visit_filesystem_nodes(root_node, visit):
+def visit_storage_indexes(root_node, visit):
     """
     Call a visitor with the storage index of ``root_node`` and that of all
     nodes reachable from it.
@@ -65,7 +65,11 @@ def visit_filesystem_nodes(root_node, visit):
         elem = stack.pop()
         visit(elem.get_storage_index())
         if IDirectoryNode.providedBy(elem):
-            for (child_node, child_metadata) in (yield elem.list()):
+            children = yield elem.list()
+            # Produce consistent results by forcing some consistent ordering
+            # here.  This will sort by name.
+            stable_children = sorted(children.items())
+            for (name, (child_node, child_metadata)) in stable_children:
                 stack.append(child_node)
 
 
@@ -325,6 +329,25 @@ def lease_maintenance_service(
     )
 
 
+def visit_storage_indexes_from_root(visitor, root_node):
+    """
+    An operation for ``lease_maintenance_service`` which applies the given
+    visitor to ``root_node`` and all its children.
+
+    :param visitor: A one-argument callable which takes the traversal function
+        and which should call it as desired.
+
+    :param IFilesystemNode root_node: The filesystem node at which traversal
+        will begin.
+
+    :return: A no-argument callable to perform the visits.
+    """
+    return partial(
+        visitor,
+        partial(visit_storage_indexes, root_node),
+    )
+
+
 def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_lease_remaining, get_now):
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
@@ -347,14 +370,21 @@ def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_leas
 
     :param get_now: A no-argument callable that returns the current time as a
         ``datetime`` instance.
+
+    :return: A no-argument callable to perform the maintenance.
     """
-    return partial(
-        renew_leases,
-        partial(visit_filesystem_nodes, root_node),
-        storage_broker,
-        secret_holder,
-        min_lease_remaining,
-        get_now,
+    def visitor(visit_assets):
+        return renew_leases(
+            visit_assets,
+            storage_broker,
+            secret_holder,
+            min_lease_remaining,
+            get_now,
+        )
+
+    return visit_storage_indexes_from_root(
+        visitor,
+        root_node,
     )
 
 
