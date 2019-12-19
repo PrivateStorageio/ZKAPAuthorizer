@@ -93,7 +93,7 @@ from .strategies import (
 
 from ..lease_maintenance import (
     lease_maintenance_service,
-    # maintain_leases_from_root,
+    maintain_leases_from_root,
     visit_storage_indexes_from_root,
     renew_leases,
 )
@@ -413,26 +413,87 @@ class RenewLeasesTests(TestCase):
 
         self.assertThat(
             storage_broker.get_connected_servers(),
-            AllMatch(
-                AfterPreprocessing(
-                    # Get share stats for storage indexes we should have
-                    # visited and maintained.
-                    lambda storage_server: list(
-                        stat
-                        for (storage_index, stat)
-                        in storage_server.buckets.items()
-                        if storage_index in relevant_storage_indexes
-                    ),
-                    AllMatch(
-                        AfterPreprocessing(
-                            # Lease expiration for anything visited must be
-                            # further in the future than min_lease_remaining,
-                            # either because it had time left or because we
-                            # renewed it.
-                            lambda share_stat: datetime.utcfromtimestamp(share_stat.lease_expiration),
-                            GreaterThan(get_now() + min_lease_remaining),
-                        ),
-                    ),
-                ),
-            ),
+            AllMatch(leases_current(
+                relevant_storage_indexes,
+                get_now(),
+                min_lease_remaining,
+            )),
         )
+
+
+class MaintainLeasesFromRootTests(TestCase):
+    """
+    Tests for ``maintain_leases_from_root``.
+    """
+    @given(storage_brokers(clocks()), node_hierarchies())
+    def test_renewed(self, storage_broker, root_node):
+        """
+        ``maintain_leases_from_root`` creates an operation which renews the leases
+        of shares on all storage servers which have no more than the specified
+        amount of time remaining on their current lease.
+        """
+        lease_secret = b"\0" * CRYPTO_VAL_SIZE
+        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
+        secret_holder = SecretHolder(lease_secret, convergence_secret)
+        min_lease_remaining = timedelta(days=3)
+
+        def get_now():
+            return datetime.utcfromtimestamp(
+                storage_broker.clock.seconds(),
+            )
+
+        operation = maintain_leases_from_root(
+            root_node,
+            storage_broker,
+            secret_holder,
+            min_lease_remaining,
+            get_now,
+        )
+        d = operation()
+        self.assertThat(
+            d,
+            succeeded(Always()),
+        )
+
+        relevant_storage_indexes = set(
+            node.get_storage_index()
+            for node
+            in root_node.flatten()
+        )
+
+        self.assertThat(
+            storage_broker.get_connected_servers(),
+            AllMatch(leases_current(
+                relevant_storage_indexes,
+                get_now(),
+                min_lease_remaining,
+            ))
+        )
+
+
+def leases_current(relevant_storage_indexes, now, min_lease_remaining):
+    """
+    Return a matcher on a ``DummyStorageServer`` instance which matches
+    servers for which the leases on the given storage indexes do not expire
+    before ``min_lease_remaining``.
+    """
+    return AfterPreprocessing(
+        # Get share stats for storage indexes we should have
+        # visited and maintained.
+        lambda storage_server: list(
+            stat
+            for (storage_index, stat)
+            in storage_server.buckets.items()
+            if storage_index in relevant_storage_indexes
+        ),
+        AllMatch(
+            AfterPreprocessing(
+                # Lease expiration for anything visited must be
+                # further in the future than min_lease_remaining,
+                # either because it had time left or because we
+                # renewed it.
+                lambda share_stat: datetime.utcfromtimestamp(share_stat.lease_expiration),
+                GreaterThan(now + min_lease_remaining),
+            ),
+        ),
+    )
