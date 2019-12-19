@@ -175,9 +175,16 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     ):
         """
         Get various metadata about shares in the given storage index or slot.
+
+        :return [{int: ShareStat}]: A list of share stats.  Dictionaries in
+            the list corresponds to the results for each storage index
+            requested by the ``storage_indexes_or_slots`` argument.  Items in
+            the dictionary give share stats for each share known to this
+            server to be associated with the corresponding storage index.
+            Keys are share numbers and values are the stats.
         """
         # Any() should be ShareStat but I don't know how to spell that.
-        return ListOf(ListOf(DictOf(int, Any())))
+        return ListOf(DictOf(int, Any()))
 
     slot_readv = RIStorageServer["slot_readv"]
 

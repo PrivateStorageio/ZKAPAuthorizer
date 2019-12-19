@@ -132,10 +132,9 @@ class DummyStorageServer(object):
 
     def stat_shares(self, storage_indexes):
         return succeed(list(
-            self.buckets[idx]
+            {0: self.buckets[idx]} if idx in self.buckets else {}
             for idx
             in storage_indexes
-            if idx in self.buckets
         ))
 
     def get_lease_seed(self):

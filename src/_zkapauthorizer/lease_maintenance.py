@@ -164,7 +164,12 @@ def renew_leases_on_server(
         been checked and any leases that need renewal have been renewed.
     """
     stats = yield server.stat_shares(storage_indexes)
-    for storage_index, stat in zip(storage_indexes, stats):
+    for storage_index, stat_dict in zip(storage_indexes, stats):
+        if not stat_dict:
+            # The server has no shares for this storage index.
+            continue
+        # All shares have the same lease information.
+        stat = stat_dict.popitem()[1]
         if needs_lease_renew(min_lease_remaining, stat, now):
             yield renew_lease(renewal_secret, storage_index, server)
 
