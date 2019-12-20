@@ -24,8 +24,14 @@ from datetime import (
     datetime,
     timedelta,
 )
-
+from errno import (
+    ENOENT,
+)
 import attr
+
+from aniso8601 import (
+    parse_datetime,
+)
 
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -44,6 +50,10 @@ from allmydata.interfaces import (
 from allmydata.util.hashutil import (
     file_renewal_secret_hash,
     bucket_renewal_secret_hash,
+)
+
+from .controller import (
+    bracket,
 )
 
 SERVICE_NAME = u"lease maintenance service"
@@ -276,7 +286,7 @@ class _FuzzyTimerService(Service):
 def lease_maintenance_service(
         maintain_leases,
         reactor,
-        last_run,
+        last_run_path,
         random,
         interval_mean=None,
         interval_range=None,
@@ -288,9 +298,12 @@ def lease_maintenance_service(
     :param IReactorClock reactor: A Twisted reactor for scheduling renewal
         activity.
 
-    :param datetime last_run: The time at which lease maintenance last ran to
-        inform an adjustment to the first interval before running it again, or
-        ``None`` not to make such an adjustment.
+    :param FilePath last_run_path: A path containing the time (as an ISO8601
+        datetime string) at which lease maintenance last ran to inform an
+        adjustment to the first interval before running it again.  If no file
+        exists at the path it is treated as though there has been no previous
+        run.  The path will also be rewritten on each run to update this
+        value.
 
     :param random: An object like ``random.Random`` which can be used as a
         source of scheduling delay.
@@ -316,6 +329,7 @@ def lease_maintenance_service(
                 (interval_mean + halfrange).total_seconds(),
             ),
         )
+    last_run = read_time_from_path(last_run_path)
     if last_run is None:
         initial_interval = sample_interval_distribution()
     else:
@@ -329,13 +343,52 @@ def lease_maintenance_service(
             timedelta(0),
         )
 
+
     return _FuzzyTimerService(
         SERVICE_NAME,
-        maintain_leases,
+        bracket(
+            lambda: None,
+            lambda: write_time_to_path(
+                last_run_path,
+                datetime.utcfromtimestamp(reactor.seconds()),
+            ),
+            maintain_leases,
+        ),
         initial_interval,
         sample_interval_distribution,
         reactor,
     )
+
+
+def write_time_to_path(path, when):
+    """
+    Write an ISO8601 datetime string to a file.
+
+    :param FilePath path: The path to a file to which to write the datetime
+        string.
+
+    :param datetime when: The datetime to write.
+    """
+    path.setContent(when.isoformat())
+
+
+def read_time_from_path(path):
+    """
+    Read an ISO8601 datetime string from a file.
+
+    :param FilePath path: The path to a file containing a datetime string.
+
+    :return: None if no file exists at the path.  Otherwise, a datetime
+        instance giving the time represented in the file.
+    """
+    try:
+        when = path.getContent()
+    except IOError as e:
+        if ENOENT == e.errno:
+            return None
+        raise
+    else:
+        return parse_datetime(when)
 
 
 def visit_storage_indexes_from_root(visitor, root_node):

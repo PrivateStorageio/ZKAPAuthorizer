@@ -42,6 +42,9 @@ from testtools.matchers import (
 from testtools.twistedsupport import (
     succeeded,
 )
+from fixtures import (
+    TempDir,
+)
 from hypothesis import (
     given,
     note,
@@ -58,6 +61,9 @@ from hypothesis.strategies import (
     just,
 )
 
+from twisted.python.filepath import (
+    FilePath,
+)
 from twisted.internet.task import (
     Clock,
 )
@@ -201,7 +207,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             dummy_maintain_leases,
             clock,
-            None,
+            FilePath(self.useFixture(TempDir()).join(u"last-run")),
             random,
         )
         self.assertThat(
@@ -229,7 +235,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             dummy_maintain_leases,
             clock,
-            None,
+            FilePath(self.useFixture(TempDir()).join(u"last-run")),
             random,
             mean,
             range_,
@@ -266,6 +272,8 @@ class LeaseMaintenanceServiceTests(TestCase):
 
         # Figure out the absolute last run time.
         last_run = datetime_now - since_last_run
+        last_run_path = FilePath(self.useFixture(TempDir()).join(u"last-run"))
+        last_run_path.setContent(last_run.isoformat())
 
         service = lease_maintenance_service(
             dummy_maintain_leases,
@@ -314,7 +322,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             maintain_leases,
             clock,
-            None,
+            FilePath(self.useFixture(TempDir()).join(u"last-run")),
             random,
         )
         service.startService()

@@ -210,7 +210,7 @@ def _maybe_attach_maintenance_service(reactor, client_node):
             client_node.config,
             client_node,
         ).setServiceParent(client_node)
-    except Exception as e:
+    except Exception:
         _log.failure("Attaching maintenance service to client node")
     else:
         _log.info("Found existing lease maintenance service")
@@ -234,7 +234,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
     # called.
     maintain_leases = maintain_leases_from_root(
         client_node.create_node_from_uri(
-            node_config.get_private_config(u"rootcap"),
+            node_config.get_private_config(b"rootcap"),
         ),
         client_node.get_storage_broker(),
         client_node._secret_holder,
@@ -242,10 +242,11 @@ def _create_maintenance_service(reactor, node_config, client_node):
         timedelta(days=3),
         get_now,
     )
+    last_run_path = FilePath(node_config.get_private_path(b"last-lease-maintenance-run"))
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
         maintain_leases,
         reactor,
-        node_config.get_private_config(u"last-lease-maintenance-run", None),
+        last_run_path,
         random,
     )
