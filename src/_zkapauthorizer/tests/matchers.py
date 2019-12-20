@@ -16,6 +16,10 @@
 Testtools matchers useful for the test suite.
 """
 
+from datetime import (
+    datetime,
+)
+
 import attr
 
 from testtools.matchers import (
@@ -28,6 +32,8 @@ from testtools.matchers import (
     GreaterThan,
     LessThan,
     Equals,
+    AfterPreprocessing,
+    AllMatch,
 )
 
 @attr.s
@@ -97,5 +103,33 @@ def between(low, high):
         MatchesAny(
             Equals(high),
             LessThan(high),
+        ),
+    )
+
+
+def leases_current(relevant_storage_indexes, now, min_lease_remaining):
+    """
+    Return a matcher on a ``DummyStorageServer`` instance which matches
+    servers for which the leases on the given storage indexes do not expire
+    before ``min_lease_remaining``.
+    """
+    return AfterPreprocessing(
+        # Get share stats for storage indexes we should have
+        # visited and maintained.
+        lambda storage_server: list(
+            stat
+            for (storage_index, stat)
+            in storage_server.buckets.items()
+            if storage_index in relevant_storage_indexes
+        ),
+        AllMatch(
+            AfterPreprocessing(
+                # Lease expiration for anything visited must be
+                # further in the future than min_lease_remaining,
+                # either because it had time left or because we
+                # renewed it.
+                lambda share_stat: datetime.utcfromtimestamp(share_stat.lease_expiration),
+                GreaterThan(now + min_lease_remaining),
+            ),
         ),
     )
