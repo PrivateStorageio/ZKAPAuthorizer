@@ -10,7 +10,9 @@
 let
   hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
   testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
-  extraTrialArgs = builtins.concatStringsSep " " (if trialArgs == null then ["--rterrors" "--jobs=4" ] else trialArgs);
+  defaultTrialArgs = [ "--rterrors" ] ++ ( lib.optional ( ! collectCoverage ) "--jobs=4" );
+  trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
+  extraTrialArgs = builtins.concatStringsSep " " trialArgs';
 in
 buildPythonPackage rec {
   version = "0.0";
