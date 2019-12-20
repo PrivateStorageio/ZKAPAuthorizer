@@ -17,19 +17,23 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
+import random
 from weakref import (
     WeakValueDictionary,
 )
 from datetime import (
     datetime,
+    timedelta,
 )
-
 import attr
 
 from zope.interface import (
     implementer,
 )
 
+from twisted.logger import (
+    Logger,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -40,6 +44,9 @@ from twisted.internet.defer import (
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
+)
+from allmydata.client import (
+    _Client,
 )
 from privacypass import (
     SigningKey,
@@ -61,6 +68,13 @@ from .resource import (
 from .controller import (
     get_redeemer,
 )
+from .lease_maintenance import (
+    SERVICE_NAME,
+    lease_maintenance_service,
+    maintain_leases_from_root,
+)
+
+_log = Logger()
 
 @implementer(IAnnounceableStorageServer)
 @attr.s
@@ -69,8 +83,8 @@ class AnnounceableStorageServer(object):
     storage_server = attr.ib()
 
 
-@attr.s
 @implementer(IFoolscapStoragePlugin)
+@attr.s
 class ZKAPAuthorizer(object):
     """
     A storage plugin which provides a token-based access control mechanism on
@@ -153,7 +167,6 @@ class ZKAPAuthorizer(object):
             get_passes,
         )
 
-
     def get_client_resource(self, node_config):
         from twisted.internet import reactor
         return resource_from_configuration(
@@ -161,3 +174,78 @@ class ZKAPAuthorizer(object):
             store=self._get_store(node_config),
             redeemer=self._get_redeemer(node_config, None, reactor),
         )
+
+
+_init_storage = _Client.__dict__["init_storage"]
+def maintenance_init_storage(self, announceable_storage_servers):
+    """
+    A monkey-patched version of ``_Client.init_storage`` which also
+    initializes the lease maintenance service.
+    """
+    from twisted.internet import reactor
+    try:
+        return _init_storage(self, announceable_storage_servers)
+    finally:
+        _maybe_attach_maintenance_service(reactor, self)
+_Client.init_storage = maintenance_init_storage
+
+
+def _maybe_attach_maintenance_service(reactor, client_node):
+    """
+    Check for an existing lease maintenance service and if one is not found,
+    create one.
+
+    :param allmydata.client._Client client_node: The client node to check and,
+        possibly, modify.  A lease maintenance service is added to it if and
+        only if one is not already present.
+    """
+    try:
+        # If there is already one we don't need another.
+        client_node.getServiceNamed(SERVICE_NAME)
+    except KeyError:
+        # There isn't one so make it and add it.
+        _log.info("Creating new lease maintenance service")
+        _create_maintenance_service(
+            reactor,
+            client_node.config,
+            client_node,
+        ).setServiceParent(client_node)
+    except Exception as e:
+        _log.failure("Attaching maintenance service to client node")
+    else:
+        _log.info("Found existing lease maintenance service")
+
+
+def _create_maintenance_service(reactor, node_config, client_node):
+    """
+    Create a lease maintenance service to be attached to the given client
+    node.
+
+    :param allmydata.node._Config node_config: The configuration for the node
+        the lease maintenance service will be attached to.
+
+    :param allmydata.client._Client client_node: The client node the lease
+        maintenance service will be attached to.
+    """
+    def get_now():
+        return datetime.utcfromtimestamp(reactor.seconds())
+
+    # Create the operation which performs the lease maintenance job when
+    # called.
+    maintain_leases = maintain_leases_from_root(
+        client_node.create_node_from_uri(
+            node_config.get_private_config(u"rootcap"),
+        ),
+        client_node.get_storage_broker(),
+        client_node._secret_holder,
+        # Make this configuration
+        timedelta(days=3),
+        get_now,
+    )
+    # Create the service to periodically run the lease maintenance operation.
+    return lease_maintenance_service(
+        maintain_leases,
+        reactor,
+        node_config.get_private_config(u"last-lease-maintenance-run", None),
+        random,
+    )
