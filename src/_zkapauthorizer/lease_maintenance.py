@@ -46,6 +46,8 @@ from allmydata.util.hashutil import (
     bucket_renewal_secret_hash,
 )
 
+SERVICE_NAME = u"lease maintenance service"
+
 @inlineCallbacks
 def visit_storage_indexes(root_node, visit):
     """
@@ -240,6 +242,7 @@ class _FuzzyTimerService(Service):
     :ivar IReactorTime reactor: A Twisted reactor to use to schedule runs of
         the operation.
     """
+    name = attr.ib()
     operation = attr.ib()
     initial_interval = attr.ib()
     sample_interval_distribution = attr.ib()
@@ -327,6 +330,7 @@ def lease_maintenance_service(
         )
 
     return _FuzzyTimerService(
+        SERVICE_NAME,
         maintain_leases,
         initial_interval,
         sample_interval_distribution,
