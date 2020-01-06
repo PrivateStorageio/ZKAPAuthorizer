@@ -10,7 +10,7 @@ care is taken to only renew leases for which the expiration time will soon arriv
 Design
 ------
 
-The process of checking leases and renewing is automated in the client storage plugin.
+The process of checking lease age and renewing them automated in the client storage plugin.
 The storage plugin interface is not ideally shaped to support this functionality.
 The following designs have been considered.
 
