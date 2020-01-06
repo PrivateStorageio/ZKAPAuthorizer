@@ -270,7 +270,7 @@ class _FuzzyTimerService(Service):
         Run the operation once and then schedule it to run again.
         """
         d = maybeDeferred(self.operation)
-        d.addErrback(err, "Fuzzy timer service ({})")
+        d.addErrback(err, "Fuzzy timer service ({})".format(self.name))
         d.addCallback(lambda ignored: self._schedule())
 
     def _schedule(self):
