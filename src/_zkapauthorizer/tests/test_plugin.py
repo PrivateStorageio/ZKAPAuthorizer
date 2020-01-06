@@ -473,7 +473,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         finally:
             # create_client_from_config (indirectly) rewrites tempfile.tempdir
             # in a destructive manner that fails most of the rest of the test
-            # suite if we don't clean it up.  We can do this with a tearDown
+            # suite if we don't clean it up.  We can't do this with a tearDown
             # or a fixture or an addCleanup because hypothesis doesn't run any
             # of those at the right time. :/
            tempfile.tempdir = original_tempdir
