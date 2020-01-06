@@ -131,6 +131,8 @@ def dummy_maintain_leases():
 @attr.s
 class DummyStorageServer(object):
     """
+    A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
+
     :ivar dict[bytes, datetime] buckets: A mapping from storage index to lease
         expiration time for shares at that storage index.
     """
