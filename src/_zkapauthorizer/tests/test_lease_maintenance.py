@@ -118,7 +118,7 @@ def interval_means():
     ).map(
         # By representing the result as a timedelta we avoid the cases where
         # the lower precision of timedelta compared to float drops the whole
-        # value (anything between 0 and 1 microsecond).  This is just on
+        # value (anything between 0 and 1 microsecond).  This is just one
         # example of how working with timedeltas is nicer, in general.
         lambda s: timedelta(seconds=s),
     )
