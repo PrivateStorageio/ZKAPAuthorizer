@@ -260,10 +260,15 @@ class _FuzzyTimerService(Service):
 
     def startService(self):
         Service.startService(self)
-        self.reactor.callLater(
+        self._call = self.reactor.callLater(
             self.initial_interval.total_seconds(),
             self._iterate,
         )
+
+    def stopService(self):
+        self._call.cancel()
+        self._call = None
+        return Service.stopService(self)
 
     def _iterate(self):
         """

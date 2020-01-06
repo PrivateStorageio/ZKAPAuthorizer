@@ -32,6 +32,7 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Is,
     Equals,
     Always,
     HasLength,
@@ -69,6 +70,7 @@ from twisted.internet.task import (
 )
 from twisted.internet.defer import (
     succeed,
+    maybeDeferred,
 )
 from twisted.application.service import (
     IService,
@@ -305,6 +307,34 @@ class LeaseMaintenanceServiceTests(TestCase):
         self.assertThat(
             datetime.utcfromtimestamp(maintenance_call.getTime()),
             between(low, high),
+        )
+
+    @given(
+        randoms(),
+        clocks(),
+    )
+    def test_clean_up_when_stopped(self, random, clock):
+        """
+        When the service is stopped, the delayed call in the reactor is removed.
+        """
+        service = lease_maintenance_service(
+            lambda: None,
+            clock,
+            FilePath(self.useFixture(TempDir()).join(u"last-run")),
+            random,
+        )
+        service.startService()
+        self.assertThat(
+            maybeDeferred(service.stopService),
+            succeeded(Is(None)),
+        )
+        self.assertThat(
+            clock.getDelayedCalls(),
+            Equals([]),
+        )
+        self.assertThat(
+            service.running,
+            Equals(False),
         )
 
     @given(
