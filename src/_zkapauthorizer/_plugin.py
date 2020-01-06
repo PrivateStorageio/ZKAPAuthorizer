@@ -184,10 +184,9 @@ def maintenance_init_storage(self, announceable_storage_servers):
     initializes the lease maintenance service.
     """
     from twisted.internet import reactor
-    try:
-        return _init_storage(self, announceable_storage_servers)
-    finally:
-        _maybe_attach_maintenance_service(reactor, self)
+    result = _init_storage(self, announceable_storage_servers)
+    _maybe_attach_maintenance_service(reactor, self)
+    return result
 _Client.init_storage = maintenance_init_storage
 
 
