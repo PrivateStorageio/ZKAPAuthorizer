@@ -329,6 +329,12 @@ def lease_maintenance_service(
                 (interval_mean + halfrange).total_seconds(),
             ),
         )
+    # Rather than an all-or-nothing last-run time we probably eventually want
+    # to have a more comprehensive record of the state when we were last
+    # interrupted.  This would remove the unfortunate behavior of restarting
+    # from the beginning if we shut down during a lease scan.  Shutting down
+    # during a lease scan becomes increasingly likely the more shares there
+    # are to check.
     last_run = read_time_from_path(last_run_path)
     if last_run is None:
         initial_interval = sample_interval_distribution()
