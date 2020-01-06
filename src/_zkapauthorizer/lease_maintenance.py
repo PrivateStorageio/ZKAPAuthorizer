@@ -346,7 +346,7 @@ def lease_maintenance_service(
 
     return _FuzzyTimerService(
         SERVICE_NAME,
-        bracket(
+        lambda: bracket(
             lambda: None,
             lambda: write_time_to_path(
                 last_run_path,
