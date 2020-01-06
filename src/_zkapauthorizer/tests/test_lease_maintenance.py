@@ -278,7 +278,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             dummy_maintain_leases,
             clock,
-            last_run,
+            last_run_path,
             random,
             mean,
             range_,
