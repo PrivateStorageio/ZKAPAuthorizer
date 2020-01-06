@@ -124,6 +124,7 @@ from .matchers import (
     Provides,
 )
 
+
 SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
 
 

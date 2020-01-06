@@ -167,6 +167,7 @@ class ZKAPAuthorizer(object):
             get_passes,
         )
 
+
     def get_client_resource(self, node_config):
         from twisted.internet import reactor
         return resource_from_configuration(

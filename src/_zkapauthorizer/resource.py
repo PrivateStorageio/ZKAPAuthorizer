@@ -108,7 +108,6 @@ def from_configuration(node_config, store, redeemer=None):
             controller,
         ),
     )
-
     return root
 
 
