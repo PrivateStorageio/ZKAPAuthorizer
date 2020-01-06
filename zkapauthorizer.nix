@@ -1,6 +1,6 @@
 { buildPythonPackage, sphinx
-, attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass
-, fixtures, testtools, hypothesis, pyflakes, treq, coverage
+, attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass, treq
+, fixtures, testtools, hypothesis, pyflakes, coverage
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
@@ -30,6 +30,7 @@ buildPythonPackage rec {
     twisted
     tahoe-lafs
     privacypass
+    treq
   ];
 
   checkInputs = [
@@ -37,8 +38,6 @@ buildPythonPackage rec {
     fixtures
     testtools
     hypothesis
-    twisted
-    treq
   ];
 
   checkPhase = ''
