@@ -10,7 +10,7 @@
 let
   hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
   testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
-  defaultTrialArgs = [ "--rterrors" ] ++ ( lib.optional ( ! collectCoverage ) "--jobs=4" );
+  defaultTrialArgs = [ "--rterrors" ] ++ ( lib.optional ( ! collectCoverage ) "--jobs=$NIX_BUILD_CORES" );
   trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
   extraTrialArgs = builtins.concatStringsSep " " trialArgs';
 in
