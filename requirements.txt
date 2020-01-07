@@ -1,3 +1,0 @@
-attrs
-zope.interface
-https://github.com/tahoe-lafs/tahoe-lafs/archive/b35a8908f4096ccae35da78b0e7dde96d6cf1667.zip#egg=tahoe-lafs
