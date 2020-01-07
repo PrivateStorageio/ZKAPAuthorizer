@@ -13,6 +13,7 @@ Welcome to ZKAP Authorizer's documentation!
    code_of_conduct
    CONTRIBUTING
    interface
+   leases
 
 Indices and tables
 ==================

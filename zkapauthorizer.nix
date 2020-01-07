@@ -1,4 +1,5 @@
-{ buildPythonPackage, sphinx
+{ lib
+, buildPythonPackage, sphinx
 , attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass, treq
 , fixtures, testtools, hypothesis, pyflakes, coverage
 , hypothesisProfile ? null
@@ -9,13 +10,15 @@
 let
   hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
   testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
-  extraTrialArgs = builtins.concatStringsSep " " (if trialArgs == null then ["--rterrors" "--jobs=4" ] else trialArgs);
+  defaultTrialArgs = [ "--rterrors" ] ++ ( lib.optional ( ! collectCoverage ) "--jobs=$NIX_BUILD_CORES" );
+  trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
+  extraTrialArgs = builtins.concatStringsSep " " trialArgs';
 in
 buildPythonPackage rec {
   version = "0.0";
   pname = "zero-knowledge-access-pass-authorizer";
   name = "${pname}-${version}";
-  src = ./.;
+  src = lib.cleanSource ./.;
 
   outputs = [ "out" ] ++ (if collectCoverage then [ "doc" ] else [ ]);
 

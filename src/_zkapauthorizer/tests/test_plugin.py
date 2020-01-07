@@ -23,7 +23,10 @@ from __future__ import (
 from io import (
     BytesIO,
 )
-
+from os import (
+    makedirs,
+)
+import tempfile
 from zope.interface import (
     implementer,
 )
@@ -53,6 +56,7 @@ from hypothesis import (
 from hypothesis.strategies import (
     just,
     datetimes,
+    sampled_from,
 )
 from foolscap.broker import (
     Broker,
@@ -70,6 +74,9 @@ from allmydata.interfaces import (
     IAnnounceableStorageServer,
     IStorageServer,
     RIStorageServer,
+)
+from allmydata.client import (
+    create_client_from_config,
 )
 
 from twisted.python.filepath import (
@@ -93,6 +100,9 @@ from ..model import (
 )
 from ..controller import (
     IssuerConfigurationMismatch,
+)
+from ..lease_maintenance import (
+    SERVICE_NAME,
 )
 
 from .strategies import (
@@ -391,3 +401,91 @@ class ClientResourceTests(TestCase):
             storage_server.get_client_resource(config),
             Provides([IResource]),
         )
+
+
+SERVERS_YAML = b"""
+storage:
+  v0-aaaaaaaa:
+    ann:
+      anonymous-storage-FURL: pb://@tcp:/
+      nickname: 10.0.0.2
+      storage-options:
+      - name: privatestorageio-zkapauthz-v1
+        ristretto-issuer-root-url: https://payments.example.com/
+        storage-server-FURL: pb://bbbbbbbb@tcp:10.0.0.2:1234/cccccccc
+"""
+
+TWO_SERVERS_YAML = b"""
+storage:
+  v0-aaaaaaaa:
+    ann:
+      anonymous-storage-FURL: pb://@tcp:/
+      nickname: 10.0.0.2
+      storage-options:
+      - name: privatestorageio-zkapauthz-v1
+        ristretto-issuer-root-url: https://payments.example.com/
+        storage-server-FURL: pb://bbbbbbbb@tcp:10.0.0.2:1234/cccccccc
+  v0-dddddddd:
+    ann:
+      anonymous-storage-FURL: pb://@tcp:/
+      nickname: 10.0.0.3
+      storage-options:
+      - name: privatestorageio-zkapauthz-v1
+        ristretto-issuer-root-url: https://payments.example.com/
+        storage-server-FURL: pb://eeeeeeee@tcp:10.0.0.3:1234/ffffffff
+"""
+
+
+class LeaseMaintenanceServiceTests(TestCase):
+    """
+    Tests for the plugin's initialization of the lease maintenance service.
+    """
+    def _created_test(self, get_config, servers_yaml):
+        original_tempdir = tempfile.tempdir
+
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+        privatedir = tempdir.join(b"node", b"private")
+        makedirs(privatedir)
+        config = get_config(nodedir, b"tub.port")
+
+        # Provide it a statically configured server to connect to.
+        config.write_private_config(
+            b"servers.yaml",
+            servers_yaml,
+        )
+        config.write_private_config(
+            b"rootcap",
+            b"dddddddd",
+        )
+
+        try:
+            d = create_client_from_config(config)
+            self.assertThat(
+                d,
+                succeeded(
+                    AfterPreprocessing(
+                        lambda client: client.getServiceNamed(SERVICE_NAME),
+                        Always(),
+                    ),
+                ),
+            )
+        finally:
+            # create_client_from_config (indirectly) rewrites tempfile.tempdir
+            # in a destructive manner that fails most of the rest of the test
+            # suite if we don't clean it up.  We can't do this with a tearDown
+            # or a fixture or an addCleanup because hypothesis doesn't run any
+            # of those at the right time. :/
+           tempfile.tempdir = original_tempdir
+
+    @given(
+        tahoe_configs_with_dummy_redeemer,
+        sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),
+    )
+    def test_created(self, get_config, servers_yaml):
+        """
+        A client created from a configuration with the plugin enabled has a lease
+        maintenance service after it has at least one storage server to
+        connect to.
+        """
+        return self._created_test(get_config, servers_yaml)

@@ -25,6 +25,10 @@ from datetime import (
 
 import attr
 
+from zope.interface import (
+    implementer,
+)
+
 from hypothesis.strategies import (
     one_of,
     just,
@@ -40,8 +44,12 @@ from hypothesis.strategies import (
     fixed_dictionaries,
     builds,
     datetimes,
+    recursive,
 )
 
+from twisted.internet.defer import (
+    succeed,
+)
 from twisted.internet.task import (
     Clock,
 )
@@ -50,6 +58,8 @@ from twisted.web.test.requesthelper import (
 )
 
 from allmydata.interfaces import (
+    IFilesystemNode,
+    IDirectoryNode,
     HASH_SIZE,
 )
 
@@ -583,3 +593,71 @@ def clocks(now=posix_safe_datetimes()):
         c.advance((when - _POSIX_EPOCH).total_seconds())
         return c
     return now.map(clock_at_time)
+
+
+
+
+@implementer(IFilesystemNode)
+@attr.s
+class _LeafNode(object):
+    _storage_index = attr.ib()
+
+    def get_storage_index(self):
+        return self._storage_index
+
+    # For testing
+    def flatten(self):
+        return [self]
+
+
+def leaf_nodes():
+    return storage_indexes().map(_LeafNode)
+
+
+@implementer(IDirectoryNode)
+@attr.s
+class _DirectoryNode(object):
+    _storage_index = attr.ib()
+    _children = attr.ib()
+
+    def list(self):
+        return succeed(self._children)
+
+    def get_storage_index(self):
+        return self._storage_index
+
+    # For testing
+    def flatten(self):
+        result = [self]
+        for (node, _) in self._children.values():
+            result.extend(node.flatten())
+        return result
+
+
+def directory_nodes(child_strategy):
+    """
+    Build directory nodes with children drawn from the given strategy.
+    """
+    children = dictionaries(
+        text(),
+        tuples(
+            child_strategy,
+            just({}),
+        ),
+    )
+    return builds(
+        _DirectoryNode,
+        storage_indexes(),
+        children,
+    )
+
+
+def node_hierarchies():
+    """
+    Build hierarchies of ``IDirectoryNode`` and other ``IFilesystemNode``
+    (incomplete) providers.
+    """
+    return recursive(
+        leaf_nodes(),
+        directory_nodes,
+    )
