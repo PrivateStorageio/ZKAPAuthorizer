@@ -1,5 +1,5 @@
 diff --git a/setup.py b/setup.py
-index 70927ff..9bf414d 100644
+index 6da2d4d..32262dd 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -21,7 +21,7 @@ setup(
@@ -8,7 +8,7 @@ index 70927ff..9bf414d 100644
      platforms='any',
 -    setup_requires=['milksnake', 'setuptools_scm'],
 +    setup_requires=['milksnake'],
-     install_requires=['milksnake', 'cffi', 'attrs'],
+     install_requires=['cffi', 'attrs'],
      extras_require={
          "tests": [
 @@ -29,7 +29,6 @@ setup(
