@@ -533,16 +533,11 @@ class LeaseMaintenance(object):
         self._rowid = cursor.lastrowid
 
     @with_cursor
-    def observe(self, cursor, size):
+    def observe(self, cursor, sizes):
         """
-        Record a storage object of a given size.
+        Record a storage shares of the given sizes.
         """
-        # XXX The client has no idea how many shares a server is storing and
-        # can do nothing except renew the lease on all of them. :( Here, guess
-        # that there is only one share.  "Servers of happiness" should make
-        # this more likely to be the case...  We might be underestimating
-        # storage costs though.
-        count = required_passes(BYTES_PER_PASS, {size})
+        count = required_passes(BYTES_PER_PASS, sizes)
         cursor.execute(
             """
             UPDATE [lease-maintenance-spending]
