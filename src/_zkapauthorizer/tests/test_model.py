@@ -27,6 +27,9 @@ from os import (
 from errno import (
     EACCES,
 )
+from datetime import (
+    timedelta,
+)
 
 from testtools import (
     TestCase,
@@ -52,12 +55,18 @@ from hypothesis import (
 from hypothesis.strategies import (
     data,
     lists,
+    tuples,
     datetimes,
+    timedeltas,
     integers,
 )
 
 from twisted.python.filepath import (
     FilePath,
+)
+
+from ..storage_common import (
+    BYTES_PER_PASS,
 )
 
 from ..model import (
@@ -68,6 +77,7 @@ from ..model import (
     Pending,
     DoubleSpend,
     Redeemed,
+    LeaseMaintenanceActivity,
     open_and_initialize,
     memory_connect,
 )
@@ -78,6 +88,7 @@ from .strategies import (
     voucher_objects,
     random_tokens,
     unblinded_tokens,
+    posix_safe_datetimes,
 )
 from .fixtures import (
     TemporaryVoucherStore,
@@ -217,7 +228,6 @@ class VoucherStoreTests(TestCase):
         If the underlying database file cannot be opened then
         ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
-
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
 
@@ -235,6 +245,73 @@ class VoucherStoreTests(TestCase):
                 lambda: now,
             ),
             raises(StoreOpenError),
+        )
+
+
+class LeaseMaintenanceTests(TestCase):
+    """
+    Tests for the lease-maintenance related parts of ``VoucherStore``.
+    """
+    @given(
+        tahoe_configs(),
+        posix_safe_datetimes(),
+        lists(
+            tuples(
+                # How much time passes before this activity starts
+                timedeltas(min_value=timedelta(0), max_value=timedelta(days=1)),
+                # Some activity.  This list of two tuples gives us a trivial
+                # way to compute the total passes required (just sum the pass
+                # counts in it).  This is nice because it avoids having the
+                # test re-implement size quantization which would just be
+                # repeated code duplicating the implementation.  The second
+                # value lets us fuzz the actual size values a little bit in a
+                # way which shouldn't affect the passes required.
+                lists(
+                    tuples(
+                        # The activity itself, in pass count
+                        integers(min_value=1, max_value=2 ** 16 - 1),
+                        # Amount by which to trim back the share sizes
+                        integers(min_value=0, max_value=BYTES_PER_PASS - 1),
+                    ),
+                ),
+                # How much time passes before this activity finishes
+                timedeltas(min_value=timedelta(0), max_value=timedelta(days=1)),
+            ),
+        ),
+    )
+    def test_lease_maintenance_activity(self, get_config, now, activity):
+        """
+        ``VoucherStore.get_latest_lease_maintenance_activity`` returns a
+        ``LeaseMaintenanceTests`` with fields reflecting the most recently
+        finished lease maintenance activity.
+        """
+        store = self.useFixture(
+            TemporaryVoucherStore(get_config, lambda: now),
+        ).store
+
+        expected = None
+        for (start_delay, sizes, finish_delay) in activity:
+            now += start_delay
+            started = now
+            x = store.start_lease_maintenance()
+            passes_required = 0
+            for (num_passes, trim_size) in sizes:
+                passes_required += num_passes
+                x.observe(num_passes * BYTES_PER_PASS - trim_size)
+            now += finish_delay
+            x.finish()
+            finished = now
+
+            # Let the last iteration of the loop define the expected value.
+            expected = LeaseMaintenanceActivity(
+                started,
+                passes_required,
+                finished,
+            )
+
+        self.assertThat(
+            store.get_latest_lease_maintenance_activity(),
+            Equals(expected),
         )
 
 
