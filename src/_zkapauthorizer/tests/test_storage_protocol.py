@@ -51,6 +51,7 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     sets,
+    lists,
     tuples,
     integers,
 )
@@ -166,6 +167,30 @@ class RequiredPassesTests(TestCase):
             lambda: required_passes(bytes_per_pass, share_sizes),
             raises(TypeError),
         )
+
+    @given(
+        bytes_per_pass=integers(min_value=1),
+        expected_per_share=lists(integers(min_value=1), min_size=1),
+    )
+    def test_minimum_result(self, bytes_per_pass, expected_per_share):
+        """
+        ``required_passes`` returns an integer giving the fewest passes required
+        to pay for the storage represented by the given share sizes.
+        """
+        actual = required_passes(
+            bytes_per_pass,
+            list(
+                passes * bytes_per_pass
+                for passes
+                in expected_per_share
+            ),
+        )
+        self.assertThat(
+            actual,
+            Equals(sum(expected_per_share)),
+        )
+
+
 
 class ShareTests(TestCase):
     """
