@@ -297,9 +297,9 @@ class LeaseMaintenanceTests(TestCase):
             passes_required = 0
             for (num_passes, trim_size) in sizes:
                 passes_required += num_passes
-                x.observe({
-                    num_passes * BYTES_PER_PASS - trim_size
-                })
+                x.observe([
+                    num_passes * BYTES_PER_PASS - trim_size,
+                ])
             now += finish_delay
             x.finish()
             finished = now
