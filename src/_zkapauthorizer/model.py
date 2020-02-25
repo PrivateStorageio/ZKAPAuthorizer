@@ -27,6 +27,12 @@ from json import (
 from datetime import (
     datetime,
 )
+
+from zope.interface import (
+    Interface,
+    implementer,
+)
+
 from sqlite3 import (
     OperationalError,
     connect as _connect,
@@ -40,6 +46,29 @@ from aniso8601 import (
 from twisted.python.filepath import (
     FilePath,
 )
+
+from .storage_common import (
+    BYTES_PER_PASS,
+    required_passes,
+)
+
+
+class ILeaseMaintenanceObserver(Interface):
+    """
+    An object which is interested in receiving events related to the progress
+    of lease maintenance activity.
+    """
+    def observe(sizes):
+        """
+        Observe some shares encountered during lease maintenance.
+
+        :param list[int] sizes: The sizes of the shares encountered.
+        """
+
+    def finish():
+        """
+        Observe that a run of lease maintenance has completed.
+        """
 
 
 class StoreOpenError(Exception):
@@ -154,6 +183,26 @@ def open_and_initialize(path, required_schema_version, connect=None):
                 [token] text, -- The base64 encoded unblinded token.
 
                 PRIMARY KEY([token])
+            )
+            """,
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS [lease-maintenance-spending] (
+                [id] integer, -- A unique identifier for a group of activity.
+                [started] text, -- ISO8601 date+time string when the activity began.
+                [finished] text, -- ISO8601 date+time string when the activity completed (or null).
+
+                -- The number of passes that would be required to renew all
+                -- shares encountered during this activity.  Note that because
+                -- leases on different shares don't necessarily expire at the
+                -- same time this is not necessarily the number of passes
+                -- **actually** used during this activity.  Some shares may
+                -- not have required lease renewal.  Also note that while the
+                -- activity is ongoing this value may change.
+                [count] integer,
+
+                PRIMARY KEY([id])
             )
             """,
         )
@@ -426,6 +475,136 @@ class VoucherStore(object):
         return {
             u"unblinded-tokens": list(token for (token,) in tokens),
         }
+
+    def start_lease_maintenance(self):
+        """
+        Get an object which can track a newly started round of lease maintenance
+        activity.
+
+        :return LeaseMaintenance: A new, started lease maintenance object.
+        """
+        m = LeaseMaintenance(self.now, self._connection)
+        m.start()
+        return m
+
+    @with_cursor
+    def get_latest_lease_maintenance_activity(self, cursor):
+        """
+        Get a description of the most recently completed lease maintenance
+        activity.
+
+        :return LeaseMaintenanceActivity|None: If any lease maintenance has
+            completed, an object describing its results.  Otherwise, None.
+        """
+        cursor.execute(
+            """
+            SELECT [started], [count], [finished]
+            FROM [lease-maintenance-spending]
+            WHERE [finished] IS NOT NULL
+            ORDER BY [finished] DESC
+            LIMIT 1
+            """,
+        )
+        activity = cursor.fetchall()
+        if len(activity) == 0:
+            return None
+        [(started, count, finished)] = activity
+        return LeaseMaintenanceActivity(
+            parse_datetime(started, delimiter=u" "),
+            count,
+            parse_datetime(finished, delimiter=u" "),
+        )
+
+
+@implementer(ILeaseMaintenanceObserver)
+@attr.s
+class LeaseMaintenance(object):
+    """
+    A state-updating helper for recording pass usage during a lease
+    maintenance run.
+
+    Get one of these from ``VoucherStore.start_lease_maintenance``.  Then use
+    the ``observe`` and ``finish`` methods to persist state about a lease
+    maintenance run.
+
+    :ivar _now: A no-argument callable which returns a datetime giving a time
+        to use as current.
+
+    :ivar _connection: A SQLite3 connection object to use to persist observed
+        information.
+
+    :ivar _rowid: None for unstarted lease maintenance objects.  For started
+        objects, the database row id that corresponds to the started run.
+        This is used to make sure future updates go to the right row.
+    """
+    _now = attr.ib()
+    _connection = attr.ib()
+    _rowid = attr.ib(default=None)
+
+    @with_cursor
+    def start(self, cursor):
+        """
+        Record the start of a lease maintenance run.
+        """
+        if self._rowid is not None:
+            raise Exception("Cannot re-start a particular _LeaseMaintenance.")
+
+        cursor.execute(
+            """
+            INSERT INTO [lease-maintenance-spending] ([started], [finished], [count])
+            VALUES (?, ?, ?)
+            """,
+            (self._now(), None, 0),
+        )
+        self._rowid = cursor.lastrowid
+
+    @with_cursor
+    def observe(self, cursor, sizes):
+        """
+        Record a storage shares of the given sizes.
+        """
+        count = required_passes(BYTES_PER_PASS, sizes)
+        cursor.execute(
+            """
+            UPDATE [lease-maintenance-spending]
+            SET [count] = [count] + ?
+            WHERE [id] = ?
+            """,
+            (count, self._rowid),
+        )
+
+    @with_cursor
+    def finish(self, cursor):
+        """
+        Record the completion of this lease maintenance run.
+        """
+        cursor.execute(
+            """
+            UPDATE [lease-maintenance-spending]
+            SET [finished] = ?
+            WHERE [id] = ?
+            """,
+            (self._now(), self._rowid),
+        )
+        self._rowid = None
+
+
+@attr.s
+class LeaseMaintenanceActivity(object):
+    started = attr.ib()
+    passes_required = attr.ib()
+    finished = attr.ib()
+
+
+# store = ...
+# x = store.start_lease_maintenance()
+# x.observe(size=123)
+# x.observe(size=456)
+# ...
+# x.finish()
+#
+# x = store.get_latest_lease_maintenance_activity()
+# xs.started, xs.passes_required, xs.finished
 
 
 @attr.s(frozen=True)

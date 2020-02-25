@@ -100,6 +100,8 @@ from .strategies import (
 )
 
 from ..lease_maintenance import (
+    NoopMaintenanceObserver,
+    MemoryMaintenanceObserver,
     lease_maintenance_service,
     maintain_leases_from_root,
     visit_storage_indexes_from_root,
@@ -133,8 +135,8 @@ class DummyStorageServer(object):
     """
     A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
 
-    :ivar dict[bytes, datetime] buckets: A mapping from storage index to lease
-        expiration time for shares at that storage index.
+    :ivar dict[bytes, ShareStat] buckets: A mapping from storage index to
+        metadata about shares at that storage index.
     """
     clock = attr.ib()
     buckets = attr.ib()
@@ -438,6 +440,7 @@ class RenewLeasesTests(TestCase):
             storage_broker,
             secret_holder,
             min_lease_remaining,
+            NoopMaintenanceObserver,
             get_now,
         )
         self.assertThat(
@@ -487,6 +490,7 @@ class MaintainLeasesFromRootTests(TestCase):
             storage_broker,
             secret_holder,
             min_lease_remaining,
+            NoopMaintenanceObserver,
             get_now,
         )
         d = operation()
@@ -508,4 +512,60 @@ class MaintainLeasesFromRootTests(TestCase):
                 get_now(),
                 min_lease_remaining,
             ))
+        )
+
+    @given(storage_brokers(clocks()), node_hierarchies())
+    def test_activity_observed(self, storage_broker, root_node):
+        """
+        ``maintain_leases_from_root`` creates an operation which uses the given
+        activity observer to report its progress.
+        """
+        lease_secret = b"\0" * CRYPTO_VAL_SIZE
+        convergence_secret = b"\1" * CRYPTO_VAL_SIZE
+        secret_holder = SecretHolder(lease_secret, convergence_secret)
+        min_lease_remaining = timedelta(days=3)
+
+        def get_now():
+            return datetime.utcfromtimestamp(
+                storage_broker.clock.seconds(),
+            )
+
+        observer = MemoryMaintenanceObserver()
+        # There is only one available.
+        observers = [observer]
+        progress = observers.pop
+        operation = maintain_leases_from_root(
+            root_node,
+            storage_broker,
+            secret_holder,
+            min_lease_remaining,
+            progress,
+            get_now,
+        )
+        d = operation()
+        self.assertThat(
+            d,
+            succeeded(Always()),
+        )
+
+        expected = []
+        for node in root_node.flatten():
+            for storage_server in storage_broker.get_connected_servers():
+                try:
+                    stat = storage_server.buckets[node.get_storage_index()]
+                except KeyError:
+                    continue
+                else:
+                    # DummyStorageServer always pretends to have only one share
+                    expected.append([stat.size])
+
+        # The visit order doesn't matter.
+        expected.sort()
+
+        self.assertThat(
+            observer.observed,
+            AfterPreprocessing(
+                sorted,
+                Equals(expected),
+            ),
         )

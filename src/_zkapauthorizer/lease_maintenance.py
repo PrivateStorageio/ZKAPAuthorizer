@@ -29,6 +29,10 @@ from errno import (
 )
 import attr
 
+from zope.interface import (
+    implementer,
+)
+
 from aniso8601 import (
     parse_datetime,
 )
@@ -56,7 +60,12 @@ from .controller import (
     bracket,
 )
 
+from .model import (
+    ILeaseMaintenanceObserver,
+)
+
 SERVICE_NAME = u"lease maintenance service"
+
 
 @inlineCallbacks
 def visit_storage_indexes(root_node, visit):
@@ -107,7 +116,14 @@ def iter_storage_indexes(visit_assets):
 
 
 @inlineCallbacks
-def renew_leases(visit_assets, storage_broker, secret_holder, min_lease_remaining, now):
+def renew_leases(
+        visit_assets,
+        storage_broker,
+        secret_holder,
+        min_lease_remaining,
+        get_activity_observer,
+        now,
+):
     """
     Check the leases on a group of nodes for those which are expired or close
     to expiring and renew such leases.
@@ -124,12 +140,17 @@ def renew_leases(visit_assets, storage_broker, secret_holder, min_lease_remainin
     :param timedelta min_lease_remaining: The minimum amount of time remaining
         to allow on a lease without renewing it.
 
+    :param get_activity_observer: A no-argument callable which returns an
+        ``ILeaseMaintenanceObserver``.
+
     :param now: A no-argument function returning the current time, as a
         datetime instance, for comparison against lease expiration time.
 
     :return Deferred: A Deferred which fires when all visitable nodes have
         been checked and any leases renewed which required it.
     """
+    activity = get_activity_observer()
+
     storage_indexes = yield iter_storage_indexes(visit_assets)
 
     renewal_secret = secret_holder.get_renewal_secret()
@@ -142,8 +163,11 @@ def renew_leases(visit_assets, storage_broker, secret_holder, min_lease_remainin
             renewal_secret,
             storage_indexes,
             server,
+            activity,
             now(),
         )
+
+    activity.finish()
 
 
 @inlineCallbacks
@@ -152,6 +176,7 @@ def renew_leases_on_server(
         renewal_secret,
         storage_indexes,
         server,
+        activity,
         now,
 ):
     """
@@ -169,6 +194,9 @@ def renew_leases_on_server(
 
     :param StorageServer server: The storage server on which to check.
 
+    :param ILeaseMaintenanceObserver activity: An object which will receive
+        events allowing it to observe the lease maintenance activity.
+
     :param datetime now: The current time for comparison against the least
         expiration time.
 
@@ -180,6 +208,10 @@ def renew_leases_on_server(
         if not stat_dict:
             # The server has no shares for this storage index.
             continue
+
+        # Keep track of what's been seen.
+        activity.observe([stat.size for stat in stat_dict.values()])
+
         # All shares have the same lease information.
         stat = stat_dict.popitem()[1]
         if needs_lease_renew(min_lease_remaining, stat, now):
@@ -421,7 +453,42 @@ def visit_storage_indexes_from_root(visitor, root_node):
     )
 
 
-def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_lease_remaining, get_now):
+@implementer(ILeaseMaintenanceObserver)
+class NoopMaintenanceObserver(object):
+    """
+    A lease maintenance observer that does nothing.
+    """
+    def observe(self, sizes):
+        pass
+
+    def finish(self):
+        pass
+
+
+@implementer(ILeaseMaintenanceObserver)
+@attr.s
+class MemoryMaintenanceObserver(object):
+    """
+    A lease maintenance observer that records observations in memory.
+    """
+    observed = attr.ib(default=attr.Factory(list))
+    finished = attr.ib(default=False)
+
+    def observe(self, sizes):
+        self.observed.append(sizes)
+
+    def finish(self):
+        self.finished = True
+
+
+def maintain_leases_from_root(
+        root_node,
+        storage_broker,
+        secret_holder,
+        min_lease_remaining,
+        progress,
+        get_now,
+):
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
     and all its children and renews their leases if they have
@@ -452,6 +519,7 @@ def maintain_leases_from_root(root_node, storage_broker, secret_holder, min_leas
             storage_broker,
             secret_holder,
             min_lease_remaining,
+            progress,
             get_now,
         )
 

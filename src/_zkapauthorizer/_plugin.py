@@ -230,6 +230,11 @@ def _create_maintenance_service(reactor, node_config, client_node):
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
 
+    from twisted.plugins.zkapauthorizer import (
+        storage_server,
+    )
+    store = storage_server._get_store(node_config)
+
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
@@ -240,6 +245,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         client_node._secret_holder,
         # Make this configuration
         timedelta(days=3),
+        store.start_lease_maintenance,
         get_now,
     )
     last_run_path = FilePath(node_config.get_private_path(b"last-lease-maintenance-run"))
