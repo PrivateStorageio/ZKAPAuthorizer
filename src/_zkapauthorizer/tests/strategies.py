@@ -657,7 +657,18 @@ def node_hierarchies():
     Build hierarchies of ``IDirectoryNode`` and other ``IFilesystemNode``
     (incomplete) providers.
     """
+    def storage_indexes_are_distinct(nodes):
+        seen = set()
+        for n in nodes.flatten():
+            si = n.get_storage_index()
+            if si in seen:
+                return False
+            seen.add(si)
+        return True
+
     return recursive(
         leaf_nodes(),
         directory_nodes,
+    ).filter(
+        storage_indexes_are_distinct,
     )

@@ -552,7 +552,7 @@ class MaintainLeasesFromRootTests(TestCase):
         for node in root_node.flatten():
             for storage_server in storage_broker.get_connected_servers():
                 try:
-                    stat = storage_server.buckets[node._storage_index]
+                    stat = storage_server.buckets[node.get_storage_index()]
                 except KeyError:
                     continue
                 else:
