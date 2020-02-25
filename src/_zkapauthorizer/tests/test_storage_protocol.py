@@ -33,6 +33,7 @@ from testtools.matchers import (
     HasLength,
     IsInstance,
     AfterPreprocessing,
+    raises,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -49,7 +50,9 @@ from hypothesis import (
     assume,
 )
 from hypothesis.strategies import (
+    sets,
     tuples,
+    integers,
 )
 
 from twisted.python.filepath import (
@@ -101,6 +104,7 @@ from ..api import (
 from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
+    required_passes,
 )
 from ..model import (
     Pass,
@@ -147,6 +151,21 @@ class LocalRemote(object):
             kwargs,
         )
 
+
+class RequiredPassesTests(TestCase):
+    """
+    Tests for ``required_passes``.
+    """
+    @given(integers(min_value=1), sets(integers(min_value=0)))
+    def test_incorrect_types(self, bytes_per_pass, share_sizes):
+        """
+        ``required_passes`` raises ``TypeError`` if passed a ``set`` for
+        ``share_sizes``.
+        """
+        self.assertThat(
+            lambda: required_passes(bytes_per_pass, share_sizes),
+            raises(TypeError),
+        )
 
 class ShareTests(TestCase):
     """
