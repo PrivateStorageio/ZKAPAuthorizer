@@ -28,6 +28,10 @@ from datetime import (
 
 import attr
 
+from zope.interface import (
+    implementer,
+)
+
 from testtools import (
     TestCase,
 )
@@ -81,6 +85,10 @@ from allmydata.util.hashutil import (
 )
 from allmydata.client import (
     SecretHolder,
+)
+from allmydata.interfaces import (
+    IStorageBroker,
+    IServer,
 )
 
 from ..foolscap import (
@@ -179,11 +187,29 @@ def storage_servers(clocks):
         clocks,
         dictionaries(storage_indexes(), share_stats()),
         lease_seeds(),
+    ).map(
+        DummyServer,
     )
 
 
+@implementer(IServer)
+@attr.s
+class DummyServer(object):
+    """
+    A partial implementation of a Tahoe-LAFS "native" storage server.
+    """
+    _storage_server = attr.ib()
+
+    def get_storage_server(self):
+        return self._storage_server
+
+
+@implementer(IStorageBroker)
 @attr.s
 class DummyStorageBroker(object):
+    """
+    A partial implementation of a Tahoe-LAFS storage broker.
+    """
     clock = attr.ib()
     _storage_servers = attr.ib()
 
@@ -455,7 +481,11 @@ class RenewLeasesTests(TestCase):
         )
 
         self.assertThat(
-            storage_broker.get_connected_servers(),
+            list(
+                server.get_storage_server()
+                for server
+                in storage_broker.get_connected_servers()
+            ),
             AllMatch(leases_current(
                 relevant_storage_indexes,
                 get_now(),
@@ -506,7 +536,11 @@ class MaintainLeasesFromRootTests(TestCase):
         )
 
         self.assertThat(
-            storage_broker.get_connected_servers(),
+            list(
+                server.get_storage_server()
+                for server
+                in storage_broker.get_connected_servers()
+            ),
             AllMatch(leases_current(
                 relevant_storage_indexes,
                 get_now(),
@@ -550,9 +584,9 @@ class MaintainLeasesFromRootTests(TestCase):
 
         expected = []
         for node in root_node.flatten():
-            for storage_server in storage_broker.get_connected_servers():
+            for server in storage_broker.get_connected_servers():
                 try:
-                    stat = storage_server.buckets[node.get_storage_index()]
+                    stat = server.get_storage_server().buckets[node.get_storage_index()]
                 except KeyError:
                     continue
                 else:
