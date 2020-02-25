@@ -33,6 +33,7 @@ from testtools.matchers import (
     HasLength,
     IsInstance,
     AfterPreprocessing,
+    raises,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -49,7 +50,10 @@ from hypothesis import (
     assume,
 )
 from hypothesis.strategies import (
+    sets,
+    lists,
     tuples,
+    integers,
 )
 
 from twisted.python.filepath import (
@@ -101,6 +105,7 @@ from ..api import (
 from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
+    required_passes,
 )
 from ..model import (
     Pass,
@@ -146,6 +151,45 @@ class LocalRemote(object):
             args,
             kwargs,
         )
+
+
+class RequiredPassesTests(TestCase):
+    """
+    Tests for ``required_passes``.
+    """
+    @given(integers(min_value=1), sets(integers(min_value=0)))
+    def test_incorrect_types(self, bytes_per_pass, share_sizes):
+        """
+        ``required_passes`` raises ``TypeError`` if passed a ``set`` for
+        ``share_sizes``.
+        """
+        self.assertThat(
+            lambda: required_passes(bytes_per_pass, share_sizes),
+            raises(TypeError),
+        )
+
+    @given(
+        bytes_per_pass=integers(min_value=1),
+        expected_per_share=lists(integers(min_value=1), min_size=1),
+    )
+    def test_minimum_result(self, bytes_per_pass, expected_per_share):
+        """
+        ``required_passes`` returns an integer giving the fewest passes required
+        to pay for the storage represented by the given share sizes.
+        """
+        actual = required_passes(
+            bytes_per_pass,
+            list(
+                passes * bytes_per_pass
+                for passes
+                in expected_per_share
+            ),
+        )
+        self.assertThat(
+            actual,
+            Equals(sum(expected_per_share)),
+        )
+
 
 
 class ShareTests(TestCase):

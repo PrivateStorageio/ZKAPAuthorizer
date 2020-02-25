@@ -24,10 +24,6 @@ from base64 import (
     b64encode,
 )
 
-from math import (
-    ceil,
-)
-
 def _message_maker(label):
     def make_message(storage_index):
         return u"{label} {storage_index}".format(
@@ -55,15 +51,20 @@ def required_passes(bytes_per_pass, share_sizes):
     :param int bytes_per_pass: The number of bytes the storage of which for
         one lease period one pass covers.
 
-    :param set[int] share_sizes: The sizes of the shared which will be stored.
+    :param list[int] share_sizes: The sizes of the shared which will be stored.
 
     :return int: The number of passes required to cover the storage cost.
     """
-    result = int(
-        ceil(
-            sum(share_sizes, 0) / bytes_per_pass,
-        ),
-    )
+    if not isinstance(share_sizes, list):
+        raise TypeError(
+            "Share sizes must be a list of integers, got {!r} instead".format(
+                share_sizes,
+            ),
+        )
+    result, b = divmod(sum(share_sizes, 0), bytes_per_pass)
+    if b:
+        result += 1
+
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
     return result
 
