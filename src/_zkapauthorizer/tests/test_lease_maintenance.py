@@ -559,7 +559,13 @@ class MaintainLeasesFromRootTests(TestCase):
                     # DummyStorageServer always pretends to have only one share
                     expected.append([stat.size])
 
+        # The visit order doesn't matter.
+        expected.sort()
+
         self.assertThat(
             observer.observed,
-            Equals(expected),
+            AfterPreprocessing(
+                sorted,
+                Equals(expected),
+            ),
         )
