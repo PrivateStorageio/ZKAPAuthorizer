@@ -154,7 +154,17 @@ class _UnblindedTokenCollection(Resource):
                 in unblinded_tokens
                 if token > position
             ), limit)),
+            u"lease-maintenance-spending": self._lease_maintenance_activity(),
         })
+
+    def _lease_maintenance_activity(self):
+        activity = self._store.get_latest_lease_maintenance_activity()
+        if activity is None:
+            return activity
+        return {
+            u"when": activity.finished,
+            u"count": activity.passes_required,
+        }
 
 
 

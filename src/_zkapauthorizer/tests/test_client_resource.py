@@ -47,6 +47,7 @@ from testtools import (
 from testtools.matchers import (
     MatchesStructure,
     MatchesAll,
+    MatchesAny,
     MatchesPredicate,
     AllMatch,
     HasLength,
@@ -56,6 +57,7 @@ from testtools.matchers import (
     Equals,
     Always,
     GreaterThan,
+    Is,
 )
 from testtools.twistedsupport import (
     CaptureTwistedLogs,
@@ -63,6 +65,10 @@ from testtools.twistedsupport import (
 )
 from testtools.content import (
     text_content,
+)
+
+from aniso8601 import (
+    parse_datetime,
 )
 
 from fixtures import (
@@ -268,9 +274,10 @@ class UnblindedTokenTests(TestCase):
     @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
     def test_get(self, get_config, voucher, num_tokens):
         """
-        When the unblinded token collection receives a **GET**, the response is the
-        total number of unblinded tokens in the system and the unblinded tokens
-        themselves.
+        When the unblinded token collection receives a **GET**, the response is
+        the total number of unblinded tokens in the system, the unblinded
+        tokens themselves, and information about tokens spent on recent lease
+        maintenance activity.
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
@@ -374,6 +381,7 @@ class UnblindedTokenTests(TestCase):
                         IsInstance(unicode),
                     ),
                 ),
+                matches_lease_maintenance_spending(),
             ),
         )
 
@@ -433,7 +441,11 @@ class UnblindedTokenTests(TestCase):
         )
 
 
-def succeeded_with_unblinded_tokens_with_matcher(all_token_count, match_unblinded_tokens):
+def succeeded_with_unblinded_tokens_with_matcher(
+        all_token_count,
+        match_unblinded_tokens,
+        match_lease_maint_spending,
+):
     """
     :return: A matcher which matches a Deferred which fires with a response
         like the one returned by the **unblinded-tokens** endpoint.
@@ -443,6 +455,9 @@ def succeeded_with_unblinded_tokens_with_matcher(all_token_count, match_unblinde
 
     :param match_unblinded_tokens: A matcher for the ``unblinded-tokens``
         field of the response.
+
+    :param match_lease_maint_spending: A matcher for the
+        ``lease-maintenance-spending`` field of the response.
     """
     return succeeded(
         MatchesAll(
@@ -453,6 +468,7 @@ def succeeded_with_unblinded_tokens_with_matcher(all_token_count, match_unblinde
                     ContainsDict({
                         u"total": Equals(all_token_count),
                         u"unblinded-tokens": match_unblinded_tokens,
+                        u"lease-maintenance-spending": match_lease_maint_spending,
                     }),
                 ),
             ),
@@ -475,9 +491,42 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
         MatchesAll(
             HasLength(returned_token_count),
             AllMatch(IsInstance(unicode)),
-        )
+        ),
+        matches_lease_maintenance_spending(),
     )
 
+def matches_lease_maintenance_spending():
+    """
+    :return: A matcher which matches the value of the
+        *lease-maintenance-spending* key in the ``unblinded-tokens`` endpoint
+        response.
+    """
+    return MatchesAny(
+        Is(None),
+        ContainsDict({
+            u"when": matches_iso8601_datetime(),
+            u"amount": matches_positive_integer(),
+        }),
+    )
+
+def matches_positive_integer():
+    return MatchesAll(
+        IsInstance(int),
+        GreaterThan(0),
+    )
+
+def matches_iso8601_datetime():
+    """
+    :return: A matcher which matches unicode strings which can be parsed as an
+        ISO8601 datetime string.
+    """
+    return MatchesAll(
+        IsInstance(unicode),
+        AfterPreprocessing(
+            parse_datetime,
+            lambda d: Always(),
+        ),
+    )
 
 class VoucherTests(TestCase):
     """
