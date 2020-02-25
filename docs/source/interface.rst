@@ -117,4 +117,14 @@ This endpoint accepts no request body.
 
 The response is **OK** with ``application/json`` content-type response body like::
 
-  {"total": <integer>, "unblinded-tokens": [<unblinded token string>, ...]}
+  { "total": <integer>
+  , "unblinded-tokens": [<unblinded token string>, ...]
+  , "lease-maintenance-spending": <spending object>
+  }
+
+The ``<spending object>`` may be ``null`` if the lease maintenance process has never run.
+If it has run,
+``<spending object>`` has two properties:
+
+ * ``when``: associated with an ISO8601 datetime string giving the approximate time the process ran
+ * ``count``: associated with a number giving the number of passes which would need to be spent to renew leases on all stored objects seen during the lease maintenance activity
