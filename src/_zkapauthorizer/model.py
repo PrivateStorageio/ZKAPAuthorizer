@@ -27,6 +27,12 @@ from json import (
 from datetime import (
     datetime,
 )
+
+from zope.interface import (
+    Interface,
+    implementer,
+)
+
 from sqlite3 import (
     OperationalError,
     connect as _connect,
@@ -45,6 +51,25 @@ from .storage_common import (
     BYTES_PER_PASS,
     required_passes,
 )
+
+
+class ILeaseMaintenanceObserver(Interface):
+    """
+    An object which is interested in receiving events related to the progress
+    of lease maintenance activity.
+    """
+    def observe(sizes):
+        """
+        Observe some shares encountered during lease maintenance.
+
+        :param list[int] sizes: The sizes of the shares encountered.
+        """
+
+    def finish():
+        """
+        Observe that a run of lease maintenance has completed.
+        """
+
 
 class StoreOpenError(Exception):
     """
@@ -491,6 +516,7 @@ class VoucherStore(object):
         )
 
 
+@implementer(ILeaseMaintenanceObserver)
 @attr.s
 class LeaseMaintenance(object):
     """
