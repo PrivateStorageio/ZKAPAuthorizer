@@ -258,7 +258,7 @@ class LeaseMaintenanceTests(TestCase):
         lists(
             tuples(
                 # How much time passes before this activity starts
-                timedeltas(min_value=timedelta(0), max_value=timedelta(days=1)),
+                timedeltas(min_value=timedelta(1), max_value=timedelta(days=1)),
                 # Some activity.  This list of two tuples gives us a trivial
                 # way to compute the total passes required (just sum the pass
                 # counts in it).  This is nice because it avoids having the
@@ -275,7 +275,7 @@ class LeaseMaintenanceTests(TestCase):
                     ),
                 ),
                 # How much time passes before this activity finishes
-                timedeltas(min_value=timedelta(0), max_value=timedelta(days=1)),
+                timedeltas(min_value=timedelta(1), max_value=timedelta(days=1)),
             ),
         ),
     )
