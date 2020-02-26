@@ -411,7 +411,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
 
         operation = visit_storage_indexes_from_root(
             perform_visit,
-            lambda: root_node,
+            lambda: [root_node],
         )
 
         self.assertThat(
@@ -516,7 +516,7 @@ class MaintainLeasesFromRootTests(TestCase):
             )
 
         operation = maintain_leases_from_root(
-            lambda: root_node,
+            lambda: [root_node],
             storage_broker,
             secret_holder,
             min_lease_remaining,
@@ -569,7 +569,7 @@ class MaintainLeasesFromRootTests(TestCase):
         observers = [observer]
         progress = observers.pop
         operation = maintain_leases_from_root(
-            lambda: root_node,
+            lambda: [root_node],
             storage_broker,
             secret_holder,
             min_lease_remaining,

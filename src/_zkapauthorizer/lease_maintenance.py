@@ -69,7 +69,7 @@ SERVICE_NAME = u"lease maintenance service"
 
 
 @inlineCallbacks
-def visit_storage_indexes(root_node, visit):
+def visit_storage_indexes(root_nodes, visit):
     """
     Call a visitor with the storage index of ``root_node`` and that of all
     nodes reachable from it.
@@ -82,11 +82,17 @@ def visit_storage_indexes(root_node, visit):
     :return Deferred: A Deferred which fires after all nodes have been
         visited.
     """
-    if not IFilesystemNode.providedBy(root_node):
-        raise TypeError("root_node must provide IFilesystemNode, {!r} does not".format(
-            root_node,
+    if not isinstance(root_nodes, list):
+        raise TypeError("root_nodes must be a list, not {!r}".format(
+            root_nodes,
         ))
-    stack = [root_node]
+    for node in root_nodes:
+        if not IFilesystemNode.providedBy(node):
+            raise TypeError("Root nodes must provide IFilesystemNode, {!r} does not".format(
+                node,
+            ))
+
+    stack = root_nodes[:]
     while stack:
         elem = stack.pop()
         visit(elem.get_storage_index())
@@ -443,7 +449,7 @@ def read_time_from_path(path):
         return parse_datetime(when)
 
 
-def visit_storage_indexes_from_root(visitor, get_root_node):
+def visit_storage_indexes_from_root(visitor, get_root_nodes):
     """
     An operation for ``lease_maintenance_service`` which applies the given
     visitor to ``root_node`` and all its children.
@@ -451,17 +457,17 @@ def visit_storage_indexes_from_root(visitor, get_root_node):
     :param visitor: A one-argument callable which takes the traversal function
         and which should call it as desired.
 
-    :param get_root_node: A no-argument callable which returns the filesystem
-        node (``IFilesystemNode``) at which traversal will begin.
+    :param get_root_nodes: A no-argument callable which returns a list of
+        filesystem nodes (``IFilesystemNode``) at which traversal will begin.
 
     :return: A no-argument callable to perform the visits.
     """
     return lambda: visitor(
         partial(
             visit_storage_indexes,
-            # Make sure we call get_root_node each time to give us a chance to
-            # notice when it changes.
-            get_root_node(),
+            # Make sure we call get_root_nodes each time to give us a chance
+            # to notice when it changes.
+            get_root_nodes(),
         ),
     )
 
@@ -495,7 +501,7 @@ class MemoryMaintenanceObserver(object):
 
 
 def maintain_leases_from_root(
-        get_root_node,
+        get_root_nodes,
         storage_broker,
         secret_holder,
         min_lease_remaining,
@@ -507,9 +513,9 @@ def maintain_leases_from_root(
     and all its children and renews their leases if they have
     ``min_lease_remaining`` or less on them.
 
-    :param get_root_node: A no-argument callable which returns the Tahoe-LAFS
-        filesystem node (``IFilesystemNode``) to use as the root of a node
-        hierarchy to be maintained.
+    :param get_root_nodes: A no-argument callable which returns the list of
+        Tahoe-LAFS filesystem nodes (``IFilesystemNode``) to use as the roots
+        of the node hierarchies to be maintained.
 
     :param StorageFarmBroker storage_broker: The storage broker which can put
         us in touch with storage servers where shares of the nodes to maintain
@@ -539,7 +545,7 @@ def maintain_leases_from_root(
 
     return visit_storage_indexes_from_root(
         visitor,
-        get_root_node,
+        get_root_nodes,
     )
 
 
