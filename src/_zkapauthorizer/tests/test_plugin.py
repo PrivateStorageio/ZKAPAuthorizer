@@ -52,6 +52,7 @@ from testtools.content import (
 )
 from hypothesis import (
     given,
+    settings,
 )
 from hypothesis.strategies import (
     just,
@@ -478,6 +479,9 @@ class LeaseMaintenanceServiceTests(TestCase):
             # of those at the right time. :/
            tempfile.tempdir = original_tempdir
 
+    @settings(
+        deadline=None,
+    )
     @given(
         tahoe_configs_with_dummy_redeemer,
         sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),

@@ -154,7 +154,11 @@ def renew_leases(
     storage_indexes = yield iter_storage_indexes(visit_assets)
 
     renewal_secret = secret_holder.get_renewal_secret()
-    servers = storage_broker.get_connected_servers()
+    servers = list(
+        server.get_storage_server()
+        for server
+        in storage_broker.get_connected_servers()
+    )
 
     for server in servers:
         # Consider parallelizing this.
