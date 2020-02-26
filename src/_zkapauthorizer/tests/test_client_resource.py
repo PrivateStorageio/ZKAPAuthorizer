@@ -130,6 +130,11 @@ from ..resource import (
     from_configuration,
 )
 
+from ..storage_common import (
+    BYTES_PER_PASS,
+    required_passes,
+)
+
 from .strategies import (
     tahoe_configs,
     client_unpaidredeemer_configurations,
@@ -444,7 +449,7 @@ class UnblindedTokenTests(TestCase):
         tahoe_configs(),
         lists(
             lists(
-                integers(min_value=0),
+                integers(min_value=0, max_value=2 ** 63 - 1),
                 min_size=1,
             ),
         ),
@@ -463,7 +468,7 @@ class UnblindedTokenTests(TestCase):
         total = 0
         activity = root.store.start_lease_maintenance()
         for sizes in size_observations:
-            total += sum(sizes)
+            total += required_passes(BYTES_PER_PASS, sizes)
             activity.observe(sizes)
         activity.finish()
 
