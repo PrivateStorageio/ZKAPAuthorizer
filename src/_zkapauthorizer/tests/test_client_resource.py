@@ -440,6 +440,50 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
+    @given(
+        tahoe_configs(),
+        lists(
+            lists(
+                integers(min_value=0),
+                min_size=1,
+            ),
+        ),
+        datetimes(),
+    )
+    def test_latest_lease_maintenance_spending(self, get_config, size_observations, now):
+        """
+        The most recently completed record of lease maintenance spending activity
+        is reported in the response to a **GET** request.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config, lambda: now)
+
+        # Put some activity into it.
+        total = 0
+        activity = root.store.start_lease_maintenance()
+        for sizes in size_observations:
+            total += sum(sizes)
+            activity.observe(sizes)
+        activity.finish()
+
+        agent = RequestTraversalAgent(root)
+        d = agent.request(
+            b"GET",
+            b"http://127.0.0.1/unblinded-token",
+        )
+        d.addCallback(readBody)
+        d.addCallback(
+            lambda body: loads(body)[u"lease-maintenance-spending"],
+        )
+        self.assertThat(
+            d,
+            succeeded(Equals({
+                "when": now.isoformat(),
+                "count": total,
+            })),
+        )
+
 
 def succeeded_with_unblinded_tokens_with_matcher(
         all_token_count,

@@ -162,7 +162,7 @@ class _UnblindedTokenCollection(Resource):
         if activity is None:
             return activity
         return {
-            u"when": activity.finished,
+            u"when": activity.finished.isoformat(),
             u"count": activity.passes_required,
         }
 
