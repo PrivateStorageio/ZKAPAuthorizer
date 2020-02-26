@@ -52,6 +52,7 @@ from testtools.content import (
 )
 from hypothesis import (
     given,
+    settings,
 )
 from hypothesis.strategies import (
     just,
@@ -440,7 +441,7 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
     Tests for the plugin's initialization of the lease maintenance service.
     """
-    def _created_test(self, get_config, servers_yaml):
+    def _created_test(self, get_config, servers_yaml, rootcap):
         original_tempdir = tempfile.tempdir
 
         tempdir = self.useFixture(TempDir())
@@ -454,10 +455,11 @@ class LeaseMaintenanceServiceTests(TestCase):
             b"servers.yaml",
             servers_yaml,
         )
-        config.write_private_config(
-            b"rootcap",
-            b"dddddddd",
-        )
+        if rootcap:
+            config.write_private_config(
+                b"rootcap",
+                b"dddddddd",
+            )
 
         try:
             d = create_client_from_config(config)
@@ -478,6 +480,9 @@ class LeaseMaintenanceServiceTests(TestCase):
             # of those at the right time. :/
            tempfile.tempdir = original_tempdir
 
+    @settings(
+        deadline=None,
+    )
     @given(
         tahoe_configs_with_dummy_redeemer,
         sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),
@@ -488,4 +493,19 @@ class LeaseMaintenanceServiceTests(TestCase):
         maintenance service after it has at least one storage server to
         connect to.
         """
-        return self._created_test(get_config, servers_yaml)
+        return self._created_test(get_config, servers_yaml, rootcap=True)
+
+
+    @settings(
+        deadline=None,
+    )
+    @given(
+        tahoe_configs_with_dummy_redeemer,
+        sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),
+    )
+    def test_created_without_rootcap(self, get_config, servers_yaml):
+        """
+        The lease maintenance service can be created even if no rootcap has yet
+        been written to the client's configuration directory.
+        """
+        return self._created_test(get_config, servers_yaml, rootcap=False)

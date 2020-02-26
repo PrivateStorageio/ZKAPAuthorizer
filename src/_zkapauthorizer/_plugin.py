@@ -25,6 +25,10 @@ from datetime import (
     datetime,
     timedelta,
 )
+from functools import (
+    partial,
+)
+
 import attr
 
 from zope.interface import (
@@ -44,6 +48,9 @@ from twisted.internet.defer import (
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
+)
+from allmydata.node import (
+    MissingConfigEntry,
 )
 from allmydata.client import (
     _Client,
@@ -238,9 +245,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
-        client_node.create_node_from_uri(
-            node_config.get_private_config(b"rootcap"),
-        ),
+        partial(get_root_nodes, client_node, node_config),
         client_node.get_storage_broker(),
         client_node._secret_holder,
         # Make this configuration
@@ -256,3 +261,12 @@ def _create_maintenance_service(reactor, node_config, client_node):
         last_run_path,
         random,
     )
+
+
+def get_root_nodes(client_node, node_config):
+    try:
+        rootcap = node_config.get_private_config(b"rootcap")
+    except MissingConfigEntry:
+        return []
+    else:
+        return [client_node.create_node_from_uri(rootcap)]
