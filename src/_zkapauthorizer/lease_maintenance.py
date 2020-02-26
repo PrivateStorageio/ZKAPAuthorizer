@@ -50,6 +50,7 @@ from twisted.python.log import (
 
 from allmydata.interfaces import (
     IDirectoryNode,
+    IFilesystemNode,
 )
 from allmydata.util.hashutil import (
     file_renewal_secret_hash,
@@ -81,6 +82,10 @@ def visit_storage_indexes(root_node, visit):
     :return Deferred: A Deferred which fires after all nodes have been
         visited.
     """
+    if not IFilesystemNode.providedBy(root_node):
+        raise TypeError("root_node must provide IFilesystemNode, {!r} does not".format(
+            root_node,
+        ))
     stack = [root_node]
     while stack:
         elem = stack.pop()
@@ -438,7 +443,7 @@ def read_time_from_path(path):
         return parse_datetime(when)
 
 
-def visit_storage_indexes_from_root(visitor, root_node):
+def visit_storage_indexes_from_root(visitor, get_root_node):
     """
     An operation for ``lease_maintenance_service`` which applies the given
     visitor to ``root_node`` and all its children.
@@ -446,14 +451,18 @@ def visit_storage_indexes_from_root(visitor, root_node):
     :param visitor: A one-argument callable which takes the traversal function
         and which should call it as desired.
 
-    :param IFilesystemNode root_node: The filesystem node at which traversal
-        will begin.
+    :param get_root_node: A no-argument callable which returns the filesystem
+        node (``IFilesystemNode``) at which traversal will begin.
 
     :return: A no-argument callable to perform the visits.
     """
-    return partial(
-        visitor,
-        partial(visit_storage_indexes, root_node),
+    return lambda: visitor(
+        partial(
+            visit_storage_indexes,
+            # Make sure we call get_root_node each time to give us a chance to
+            # notice when it changes.
+            get_root_node(),
+        ),
     )
 
 
@@ -486,7 +495,7 @@ class MemoryMaintenanceObserver(object):
 
 
 def maintain_leases_from_root(
-        root_node,
+        get_root_node,
         storage_broker,
         secret_holder,
         min_lease_remaining,
@@ -498,8 +507,9 @@ def maintain_leases_from_root(
     and all its children and renews their leases if they have
     ``min_lease_remaining`` or less on them.
 
-    :param IFilesystemNode root_node: A Tahoe-LAFS filesystem node to use as
-        the root of a node hierarchy to be maintained.
+    :param get_root_node: A no-argument callable which returns the Tahoe-LAFS
+        filesystem node (``IFilesystemNode``) to use as the root of a node
+        hierarchy to be maintained.
 
     :param StorageFarmBroker storage_broker: The storage broker which can put
         us in touch with storage servers where shares of the nodes to maintain
@@ -529,7 +539,7 @@ def maintain_leases_from_root(
 
     return visit_storage_indexes_from_root(
         visitor,
-        root_node,
+        get_root_node,
     )
 
 

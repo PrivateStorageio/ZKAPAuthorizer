@@ -238,7 +238,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
-        client_node.create_node_from_uri(
+        lambda: client_node.create_node_from_uri(
             node_config.get_private_config(b"rootcap"),
         ),
         client_node.get_storage_broker(),
