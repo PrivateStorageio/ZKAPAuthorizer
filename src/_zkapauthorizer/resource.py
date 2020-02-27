@@ -45,6 +45,10 @@ from twisted.web.resource import (
     Resource,
 )
 
+from . import (
+    __version__ as _zkapauthorizer_version,
+)
+
 from ._base64 import (
     urlsafe_b64decode,
 )
@@ -108,6 +112,10 @@ def from_configuration(node_config, store, redeemer=None):
             controller,
         ),
     )
+    root.putChild(
+        b"version",
+        _ProjectVersion(),
+    )
     return root
 
 
@@ -118,6 +126,17 @@ def application_json(request):
     :param twisted.web.iweb.IRequest request: The request to modify.
     """
     request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+
+
+class _ProjectVersion(Resource):
+    """
+    This resource exposes the version of **ZKAPAuthorizer** itself.
+    """
+    def render_GET(self, request):
+        application_json(request)
+        return dumps({
+            "version": _zkapauthorizer_version,
+        })
 
 
 class _UnblindedTokenCollection(Resource):

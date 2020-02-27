@@ -1,5 +1,5 @@
 { lib
-, buildPythonPackage, sphinx
+, buildPythonPackage, sphinx, git
 , attrs, zope_interface, aniso8601, twisted, tahoe-lafs, privacypass, treq
 , fixtures, testtools, hypothesis, pyflakes, coverage
 , hypothesisProfile ? null
@@ -18,11 +18,12 @@ buildPythonPackage rec {
   version = "0.0";
   pname = "zero-knowledge-access-pass-authorizer";
   name = "${pname}-${version}";
-  src = lib.cleanSource ./.;
+  src = ./.;
 
   outputs = [ "out" ] ++ (if collectCoverage then [ "doc" ] else [ ]);
 
   depsBuildBuild = [
+    git
     sphinx
   ];
 
