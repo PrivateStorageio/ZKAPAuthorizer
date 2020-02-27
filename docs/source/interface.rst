@@ -7,6 +7,16 @@ Client
 When enabled in a Tahoe-LAFS client node,
 ZKAPAuthorizer publishes an HTTP-based interface inside the main Tahoe-LAFS web interface.
 
+``GET /storage-plugins/privatestorageio-zkapauthz-v1/version``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This endpoint returns the version of the ZKAPAuthorizer Python package in use by the Tahoe-LAFS client node.
+
+The response is **OK** with an ``application/json`` **Content-Type**::
+
+  { "version": <string>
+  }
+
 ``PUT /storage-plugins/privatestorageio-zkapauthz-v1/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

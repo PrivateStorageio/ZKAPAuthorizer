@@ -116,6 +116,10 @@ from treq.testing import (
     RequestTraversalAgent,
 )
 
+from .. import (
+    __version__ as zkapauthorizer_version,
+)
+
 from ..model import (
     Voucher,
     Redeeming,
@@ -263,6 +267,27 @@ class ResourceTests(TestCase):
         self.assertThat(
             getChildForRequest(root, request),
             Provides([IResource]),
+        )
+
+    @given(tahoe_configs())
+    def test_version(self, get_config):
+        """
+        The ZKAPAuthorizer package version is available in a JSON response to a
+        **GET** to ``/version``.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/version",
+        )
+        requesting.addCallback(readBody)
+        requesting.addCallback(loads)
+        self.assertThat(
+            requesting,
+            succeeded(Equals({"version": zkapauthorizer_version})),
         )
 
 
