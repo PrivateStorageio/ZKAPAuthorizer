@@ -83,6 +83,8 @@ from ..model import (
 
 # The length of a `Token`, in bytes.
 _TOKEN_LENGTH = 96
+# The length of a `UnblindedToken`, in bytes.
+_UNBLINDED_TOKEN_LENGTH = 96
 
 def _merge_dictionaries(dictionaries):
     result = {}
@@ -356,11 +358,12 @@ def unblinded_tokens():
     base64 encode data.  You cannot use these in the PrivacyPass cryptographic
     protocol but you can put them into the database and take them out again.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
+    return byte_strings(
+        label=b"unblinded-tokens",
+        length=_UNBLINDED_TOKEN_LENGTH,
+        entropy=4,
     ).map(
-        urlsafe_b64encode,
+        b64encode,
     ).map(
         lambda zkap: UnblindedToken(zkap.decode("ascii")),
     )

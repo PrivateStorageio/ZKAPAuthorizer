@@ -371,7 +371,7 @@ class VoucherStore(object):
             INSERT INTO [unblinded-tokens] VALUES (?)
             """,
             list(
-                (t.text,)
+                (t.unblinded_token,)
                 for t
                 in unblinded_tokens
             ),
@@ -646,12 +646,18 @@ class UnblindedToken(object):
     and can be used to construct a privacy-preserving pass which can be
     exchanged for service.
 
-    :ivar unicode text: The base64 encoded serialized form of the unblinded
-        token.  This can be used to reconstruct a
+    :ivar unicode unblinded_token: The base64 encoded serialized form of the
+        unblinded token.  This can be used to reconstruct a
         ``privacypass.UnblindedToken`` using that class's ``decode_base64``
         method.
     """
-    text = attr.ib(validator=attr.validators.instance_of(unicode))
+    unblinded_token = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(128),
+        ),
+    )
 
 
 @attr.s(frozen=True)

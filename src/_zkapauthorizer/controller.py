@@ -35,6 +35,7 @@ from datetime import (
 )
 from base64 import (
     b64encode,
+    b64decode,
 )
 import attr
 
@@ -301,9 +302,13 @@ class DummyRedeemer(object):
         :return: An already-fired ``Deferred`` that has a list of
           ``UnblindedToken`` instances wrapping meaningless values.
         """
+        def dummy_unblinded_token(random_token):
+            random_value = b64decode(random_token.token_value.encode("ascii"))
+            unblinded_value = random_value + b"x" * (96 - len(random_value))
+            return UnblindedToken(b64encode(unblinded_value).decode("ascii"))
         return succeed(
             list(
-                UnblindedToken(token.token_value)
+                dummy_unblinded_token(token)
                 for token
                 in random_tokens
             ),
@@ -311,7 +316,7 @@ class DummyRedeemer(object):
 
     def tokens_to_passes(self, message, unblinded_tokens):
         return list(
-            Pass(token.text)
+            Pass(token.unblinded_token)
             for token
             in unblinded_tokens
         )
@@ -463,7 +468,7 @@ class RistrettoRedeemer(object):
         assert isinstance(unblinded_tokens, list)
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
-            privacypass.UnblindedToken.decode_base64(token.text.encode("ascii"))
+            privacypass.UnblindedToken.decode_base64(token.unblinded_token.encode("ascii"))
             for token
             in unblinded_tokens
         )
