@@ -127,7 +127,11 @@ class PassValidationTests(TestCase):
             message,
             list(RandomToken.create() for i in range(valid_count)),
         )
-        all_passes = valid_passes + list(pass_.text.encode("ascii") for pass_ in invalid_passes)
+        all_passes = valid_passes + list(
+            pass_.pass_text.encode("ascii")
+            for pass_
+            in invalid_passes
+        )
         shuffle(all_passes)
 
         self.assertThat(

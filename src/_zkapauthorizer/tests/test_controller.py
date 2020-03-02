@@ -469,7 +469,7 @@ def ristretto_verify(signing_key, message, marshaled_passes):
             VerificationSignature.decode_base64(s.encode("ascii")),
         )
     servers_passes = list(
-        decode(marshaled_pass.text)
+        decode(marshaled_pass.pass_text)
         for marshaled_pass
         in marshaled_passes
     )

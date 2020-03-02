@@ -211,7 +211,7 @@ class ShareTests(TestCase):
         def get_passes(message, count):
             self.spent_passes += count
             return list(
-                Pass(pass_.decode("ascii"))
+                Pass(*pass_.split(u" "))
                 for pass_
                 in make_passes(
                     self.signing_key,

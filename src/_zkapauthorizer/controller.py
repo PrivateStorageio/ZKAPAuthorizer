@@ -33,7 +33,10 @@ from json import (
 from datetime import (
     timedelta,
 )
-
+from base64 import (
+    b64encode,
+    b64decode,
+)
 import attr
 
 from zope.interface import (
@@ -71,6 +74,10 @@ from treq.client import (
 )
 
 import privacypass
+
+from ._base64 import (
+    urlsafe_b64decode,
+)
 
 from .model import (
     RandomToken,
@@ -177,12 +184,7 @@ class NonRedeemer(object):
         return cls()
 
     def random_tokens_for_voucher(self, voucher, count):
-        # It doesn't matter because we're never going to try to redeem them.
-        return list(
-            RandomToken(u"{}-{}".format(voucher.number, n))
-            for n
-            in range(count)
-        )
+        return dummy_random_tokens(voucher, count)
 
     def redeem(self, voucher, random_tokens):
         # Don't try to redeem them.
@@ -260,8 +262,17 @@ class UnpaidRedeemer(object):
 
 
 def dummy_random_tokens(voucher, count):
+    v = urlsafe_b64decode(voucher.number.encode("ascii"))
+    def dummy_random_token(n):
+        return RandomToken(
+            # Padding is 96 (random token length) - 32 (decoded voucher
+            # length)
+            b64encode(
+                v + u"{:0>64}".format(n).encode("ascii"),
+            ).decode("ascii"),
+        )
     return list(
-        RandomToken(u"{}-{}".format(voucher.number, n))
+        dummy_random_token(n)
         for n
         in range(count)
     )
@@ -291,17 +302,31 @@ class DummyRedeemer(object):
         :return: An already-fired ``Deferred`` that has a list of
           ``UnblindedToken`` instances wrapping meaningless values.
         """
+        def dummy_unblinded_token(random_token):
+            random_value = b64decode(random_token.token_value.encode("ascii"))
+            unblinded_value = random_value + b"x" * (96 - len(random_value))
+            return UnblindedToken(b64encode(unblinded_value).decode("ascii"))
         return succeed(
             list(
-                UnblindedToken(token.token_value)
+                dummy_unblinded_token(token)
                 for token
                 in random_tokens
             ),
         )
 
     def tokens_to_passes(self, message, unblinded_tokens):
+        def token_to_pass(token):
+            # Smear the unblinded token value across the two new values we
+            # need.
+            bs = b64decode(token.unblinded_token.encode("ascii"))
+            preimage = bs[:48] + b"x" * 16
+            signature = bs[48:] + b"y" * 16
+            return Pass(
+                b64encode(preimage).decode("ascii"),
+                b64encode(signature).decode("ascii"),
+            )
         return list(
-            Pass(token.text)
+            token_to_pass(token)
             for token
             in unblinded_tokens
         )
@@ -453,7 +478,7 @@ class RistrettoRedeemer(object):
         assert isinstance(unblinded_tokens, list)
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
-            privacypass.UnblindedToken.decode_base64(token.text.encode("ascii"))
+            privacypass.UnblindedToken.decode_base64(token.unblinded_token.encode("ascii"))
             for token
             in unblinded_tokens
         )
@@ -472,16 +497,15 @@ class RistrettoRedeemer(object):
             for token
             in unblinded_tokens
         )
-        marshaled_passes = list(
-            preimage.encode_base64() + b" " + signature.encode_base64()
+        passes = list(
+            Pass(
+                preimage.encode_base64().decode("ascii"),
+                signature.encode_base64().decode("ascii"),
+            )
             for (preimage, signature)
             in zip(clients_preimages, clients_signatures)
         )
-        return list(
-            Pass(p.decode("ascii"))
-            for p
-            in marshaled_passes
-        )
+        return passes
 
 
 @attr.s

@@ -17,6 +17,7 @@ Hypothesis strategies for property testing.
 """
 
 from base64 import (
+    b64encode,
     urlsafe_b64encode,
 )
 from datetime import (
@@ -77,6 +78,17 @@ from ..model import (
     Redeemed,
 )
 
+# Sizes informed by
+# https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
+
+# The length of a `TokenPreimage`, in bytes.
+_TOKEN_PREIMAGE_LENGTH = 64
+# The length of a `Token`, in bytes.
+_TOKEN_LENGTH = 96
+# The length of a `UnblindedToken`, in bytes.
+_UNBLINDED_TOKEN_LENGTH = 96
+# The length of a `VerificationSignature`, in bytes.
+_VERIFICATION_SIGNATURE_LENGTH = 64
 
 def _merge_dictionaries(dictionaries):
     result = {}
@@ -296,17 +308,65 @@ def voucher_objects():
     )
 
 
+def byte_strings(label, length, entropy):
+    """
+    Build byte strings of the given length with at most the given amount of
+    entropy.
+
+    These are cheaper for Hypothesis to construct than byte strings where
+    potentially the entire length is random.
+    """
+    if len(label) + entropy > length:
+        raise ValueError("Entropy and label don't fit into {} bytes".format(
+            length,
+        ))
+    return binary(
+        min_size=entropy,
+        max_size=entropy,
+    ).map(
+        lambda bs: label + b"x" * (length - entropy - len(label)) + bs,
+    )
+
+
 def random_tokens():
     """
-    Build random tokens as unicode strings.
+    Build ``RandomToken`` instances.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
+    return byte_strings(
+        label=b"random-tokens",
+        length=_TOKEN_LENGTH,
+        entropy=4,
     ).map(
-        urlsafe_b64encode,
+        b64encode,
     ).map(
         lambda token: RandomToken(token.decode("ascii")),
+    )
+
+
+def token_preimages():
+    """
+    Build ``unicode`` strings representing base64-encoded token preimages.
+    """
+    return byte_strings(
+        label=b"token-preimage",
+        length=_TOKEN_PREIMAGE_LENGTH,
+        entropy=4,
+    ).map(
+        lambda bs: b64encode(bs).decode("ascii"),
+    )
+
+
+def verification_signatures():
+    """
+    Build ``unicode`` strings representing base64-encoded verification
+    signatures.
+    """
+    return byte_strings(
+        label=b"verification-signature",
+        length=_VERIFICATION_SIGNATURE_LENGTH,
+        entropy=4,
+    ).map(
+        lambda bs: b64encode(bs).decode("ascii"),
     )
 
 
@@ -315,11 +375,9 @@ def zkaps():
     Build random ZKAPs as ``Pass` instances.
     """
     return builds(
-        lambda preimage, signature: Pass(u"{} {}".format(preimage, signature)),
-        # Sizes informed by
-        # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
-        preimage=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
-        signature=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
+        Pass,
+        preimage=token_preimages(),
+        signature=verification_signatures(),
     )
 
 
@@ -329,11 +387,12 @@ def unblinded_tokens():
     base64 encode data.  You cannot use these in the PrivacyPass cryptographic
     protocol but you can put them into the database and take them out again.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
+    return byte_strings(
+        label=b"unblinded-tokens",
+        length=_UNBLINDED_TOKEN_LENGTH,
+        entropy=4,
     ).map(
-        urlsafe_b64encode,
+        b64encode,
     ).map(
         lambda zkap: UnblindedToken(zkap.decode("ascii")),
     )

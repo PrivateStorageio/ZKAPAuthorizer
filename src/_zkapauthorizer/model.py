@@ -27,7 +27,9 @@ from json import (
 from datetime import (
     datetime,
 )
-
+from base64 import (
+    b64decode,
+)
 from zope.interface import (
     Interface,
     implementer,
@@ -45,6 +47,10 @@ from aniso8601 import (
 )
 from twisted.python.filepath import (
     FilePath,
+)
+
+from ._base64 import (
+    urlsafe_b64decode,
 )
 
 from .storage_common import (
@@ -365,7 +371,7 @@ class VoucherStore(object):
             INSERT INTO [unblinded-tokens] VALUES (?)
             """,
             list(
-                (t.text,)
+                (t.unblinded_token,)
                 for t
                 in unblinded_tokens
             ),
@@ -606,6 +612,31 @@ class LeaseMaintenanceActivity(object):
 # x = store.get_latest_lease_maintenance_activity()
 # xs.started, xs.passes_required, xs.finished
 
+def is_base64_encoded(b64decode=b64decode):
+    def validate_is_base64_encoded(inst, attr, value):
+        try:
+            b64decode(value.encode("ascii"))
+        except (TypeError, Error):
+            raise TypeError(
+                "{name!r} must be base64 encoded unicode, (got {value!r})".format(
+                    name=attr.name,
+                    value=value,
+                ),
+            )
+    return validate_is_base64_encoded
+
+def has_length(expected):
+    def validate_has_length(inst, attr, value):
+        if len(value) != expected:
+            raise ValueError(
+                "{name!r} must have length {expected}, instead has length {actual}".format(
+                    name=attr.name,
+                    expected=expected,
+                    actual=len(value),
+                ),
+            )
+    return validate_has_length
+
 
 @attr.s(frozen=True)
 class UnblindedToken(object):
@@ -615,12 +646,18 @@ class UnblindedToken(object):
     and can be used to construct a privacy-preserving pass which can be
     exchanged for service.
 
-    :ivar unicode text: The base64 encoded serialized form of the unblinded
-        token.  This can be used to reconstruct a
+    :ivar unicode unblinded_token: The base64 encoded serialized form of the
+        unblinded token.  This can be used to reconstruct a
         ``privacypass.UnblindedToken`` using that class's ``decode_base64``
         method.
     """
-    text = attr.ib(validator=attr.validators.instance_of(unicode))
+    unblinded_token = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(128),
+        ),
+    )
 
 
 @attr.s(frozen=True)
@@ -628,19 +665,47 @@ class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar unicode text: The text value of the pass.  This can be sent to a
-        service provider one time to anonymously prove a prior voucher
+    :ivar unicode pass_text: The text value of the pass.  This can be sent to
+        a service provider one time to anonymously prove a prior voucher
         redemption.  If it is sent more than once the service provider may
         choose to reject it and the anonymity property is compromised.  Pass
         text should be kept secret.  If pass text is divulged to third-parties
         the anonymity property may be compromised.
     """
-    text = attr.ib(validator=attr.validators.instance_of(unicode))
+    preimage = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(88),
+        ),
+    )
+
+    signature = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(88),
+        ),
+    )
+
+    @property
+    def pass_text(self):
+        return u"{} {}".format(self.preimage, self.signature)
 
 
 @attr.s(frozen=True)
 class RandomToken(object):
-    token_value = attr.ib(validator=attr.validators.instance_of(unicode))
+    """
+    :ivar unicode token_value: The base64-encoded representation of the random
+        token.
+    """
+    token_value = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(128),
+        ),
+    )
 
 
 @attr.s(frozen=True)
@@ -759,7 +824,13 @@ class Voucher(object):
         this voucher if it has been redeemed, ``None`` if it has not been
         redeemed.
     """
-    number = attr.ib()
+    number = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(urlsafe_b64decode),
+            has_length(44),
+        ),
+    )
     created = attr.ib(
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
