@@ -49,6 +49,10 @@ from twisted.python.filepath import (
     FilePath,
 )
 
+from ._base64 import (
+    urlsafe_b64decode,
+)
+
 from .storage_common import (
     BYTES_PER_PASS,
     required_passes,
@@ -796,7 +800,13 @@ class Voucher(object):
         this voucher if it has been redeemed, ``None`` if it has not been
         redeemed.
     """
-    number = attr.ib()
+    number = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(urlsafe_b64decode),
+            has_length(44),
+        ),
+    )
     created = attr.ib(
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
