@@ -27,7 +27,9 @@ from json import (
 from datetime import (
     datetime,
 )
-
+from base64 import (
+    b64decode,
+)
 from zope.interface import (
     Interface,
     implementer,
@@ -605,6 +607,31 @@ class LeaseMaintenanceActivity(object):
 #
 # x = store.get_latest_lease_maintenance_activity()
 # xs.started, xs.passes_required, xs.finished
+
+def is_base64_encoded(b64decode=b64decode):
+    def validate_is_base64_encoded(inst, attr, value):
+        try:
+            b64decode(value.encode("ascii"))
+        except (TypeError, Error):
+            raise TypeError(
+                "{name!r} must be base64 encoded unicode, (got {value!r})".format(
+                    name=attr.name,
+                    value=value,
+                ),
+            )
+    return validate_is_base64_encoded
+
+def has_length(expected):
+    def validate_has_length(inst, attr, value):
+        if len(value) != expected:
+            raise ValueError(
+                "{name!r} must have length {expected}, instead has length {actual}".format(
+                    name=attr.name,
+                    expected=expected,
+                    actual=len(value),
+                ),
+            )
+    return validate_has_length
 
 
 @attr.s(frozen=True)
