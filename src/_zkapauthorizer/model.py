@@ -667,7 +667,17 @@ class Pass(object):
 
 @attr.s(frozen=True)
 class RandomToken(object):
-    token_value = attr.ib(validator=attr.validators.instance_of(unicode))
+    """
+    :ivar unicode token_value: The base64-encoded representation of the random
+        token.
+    """
+    token_value = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(128),
+        ),
+    )
 
 
 @attr.s(frozen=True)

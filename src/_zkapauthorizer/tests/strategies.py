@@ -17,6 +17,7 @@ Hypothesis strategies for property testing.
 """
 
 from base64 import (
+    b64encode,
     urlsafe_b64encode,
 )
 from datetime import (
@@ -77,6 +78,11 @@ from ..model import (
     Redeemed,
 )
 
+# Sizes informed by
+# https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
+
+# The length of a `Token`, in bytes.
+_TOKEN_LENGTH = 96
 
 def _merge_dictionaries(dictionaries):
     result = {}
@@ -296,15 +302,36 @@ def voucher_objects():
     )
 
 
+def byte_strings(label, length, entropy):
+    """
+    Build byte strings of the given length with at most the given amount of
+    entropy.
+
+    These are cheaper for Hypothesis to construct than byte strings where
+    potentially the entire length is random.
+    """
+    if len(label) + entropy > length:
+        raise ValueError("Entropy and label don't fit into {} bytes".format(
+            length,
+        ))
+    return binary(
+        min_size=entropy,
+        max_size=entropy,
+    ).map(
+        lambda bs: label + b"x" * (length - entropy - len(label)) + bs,
+    )
+
+
 def random_tokens():
     """
-    Build random tokens as unicode strings.
+    Build ``RandomToken`` instances.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
+    return byte_strings(
+        label=b"random-tokens",
+        length=_TOKEN_LENGTH,
+        entropy=4,
     ).map(
-        urlsafe_b64encode,
+        b64encode,
     ).map(
         lambda token: RandomToken(token.decode("ascii")),
     )

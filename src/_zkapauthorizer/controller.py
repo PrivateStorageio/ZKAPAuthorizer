@@ -33,7 +33,9 @@ from json import (
 from datetime import (
     timedelta,
 )
-
+from base64 import (
+    b64encode,
+)
 import attr
 
 from zope.interface import (
@@ -71,6 +73,10 @@ from treq.client import (
 )
 
 import privacypass
+
+from ._base64 import (
+    urlsafe_b64decode,
+)
 
 from .model import (
     RandomToken,
@@ -177,12 +183,7 @@ class NonRedeemer(object):
         return cls()
 
     def random_tokens_for_voucher(self, voucher, count):
-        # It doesn't matter because we're never going to try to redeem them.
-        return list(
-            RandomToken(u"{}-{}".format(voucher.number, n))
-            for n
-            in range(count)
-        )
+        return dummy_random_tokens(voucher, count)
 
     def redeem(self, voucher, random_tokens):
         # Don't try to redeem them.
@@ -260,8 +261,17 @@ class UnpaidRedeemer(object):
 
 
 def dummy_random_tokens(voucher, count):
+    v = urlsafe_b64decode(voucher.number.encode("ascii"))
+    def dummy_random_token(n):
+        return RandomToken(
+            # Padding is 96 (random token length) - 32 (decoded voucher
+            # length)
+            b64encode(
+                v + u"{:0>64}".format(n).encode("ascii"),
+            ).decode("ascii"),
+        )
     return list(
-        RandomToken(u"{}-{}".format(voucher.number, n))
+        dummy_random_token(n)
         for n
         in range(count)
     )
