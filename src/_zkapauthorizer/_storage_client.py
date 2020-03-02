@@ -85,7 +85,7 @@ class ZKAPAuthorizerStorageClient(object):
         """
         assert isinstance(message, unicode)
         return list(
-            t.text.encode("ascii")
+            t.pass_text.encode("ascii")
             for t
             in self._get_passes(message.encode("utf-8"), count)
         )

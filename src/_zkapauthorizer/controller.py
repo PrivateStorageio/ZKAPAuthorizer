@@ -315,8 +315,18 @@ class DummyRedeemer(object):
         )
 
     def tokens_to_passes(self, message, unblinded_tokens):
+        def token_to_pass(token):
+            # Smear the unblinded token value across the two new values we
+            # need.
+            bs = b64decode(token.unblinded_token.encode("ascii"))
+            preimage = bs[:48] + b"x" * 16
+            signature = bs[48:] + b"y" * 16
+            return Pass(
+                b64encode(preimage).decode("ascii"),
+                b64encode(signature).decode("ascii"),
+            )
         return list(
-            Pass(token.unblinded_token)
+            token_to_pass(token)
             for token
             in unblinded_tokens
         )
@@ -487,16 +497,15 @@ class RistrettoRedeemer(object):
             for token
             in unblinded_tokens
         )
-        marshaled_passes = list(
-            preimage.encode_base64() + b" " + signature.encode_base64()
+        passes = list(
+            Pass(
+                preimage.encode_base64().decode("ascii"),
+                signature.encode_base64().decode("ascii"),
+            )
             for (preimage, signature)
             in zip(clients_preimages, clients_signatures)
         )
-        return list(
-            Pass(p.decode("ascii"))
-            for p
-            in marshaled_passes
-        )
+        return passes
 
 
 @attr.s

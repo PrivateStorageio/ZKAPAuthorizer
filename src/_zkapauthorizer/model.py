@@ -665,14 +665,32 @@ class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar unicode text: The text value of the pass.  This can be sent to a
-        service provider one time to anonymously prove a prior voucher
+    :ivar unicode pass_text: The text value of the pass.  This can be sent to
+        a service provider one time to anonymously prove a prior voucher
         redemption.  If it is sent more than once the service provider may
         choose to reject it and the anonymity property is compromised.  Pass
         text should be kept secret.  If pass text is divulged to third-parties
         the anonymity property may be compromised.
     """
-    text = attr.ib(validator=attr.validators.instance_of(unicode))
+    preimage = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(88),
+        ),
+    )
+
+    signature = attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of(unicode),
+            is_base64_encoded(),
+            has_length(88),
+        ),
+    )
+
+    @property
+    def pass_text(self):
+        return u"{} {}".format(self.preimage, self.signature)
 
 
 @attr.s(frozen=True)

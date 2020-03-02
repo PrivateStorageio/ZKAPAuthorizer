@@ -81,10 +81,14 @@ from ..model import (
 # Sizes informed by
 # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
 
+# The length of a `TokenPreimage`, in bytes.
+_TOKEN_PREIMAGE_LENGTH = 64
 # The length of a `Token`, in bytes.
 _TOKEN_LENGTH = 96
 # The length of a `UnblindedToken`, in bytes.
 _UNBLINDED_TOKEN_LENGTH = 96
+# The length of a `VerificationSignature`, in bytes.
+_VERIFICATION_SIGNATURE_LENGTH = 64
 
 def _merge_dictionaries(dictionaries):
     result = {}
@@ -339,16 +343,41 @@ def random_tokens():
     )
 
 
+def token_preimages():
+    """
+    Build ``unicode`` strings representing base64-encoded token preimages.
+    """
+    return byte_strings(
+        label=b"token-preimage",
+        length=_TOKEN_PREIMAGE_LENGTH,
+        entropy=4,
+    ).map(
+        lambda bs: b64encode(bs).decode("ascii"),
+    )
+
+
+def verification_signatures():
+    """
+    Build ``unicode`` strings representing base64-encoded verification
+    signatures.
+    """
+    return byte_strings(
+        label=b"verification-signature",
+        length=_VERIFICATION_SIGNATURE_LENGTH,
+        entropy=4,
+    ).map(
+        lambda bs: b64encode(bs).decode("ascii"),
+    )
+
+
 def zkaps():
     """
     Build random ZKAPs as ``Pass` instances.
     """
     return builds(
-        lambda preimage, signature: Pass(u"{} {}".format(preimage, signature)),
-        # Sizes informed by
-        # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
-        preimage=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
-        signature=binary(min_size=64, max_size=64).map(urlsafe_b64encode),
+        Pass,
+        preimage=token_preimages(),
+        signature=verification_signatures(),
     )
 
 
