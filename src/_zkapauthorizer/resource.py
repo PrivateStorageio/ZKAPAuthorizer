@@ -69,10 +69,9 @@ class IZKAPRoot(IResource):
 def from_configuration(node_config, store, redeemer=None):
     """
     Instantiate the plugin root resource using data from its configuration
-    section in the Tahoe-LAFS configuration file::
-
-        [storageclient.plugins.privatestorageio-zkapauthz-v1]
-        # nothing yet
+    section, **storageclient.plugins.privatestorageio-zkapauthz-v1**, in the
+    Tahoe-LAFS configuration file.  See the configuration documentation for
+    details of the configuration section.
 
     :param _Config node_config: An object representing the overall node
         configuration.  The plugin configuration can be extracted from this.
