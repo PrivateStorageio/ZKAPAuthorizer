@@ -90,9 +90,6 @@ from .model import (
     Error as model_Error,
 )
 
-# The number of tokens to submit with a voucher redemption.
-NUM_TOKENS = 512000
-
 RETRY_INTERVAL = timedelta(minutes=3)
 
 class AlreadySpent(Exception):
@@ -535,6 +532,10 @@ class PaymentController(object):
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
 
+    :ivar int default_token_count: The number of tokens to request when
+        redeeming a voucher, if no other count is given when the redemption is
+        started.
+
     :ivar dict[unicode, datetime] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to timestamps
         when the attempt began.
@@ -551,6 +552,7 @@ class PaymentController(object):
 
     store = attr.ib()
     redeemer = attr.ib()
+    default_token_count = attr.ib()
 
     _clock = attr.ib(
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
@@ -664,7 +666,7 @@ class PaymentController(object):
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
         if num_tokens is None:
-            num_tokens = NUM_TOKENS
+            num_tokens = self.default_token_count
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
         return self._perform_redeem(voucher, tokens)
 

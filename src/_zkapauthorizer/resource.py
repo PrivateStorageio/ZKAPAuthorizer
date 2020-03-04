@@ -58,6 +58,10 @@ from .controller import (
     get_redeemer,
 )
 
+# The number of tokens to submit with a voucher redemption.
+NUM_TOKENS = 512000
+
+
 class IZKAPRoot(IResource):
     """
     The root of the resource tree of this plugin's client web presence.
@@ -66,7 +70,7 @@ class IZKAPRoot(IResource):
     controller = Attribute("The ``PaymentController`` used by this resource tree.")
 
 
-def from_configuration(node_config, store, redeemer=None):
+def from_configuration(node_config, store, redeemer=None, default_token_count=None):
     """
     Instantiate the plugin root resource using data from its configuration
     section, **storageclient.plugins.privatestorageio-zkapauthz-v1**, in the
@@ -93,7 +97,9 @@ def from_configuration(node_config, store, redeemer=None):
             None,
             None,
         )
-    controller = PaymentController(store, redeemer)
+    if default_token_count is None:
+        default_token_count = NUM_TOKENS
+    controller = PaymentController(store, redeemer, default_token_count)
     root = Resource()
     root.store = store
     root.controller = controller

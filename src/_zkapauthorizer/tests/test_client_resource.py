@@ -130,9 +130,6 @@ from ..model import (
     VoucherStore,
     memory_connect,
 )
-from ..controller import (
-    NUM_TOKENS,
-)
 from ..resource import (
     from_configuration,
 )
@@ -155,6 +152,9 @@ from .strategies import (
 from .matchers import (
     Provides,
 )
+
+# A small number of tokens to work with in the tests.
+NUM_TOKENS = 10
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
@@ -251,6 +251,7 @@ def root_from_config(config, now):
             now,
             memory_connect,
         ),
+        default_token_count=NUM_TOKENS,
     )
 
 
@@ -911,10 +912,7 @@ class VoucherTests(TestCase):
                         created=now,
                         state=Redeemed(
                             finished=now,
-                            # Value duplicated from
-                            # PaymentController.redeem
-                            # default.  Should do this better.
-                            token_count=100,
+                            token_count=NUM_TOKENS,
                         ),
                     ).marshal()
                     for voucher
