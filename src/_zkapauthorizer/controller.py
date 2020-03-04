@@ -595,13 +595,13 @@ class PaymentController(object):
         for voucher in vouchers:
             if voucher.state.should_start_redemption():
                 self._log.info(
-                    "Controller found voucher ({}) at startup that needs redemption.",
+                    "Controller found voucher ({voucher}) at startup that needs redemption.",
                     voucher=voucher.number,
                 )
                 self.redeem(voucher.number)
             else:
                 self._log.info(
-                    "Controller found voucher ({}) at startup that does not need redemption.",
+                    "Controller found voucher ({voucher}) at startup that does not need redemption.",
                     voucher=voucher.number,
                 )
 
