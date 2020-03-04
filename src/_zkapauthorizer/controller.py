@@ -91,7 +91,7 @@ from .model import (
 )
 
 # The number of tokens to submit with a voucher redemption.
-NUM_TOKENS = 100
+NUM_TOKENS = 512000
 
 RETRY_INTERVAL = timedelta(minutes=3)
 
