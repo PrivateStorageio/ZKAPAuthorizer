@@ -27,8 +27,8 @@ from os import (
     makedirs,
 )
 import tempfile
-from zope.interface import (
-    implementer,
+from functools import (
+    partial,
 )
 
 from fixtures import (
@@ -96,12 +96,19 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
+from ..foolscap import (
+    RIPrivacyPassAuthorizedStorageServer,
+)
 from ..model import (
     VoucherStore,
 )
 from ..controller import (
     IssuerConfigurationMismatch,
 )
+from .._storage_client import (
+    IncorrectStorageServerReference,
+)
+
 from ..lease_maintenance import (
     SERVICE_NAME,
 )
@@ -123,23 +130,25 @@ from .strategies import (
 )
 from .matchers import (
     Provides,
+    raises,
+)
+
+from .foolscap import (
+    LocalRemote,
+    get_anonymous_storage_server,
+    DummyReferenceable,
 )
 
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
 
 
-@implementer(RIStorageServer)
-class StubStorageServer(object):
-    pass
+def get_rref(interface=None):
+    if interface is None:
+        interface = RIPrivacyPassAuthorizedStorageServer
+    return LocalRemote(DummyReferenceable(interface))
 
 
-def get_anonymous_storage_server():
-    return StubStorageServer()
-
-
-def get_rref():
-    return LocalReferenceable(None)
 
 
 class PluginTests(TestCase):
@@ -318,6 +327,59 @@ class ClientPluginTests(TestCase):
         else:
             self.fail("get_storage_client didn't raise, returned: {}".format(result))
 
+
+    @given(
+        tahoe_configs(),
+        announcements(),
+        storage_indexes(),
+        lease_renew_secrets(),
+        lease_cancel_secrets(),
+        sharenum_sets(),
+        sizes(),
+    )
+    def test_mismatch_storage_server_furl(
+            self,
+            get_config,
+            announcement,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            size,
+
+    ):
+        """
+        If the ``get_rref`` passed to ``get_storage_client`` returns a reference
+        to something other than an ``RIPrivacyPassAuthorizedStorageServer``
+        provider then the storage methods of the client raise exceptions that
+        clearly indicate this.
+        """
+        tempdir = self.useFixture(TempDir())
+        node_config = get_config(
+            tempdir.join(b"node"),
+            b"tub.port",
+        )
+
+        storage_client = storage_server.get_storage_client(
+            node_config,
+            announcement,
+            partial(get_rref, RIStorageServer),
+        )
+
+        def use_it():
+            return storage_client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                LocalReferenceable(None),
+            )
+
+        self.assertThat(
+            use_it,
+            raises(IncorrectStorageServerReference),
+        )
 
     @given(
         tahoe_configs_with_dummy_redeemer,

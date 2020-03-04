@@ -16,6 +16,15 @@
 Testtools matchers useful for the test suite.
 """
 
+__all__ = [
+    "Provides",
+    "raises",
+    "returns",
+    "matches_version_dictionary",
+    "between",
+    "leases_current",
+]
+
 from datetime import (
     datetime,
 )
@@ -34,6 +43,10 @@ from testtools.matchers import (
     Equals,
     AfterPreprocessing,
     AllMatch,
+)
+
+from ._exception import (
+    raises,
 )
 
 @attr.s
