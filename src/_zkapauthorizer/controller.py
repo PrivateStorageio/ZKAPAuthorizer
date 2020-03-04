@@ -442,7 +442,12 @@ class RistrettoRedeemer(object):
             elif reason == u"unpaid":
                 raise Unpaid(voucher)
 
-        self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
+        self._log.info(
+            "Redeemed: {public_key} {proof} {count}",
+            public_key=result[u"public-key"],
+            proof=result[u"proof"],
+            count=len(result[u"signatures"]),
+        )
 
         marshaled_signed_tokens = result[u"signatures"]
         marshaled_proof = result[u"proof"]
