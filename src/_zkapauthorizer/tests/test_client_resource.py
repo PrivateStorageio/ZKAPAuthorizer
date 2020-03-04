@@ -130,6 +130,9 @@ from ..model import (
     VoucherStore,
     memory_connect,
 )
+from ..controller import (
+    NUM_TOKENS,
+)
 from ..resource import (
     from_configuration,
 )
@@ -763,9 +766,7 @@ class VoucherTests(TestCase):
                 created=Equals(now),
                 state=Equals(Redeemed(
                     finished=now,
-                    # Value duplicated from PaymentController.redeem default.
-                    # Should do this better.
-                    token_count=100,
+                    token_count=NUM_TOKENS,
                 )),
             ),
         )
