@@ -633,7 +633,7 @@ class PaymentController(object):
         self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
         tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
 
-        self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
+        self._log.info("Persisting random tokens for a voucher ({voucher}).", voucher=voucher)
         self.store.add(voucher, tokens)
 
         # XXX If the voucher is already in the store then the tokens passed to
