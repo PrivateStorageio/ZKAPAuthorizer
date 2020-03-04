@@ -20,8 +20,6 @@ from __future__ import (
     absolute_import,
 )
 
-import attr
-
 from fixtures import (
     MonkeyPatch,
 )
@@ -59,9 +57,6 @@ from hypothesis.strategies import (
 from twisted.python.filepath import (
     FilePath,
 )
-from twisted.internet.defer import (
-    execute,
-)
 
 from foolscap.referenceable import (
     LocalReferenceable,
@@ -98,6 +93,9 @@ from .storage_common import (
     cleanup_storage_server,
     write_toy_shares,
 )
+from .foolscap import (
+    LocalRemote,
+)
 from ..api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
@@ -113,44 +111,6 @@ from ..model import (
 from ..foolscap import (
     ShareStat,
 )
-
-@attr.s
-class LocalRemote(object):
-    """
-    Adapt a referenceable to behave as if it were a remote reference instead.
-
-    This is only a partial implementation of ``IRemoteReference`` so it
-    doesn't declare the interface.
-
-    ``foolscap.referenceable.LocalReferenceable`` is in many ways a better
-    adapter between these interfaces but it also uses ``eventually`` which
-    complicates matters immensely for testing.
-
-    :ivar foolscap.ipb.IReferenceable _referenceable: The object to which this
-        provides a simulated remote interface.
-    """
-    _referenceable = attr.ib()
-    check_args = attr.ib(default=True)
-
-    def callRemote(self, methname, *args, **kwargs):
-        """
-        Call the given method on the wrapped object, passing the given arguments.
-
-        Arguments are checked for conformance to the remote interface but the
-        return value is not (because I don't know how -exarkun).
-
-        :return Deferred: The result of the call on the wrapped object.
-        """
-        schema = self._referenceable.getInterface()[methname]
-        if self.check_args:
-            schema.checkAllArgs(args, kwargs, inbound=False)
-        # TODO: Figure out how to call checkResults on the result.
-        return execute(
-            self._referenceable.doRemoteCall,
-            methname,
-            args,
-            kwargs,
-        )
 
 
 class RequiredPassesTests(TestCase):

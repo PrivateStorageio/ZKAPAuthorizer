@@ -44,6 +44,26 @@ from .storage_common import (
     get_required_new_passes_for_mutable_write,
 )
 
+
+class IncorrectStorageServerReference(Exception):
+    """
+    A Foolscap remote object which should reference a ZKAPAuthorizer storage
+    server instead references some other kind of object.  This makes the
+    connection, and thus the configured storage server, unusable.
+    """
+    def __init__(self, furl, actual_name, expected_name):
+        self.furl = furl
+        self.actual_name = actual_name
+        self.expected_name = expected_name
+
+    def __str__(self):
+        return "RemoteReference via {} provides {} instead of {}".format(
+            self.furl,
+            self.actual_name,
+            self.expected_name,
+        )
+
+
 @implementer(IStorageServer)
 @attr.s
 class ZKAPAuthorizerStorageClient(object):
@@ -69,12 +89,32 @@ class ZKAPAuthorizerStorageClient(object):
         which they will be used.  The second is an integer giving the number
         of passes to request.
     """
+    _expected_remote_interface_name = (
+        "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
+    )
+
     _get_rref = attr.ib()
     _get_passes = attr.ib()
 
     @property
     def _rref(self):
-        return self._get_rref()
+        rref = self._get_rref()
+        # rref provides foolscap.ipb.IRemoteReference but in practice it is a
+        # foolscap.referenceable.RemoteReference instance.  The interface
+        # doesn't give us enough functionality to verify that the reference is
+        # to the right sort of thing but the concrete type does.
+        #
+        # Foolscap development isn't exactly racing along and if we're lucky
+        # we'll switch to HTTP before too long anyway.
+        actual_name = rref.tracker.interfaceName
+        expected_name = self._expected_remote_interface_name
+        if actual_name != expected_name:
+            raise IncorrectStorageServerReference(
+                rref.tracker.getURL(),
+                actual_name,
+                expected_name,
+            )
+        return rref
 
     def _get_encoded_passes(self, message, count):
         """
