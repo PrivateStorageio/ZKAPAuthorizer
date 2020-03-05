@@ -28,14 +28,13 @@ def _configure_hypothesis():
         settings,
     )
 
-    settings.register_profile(
-        "ci",
+    base = dict(
         suppress_health_check=[
-            # CPU resources available to CI builds typically varies
-            # significantly from run to run making it difficult to determine
-            # if "too slow" data generation is a result of the code or the
-            # execution environment.  Prevent these checks from
-            # (intermittently) failing tests that are otherwise fine.
+            # CPU resources available to builds typically varies significantly
+            # from run to run making it difficult to determine if "too slow"
+            # data generation is a result of the code or the execution
+            # environment.  Prevent these checks from (intermittently) failing
+            # tests that are otherwise fine.
             HealthCheck.too_slow,
         ],
         # With the same reasoning, disable the test deadline.
@@ -43,9 +42,22 @@ def _configure_hypothesis():
     )
 
     settings.register_profile(
+        "default",
+        **base
+    )
+
+    settings.register_profile(
+        "ci",
+        # Make CI runs a little more aggressive in amount of coverage they try
+        # to provide.
+        max_examples=1000,
+        **base
+    )
+
+    settings.register_profile(
         "big",
         max_examples=10000,
-        deadline=None,
+        **base
     )
 
     profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")
