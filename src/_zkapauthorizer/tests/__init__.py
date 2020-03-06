@@ -51,7 +51,7 @@ def _configure_hypothesis():
         "ci",
         # Make CI runs a little more aggressive in amount of coverage they try
         # to provide.
-        max_examples=1000,
+        max_examples=200,
         verbosity=Verbosity.debug,
         **base
     )
