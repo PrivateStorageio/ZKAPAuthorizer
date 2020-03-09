@@ -1,0 +1,6 @@
+[run]
+source =
+    _zkapauthorizer
+    twisted.plugins.zkapauthorizer
+
+branch = True
