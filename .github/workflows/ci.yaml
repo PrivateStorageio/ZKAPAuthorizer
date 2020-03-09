@@ -33,17 +33,24 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install wheel coverage
-
     - name: "Install Dependencies"
       run: |
-        pip install git+https://github.com/LeastAuthority/privacypass@master#egg=privacypass
-        pip install git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
-        python -m pip install -r test-requirements.txt
-        python -m pip install ./
+        python -m pip -vvv install --upgrade pip
+    - name: "Install Dependencies"
+      run: |
+        python -m pip -vvv install wheel coverage
+    - name: "Install Dependencies"
+      run: |
+        python -m pip install -vvv git+https://github.com/LeastAuthority/privacypass@master#egg=privacypass
+    - name: "Install Dependencies"
+      run: |
+        python -m pip install -vvv git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
+    - name: "Install Dependencies"
+      run: |
+        python -m pip install -vvv -r test-requirements.txt
+    - name: "Install Dependencies"
+      run: |
+        python -m pip install -vvv ./
 
     - name: "Dump Python Environment"
       run: |
