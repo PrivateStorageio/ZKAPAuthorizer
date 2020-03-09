@@ -40,7 +40,8 @@ jobs:
         pip wheel --wheel-dir ./wheelhouse git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
     - name: "Install Dependencies"
       run: |
-        PIP_FIND_LINKS=./wheelhouse python -m pip install ./
+        $Env:PIP_FIND_LINKS = "./wheelhouse"
+        python -m pip install ./
 
     - name: "Run Tests"
       env:
