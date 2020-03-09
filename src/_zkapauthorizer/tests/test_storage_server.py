@@ -27,6 +27,11 @@ from time import (
 from random import (
     shuffle,
 )
+
+from unittest import (
+    skipIf,
+)
+
 from testtools import (
     TestCase,
 )
@@ -52,6 +57,9 @@ from privacypass import (
     random_signing_key,
 )
 
+from twisted.python.runtime import (
+    platform,
+)
 from twisted.internet.task import (
     Clock,
 )
@@ -96,6 +104,7 @@ from ..storage_common import (
     summarize,
 )
 
+@skipIf(platform.isWindows(), "Storage server is not supported on Windows")
 class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
