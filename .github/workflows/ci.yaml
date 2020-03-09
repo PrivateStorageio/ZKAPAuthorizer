@@ -12,6 +12,9 @@ jobs:
           - "2.7"
 
     steps:
+    # Avoid letting Windows newlines confusing milksnake.
+    - run: "git config --global core.autocrlf false"
+
     - uses: actions/checkout@v2
       with:
         fetch-depth: "0"
