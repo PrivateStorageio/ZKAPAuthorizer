@@ -52,6 +52,10 @@ jobs:
         python -m pip install -r test-requirements.txt
         python -m pip install ./
 
+    - name: "Dump Python Environment"
+      run: |
+        pip freeze
+
     - name: "Run Tests"
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
