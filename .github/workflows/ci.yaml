@@ -49,6 +49,7 @@ jobs:
     - name: "Install Dependencies"
       run: |
         $Env:PIP_FIND_LINKS = "./wheelhouse"
+        python -m pip install -r test-requirements.txt
         python -m pip install ./
 
     - name: "Run Tests"
