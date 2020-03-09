@@ -15,16 +15,26 @@ jobs:
     - uses: actions/checkout@v2
       with:
         fetch-depth: "0"
-    # Get tags not fetched by the checkout action, needed for auto-versioning.
+
+      # Get tags not fetched by the checkout action, needed for auto-versioning.
     - run: "git fetch origin +refs/tags/*:refs/tags/*"
+
+    # Get MS VC++ 9 aka Visual Studio 2008, required to build Python 2.7
+    # extensions (zfec via Tahoe-LAFS).
+    - uses: "crazy-max/ghaction-chocolatey@v1"
+      with:
+        args: "install vcpython27"
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install wheel tox
+
     - name: Get Tahoe-LAFS master
       run: |
         pip wheel --wheel-dir ./wheelhouse git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
