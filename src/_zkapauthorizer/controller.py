@@ -17,6 +17,10 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from sys import (
     exc_info,
 )
@@ -453,6 +457,7 @@ class RistrettoRedeemer(object):
         public_key = privacypass.PublicKey.decode_base64(
             marshaled_public_key.encode("ascii"),
         )
+        self._log.info("Decoded public key")
         clients_signed_tokens = list(
             privacypass.SignedToken.decode_base64(
                 marshaled_signed_token.encode("ascii"),
@@ -460,6 +465,7 @@ class RistrettoRedeemer(object):
             for marshaled_signed_token
             in marshaled_signed_tokens
         )
+        self._log.info("Decoded signed tokens")
         clients_proof = privacypass.BatchDLEQProof.decode_base64(
             marshaled_proof.encode("ascii"),
         )
@@ -469,6 +475,7 @@ class RistrettoRedeemer(object):
             clients_signed_tokens,
             public_key,
         )
+        self._log.info("Validated proof")
         returnValue(list(
             UnblindedToken(token.encode_base64().decode("ascii"))
             for token
