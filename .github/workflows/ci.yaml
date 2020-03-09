@@ -36,7 +36,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install wheel tox
+        pip install wheel coverage
 
     - name: Get Tahoe-LAFS master
       run: |
