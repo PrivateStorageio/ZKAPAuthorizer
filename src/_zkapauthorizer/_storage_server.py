@@ -509,6 +509,12 @@ def get_storage_index_share_size(sharepath):
     """
     with open(sharepath) as share_file:
         share_data_length_bytes = share_file.read(8)[4:]
+        if len(share_data_length_bytes) != 4:
+            raise ValueError(
+                "Tried to read 4 bytes of share data length from share, got {!r} instead.".format(
+                    share_data_length_bytes,
+                ),
+            )
         (share_data_length,) = unpack('>L', share_data_length_bytes)
         return share_data_length
 
