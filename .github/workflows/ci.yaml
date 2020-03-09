@@ -56,6 +56,10 @@ jobs:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
         python -m coverage run -m twisted.trial _zkapauthorizer
+
+
+    - name: "Convert Coverage"
+      run: |
         coverage xml
 
     - uses: codecov/codecov-action@v1
