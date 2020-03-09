@@ -38,17 +38,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install wheel coverage
 
-    - name: Get Tahoe-LAFS master
-      run: |
-        pip wheel --wheel-dir ./wheelhouse git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
-
-    - name: Get PrivacyPass bindings
-      run: |
-        pip wheel --wheel-dir ./wheelhouse git+https://github.com/LeastAuthority/privacypass@master#egg=privacypass
-
     - name: "Install Dependencies"
       run: |
-        $Env:PIP_FIND_LINKS = "./wheelhouse"
+        pip install git+https://github.com/LeastAuthority/privacypass@master#egg=privacypass
+        pip install git+https://github.com/tahoe-lafs/tahoe-lafs@master#egg=tahoe-lafs
         python -m pip install -r test-requirements.txt
         python -m pip install ./
 
