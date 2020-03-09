@@ -23,6 +23,9 @@ from __future__ import (
 from fixtures import (
     MonkeyPatch,
 )
+from unittest import (
+    skipIf,
+)
 from testtools import (
     TestCase,
 )
@@ -54,6 +57,9 @@ from hypothesis.strategies import (
     integers,
 )
 
+from twisted.python.runtime import (
+    platform,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -395,6 +401,7 @@ class ShareTests(TestCase):
         )
 
 
+    @skipIf(platform.isWindows(), "Storage server miscomputes slot size on Windows")
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(

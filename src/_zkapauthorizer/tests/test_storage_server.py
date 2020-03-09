@@ -104,11 +104,11 @@ from ..storage_common import (
     summarize,
 )
 
-@skipIf(platform.isWindows(), "Storage server is not supported on Windows")
 class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
     """
+    @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
     def setUp(self):
         super(PassValidationTests, self).setUp()
         self.clock = Clock()
