@@ -23,9 +23,6 @@ from __future__ import (
 from fixtures import (
     MonkeyPatch,
 )
-from unittest import (
-    skipIf,
-)
 from testtools import (
     TestCase,
 )
@@ -71,6 +68,10 @@ from foolscap.referenceable import (
 from privacypass import (
     RandomToken,
     random_signing_key,
+)
+
+from .common import (
+    skipIf,
 )
 
 from .privacypass import (
