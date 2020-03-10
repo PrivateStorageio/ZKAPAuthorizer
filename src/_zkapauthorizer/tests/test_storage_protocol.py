@@ -158,6 +158,19 @@ class RequiredPassesTests(TestCase):
         )
 
 
+from allmydata.storage.immutable import ShareFile
+orig_ShareFile__init__ = ShareFile.__init__
+def ShareFile__init__(self, filename, max_size=None, create=False):
+    print("ShareFile(filename={}, max_size={}, create={})".format(
+        filename,
+        max_size,
+        create,
+    ))
+    orig_ShareFile__init__(self, filename, max_size, create)
+    with open(self.home) as f:
+        print("Home: {!r}".format(f.read(12)))
+ShareFile.__init__ = ShareFile__init__
+del ShareFile
 
 class ShareTests(TestCase):
     """
