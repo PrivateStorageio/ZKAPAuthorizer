@@ -175,12 +175,24 @@ class ZKAPAuthorizer(object):
         )
 
 
-    def get_client_resource(self, node_config):
+    def get_client_resource(self, node_config, default_token_count=None):
+        """
+        Get an ``IZKAPRoot`` for the given node configuration.
+
+        :param allmydata.node._Config node_config: The configuration object
+            for the relevant node.
+
+        :param int default_token_count: Configure the payment controller with
+            a default number of tokens to request during voucher redemption.
+            This is only used if a number of tokens isn't specified at the
+            point of redemption.
+        """
         from twisted.internet import reactor
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
             redeemer=self._get_redeemer(node_config, None, reactor),
+            default_token_count=default_token_count,
         )
 
 

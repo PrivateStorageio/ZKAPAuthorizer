@@ -139,6 +139,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             NonRedeemer(),
+            default_token_count=10,
         )
         controller.redeem(voucher)
 
@@ -157,6 +158,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DummyRedeemer(),
+            default_token_count=10,
         )
         controller.redeem(voucher)
 
@@ -165,7 +167,7 @@ class PaymentControllerTests(TestCase):
             persisted_voucher.state,
             Equals(model_Redeemed(
                 finished=now,
-                token_count=100,
+                token_count=10,
             )),
         )
 
@@ -179,6 +181,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
+            default_token_count=10,
         )
         controller.redeem(voucher)
 
@@ -204,6 +207,7 @@ class PaymentControllerTests(TestCase):
         unpaid_controller = PaymentController(
             store,
             UnpaidRedeemer(),
+            default_token_count=10,
         )
         unpaid_controller.redeem(voucher)
 
@@ -219,6 +223,7 @@ class PaymentControllerTests(TestCase):
         success_controller = PaymentController(
             store,
             DummyRedeemer(),
+            default_token_count=10,
         )
 
         self.assertThat(
@@ -247,7 +252,8 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             UnpaidRedeemer(),
-            clock,
+            default_token_count=10,
+            clock=clock,
         )
         controller.redeem(voucher)
         # It fails this time.

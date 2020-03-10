@@ -17,6 +17,10 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from sys import (
     exc_info,
 )
@@ -78,6 +82,9 @@ import privacypass
 from ._base64 import (
     urlsafe_b64decode,
 )
+from ._stack import (
+    less_limited_stack,
+)
 
 from .model import (
     RandomToken,
@@ -89,9 +96,6 @@ from .model import (
     Redeeming as model_Redeeming,
     Error as model_Error,
 )
-
-# The number of tokens to submit with a voucher redemption.
-NUM_TOKENS = 100
 
 RETRY_INTERVAL = timedelta(minutes=3)
 
@@ -442,7 +446,12 @@ class RistrettoRedeemer(object):
             elif reason == u"unpaid":
                 raise Unpaid(voucher)
 
-        self._log.info("Redeemed: {public-key} {proof} {signatures}", **result)
+        self._log.info(
+            "Redeemed: {public_key} {proof} {count}",
+            public_key=result[u"public-key"],
+            proof=result[u"proof"],
+            count=len(result[u"signatures"]),
+        )
 
         marshaled_signed_tokens = result[u"signatures"]
         marshaled_proof = result[u"proof"]
@@ -451,6 +460,7 @@ class RistrettoRedeemer(object):
         public_key = privacypass.PublicKey.decode_base64(
             marshaled_public_key.encode("ascii"),
         )
+        self._log.info("Decoded public key")
         clients_signed_tokens = list(
             privacypass.SignedToken.decode_base64(
                 marshaled_signed_token.encode("ascii"),
@@ -458,15 +468,19 @@ class RistrettoRedeemer(object):
             for marshaled_signed_token
             in marshaled_signed_tokens
         )
+        self._log.info("Decoded signed tokens")
         clients_proof = privacypass.BatchDLEQProof.decode_base64(
             marshaled_proof.encode("ascii"),
         )
-        clients_unblinded_tokens = clients_proof.invalid_or_unblind(
-            random_tokens,
-            blinded_tokens,
-            clients_signed_tokens,
-            public_key,
-        )
+        with less_limited_stack():
+            self._log.info("Decoded batch proof")
+            clients_unblinded_tokens = clients_proof.invalid_or_unblind(
+                random_tokens,
+                blinded_tokens,
+                clients_signed_tokens,
+                public_key,
+            )
+        self._log.info("Validated proof")
         returnValue(list(
             UnblindedToken(token.encode_base64().decode("ascii"))
             for token
@@ -530,6 +544,10 @@ class PaymentController(object):
          the voucher.  The data store marks the voucher as redeemed and stores
          the unblinded tokens for use by the storage client.
 
+    :ivar int default_token_count: The number of tokens to request when
+        redeeming a voucher, if no other count is given when the redemption is
+        started.
+
     :ivar dict[unicode, datetime] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to timestamps
         when the attempt began.
@@ -546,6 +564,7 @@ class PaymentController(object):
 
     store = attr.ib()
     redeemer = attr.ib()
+    default_token_count = attr.ib()
 
     _clock = attr.ib(
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
@@ -595,13 +614,13 @@ class PaymentController(object):
         for voucher in vouchers:
             if voucher.state.should_start_redemption():
                 self._log.info(
-                    "Controller found voucher ({}) at startup that needs redemption.",
+                    "Controller found voucher ({voucher}) at startup that needs redemption.",
                     voucher=voucher.number,
                 )
                 self.redeem(voucher.number)
             else:
                 self._log.info(
-                    "Controller found voucher ({}) at startup that does not need redemption.",
+                    "Controller found voucher ({voucher}) at startup that does not need redemption.",
                     voucher=voucher.number,
                 )
 
@@ -633,7 +652,7 @@ class PaymentController(object):
         self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
         tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
 
-        self._log.info("Persistenting random tokens for a voucher ({voucher}).", voucher=voucher)
+        self._log.info("Persisting random tokens for a voucher ({voucher}).", voucher=voucher)
         self.store.add(voucher, tokens)
 
         # XXX If the voucher is already in the store then the tokens passed to
@@ -659,7 +678,7 @@ class PaymentController(object):
         # number of passes that can be constructed is still only the size of
         # the set of random tokens.
         if num_tokens is None:
-            num_tokens = NUM_TOKENS
+            num_tokens = self.default_token_count
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
         return self._perform_redeem(voucher, tokens)
 

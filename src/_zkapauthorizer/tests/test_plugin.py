@@ -461,7 +461,7 @@ class ClientResourceTests(TestCase):
         nodedir = tempdir.join(b"node")
         config = get_config(nodedir, b"tub.port")
         self.assertThat(
-            storage_server.get_client_resource(config),
+            storage_server.get_client_resource(config, default_token_count=10),
             Provides([IResource]),
         )
 

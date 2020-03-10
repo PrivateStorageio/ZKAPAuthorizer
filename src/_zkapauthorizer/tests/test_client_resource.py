@@ -153,6 +153,9 @@ from .matchers import (
     Provides,
 )
 
+# A small number of tokens to work with in the tests.
+NUM_TOKENS = 10
+
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
@@ -248,6 +251,7 @@ def root_from_config(config, now):
             now,
             memory_connect,
         ),
+        default_token_count=NUM_TOKENS,
     )
 
 
@@ -763,9 +767,7 @@ class VoucherTests(TestCase):
                 created=Equals(now),
                 state=Equals(Redeemed(
                     finished=now,
-                    # Value duplicated from PaymentController.redeem default.
-                    # Should do this better.
-                    token_count=100,
+                    token_count=NUM_TOKENS,
                 )),
             ),
         )
@@ -910,10 +912,7 @@ class VoucherTests(TestCase):
                         created=now,
                         state=Redeemed(
                             finished=now,
-                            # Value duplicated from
-                            # PaymentController.redeem
-                            # default.  Should do this better.
-                            token_count=100,
+                            token_count=NUM_TOKENS,
                         ),
                     ).marshal()
                     for voucher
