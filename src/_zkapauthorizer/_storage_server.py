@@ -26,6 +26,7 @@ from __future__ import (
 
 from struct import (
     unpack,
+    calcsize,
 )
 
 from errno import (
@@ -507,16 +508,22 @@ def get_storage_index_share_size(sharepath):
 
     :return int: The data size of the share in bytes.
     """
+    # Note Tahoe-LAFS immutable/layout.py makes some claims about how the
+    # share data is structured.  A lot of this seems to be wrong.
+    # storage/immutable.py appears to have the correct information.
+    fmt = ">LL"
     with open(sharepath) as share_file:
-        share_data_length_bytes = share_file.read(8)[4:]
-        if len(share_data_length_bytes) != 4:
-            raise ValueError(
-                "Tried to read 4 bytes of share data length from share, got {!r} instead.".format(
-                    share_data_length_bytes,
-                ),
-            )
-        (share_data_length,) = unpack('>L', share_data_length_bytes)
-        return share_data_length
+        header = share_file.read(calcsize(fmt))
+
+    if len(share_data_length_bytes) != calcsize(fmt):
+        raise ValueError(
+            "Tried to read 4 bytes of share data length from share, got {!r} instead.".format(
+                share_data_length_bytes,
+            ),
+        )
+
+    version, share_data_length = unpack(fmt, header)
+    return share_data_length
 
 
 def get_lease_expiration(get_leases, storage_index_or_slot):
