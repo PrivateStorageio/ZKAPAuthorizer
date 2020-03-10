@@ -26,6 +26,7 @@ from __future__ import (
 
 from struct import (
     unpack,
+    calcsize,
 )
 
 from errno import (
@@ -507,10 +508,23 @@ def get_storage_index_share_size(sharepath):
 
     :return int: The data size of the share in bytes.
     """
-    with open(sharepath) as share_file:
-        share_data_length_bytes = share_file.read(8)[4:]
-        (share_data_length,) = unpack('>L', share_data_length_bytes)
-        return share_data_length
+    # Note Tahoe-LAFS immutable/layout.py makes some claims about how the
+    # share data is structured.  A lot of this seems to be wrong.
+    # storage/immutable.py appears to have the correct information.
+    fmt = ">LL"
+    with open(sharepath, "rb") as share_file:
+        header = share_file.read(calcsize(fmt))
+
+    if len(header) != calcsize(fmt):
+        raise ValueError(
+            "Tried to read {} bytes of share file header, got {!r} instead.".format(
+                calcsize(fmt),
+                header,
+            ),
+        )
+
+    version, share_data_length = unpack(fmt, header)
+    return share_data_length
 
 
 def get_lease_expiration(get_leases, storage_index_or_slot):
@@ -556,7 +570,7 @@ def get_slot_share_size(sharepath):
 
     :return int: The data size of the share in bytes.
     """
-    with open(sharepath) as share_file:
+    with open(sharepath, "rb") as share_file:
         share_data_length_bytes = share_file.read(92)[-8:]
         (share_data_length,) = unpack('>Q', share_data_length_bytes)
         return share_data_length
@@ -584,7 +598,7 @@ def get_stat(sharepath):
     This is necessary to differentiate between buckets and slots.
     """
     # Figure out if it is a storage index or a slot.
-    with open(sharepath) as share_file:
+    with open(sharepath, "rb") as share_file:
         magic = share_file.read(32)
         if magic == "Tahoe mutable container v1\n" + "\x75\x09\x44\x03\x8e":
             return stat_slot

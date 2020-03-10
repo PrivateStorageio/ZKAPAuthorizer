@@ -27,6 +27,7 @@ from time import (
 from random import (
     shuffle,
 )
+
 from testtools import (
     TestCase,
 )
@@ -52,6 +53,9 @@ from privacypass import (
     random_signing_key,
 )
 
+from twisted.python.runtime import (
+    platform,
+)
 from twisted.internet.task import (
     Clock,
 )
@@ -60,6 +64,9 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
+from .common import (
+    skipIf,
+)
 from .privacypass import (
     make_passes,
 )
@@ -100,6 +107,7 @@ class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
     """
+    @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
     def setUp(self):
         super(PassValidationTests, self).setUp()
         self.clock = Clock()

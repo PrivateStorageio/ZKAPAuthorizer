@@ -488,10 +488,10 @@ def sizes():
     return integers(
         # Size 0 data isn't data, it's nothing.
         min_value=1,
-        # For the moment there are some assumptions in the test suite that
-        # limit us to an amount of storage that can be paid for with one ZKAP.
-        # That will be fixed eventually.  For now, keep the sizes pretty low.
-        max_value=2 ** 16,
+        # Let this be larger than a single segment (2 ** 17) in case that
+        # matters to Tahoe-LAFS storage at all.  I don't think it does,
+        # though.
+        max_value=2 ** 18,
     )
 
 
