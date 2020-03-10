@@ -517,7 +517,8 @@ def get_storage_index_share_size(sharepath):
 
     if len(header) != calcsize(fmt):
         raise ValueError(
-            "Tried to read 4 bytes of share data length from share, got {!r} instead.".format(
+            "Tried to read {} bytes of share file header, got {!r} instead.".format(
+                calcsize(fmt),
                 header,
             ),
         )
