@@ -54,6 +54,9 @@ from hypothesis.strategies import (
     integers,
 )
 
+from twisted.python.runtime import (
+    platform,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -65,6 +68,10 @@ from foolscap.referenceable import (
 from privacypass import (
     RandomToken,
     random_signing_key,
+)
+
+from .common import (
+    skipIf,
 )
 
 from .privacypass import (
@@ -149,7 +156,6 @@ class RequiredPassesTests(TestCase):
             actual,
             Equals(sum(expected_per_share)),
         )
-
 
 
 class ShareTests(TestCase):
@@ -395,6 +401,7 @@ class ShareTests(TestCase):
         )
 
 
+    @skipIf(platform.isWindows(), "Storage server miscomputes slot size on Windows")
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
@@ -462,6 +469,10 @@ class ShareTests(TestCase):
         )
 
 
+    @skipIf(
+        platform.isWindows(),
+        "StorageServer fails to create necessary directory for corruption advisories in Windows.",
+    )
     @given(
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),

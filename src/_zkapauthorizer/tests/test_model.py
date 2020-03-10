@@ -31,6 +31,10 @@ from datetime import (
     timedelta,
 )
 
+from unittest import (
+    skipIf,
+)
+
 from testtools import (
     TestCase,
 )
@@ -61,6 +65,9 @@ from hypothesis.strategies import (
     integers,
 )
 
+from twisted.python.runtime import (
+    platform,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -182,6 +189,7 @@ class VoucherStoreTests(TestCase):
             )),
         )
 
+    @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
     @given(tahoe_configs(), datetimes())
     def test_uncreateable_store_directory(self, get_config, now):
         """
@@ -222,6 +230,7 @@ class VoucherStoreTests(TestCase):
         )
 
 
+    @skipIf(platform.isWindows(), "Hard to prevent database from being opened on Windows")
     @given(tahoe_configs(), datetimes())
     def test_unopenable_store(self, get_config, now):
         """
