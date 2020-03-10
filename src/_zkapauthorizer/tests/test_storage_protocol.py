@@ -470,6 +470,10 @@ class ShareTests(TestCase):
         )
 
 
+    @skipIf(
+        platform.isWindows(),
+        "StorageServer fails to create necessary directory for corruption advisories in Windows.",
+    )
     @given(
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),
