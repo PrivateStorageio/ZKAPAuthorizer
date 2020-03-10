@@ -515,10 +515,10 @@ def get_storage_index_share_size(sharepath):
     with open(sharepath) as share_file:
         header = share_file.read(calcsize(fmt))
 
-    if len(share_data_length_bytes) != calcsize(fmt):
+    if len(header) != calcsize(fmt):
         raise ValueError(
             "Tried to read 4 bytes of share data length from share, got {!r} instead.".format(
-                share_data_length_bytes,
+                header,
             ),
         )
 
