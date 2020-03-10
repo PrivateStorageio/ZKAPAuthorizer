@@ -41,6 +41,15 @@ from base64 import (
     b64encode,
     b64decode,
 )
+from contextlib import (
+    contextmanager,
+)
+from resource import (
+    RLIMIT_STACK,
+    getrlimit,
+    setrlimit,
+)
+
 import attr
 
 from zope.interface import (
@@ -469,12 +478,14 @@ class RistrettoRedeemer(object):
         clients_proof = privacypass.BatchDLEQProof.decode_base64(
             marshaled_proof.encode("ascii"),
         )
-        clients_unblinded_tokens = clients_proof.invalid_or_unblind(
-            random_tokens,
-            blinded_tokens,
-            clients_signed_tokens,
-            public_key,
-        )
+        with unlimited_stack():
+            self._log.info("Decoded batch proof")
+            clients_unblinded_tokens = clients_proof.invalid_or_unblind(
+                random_tokens,
+                blinded_tokens,
+                clients_signed_tokens,
+                public_key,
+            )
         self._log.info("Validated proof")
         returnValue(list(
             UnblindedToken(token.encode_base64().decode("ascii"))
@@ -795,3 +806,16 @@ def bracket(first, last, between):
     else:
         yield last()
         returnValue(result)
+
+
+@contextmanager
+def unlimited_stack():
+    """
+    A context manager which removes the resource limit on stack size for
+    execution of the context.
+    """
+    soft, hard = getrlimit(RLIMIT_STACK)
+    # We can raise the soft limit to the hard limit and no higher.
+    setrlimit(RLIMIT_STACK, (hard, hard))
+    yield
+    setrlimit(RLIMIT_STACK, (soft, hard))
