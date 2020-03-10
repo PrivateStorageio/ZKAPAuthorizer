@@ -28,10 +28,6 @@ from random import (
     shuffle,
 )
 
-from unittest import (
-    skipIf,
-)
-
 from testtools import (
     TestCase,
 )
@@ -68,6 +64,9 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
+from .common import (
+    skipIf,
+)
 from .privacypass import (
     make_passes,
 )
