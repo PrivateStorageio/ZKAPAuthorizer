@@ -65,7 +65,7 @@ from foolscap.referenceable import (
     LocalReferenceable,
 )
 
-from privacypass import (
+from challenge_bypass_ristretto import (
     RandomToken,
     random_signing_key,
 )

@@ -55,7 +55,7 @@ from allmydata.node import (
 from allmydata.client import (
     _Client,
 )
-from privacypass import (
+from challenge_bypass_ristretto import (
     SigningKey,
 )
 

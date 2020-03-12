@@ -3,7 +3,7 @@ index 6da2d4d..32262dd 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -21,7 +21,7 @@ setup(
-     packages=['privacypass', 'privacypass.tests'],
+     packages=['challenge_bypass_ristretto', 'challenge_bypass_ristretto.tests'],
      zip_safe=False,
      platforms='any',
 -    setup_requires=['milksnake', 'setuptools_scm'],
@@ -15,7 +15,7 @@ index 6da2d4d..32262dd 100644
              "hypothesis",
          ],
      },
--    use_scm_version=True,
+-    use_scm_version=_myversion,
      url='https://github.com/',
      milksnake_tasks=[
          build_native

@@ -48,7 +48,7 @@ from hypothesis.strategies import (
     one_of,
     just,
 )
-from privacypass import (
+from challenge_bypass_ristretto import (
     RandomToken,
     random_signing_key,
 )
