@@ -20,7 +20,7 @@ from __future__ import (
     absolute_import,
 )
 
-from privacypass import (
+from challenge_bypass_ristretto import (
     BatchDLEQProof,
     PublicKey,
 )
@@ -29,14 +29,14 @@ def make_passes(signing_key, for_message, random_tokens):
     """
     Create a number of cryptographically correct privacy passes.
 
-    :param privacypass.SigningKey signing_key: The key to use to sign the
-        passes.
+    :param challenge_bypass_ristretto.SigningKey signing_key: The key to use
+        to sign the passes.
 
     :param unicode for_message: The request-binding message with which to
         associate the passes.
 
-    :param list[privacypass.RandomToken] random_tokens: The random tokens to
-        feed in to the pass generation process.
+    :param list[challenge_bypass_ristretto.RandomToken] random_tokens: The
+        random tokens to feed in to the pass generation process.
 
     :return list[unicode]: The privacy passes.  The returned list has one
         element for each element of ``random_tokens``.

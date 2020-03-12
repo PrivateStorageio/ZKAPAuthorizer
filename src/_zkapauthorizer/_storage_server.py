@@ -68,7 +68,7 @@ from allmydata.interfaces import (
 from allmydata.storage.common import (
     storage_index_to_dir,
 )
-from privacypass import (
+from challenge_bypass_ristretto import (
     TokenPreimage,
     VerificationSignature,
     SigningKey,

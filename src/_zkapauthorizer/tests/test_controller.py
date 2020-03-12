@@ -82,7 +82,7 @@ from treq.testing import (
     StubTreq,
 )
 
-from privacypass import (
+from challenge_bypass_ristretto import (
     SecurityException,
     PublicKey,
     BlindedToken,
@@ -452,9 +452,9 @@ def ristretto_verify(signing_key, message, marshaled_passes):
     Verify that the given passes were generated in a process that involved a
     signature from the given signing key and using the given message.
 
-    :param privacypass.SigningKey signing_key: A signing key which should have
-        signed some random blinded tokens earlier in the lifecycle of the
-        passes to verify.
+    :param SigningKey signing_key: A signing key which should have signed some
+        random blinded tokens earlier in the lifecycle of the passes to
+        verify.
 
     :param bytes message: Request binding data which is involved in the
         generation of the passes to verify.

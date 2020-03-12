@@ -22,9 +22,9 @@ self: super: {
       # re-package it ourselves as a library.
       tahoe-lafs = python-self.callPackage ((import ./tahoe-lafs.nix) + "/nix") { };
 
-      # we depend on the privacypass python library, a set of bindings to the
-      # challenge-bypass-ristretto Rust library
-      privacypass = python-self.callPackage ./privacypass.nix { };
+      # we depend on the challenge-bypass-ristretto python package, a set of
+      # bindings to the challenge-bypass-ristretto Rust crate.
+      challenge-bypass-ristretto = python-self.callPackage ./python-challenge-bypass-ristretto.nix { };
 
       # And add ourselves to the collection too.
       zkapauthorizer = python-self.callPackage ./zkapauthorizer.nix { };

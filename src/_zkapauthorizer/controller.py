@@ -77,7 +77,7 @@ from treq.client import (
     HTTPClient,
 )
 
-import privacypass
+import challenge_bypass_ristretto
 
 from ._base64 import (
     urlsafe_b64decode,
@@ -407,7 +407,9 @@ class RistrettoRedeemer(object):
 
     def random_tokens_for_voucher(self, voucher, count):
         return list(
-            RandomToken(privacypass.RandomToken.create().encode_base64().decode("ascii"))
+            RandomToken(
+                challenge_bypass_ristretto.RandomToken.create().encode_base64().decode("ascii"),
+            )
             for n
             in range(count)
         )
@@ -415,7 +417,7 @@ class RistrettoRedeemer(object):
     @inlineCallbacks
     def redeem(self, voucher, encoded_random_tokens):
         random_tokens = list(
-            privacypass.RandomToken.decode_base64(token.token_value.encode("ascii"))
+            challenge_bypass_ristretto.RandomToken.decode_base64(token.token_value.encode("ascii"))
             for token
             in encoded_random_tokens
         )
@@ -457,19 +459,19 @@ class RistrettoRedeemer(object):
         marshaled_proof = result[u"proof"]
         marshaled_public_key = result[u"public-key"]
 
-        public_key = privacypass.PublicKey.decode_base64(
+        public_key = challenge_bypass_ristretto.PublicKey.decode_base64(
             marshaled_public_key.encode("ascii"),
         )
         self._log.info("Decoded public key")
         clients_signed_tokens = list(
-            privacypass.SignedToken.decode_base64(
+            challenge_bypass_ristretto.SignedToken.decode_base64(
                 marshaled_signed_token.encode("ascii"),
             )
             for marshaled_signed_token
             in marshaled_signed_tokens
         )
         self._log.info("Decoded signed tokens")
-        clients_proof = privacypass.BatchDLEQProof.decode_base64(
+        clients_proof = challenge_bypass_ristretto.BatchDLEQProof.decode_base64(
             marshaled_proof.encode("ascii"),
         )
         with less_limited_stack():
@@ -492,7 +494,7 @@ class RistrettoRedeemer(object):
         assert isinstance(unblinded_tokens, list)
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
-            privacypass.UnblindedToken.decode_base64(token.unblinded_token.encode("ascii"))
+            challenge_bypass_ristretto.UnblindedToken.decode_base64(token.unblinded_token.encode("ascii"))
             for token
             in unblinded_tokens
         )
