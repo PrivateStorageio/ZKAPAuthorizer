@@ -648,8 +648,8 @@ class UnblindedToken(object):
 
     :ivar unicode unblinded_token: The base64 encoded serialized form of the
         unblinded token.  This can be used to reconstruct a
-        ``privacypass.UnblindedToken`` using that class's ``decode_base64``
-        method.
+        ``challenge_bypass_ristretto.UnblindedToken`` using that class's
+        ``decode_base64`` method.
     """
     unblinded_token = attr.ib(
         validator=attr.validators.and_(

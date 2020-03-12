@@ -1,5 +1,5 @@
 { fetchFromGitHub, callPackage }:
 let
-  src = import ./privacypass-repo.nix { inherit fetchFromGitHub; };
+  src = import ./python-challenge-bypass-ristretto-repo.nix { inherit fetchFromGitHub; };
 in
-  callPackage "${src}/ristretto.nix" { }
+  callPackage "${src}/challenge-bypass-ristretto.nix" { }

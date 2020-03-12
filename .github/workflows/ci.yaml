@@ -41,9 +41,9 @@ jobs:
       run: |
         python -m pip install wheel coverage
 
-    - name: "Install PrivacyPass master@HEAD"
+    - name: "Install python-challenge-bypass-ristretto master@HEAD"
       run: |
-        python -m pip install git+https://github.com/LeastAuthority/privacypass@master#egg=privacypass
+        python -m pip install git+https://github.com/LeastAuthority/python-challenge-bypass-ristretto@master#egg=python-challenge-bypass-ristretto
 
     - name: "Install Tahoe-LAFS master@HEAD"
       run: |
