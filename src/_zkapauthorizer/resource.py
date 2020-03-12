@@ -59,7 +59,7 @@ from .controller import (
 )
 
 # The number of tokens to submit with a voucher redemption.
-NUM_TOKENS = 512000
+NUM_TOKENS = 2 ** 15
 
 
 class IZKAPRoot(IResource):
