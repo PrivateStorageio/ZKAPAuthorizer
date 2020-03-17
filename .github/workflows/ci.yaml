@@ -20,7 +20,9 @@ jobs:
         fetch-depth: "0"
 
       # Get tags not fetched by the checkout action, needed for auto-versioning.
-    - run: "git fetch origin +refs/tags/*:refs/tags/*"
+    - name: "Finish checkout"
+      run: |
+        git fetch --tags
 
     # Get MS VC++ 9 aka Visual Studio 2008, required to build Python 2.7
     # extensions (zfec via Tahoe-LAFS).
@@ -40,10 +42,6 @@ jobs:
     - name: "Install CI Dependencies"
       run: |
         python -m pip install wheel coverage
-
-    - name: "Install python-challenge-bypass-ristretto master@HEAD"
-      run: |
-        python -m pip install git+https://github.com/LeastAuthority/python-challenge-bypass-ristretto@master#egg=python-challenge-bypass-ristretto
 
     - name: "Install Tahoe-LAFS master@HEAD"
       run: |
