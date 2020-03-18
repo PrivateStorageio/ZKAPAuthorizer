@@ -141,7 +141,7 @@ class VoucherStoreTests(TestCase):
         previously added to the store with ``VoucherStore.add``.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.add(voucher, tokens)
+        store.add(voucher, lambda: tokens)
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
@@ -158,8 +158,8 @@ class VoucherStoreTests(TestCase):
         in the same state as a single call.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.add(voucher, tokens)
-        store.add(voucher, [])
+        first_tokens = store.add(voucher, lambda: tokens)
+        second_tokens = store.add(voucher, lambda: [])
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
@@ -168,7 +168,14 @@ class VoucherStoreTests(TestCase):
                 state=Equals(Pending()),
             ),
         )
-
+        self.assertThat(
+            first_tokens,
+            Equals(tokens),
+        )
+        self.assertThat(
+            second_tokens,
+            Equals(tokens),
+        )
 
     @given(tahoe_configs(), datetimes(), lists(vouchers(), unique=True))
     def test_list(self, get_config, now, vouchers):
@@ -178,7 +185,7 @@ class VoucherStoreTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         for voucher in vouchers:
-            store.add(voucher, [])
+            store.add(voucher, lambda: [])
 
         self.assertThat(
             store.list(),
@@ -389,7 +396,7 @@ class UnblindedTokenStoreTests(TestCase):
         )
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.add(voucher_value, random)
+        store.add(voucher_value, lambda: random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         loaded_voucher = store.get(voucher_value)
         self.assertThat(
@@ -414,7 +421,7 @@ class UnblindedTokenStoreTests(TestCase):
         such.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.add(voucher_value, random_tokens)
+        store.add(voucher_value, lambda: random_tokens)
         store.mark_voucher_double_spent(voucher_value)
         voucher = store.get(voucher_value)
         self.assertThat(
@@ -454,7 +461,7 @@ class UnblindedTokenStoreTests(TestCase):
             ),
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.add(voucher_value, random)
+        store.add(voucher_value, lambda: random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
         try:
             result = store.mark_voucher_double_spent(voucher_value)

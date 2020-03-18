@@ -651,18 +651,11 @@ class PaymentController(object):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
         """
-        self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
-        tokens = self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
+        def get_tokens():
+            self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
+            return self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
 
-        self._log.info("Persisting random tokens for a voucher ({voucher}).", voucher=voucher)
-        self.store.add(voucher, tokens)
-
-        # XXX If the voucher is already in the store then the tokens passed to
-        # `add` are dropped and we need to get the tokens already persisted in
-        # the store.  add should probably return them so we can use them.  Or
-        # maybe we should pass the generator in so it can be called only if
-        # necessary.
-        return tokens
+        return self.store.add(voucher, get_tokens)
 
     def redeem(self, voucher, num_tokens=None):
         """
