@@ -45,6 +45,9 @@ import attr
 from aniso8601 import (
     parse_datetime,
 )
+from twisted.logger import (
+    Logger,
+)
 from twisted.python.filepath import (
     FilePath,
 )
@@ -241,6 +244,8 @@ class VoucherStore(object):
     :ivar now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
     """
+    _log = Logger()
+
     database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
     now = attr.ib()
 
@@ -296,7 +301,7 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher, tokens):
+    def add(self, cursor, voucher, get_tokens):
         """
         Add a new voucher and associated random tokens to the database.  If a
         voucher with the given text value is already present, do nothing.
@@ -309,17 +314,40 @@ class VoucherStore(object):
         if not isinstance(now, datetime):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
+        cursor.execute("BEGIN IMMEDIATE TRANSACTION")
         cursor.execute(
             """
-            INSERT OR IGNORE INTO [vouchers] ([number], [created]) VALUES (?, ?)
+            SELECT ([text])
+            FROM [tokens]
+            WHERE [voucher] = ?
             """,
-            (voucher, self.now())
+            (voucher,),
         )
-        if cursor.rowcount:
-            # Something was inserted.  Insert the tokens, too.  It's okay to
-            # drop the tokens in the other case.  They've never been used.
-            # What's *already* in the database, on the other hand, may already
-            # have been submitted in a redeem attempt and must not change.
+        rows = cursor.fetchall()
+        if len(rows) > 0:
+            self._log.info(
+                "Loaded {count} random tokens for a voucher ({voucher}).",
+                count=len(rows),
+                voucher=voucher,
+            )
+            tokens = list(
+                RandomToken(token_value)
+                for (token_value,)
+                in rows
+            )
+        else:
+            tokens = get_tokens()
+            self._log.info(
+                "Persisting {count} random tokens for a voucher ({voucher}).",
+                count=len(tokens),
+                voucher=voucher,
+            )
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO [vouchers] ([number], [created]) VALUES (?, ?)
+                """,
+                (voucher, self.now())
+            )
             cursor.executemany(
                 """
                 INSERT INTO [tokens] ([voucher], [text]) VALUES (?, ?)
@@ -330,6 +358,8 @@ class VoucherStore(object):
                     in tokens
                 ),
             )
+        cursor.connection.commit()
+        return tokens
 
     @with_cursor
     def list(self, cursor):

@@ -419,7 +419,7 @@ class ClientPluginTests(TestCase):
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        store.add(voucher, [token])
+        store.add(voucher, lambda: [token])
         store.insert_unblinded_tokens_for_voucher(voucher, [unblinded_token])
 
         storage_client = storage_server.get_storage_client(
