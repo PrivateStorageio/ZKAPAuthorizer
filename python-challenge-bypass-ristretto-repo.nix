@@ -4,6 +4,6 @@ in
   pkgs.fetchFromGitHub {
     owner = "LeastAuthority";
     repo = "python-challenge-bypass-ristretto";
-    rev = "e15f0f02d43cd16e712cde26e87b4854bedff5e6";
-    sha256 = "1xrzcf01z2hzhajbnv6csc1dqld8apkvv6x202hjc9y88rb2mmpb";
+    rev = "f1a7cfab1a7f1bf8b3345c228c2183064889ad83";
+    sha256 = "12myak2jwaisljs7bmx1vydgd0fnxvkaisk4zsf0kshwxrlnyh3x";
   }
