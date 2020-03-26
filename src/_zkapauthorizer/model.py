@@ -61,6 +61,12 @@ from .storage_common import (
     required_passes,
 )
 
+from .schema import (
+    get_schema_version,
+    get_schema_upgrades,
+    run_schema_upgrades,
+)
+
 
 class ILeaseMaintenanceObserver(Interface):
     """
@@ -88,13 +94,9 @@ class StoreOpenError(Exception):
         self.reason = reason
 
 
-class SchemaError(TypeError):
-    pass
-
-
 CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
 
-def open_and_initialize(path, required_schema_version, connect=None):
+def open_and_initialize(path, connect=None):
     """
     Open a SQLite3 database for use as a voucher store.
 
@@ -102,13 +104,6 @@ def open_and_initialize(path, required_schema_version, connect=None):
     exist.
 
     :param FilePath path: The location of the SQLite3 database file.
-
-    :param int required_schema_version: The schema version which must be
-        present in the database in order for a SQLite3 connection to be
-        returned.
-
-    :raise SchemaError: If the schema in the database does not match the
-        required schema version.
 
     :return: A SQLite3 connection object for the database at the given path.
     """
@@ -135,86 +130,9 @@ def open_and_initialize(path, required_schema_version, connect=None):
 
     with conn:
         cursor = conn.cursor()
-        cursor.execute(
-            # This code knows how to create schema version 1.  This is
-            # regardless of what the caller *wants* to find in the database.
-            """
-            CREATE TABLE IF NOT EXISTS [version] AS SELECT 1 AS [version]
-            """
-        )
-        cursor.execute(
-            """
-            SELECT [version] FROM [version]
-            """
-        )
-        [(actual_version,)] = cursor.fetchall()
-        if actual_version != required_schema_version:
-            raise SchemaError(
-                "Unexpected database schema version.  Required {}.  Got {}.".format(
-                    required_schema_version,
-                    actual_version,
-                ),
-            )
-
-        cursor.execute(
-            # A denormalized schema because, for now, it's simpler. :/
-            """
-            CREATE TABLE IF NOT EXISTS [vouchers] (
-                [number] text,
-                [created] text,                     -- An ISO8601 date+time string.
-                [state] text DEFAULT "pending",     -- pending, double-spend, redeemed
-
-                [finished] text DEFAULT NULL,       -- ISO8601 date+time string when
-                                                    -- the current terminal state was entered.
-
-                [token-count] num DEFAULT NULL,     -- Set in the redeemed state to the number
-                                                    -- of tokens received on this voucher's
-                                                    -- redemption.
-
-                PRIMARY KEY([number])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [tokens] (
-                [text] text, -- The random string that defines the token.
-                [voucher] text, -- Reference to the voucher these tokens go with.
-
-                PRIMARY KEY([text])
-                FOREIGN KEY([voucher]) REFERENCES [vouchers]([number])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [unblinded-tokens] (
-                [token] text, -- The base64 encoded unblinded token.
-
-                PRIMARY KEY([token])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [lease-maintenance-spending] (
-                [id] integer, -- A unique identifier for a group of activity.
-                [started] text, -- ISO8601 date+time string when the activity began.
-                [finished] text, -- ISO8601 date+time string when the activity completed (or null).
-
-                -- The number of passes that would be required to renew all
-                -- shares encountered during this activity.  Note that because
-                -- leases on different shares don't necessarily expire at the
-                -- same time this is not necessarily the number of passes
-                -- **actually** used during this activity.  Some shares may
-                -- not have required lease renewal.  Also note that while the
-                -- activity is ongoing this value may change.
-                [count] integer,
-
-                PRIMARY KEY([id])
-            )
-            """,
-        )
+        actual_version = get_schema_version(cursor)
+        schema_upgrades = list(get_schema_upgrades(actual_version))
+        run_schema_upgrades(schema_upgrades, cursor)
     return conn
 
 
@@ -280,7 +198,6 @@ class VoucherStore(object):
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
-            required_schema_version=1,
             connect=connect,
         )
         return cls(

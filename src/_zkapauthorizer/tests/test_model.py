@@ -68,16 +68,12 @@ from hypothesis.strategies import (
 from twisted.python.runtime import (
     platform,
 )
-from twisted.python.filepath import (
-    FilePath,
-)
 
 from ..storage_common import (
     BYTES_PER_PASS,
 )
 
 from ..model import (
-    SchemaError,
     StoreOpenError,
     VoucherStore,
     Voucher,
@@ -85,7 +81,6 @@ from ..model import (
     DoubleSpend,
     Redeemed,
     LeaseMaintenanceActivity,
-    open_and_initialize,
     memory_connect,
 )
 
@@ -107,22 +102,6 @@ class VoucherStoreTests(TestCase):
     """
     Tests for ``VoucherStore``.
     """
-    def test_create_mismatched_schema(self):
-        """
-        ``open_and_initialize`` raises ``SchemaError`` if asked for a database
-        with a schema version other than it can create.
-        """
-        tempdir = self.useFixture(TempDir())
-        dbpath = tempdir.join(b"db.sqlite3")
-        self.assertThat(
-            lambda: open_and_initialize(
-                FilePath(dbpath),
-                required_schema_version=100,
-            ),
-            raises(SchemaError),
-        )
-
-
     @given(tahoe_configs(), datetimes(), vouchers())
     def test_get_missing(self, get_config, now, voucher):
         """
