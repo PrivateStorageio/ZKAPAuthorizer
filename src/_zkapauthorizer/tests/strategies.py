@@ -185,6 +185,22 @@ def node_nicknames():
     )
 
 
+def dummy_ristretto_keys():
+    """
+    Build string values which one could imagine might be Ristretto-flavored
+    PrivacyPass signing or public keys.
+
+    They're not really because they're entirely random rather than points on
+    the curve.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        b64encode,
+    )
+
+
 def server_configurations(signing_key_path):
     """
     Build configuration values for the server-side plugin.

@@ -233,6 +233,18 @@ def memory_connect(path, *a, **kw):
     return _connect(":memory:", *a, **kw)
 
 
+def determine_state_for_redeemed_voucher(existing_vouchers, new_voucher, now):
+    """
+    Choose a state to store in the database for a voucher which was just
+    redeemed.
+
+    This takes into account what is known about previously redeemed vouchers
+    (if any) and watches for suspicious public key changes in the redemption
+    process.
+    """
+    return u"redeemed"
+
+
 @attr.s(frozen=True)
 class VoucherStore(object):
     """
@@ -385,7 +397,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, unblinded_tokens):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens):
         """
         Store some unblinded tokens.
 
@@ -393,9 +405,32 @@ class VoucherStore(object):
             tokens.  This voucher will be marked as redeemed to indicate it
             has fulfilled its purpose and has no further use for us.
 
+        :param unicode public_key: The encoded public key for the private key
+            which was used to sign these tokens.
+
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
             store.
         """
+        voucher_state = determine_state_for_redeemed_voucher(
+            None,
+            None,
+            None,
+        )
+        cursor.execute(
+            """
+            UPDATE [vouchers]
+            SET [state] = ?
+              , [token-count] = ?
+              , [finished] = ?
+            WHERE [number] = ?
+            """,
+            (
+                voucher_state,
+                len(unblinded_tokens),
+                self.now(),
+                voucher,
+            ),
+        )
         cursor.executemany(
             """
             INSERT INTO [unblinded-tokens] VALUES (?)
@@ -405,16 +440,6 @@ class VoucherStore(object):
                 for t
                 in unblinded_tokens
             ),
-        )
-        cursor.execute(
-            """
-            UPDATE [vouchers]
-            SET [state] = "redeemed"
-              , [token-count] = ?
-              , [finished] = ?
-            WHERE [number] = ?
-            """,
-            (len(unblinded_tokens), self.now(), voucher),
         )
 
     @with_cursor
