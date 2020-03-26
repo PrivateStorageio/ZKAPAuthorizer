@@ -75,6 +75,8 @@ from ..model import (
     Voucher,
     Pending,
     DoubleSpend,
+    Unpaid,
+    Error,
     Redeemed,
 )
 
@@ -303,13 +305,22 @@ def voucher_states():
     return one_of(
         just(Pending()),
         builds(
+            Redeemed,
+            finished=datetimes(),
+            token_count=one_of(integers(min_value=1)),
+        ),
+        builds(
             DoubleSpend,
             finished=datetimes(),
         ),
         builds(
-            Redeemed,
+            Unpaid,
             finished=datetimes(),
-            token_count=one_of(integers(min_value=1)),
+        ),
+        builds(
+            Error,
+            finished=datetimes(),
+            details=text(),
         ),
     )
 
