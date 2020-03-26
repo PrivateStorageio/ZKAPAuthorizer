@@ -789,12 +789,9 @@ class Voucher(object):
     :ivar datetime created: The time at which this voucher was added to this
         node.
 
-    :ivar bool redeemed: ``True`` if this voucher has successfully been
-        redeemed with a payment server, ``False`` otherwise.
-
-    :ivar int token_count: A number of tokens received from the redemption of
-        this voucher if it has been redeemed, ``None`` if it has not been
-        redeemed.
+    :ivar state: An indication of the current state of this voucher.  This is
+        an instance of ``Pending``, ``Redeeming``, ``Redeemed``,
+        ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
     number = attr.ib(
         validator=attr.validators.and_(
