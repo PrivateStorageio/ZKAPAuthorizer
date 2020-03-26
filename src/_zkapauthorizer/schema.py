@@ -125,6 +125,12 @@ _UPGRADES = {
         )
         """,
     ],
+
+    1: [
+        """
+        ALTER TABLE [vouchers] ADD COLUMN [public-key] text
+        """,
+    ],
 }
 
 def _check_consistency():

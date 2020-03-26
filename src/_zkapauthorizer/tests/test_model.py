@@ -392,6 +392,7 @@ class UnblindedTokenStoreTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=num_tokens,
+                    public_key=public_key,
                 )),
             ),
         )

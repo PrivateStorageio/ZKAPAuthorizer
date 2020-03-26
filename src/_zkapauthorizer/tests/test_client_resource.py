@@ -768,6 +768,7 @@ class VoucherTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=NUM_TOKENS,
+                    public_key=None,
                 )),
             ),
         )
@@ -913,6 +914,7 @@ class VoucherTests(TestCase):
                         state=Redeemed(
                             finished=now,
                             token_count=NUM_TOKENS,
+                            public_key=None,
                         ),
                     ).marshal()
                     for voucher

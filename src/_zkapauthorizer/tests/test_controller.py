@@ -116,6 +116,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
     voucher_objects,
+    dummy_ristretto_keys,
     clocks,
 )
 from .matchers import (
@@ -149,15 +150,15 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending()),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_redeemed_after_redeeming(self, get_config, now, voucher):
+    @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())
+    def test_redeemed_after_redeeming(self, get_config, public_key, now, voucher):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
-            DummyRedeemer(),
+            DummyRedeemer(public_key),
             default_token_count=10,
         )
         controller.redeem(voucher)
@@ -168,6 +169,7 @@ class PaymentControllerTests(TestCase):
             Equals(model_Redeemed(
                 finished=now,
                 token_count=10,
+                public_key=public_key,
             )),
         )
 
