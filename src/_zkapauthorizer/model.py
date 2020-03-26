@@ -742,6 +742,35 @@ class Redeemed(object):
 
 
 @attr.s(frozen=True)
+class Suspicious(object):
+    """
+    The voucher was successfully redeemed but the public key used in the
+    redemption was suspicious.
+
+    :ivar datetime finished: The time when the redemption finished.
+
+    :ivar int token_count: The number of tokens the voucher was redeemed for.
+
+    :ivar unicode public_key: The public part of the key used to sign the
+        tokens for this voucher.
+    """
+    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    public_key = attr.ib(validator=attr.validators.optional(attr.validators.instance_of(unicode)))
+
+    def should_start_redemption(self):
+        return False
+
+    def to_json_v1(self):
+        return {
+            u"name": u"suspicious",
+            u"finished": self.finished.isoformat(),
+            u"token-count": self.token_count,
+            u"public-key": self.public_key,
+        }
+
+
+@attr.s(frozen=True)
 class DoubleSpend(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
 
@@ -873,6 +902,12 @@ class Voucher(object):
             )
         elif state_name == u"redeemed":
             state = Redeemed(
+                finished=parse_datetime(state_json[u"finished"]),
+                token_count=state_json[u"token-count"],
+                public_key=state_json[u"public-key"],
+            )
+        elif state_name == u"suspicious":
+            state = Suspicious(
                 finished=parse_datetime(state_json[u"finished"]),
                 token_count=state_json[u"token-count"],
                 public_key=state_json[u"public-key"],
