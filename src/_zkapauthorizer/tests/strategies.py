@@ -198,6 +198,8 @@ def dummy_ristretto_keys():
         max_size=32,
     ).map(
         b64encode,
+    ).map(
+        lambda bs: bs.decode("ascii"),
     )
 
 
