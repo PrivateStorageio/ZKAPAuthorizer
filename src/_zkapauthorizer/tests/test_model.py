@@ -328,6 +328,29 @@ class VoucherTests(TestCase):
         )
 
 
+def paired_tokens(data):
+    """
+    Draw two lists of the same length, one of random tokens and one of
+    unblinded tokens.
+
+    :rtype: ([RandomTokens], [UnblindedTokens])
+    """
+    num_tokens = data.draw(integers(min_value=1, max_value=1000))
+    r = data.draw(lists(
+        random_tokens(),
+        min_size=num_tokens,
+        max_size=num_tokens,
+        unique=True,
+    ))
+    u = data.draw(lists(
+        unblinded_tokens(),
+        min_size=num_tokens,
+        max_size=num_tokens,
+        unique=True,
+    ))
+    return r, u
+
+
 class UnblindedTokenStoreTests(TestCase):
     """
     Tests for ``UnblindedToken``-related functionality of ``VoucherStore``.
@@ -339,14 +362,37 @@ class UnblindedTokenStoreTests(TestCase):
         dummy_ristretto_keys(),
         lists(unblinded_tokens(), unique=True),
     )
-    def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, tokens):
+    def test_unblinded_tokens_without_voucher(self, get_config, now, voucher_value, public_key, unblinded_tokens):
+        """
+        Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        try:
+            result = store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
+        except ValueError:
+            pass
+        except Exception as e:
+            self.fail("insert_unblinded_tokens_for_voucher raised the wrong exception: {}".format(e))
+        else:
+            self.fail("insert_unblinded_tokens_for_voucher didn't raise, returned: {}".format(result))
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        dummy_ristretto_keys(),
+        data(),
+    )
+    def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, data):
         """
         Unblinded tokens that are added to the store can later be retrieved.
         """
+        random_tokens, unblinded_tokens = paired_tokens(data)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, tokens)
-        retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
-        self.expectThat(tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
+        store.add(voucher_value, lambda: random_tokens)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
+        retrieved_tokens = store.extract_unblinded_tokens(len(random_tokens))
+        self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
 
         # After extraction, the unblinded tokens are no longer available.
         more_unblinded_tokens = store.extract_unblinded_tokens(1)

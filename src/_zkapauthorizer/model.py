@@ -350,6 +350,8 @@ class VoucherStore(object):
                 voucher,
             ),
         )
+        if cursor.rowcount == 0:
+            raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
         cursor.executemany(
             """
             INSERT INTO [unblinded-tokens] VALUES (?)
