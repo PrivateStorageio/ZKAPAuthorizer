@@ -78,7 +78,6 @@ from ..model import (
     Unpaid,
     Error,
     Redeemed,
-    Suspicious,
 )
 
 # Sizes informed by
@@ -316,12 +315,6 @@ def voucher_states():
     return one_of(
         just(Pending()),
         redeemed_states(),
-        builds(
-            Suspicious,
-            finished=datetimes(),
-            token_count=one_of(integers(min_value=1)),
-            public_key=dummy_ristretto_keys(),
-        ),
         builds(
             DoubleSpend,
             finished=datetimes(),
