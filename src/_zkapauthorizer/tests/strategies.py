@@ -338,7 +338,7 @@ def voucher_states():
     )
 
 
-def voucher_objects():
+def voucher_objects(states=voucher_states()):
     """
     Build ``Voucher`` instances.
     """
@@ -346,7 +346,7 @@ def voucher_objects():
         Voucher,
         number=vouchers(),
         created=one_of(none(), datetimes()),
-        state=voucher_states(),
+        state=states,
     )
 
 
