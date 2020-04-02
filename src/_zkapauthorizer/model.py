@@ -151,7 +151,7 @@ def memory_connect(path, *a, **kw):
     return _connect(":memory:", *a, **kw)
 
 
-def determine_state_for_redeemed_voucher(existing_vouchers, new_voucher, now):
+def determine_state_for_redeemed_voucher(existing_vouchers, redeemed, now):
     """
     Choose a state to store in the database for a voucher which was just
     redeemed.
@@ -159,6 +159,13 @@ def determine_state_for_redeemed_voucher(existing_vouchers, new_voucher, now):
     This takes into account what is known about previously redeemed vouchers
     (if any) and watches for suspicious public key changes in the redemption
     process.
+
+    :param list[Voucher] existing_vouchers: Vouchers which have been redeemed
+        in the past.
+
+    :param Redeemed redeemed: The newly redeemed voucher's state.
+
+    :param datetime now: The current time.
     """
     return u"redeemed"
 
