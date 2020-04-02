@@ -151,25 +151,6 @@ def memory_connect(path, *a, **kw):
     return _connect(":memory:", *a, **kw)
 
 
-def determine_state_for_redeemed_voucher(existing_vouchers, redeemed, now):
-    """
-    Choose a state to store in the database for a voucher which was just
-    redeemed.
-
-    This takes into account what is known about previously redeemed vouchers
-    (if any) and watches for suspicious public key changes in the redemption
-    process.
-
-    :param list[Voucher] existing_vouchers: Vouchers which have been redeemed
-        in the past.
-
-    :param Redeemed redeemed: The newly redeemed voucher's state.
-
-    :param datetime now: The current time.
-    """
-    return u"redeemed"
-
-
 @attr.s(frozen=True)
 class VoucherStore(object):
     """
@@ -335,11 +316,7 @@ class VoucherStore(object):
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
             store.
         """
-        voucher_state = determine_state_for_redeemed_voucher(
-            None,
-            None,
-            None,
-        )
+        voucher_state = u"redeemed"
         cursor.execute(
             """
             UPDATE [vouchers]
