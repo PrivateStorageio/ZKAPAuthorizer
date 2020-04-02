@@ -298,6 +298,16 @@ def vouchers():
         lambda voucher: voucher.decode("ascii"),
     )
 
+def redeemed_states():
+    """
+    Build ``Redeemed`` instances.
+    """
+    return builds(
+        Redeemed,
+        finished=datetimes(),
+        token_count=one_of(integers(min_value=1)),
+        public_key=dummy_ristretto_keys(),
+    )
 
 def voucher_states():
     """
@@ -305,12 +315,7 @@ def voucher_states():
     """
     return one_of(
         just(Pending()),
-        builds(
-            Redeemed,
-            finished=datetimes(),
-            token_count=one_of(integers(min_value=1)),
-            public_key=dummy_ristretto_keys(),
-        ),
+        redeemed_states(),
         builds(
             Suspicious,
             finished=datetimes(),
