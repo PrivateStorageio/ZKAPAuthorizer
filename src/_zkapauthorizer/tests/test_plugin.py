@@ -104,6 +104,8 @@ from ..model import (
 )
 from ..controller import (
     IssuerConfigurationMismatch,
+    PaymentController,
+    DummyRedeemer,
 )
 from .._storage_client import (
     IncorrectStorageServerReference,
@@ -120,8 +122,6 @@ from .strategies import (
     server_configurations,
     announcements,
     vouchers,
-    random_tokens,
-    unblinded_tokens,
     storage_indexes,
     lease_renew_secrets,
     lease_cancel_secrets,
@@ -386,8 +386,6 @@ class ClientPluginTests(TestCase):
         datetimes(),
         announcements(),
         vouchers(),
-        random_tokens(),
-        unblinded_tokens(),
         storage_indexes(),
         lease_renew_secrets(),
         lease_cancel_secrets(),
@@ -400,8 +398,6 @@ class ClientPluginTests(TestCase):
             now,
             announcement,
             voucher,
-            token,
-            unblinded_token,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -419,8 +415,17 @@ class ClientPluginTests(TestCase):
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        store.add(voucher, lambda: [token])
-        store.insert_unblinded_tokens_for_voucher(voucher, [unblinded_token])
+        controller = PaymentController(
+            store,
+            DummyRedeemer(),
+            1,
+        )
+        # Get a token inserted into the store.
+        redeeming = controller.redeem(voucher)
+        self.assertThat(
+            redeeming,
+            succeeded(Always()),
+        )
 
         storage_client = storage_server.get_storage_client(
             node_config,

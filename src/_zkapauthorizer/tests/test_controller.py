@@ -116,6 +116,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
     voucher_objects,
+    dummy_ristretto_keys,
     clocks,
 )
 from .matchers import (
@@ -149,15 +150,15 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending()),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_redeemed_after_redeeming(self, get_config, now, voucher):
+    @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())
+    def test_redeemed_after_redeeming(self, get_config, public_key, now, voucher):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
-            DummyRedeemer(),
+            DummyRedeemer(public_key),
             default_token_count=10,
         )
         controller.redeem(voucher)
@@ -168,6 +169,7 @@ class PaymentControllerTests(TestCase):
             Equals(model_Redeemed(
                 finished=now,
                 token_count=10,
+                public_key=public_key,
             )),
         )
 
@@ -319,11 +321,16 @@ class RistrettoRedeemerTests(TestCase):
         self.assertThat(
             d,
             succeeded(
-                MatchesAll(
-                    AllMatch(
-                        IsInstance(UnblindedToken),
+                MatchesStructure(
+                    unblinded_tokens=MatchesAll(
+                        AllMatch(
+                            IsInstance(UnblindedToken),
+                        ),
+                        HasLength(num_tokens),
                     ),
-                    HasLength(num_tokens),
+                    public_key=Equals(
+                        PublicKey.from_signing_key(signing_key).encode_base64(),
+                    ),
                 ),
             ),
         )
@@ -431,8 +438,8 @@ class RistrettoRedeemerTests(TestCase):
             voucher,
             random_tokens,
         )
-        def unblinded_tokens_to_passes(unblinded_tokens):
-            passes = redeemer.tokens_to_passes(message, unblinded_tokens)
+        def unblinded_tokens_to_passes(result):
+            passes = redeemer.tokens_to_passes(message, result.unblinded_tokens)
             return passes
         d.addCallback(unblinded_tokens_to_passes)
 

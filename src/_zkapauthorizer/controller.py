@@ -114,6 +114,21 @@ class Unpaid(Exception):
     """
 
 
+@attr.s
+class RedemptionResult(object):
+    """
+    Contain the results of an attempt to redeem a voucher for ZKAP material.
+
+    :ivar list[UnblindedToken] unblinded_tokens: The tokens which resulted
+        from the redemption.
+
+    :ivar unicode public_key: The public key which the server proved was
+        involved in the redemption process.
+    """
+    unblinded_tokens = attr.ib()
+    public_key = attr.ib()
+
+
 class IRedeemer(Interface):
     """
     An ``IRedeemer`` can exchange a voucher for one or more passes.
@@ -150,12 +165,11 @@ class IRedeemer(Interface):
         :param list[RandomToken] random_tokens: The random tokens to use in
             the redemption process.
 
-        :return: A ``Deferred`` which fires with a list of ``UnblindedToken``
-            instances on successful redemption or which fails with any error
-            to allow a retry to be made at some future point.  It may also
-            fail with an ``AlreadySpent`` error to indicate the redemption
-            server considers the voucher to have been redeemed already and
-            will not allow it to be redeemed.
+        :return: A ``Deferred`` which fires with a ``RedemptionResult``
+            instance or which fails with any error to allow a retry to be made
+            at some future point.  It may also fail with an ``AlreadySpent``
+            error to indicate the redemption server considers the voucher to
+            have been redeemed already and will not allow it to be redeemed.
         """
 
     def tokens_to_passes(message, unblinded_tokens):
@@ -290,6 +304,8 @@ class DummyRedeemer(object):
     really redeeming them, it makes up some fake ZKAPs and pretends those are
     the result.
     """
+    _public_key = attr.ib(default=None)
+
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
@@ -311,10 +327,13 @@ class DummyRedeemer(object):
             unblinded_value = random_value + b"x" * (96 - len(random_value))
             return UnblindedToken(b64encode(unblinded_value).decode("ascii"))
         return succeed(
-            list(
-                dummy_unblinded_token(token)
-                for token
-                in random_tokens
+            RedemptionResult(
+                list(
+                    dummy_unblinded_token(token)
+                    for token
+                    in random_tokens
+                ),
+                self._public_key,
             ),
         )
 
@@ -483,10 +502,14 @@ class RistrettoRedeemer(object):
                 public_key,
             )
         self._log.info("Validated proof")
-        returnValue(list(
+        unblinded_tokens = list(
             UnblindedToken(token.encode_base64().decode("ascii"))
             for token
             in clients_unblinded_tokens
+        )
+        returnValue(RedemptionResult(
+            unblinded_tokens,
+            marshaled_public_key,
         ))
 
     def tokens_to_passes(self, message, unblinded_tokens):
@@ -677,14 +700,21 @@ class PaymentController(object):
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
         return self._perform_redeem(voucher, tokens)
 
-    def _redeemSuccess(self, voucher, unblinded_tokens):
+    def _redeemSuccess(self, voucher, result):
         """
         Update the database state to reflect that a voucher was redeemed and to
         store the resulting unblinded tokens (which can be used to construct
         passes later).
         """
-        self._log.info("Inserting redeemed unblinded tokens for a voucher ({voucher}).", voucher=voucher)
-        self.store.insert_unblinded_tokens_for_voucher(voucher, unblinded_tokens)
+        self._log.info(
+            "Inserting redeemed unblinded tokens for a voucher ({voucher}).",
+            voucher=voucher,
+        )
+        self.store.insert_unblinded_tokens_for_voucher(
+            voucher,
+            result.public_key,
+            result.unblinded_tokens,
+        )
 
     def _redeemFailure(self, voucher, reason):
         if reason.check(AlreadySpent):

@@ -61,6 +61,12 @@ from .storage_common import (
     required_passes,
 )
 
+from .schema import (
+    get_schema_version,
+    get_schema_upgrades,
+    run_schema_upgrades,
+)
+
 
 class ILeaseMaintenanceObserver(Interface):
     """
@@ -88,13 +94,9 @@ class StoreOpenError(Exception):
         self.reason = reason
 
 
-class SchemaError(TypeError):
-    pass
-
-
 CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
 
-def open_and_initialize(path, required_schema_version, connect=None):
+def open_and_initialize(path, connect=None):
     """
     Open a SQLite3 database for use as a voucher store.
 
@@ -102,13 +104,6 @@ def open_and_initialize(path, required_schema_version, connect=None):
     exist.
 
     :param FilePath path: The location of the SQLite3 database file.
-
-    :param int required_schema_version: The schema version which must be
-        present in the database in order for a SQLite3 connection to be
-        returned.
-
-    :raise SchemaError: If the schema in the database does not match the
-        required schema version.
 
     :return: A SQLite3 connection object for the database at the given path.
     """
@@ -135,86 +130,9 @@ def open_and_initialize(path, required_schema_version, connect=None):
 
     with conn:
         cursor = conn.cursor()
-        cursor.execute(
-            # This code knows how to create schema version 1.  This is
-            # regardless of what the caller *wants* to find in the database.
-            """
-            CREATE TABLE IF NOT EXISTS [version] AS SELECT 1 AS [version]
-            """
-        )
-        cursor.execute(
-            """
-            SELECT [version] FROM [version]
-            """
-        )
-        [(actual_version,)] = cursor.fetchall()
-        if actual_version != required_schema_version:
-            raise SchemaError(
-                "Unexpected database schema version.  Required {}.  Got {}.".format(
-                    required_schema_version,
-                    actual_version,
-                ),
-            )
-
-        cursor.execute(
-            # A denormalized schema because, for now, it's simpler. :/
-            """
-            CREATE TABLE IF NOT EXISTS [vouchers] (
-                [number] text,
-                [created] text,                     -- An ISO8601 date+time string.
-                [state] text DEFAULT "pending",     -- pending, double-spend, redeemed
-
-                [finished] text DEFAULT NULL,       -- ISO8601 date+time string when
-                                                    -- the current terminal state was entered.
-
-                [token-count] num DEFAULT NULL,     -- Set in the redeemed state to the number
-                                                    -- of tokens received on this voucher's
-                                                    -- redemption.
-
-                PRIMARY KEY([number])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [tokens] (
-                [text] text, -- The random string that defines the token.
-                [voucher] text, -- Reference to the voucher these tokens go with.
-
-                PRIMARY KEY([text])
-                FOREIGN KEY([voucher]) REFERENCES [vouchers]([number])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [unblinded-tokens] (
-                [token] text, -- The base64 encoded unblinded token.
-
-                PRIMARY KEY([token])
-            )
-            """,
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS [lease-maintenance-spending] (
-                [id] integer, -- A unique identifier for a group of activity.
-                [started] text, -- ISO8601 date+time string when the activity began.
-                [finished] text, -- ISO8601 date+time string when the activity completed (or null).
-
-                -- The number of passes that would be required to renew all
-                -- shares encountered during this activity.  Note that because
-                -- leases on different shares don't necessarily expire at the
-                -- same time this is not necessarily the number of passes
-                -- **actually** used during this activity.  Some shares may
-                -- not have required lease renewal.  Also note that while the
-                -- activity is ongoing this value may change.
-                [count] integer,
-
-                PRIMARY KEY([id])
-            )
-            """,
-        )
+        actual_version = get_schema_version(cursor)
+        schema_upgrades = list(get_schema_upgrades(actual_version))
+        run_schema_upgrades(schema_upgrades, cursor)
     return conn
 
 
@@ -268,7 +186,6 @@ class VoucherStore(object):
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
-            required_schema_version=1,
             connect=connect,
         )
         return cls(
@@ -287,7 +204,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count]
+                [number], [created], [state], [finished], [token-count], [public-key]
             FROM
                 [vouchers]
             WHERE
@@ -371,7 +288,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count]
+                [number], [created], [state], [finished], [token-count], [public-key]
             FROM
                 [vouchers]
             """,
@@ -385,7 +302,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, unblinded_tokens):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens):
         """
         Store some unblinded tokens.
 
@@ -393,9 +310,32 @@ class VoucherStore(object):
             tokens.  This voucher will be marked as redeemed to indicate it
             has fulfilled its purpose and has no further use for us.
 
+        :param unicode public_key: The encoded public key for the private key
+            which was used to sign these tokens.
+
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
             store.
         """
+        voucher_state = u"redeemed"
+        cursor.execute(
+            """
+            UPDATE [vouchers]
+            SET [state] = ?
+              , [token-count] = ?
+              , [finished] = ?
+              , [public-key] = ?
+            WHERE [number] = ?
+            """,
+            (
+                voucher_state,
+                len(unblinded_tokens),
+                self.now(),
+                public_key,
+                voucher,
+            ),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
         cursor.executemany(
             """
             INSERT INTO [unblinded-tokens] VALUES (?)
@@ -405,16 +345,6 @@ class VoucherStore(object):
                 for t
                 in unblinded_tokens
             ),
-        )
-        cursor.execute(
-            """
-            UPDATE [vouchers]
-            SET [state] = "redeemed"
-              , [token-count] = ?
-              , [finished] = ?
-            WHERE [number] = ?
-            """,
-            (len(unblinded_tokens), self.now(), voucher),
         )
 
     @with_cursor
@@ -770,8 +700,20 @@ class Redeeming(object):
 
 @attr.s(frozen=True)
 class Redeemed(object):
+    """
+    The voucher was successfully redeemed.  Associated tokens were retrieved
+    and stored locally.
+
+    :ivar datetime finished: The time when the redemption finished.
+
+    :ivar int token_count: The number of tokens the voucher was redeemed for.
+
+    :ivar unicode public_key: The public part of the key used to sign the
+        tokens for this voucher.
+    """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    public_key = attr.ib(validator=attr.validators.optional(attr.validators.instance_of(unicode)))
 
     def should_start_redemption(self):
         return False
@@ -781,6 +723,7 @@ class Redeemed(object):
             u"name": u"redeemed",
             u"finished": self.finished.isoformat(),
             u"token-count": self.token_count,
+            u"public-key": self.public_key,
         }
 
 
@@ -847,12 +790,9 @@ class Voucher(object):
     :ivar datetime created: The time at which this voucher was added to this
         node.
 
-    :ivar bool redeemed: ``True`` if this voucher has successfully been
-        redeemed with a payment server, ``False`` otherwise.
-
-    :ivar int token_count: A number of tokens received from the redemption of
-        this voucher if it has been redeemed, ``None`` if it has not been
-        redeemed.
+    :ivar state: An indication of the current state of this voucher.  This is
+        an instance of ``Pending``, ``Redeeming``, ``Redeemed``,
+        ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
     number = attr.ib(
         validator=attr.validators.and_(
@@ -880,6 +820,7 @@ class Voucher(object):
                 return Redeemed(
                     parse_datetime(row[0], delimiter=u" "),
                     row[1],
+                    row[2],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
 
@@ -920,6 +861,7 @@ class Voucher(object):
             state = Redeemed(
                 finished=parse_datetime(state_json[u"finished"]),
                 token_count=state_json[u"token-count"],
+                public_key=state_json[u"public-key"],
             )
         elif state_name == u"unpaid":
             state = Unpaid(

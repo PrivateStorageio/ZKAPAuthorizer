@@ -75,6 +75,8 @@ from ..model import (
     Voucher,
     Pending,
     DoubleSpend,
+    Unpaid,
+    Error,
     Redeemed,
 )
 
@@ -185,6 +187,24 @@ def node_nicknames():
     )
 
 
+def dummy_ristretto_keys():
+    """
+    Build string values which one could imagine might be Ristretto-flavored
+    PrivacyPass signing or public keys.
+
+    They're not really because they're entirely random rather than points on
+    the curve.
+    """
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
+        b64encode,
+    ).map(
+        lambda bs: bs.decode("ascii"),
+    )
+
+
 def server_configurations(signing_key_path):
     """
     Build configuration values for the server-side plugin.
@@ -277,6 +297,16 @@ def vouchers():
         lambda voucher: voucher.decode("ascii"),
     )
 
+def redeemed_states():
+    """
+    Build ``Redeemed`` instances.
+    """
+    return builds(
+        Redeemed,
+        finished=datetimes(),
+        token_count=one_of(integers(min_value=1)),
+        public_key=dummy_ristretto_keys(),
+    )
 
 def voucher_states():
     """
@@ -284,19 +314,24 @@ def voucher_states():
     """
     return one_of(
         just(Pending()),
+        redeemed_states(),
         builds(
             DoubleSpend,
             finished=datetimes(),
         ),
         builds(
-            Redeemed,
+            Unpaid,
             finished=datetimes(),
-            token_count=one_of(integers(min_value=1)),
+        ),
+        builds(
+            Error,
+            finished=datetimes(),
+            details=text(),
         ),
     )
 
 
-def voucher_objects():
+def voucher_objects(states=voucher_states()):
     """
     Build ``Voucher`` instances.
     """
@@ -304,7 +339,7 @@ def voucher_objects():
         Voucher,
         number=vouchers(),
         created=one_of(none(), datetimes()),
-        state=voucher_states(),
+        state=states,
     )
 
 

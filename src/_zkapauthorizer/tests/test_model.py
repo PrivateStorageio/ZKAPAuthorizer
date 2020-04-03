@@ -68,16 +68,12 @@ from hypothesis.strategies import (
 from twisted.python.runtime import (
     platform,
 )
-from twisted.python.filepath import (
-    FilePath,
-)
 
 from ..storage_common import (
     BYTES_PER_PASS,
 )
 
 from ..model import (
-    SchemaError,
     StoreOpenError,
     VoucherStore,
     Voucher,
@@ -85,7 +81,6 @@ from ..model import (
     DoubleSpend,
     Redeemed,
     LeaseMaintenanceActivity,
-    open_and_initialize,
     memory_connect,
 )
 
@@ -96,6 +91,7 @@ from .strategies import (
     random_tokens,
     unblinded_tokens,
     posix_safe_datetimes,
+    dummy_ristretto_keys,
 )
 from .fixtures import (
     TemporaryVoucherStore,
@@ -106,22 +102,6 @@ class VoucherStoreTests(TestCase):
     """
     Tests for ``VoucherStore``.
     """
-    def test_create_mismatched_schema(self):
-        """
-        ``open_and_initialize`` raises ``SchemaError`` if asked for a database
-        with a schema version other than it can create.
-        """
-        tempdir = self.useFixture(TempDir())
-        dbpath = tempdir.join(b"db.sqlite3")
-        self.assertThat(
-            lambda: open_and_initialize(
-                FilePath(dbpath),
-                required_schema_version=100,
-            ),
-            raises(SchemaError),
-        )
-
-
     @given(tahoe_configs(), datetimes(), vouchers())
     def test_get_missing(self, get_config, now, voucher):
         """
@@ -348,19 +328,71 @@ class VoucherTests(TestCase):
         )
 
 
+def paired_tokens(data):
+    """
+    Draw two lists of the same length, one of random tokens and one of
+    unblinded tokens.
+
+    :rtype: ([RandomTokens], [UnblindedTokens])
+    """
+    num_tokens = data.draw(integers(min_value=1, max_value=1000))
+    r = data.draw(lists(
+        random_tokens(),
+        min_size=num_tokens,
+        max_size=num_tokens,
+        unique=True,
+    ))
+    u = data.draw(lists(
+        unblinded_tokens(),
+        min_size=num_tokens,
+        max_size=num_tokens,
+        unique=True,
+    ))
+    return r, u
+
+
 class UnblindedTokenStoreTests(TestCase):
     """
     Tests for ``UnblindedToken``-related functionality of ``VoucherStore``.
     """
-    @given(tahoe_configs(), datetimes(), vouchers(), lists(unblinded_tokens(), unique=True))
-    def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, tokens):
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        dummy_ristretto_keys(),
+        lists(unblinded_tokens(), unique=True),
+    )
+    def test_unblinded_tokens_without_voucher(self, get_config, now, voucher_value, public_key, unblinded_tokens):
+        """
+        Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        try:
+            result = store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
+        except ValueError:
+            pass
+        except Exception as e:
+            self.fail("insert_unblinded_tokens_for_voucher raised the wrong exception: {}".format(e))
+        else:
+            self.fail("insert_unblinded_tokens_for_voucher didn't raise, returned: {}".format(result))
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        dummy_ristretto_keys(),
+        data(),
+    )
+    def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, data):
         """
         Unblinded tokens that are added to the store can later be retrieved.
         """
+        random_tokens, unblinded_tokens = paired_tokens(data)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        store.insert_unblinded_tokens_for_voucher(voucher_value, tokens)
-        retrieved_tokens = store.extract_unblinded_tokens(len(tokens))
-        self.expectThat(tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
+        store.add(voucher_value, lambda: random_tokens)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
+        retrieved_tokens = store.extract_unblinded_tokens(len(random_tokens))
+        self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
 
         # After extraction, the unblinded tokens are no longer available.
         more_unblinded_tokens = store.extract_unblinded_tokens(1)
@@ -370,10 +402,11 @@ class UnblindedTokenStoreTests(TestCase):
         tahoe_configs(),
         datetimes(),
         vouchers(),
+        dummy_ristretto_keys(),
         integers(min_value=1, max_value=100),
         data(),
     )
-    def test_mark_vouchers_redeemed(self, get_config, now, voucher_value, num_tokens, data):
+    def test_mark_vouchers_redeemed(self, get_config, now, voucher_value, public_key, num_tokens, data):
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
@@ -397,7 +430,7 @@ class UnblindedTokenStoreTests(TestCase):
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
         loaded_voucher = store.get(voucher_value)
         self.assertThat(
             loaded_voucher,
@@ -405,6 +438,7 @@ class UnblindedTokenStoreTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=num_tokens,
+                    public_key=public_key,
                 )),
             ),
         )
@@ -437,10 +471,11 @@ class UnblindedTokenStoreTests(TestCase):
         tahoe_configs(),
         datetimes(),
         vouchers(),
+        dummy_ristretto_keys(),
         integers(min_value=1, max_value=100),
         data(),
     )
-    def test_mark_spent_vouchers_double_spent(self, get_config, now, voucher_value, num_tokens, data):
+    def test_mark_spent_vouchers_double_spent(self, get_config, now, voucher_value, public_key, num_tokens, data):
         """
         A voucher which has already been spent cannot be marked as double-spent.
         """
@@ -462,7 +497,7 @@ class UnblindedTokenStoreTests(TestCase):
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, unblinded)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
         try:
             result = store.mark_voucher_double_spent(voucher_value)
         except ValueError:
