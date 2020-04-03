@@ -132,9 +132,3 @@ _UPGRADES = {
         """,
     ],
 }
-
-def _check_consistency():
-    if _UPGRADES.keys() != range(len(_UPGRADES)):
-        raise TypeError("Inconsistent schema versions in schema upgraders.")
-
-_check_consistency()
