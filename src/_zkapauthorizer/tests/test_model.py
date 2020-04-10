@@ -481,7 +481,11 @@ class UnblindedTokenStoreTests(TestCase):
         store.add(voucher_value, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
         retrieved_tokens = store.extract_unblinded_tokens(len(random_tokens))
-        self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
+
+        self.expectThat(
+            set(unblinded_tokens),
+            Equals(set(retrieved_tokens)),
+        )
 
         # After extraction, the unblinded tokens are no longer available.
         self.assertThat(
