@@ -246,6 +246,92 @@ class VoucherStoreTests(TestCase):
             raises(StoreOpenError),
         )
 
+    @given(tahoe_configs(), vouchers(), dummy_ristretto_keys(), datetimes(), data())
+    def test_spend_order_equals_backup_order(self, get_config, voucher_value, public_key, now, data):
+        """
+        Unblinded tokens returned by ``VoucherStore.backup`` appear in the same
+        order as they are returned ``VoucherStore.extract_unblinded_tokens``.
+        """
+        backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
+            get_config,
+            voucher_value,
+            public_key,
+            now,
+            data
+        )
+        self.assertThat(
+            backed_up_tokens,
+            Equals(spent_tokens),
+        )
+
+
+    @given(tahoe_configs(), vouchers(), dummy_ristretto_keys(), datetimes(), data())
+    def test_spend_order_equals_insert_order(self, get_config, voucher_value, public_key, now, data):
+        """
+        Unblinded tokens returned by ``VoucherStore.extract_unblinded_tokens``
+        appear in the same order as they were inserted.
+        """
+        backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
+            get_config,
+            voucher_value,
+            public_key,
+            now,
+            data
+        )
+        self.assertThat(
+            spent_tokens,
+            Equals(inserted_tokens),
+        )
+
+
+    def _spend_order_test(self, get_config, voucher_value, public_key, now, data):
+        """
+        Insert, backup, and extract some tokens.
+
+        :param get_config: See ``tahoe_configs``
+        :param unicode voucher_value: A voucher value to associate with the tokens.
+        :param unicode public_key: A public key to associate with inserted unblinded tokens.
+        :param datetime now: A time to pretend is current.
+        :param data: A Hypothesis data for drawing values from strategies.
+
+        :return: A three-tuple of (backed up tokens, extracted tokens, inserted tokens).
+        """
+        tempdir = self.useFixture(TempDir())
+        nodedir = tempdir.join(b"node")
+
+        config = get_config(nodedir, b"tub.port")
+
+        # Create the underlying database file.
+        store = VoucherStore.from_node_config(config, lambda: now)
+
+        # Put some tokens in it that we can backup and extract
+        random_tokens, unblinded_tokens = paired_tokens(data, integers(min_value=1, max_value=5))
+        store.add(voucher_value, lambda: random_tokens)
+        store.insert_unblinded_tokens_for_voucher(
+            voucher_value,
+            public_key,
+            unblinded_tokens,
+        )
+
+        backed_up_tokens = store.backup()[u"unblinded-tokens"]
+        extracted_tokens = []
+        tokens_remaining = len(unblinded_tokens)
+        while tokens_remaining > 0:
+            to_spend = data.draw(integers(min_value=1, max_value=tokens_remaining))
+            extracted_tokens.extend(
+                token.unblinded_token
+                for token
+                in store.extract_unblinded_tokens(to_spend)
+            )
+            tokens_remaining -= to_spend
+
+        return (
+            backed_up_tokens,
+            extracted_tokens,
+            list(token.unblinded_token for token in unblinded_tokens),
+        )
+
+
 
 class LeaseMaintenanceTests(TestCase):
     """
@@ -331,14 +417,14 @@ class VoucherTests(TestCase):
         )
 
 
-def paired_tokens(data):
+def paired_tokens(data, sizes=integers(min_value=1, max_value=1000)):
     """
     Draw two lists of the same length, one of random tokens and one of
     unblinded tokens.
 
     :rtype: ([RandomTokens], [UnblindedTokens])
     """
-    num_tokens = data.draw(integers(min_value=1, max_value=1000))
+    num_tokens = data.draw(sizes)
     r = data.draw(lists(
         random_tokens(),
         min_size=num_tokens,
@@ -395,7 +481,11 @@ class UnblindedTokenStoreTests(TestCase):
         store.add(voucher_value, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
         retrieved_tokens = store.extract_unblinded_tokens(len(random_tokens))
-        self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
+
+        self.expectThat(
+            set(unblinded_tokens),
+            Equals(set(retrieved_tokens)),
+        )
 
         # After extraction, the unblinded tokens are no longer available.
         self.assertThat(

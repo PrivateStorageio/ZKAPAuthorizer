@@ -407,7 +407,7 @@ def verification_signatures():
 
 def zkaps():
     """
-    Build random ZKAPs as ``Pass` instances.
+    Build random ZKAPs as ``Pass`` instances.
     """
     return builds(
         Pass,

@@ -417,7 +417,7 @@ class VoucherStore(object):
             """
             CREATE TEMPORARY TABLE [extracting]
             AS
-            SELECT [token] FROM [unblinded-tokens] ORDER BY [token] LIMIT ?
+            SELECT [token] FROM [unblinded-tokens] LIMIT ?
             """,
             (count,),
         )
@@ -451,7 +451,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [token] FROM [unblinded-tokens] ORDER BY [token]
+            SELECT [token] FROM [unblinded-tokens]
             """,
         )
         tokens = cursor.fetchall()
