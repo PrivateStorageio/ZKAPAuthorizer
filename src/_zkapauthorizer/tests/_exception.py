@@ -60,7 +60,7 @@ class MatchesExceptionType(Matcher):
         etype, evalue, etb = other
         if not issubclass(etype, expected_class):
             return Mismatch(
-                "{} is an instance of {}, expected an instance of {}.".format(
+                "{!r} is an instance of {}, expected an instance of {}.".format(
                     evalue,
                     etype,
                     expected_class,

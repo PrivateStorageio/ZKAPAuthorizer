@@ -42,7 +42,6 @@ from testtools.matchers import (
     Always,
     Contains,
     AfterPreprocessing,
-    Equals,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -100,12 +99,17 @@ from ..foolscap import (
     RIPrivacyPassAuthorizedStorageServer,
 )
 from ..model import (
+    NotEnoughTokens,
     VoucherStore,
 )
 from ..controller import (
     IssuerConfigurationMismatch,
     PaymentController,
     DummyRedeemer,
+)
+from ..storage_common import (
+    BYTES_PER_PASS,
+    required_passes,
 )
 from .._storage_client import (
     IncorrectStorageServerReference,
@@ -318,14 +322,14 @@ class ClientPluginTests(TestCase):
         node_config.config.write(config_text)
         self.addDetail(u"config", text_content(config_text.getvalue()))
         self.addDetail(u"announcement", text_content(unicode(announcement)))
-        try:
-            result = storage_server.get_storage_client(node_config, announcement, get_rref)
-        except IssuerConfigurationMismatch:
-            pass
-        except Exception as e:
-            self.fail("get_storage_client raised the wrong exception: {}".format(e))
-        else:
-            self.fail("get_storage_client didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: storage_server.get_storage_client(
+                node_config,
+                announcement,
+                get_rref,
+            ),
+            raises(IssuerConfigurationMismatch),
+        )
 
 
     @given(
@@ -418,7 +422,8 @@ class ClientPluginTests(TestCase):
         controller = PaymentController(
             store,
             DummyRedeemer(),
-            1,
+            # Give it enough for the allocate_buckets call below.
+            required_passes(BYTES_PER_PASS, [size] * len(sharenums)),
         )
         # Get a token inserted into the store.
         redeeming = controller.redeem(voucher)
@@ -445,10 +450,9 @@ class ClientPluginTests(TestCase):
         )
 
         # There should be no unblinded tokens left to extract.
-        remaining = store.extract_unblinded_tokens(1)
         self.assertThat(
-            remaining,
-            Equals([]),
+            lambda: store.extract_unblinded_tokens(1),
+            raises(NotEnoughTokens),
         )
 
 

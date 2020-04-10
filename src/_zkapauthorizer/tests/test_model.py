@@ -45,7 +45,6 @@ from testtools.matchers import (
     Equals,
     Raises,
     IsInstance,
-    raises,
 )
 
 from fixtures import (
@@ -75,6 +74,7 @@ from ..storage_common import (
 
 from ..model import (
     StoreOpenError,
+    NotEnoughTokens,
     VoucherStore,
     Voucher,
     Pending,
@@ -95,6 +95,9 @@ from .strategies import (
 )
 from .fixtures import (
     TemporaryVoucherStore,
+)
+from .matchers import (
+    raises,
 )
 
 
@@ -367,14 +370,14 @@ class UnblindedTokenStoreTests(TestCase):
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        try:
-            result = store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("insert_unblinded_tokens_for_voucher raised the wrong exception: {}".format(e))
-        else:
-            self.fail("insert_unblinded_tokens_for_voucher didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.insert_unblinded_tokens_for_voucher(
+                voucher_value,
+                public_key,
+                unblinded_tokens,
+            ),
+            raises(ValueError),
+        )
 
     @given(
         tahoe_configs(),
@@ -395,8 +398,10 @@ class UnblindedTokenStoreTests(TestCase):
         self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
 
         # After extraction, the unblinded tokens are no longer available.
-        more_unblinded_tokens = store.extract_unblinded_tokens(1)
-        self.expectThat([], Equals(more_unblinded_tokens))
+        self.assertThat(
+            lambda: store.extract_unblinded_tokens(1),
+            raises(NotEnoughTokens),
+        )
 
     @given(
         tahoe_configs(),
@@ -498,14 +503,10 @@ class UnblindedTokenStoreTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, lambda: random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
-        try:
-            result = store.mark_voucher_double_spent(voucher_value)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
-        else:
-            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.mark_voucher_double_spent(voucher_value),
+            raises(ValueError),
+        )
 
     @given(
         tahoe_configs(),
@@ -517,14 +518,49 @@ class UnblindedTokenStoreTests(TestCase):
         A voucher which is not known cannot be marked as double-spent.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        try:
-            result = store.mark_voucher_double_spent(voucher_value)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
-        else:
-            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.mark_voucher_double_spent(voucher_value),
+            raises(ValueError),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        dummy_ristretto_keys(),
+        integers(min_value=1, max_value=100),
+        integers(min_value=1),
+        data(),
+    )
+    def test_not_enough_unblinded_tokens(self, get_config, now, voucher_value, public_key, num_tokens, extra, data):
+        """
+        ``extract_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
+        greater than the number of unblinded tokens in the store.
+        """
+        random = data.draw(
+            lists(
+                random_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+        unblinded = data.draw(
+            lists(
+                unblinded_tokens(),
+                min_size=num_tokens,
+                max_size=num_tokens,
+                unique=True,
+            ),
+        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store.add(voucher_value, lambda: random)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
+
+        self.assertThat(
+            lambda: store.extract_unblinded_tokens(num_tokens + extra),
+            raises(NotEnoughTokens),
+        )
 
 
     # TODO: Other error states and transient states

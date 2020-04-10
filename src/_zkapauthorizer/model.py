@@ -94,6 +94,13 @@ class StoreOpenError(Exception):
         self.reason = reason
 
 
+class NotEnoughTokens(Exception):
+    """
+    An attempt to extract tokens failed because the store does not contain as
+    many tokens as were requested.
+    """
+
+
 CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
 
 def open_and_initialize(path, connect=None):
@@ -396,6 +403,16 @@ class VoucherStore(object):
 
         :return list[UnblindedTokens]: The removed unblinded tokens.
         """
+        cursor.execute(
+            """
+            SELECT COUNT(token)
+            FROM [unblinded-tokens]
+            """,
+        )
+        [(existing_tokens,)] = cursor.fetchall()
+        if existing_tokens < count:
+            raise NotEnoughTokens()
+
         cursor.execute(
             """
             CREATE TEMPORARY TABLE [extracting]
