@@ -285,6 +285,17 @@ class VoucherStoreTests(TestCase):
 
 
     def _spend_order_test(self, get_config, voucher_value, public_key, now, data):
+        """
+        Insert, backup, and extract some tokens.
+
+        :param get_config: See ``tahoe_configs``
+        :param unicode voucher_value: A voucher value to associate with the tokens.
+        :param unicode public_key: A public key to associate with inserted unblinded tokens.
+        :param datetime now: A time to pretend is current.
+        :param data: A Hypothesis data for drawing values from strategies.
+
+        :return: A three-tuple of (backed up tokens, extracted tokens, inserted tokens).
+        """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
 
