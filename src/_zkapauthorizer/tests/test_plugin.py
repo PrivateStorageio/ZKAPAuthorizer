@@ -322,14 +322,14 @@ class ClientPluginTests(TestCase):
         node_config.config.write(config_text)
         self.addDetail(u"config", text_content(config_text.getvalue()))
         self.addDetail(u"announcement", text_content(unicode(announcement)))
-        try:
-            result = storage_server.get_storage_client(node_config, announcement, get_rref)
-        except IssuerConfigurationMismatch:
-            pass
-        except Exception as e:
-            self.fail("get_storage_client raised the wrong exception: {}".format(e))
-        else:
-            self.fail("get_storage_client didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: storage_server.get_storage_client(
+                node_config,
+                announcement,
+                get_rref,
+            ),
+            raises(IssuerConfigurationMismatch),
+        )
 
 
     @given(
@@ -450,14 +450,10 @@ class ClientPluginTests(TestCase):
         )
 
         # There should be no unblinded tokens left to extract.
-        try:
-            result = store.extract_unblinded_tokens(1)
-        except NotEnoughTokens:
-            pass
-        except Exception as e:
-            self.fail("extract_unblinded_tokens raised wrong exception: {}".format(e))
-        else:
-            self.fail("extract_unblinded_tokens didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.extract_unblinded_tokens(1),
+            raises(NotEnoughTokens),
+        )
 
 
 class ClientResourceTests(TestCase):
