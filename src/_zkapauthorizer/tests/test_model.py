@@ -45,7 +45,6 @@ from testtools.matchers import (
     Equals,
     Raises,
     IsInstance,
-    raises,
 )
 
 from fixtures import (
@@ -96,6 +95,9 @@ from .strategies import (
 )
 from .fixtures import (
     TemporaryVoucherStore,
+)
+from .matchers import (
+    raises,
 )
 
 
@@ -368,14 +370,14 @@ class UnblindedTokenStoreTests(TestCase):
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        try:
-            result = store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("insert_unblinded_tokens_for_voucher raised the wrong exception: {}".format(e))
-        else:
-            self.fail("insert_unblinded_tokens_for_voucher didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.insert_unblinded_tokens_for_voucher(
+                voucher_value,
+                public_key,
+                unblinded_tokens,
+            ),
+            raises(ValueError),
+        )
 
     @given(
         tahoe_configs(),
@@ -396,14 +398,10 @@ class UnblindedTokenStoreTests(TestCase):
         self.expectThat(unblinded_tokens, AfterPreprocessing(sorted, Equals(retrieved_tokens)))
 
         # After extraction, the unblinded tokens are no longer available.
-        try:
-            result = store.extract_unblinded_tokens(1)
-        except NotEnoughTokens:
-            pass
-        except Exception as e:
-            self.fail("extract_unblinded_tokens raised wrong exception: {}".format(e))
-        else:
-            self.fail("extract_unblinded_tokens didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.extract_unblinded_tokens(1),
+            raises(NotEnoughTokens),
+        )
 
     @given(
         tahoe_configs(),
@@ -505,14 +503,10 @@ class UnblindedTokenStoreTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, lambda: random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
-        try:
-            result = store.mark_voucher_double_spent(voucher_value)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
-        else:
-            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.mark_voucher_double_spent(voucher_value),
+            raises(ValueError),
+        )
 
     @given(
         tahoe_configs(),
@@ -524,14 +518,10 @@ class UnblindedTokenStoreTests(TestCase):
         A voucher which is not known cannot be marked as double-spent.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        try:
-            result = store.mark_voucher_double_spent(voucher_value)
-        except ValueError:
-            pass
-        except Exception as e:
-            self.fail("mark_voucher_double_spent raised the wrong exception: {}".format(e))
-        else:
-            self.fail("mark_voucher_double_spent didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.mark_voucher_double_spent(voucher_value),
+            raises(ValueError),
+        )
 
     @given(
         tahoe_configs(),
@@ -567,14 +557,10 @@ class UnblindedTokenStoreTests(TestCase):
         store.add(voucher_value, lambda: random)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded)
 
-        try:
-            result = store.extract_unblinded_tokens(num_tokens + extra)
-        except NotEnoughTokens:
-            pass
-        except Exception as e:
-            self.fail("extract_unblinded_tokens raised wrong exception: {}".format(e))
-        else:
-            self.fail("extract_unblinded_tokens didn't raise, returned: {}".format(result))
+        self.assertThat(
+            lambda: store.extract_unblinded_tokens(num_tokens + extra),
+            raises(NotEnoughTokens),
+        )
 
 
     # TODO: Other error states and transient states
