@@ -343,6 +343,16 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
+        stored_tokens = root.controller.store.backup()[u"unblinded-tokens"]
+
+        self.assertThat(
+            stored_tokens,
+            Equals(list(
+                token.unblinded_token
+                for token
+                in unblinded_tokens
+            )),
+        )
 
     @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
     def test_get(self, get_config, voucher, num_tokens):
