@@ -308,13 +308,9 @@ class VoucherStore(object):
             in refs
         )
 
-    @with_cursor
-    def insert_unblinded_tokens(self, cursor, unblinded_tokens):
+    def _insert_unblinded_tokens(self, cursor, unblinded_tokens):
         """
-        Store some unblinded tokens, for example as part of a backup-restore
-        process.
-
-        :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+        Helper function to really insert unblinded tokens into the database.
         """
         cursor.executemany(
             """
@@ -326,6 +322,16 @@ class VoucherStore(object):
                 in unblinded_tokens
             ),
         )
+
+    @with_cursor
+    def insert_unblinded_tokens(self, cursor, unblinded_tokens):
+        """
+        Store some unblinded tokens, for example as part of a backup-restore
+        process.
+
+        :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+        """
+        self._insert_unblinded_tokens(cursor, unblinded_tokens)
 
     @with_cursor
     def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens):
@@ -362,12 +368,10 @@ class VoucherStore(object):
         )
         if cursor.rowcount == 0:
             raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
-        cursor.executemany(
-            """
-            INSERT INTO [unblinded-tokens] VALUES (?)
-            """,
+        self._insert_unblinded_tokens(
+            cursor,
             list(
-                (t.unblinded_token,)
+                t.unblinded_token
                 for t
                 in unblinded_tokens
             ),
