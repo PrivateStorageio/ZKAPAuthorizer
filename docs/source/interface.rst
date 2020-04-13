@@ -115,7 +115,7 @@ The elements of the list are objects like the one returned by issuing a **GET** 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve unused unblinded tokens present in the node's database.
-Unblinded tokens are returned in ascending text sorted order.
+Unblinded tokens are returned in a stable order.
 This order matches the order in which tokens will be used by the system.
 This endpoint accepts several query arguments:
 
