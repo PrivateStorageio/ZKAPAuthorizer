@@ -27,7 +27,9 @@ from itertools import (
     islice,
 )
 from json import (
-    loads, dumps,
+    loads,
+    load,
+    dumps,
 )
 from zope.interface import (
     Attribute,
@@ -180,6 +182,16 @@ class _UnblindedTokenCollection(Resource):
             ), limit)),
             u"lease-maintenance-spending": self._lease_maintenance_activity(),
         })
+
+    def render_POST(self, request):
+        """
+        Store some unblinded tokens.
+        """
+        application_json(request)
+        unblinded_tokens = load(request.content)[u"unblinded-tokens"]
+        self._store.insert_unblinded_tokens(unblinded_tokens)
+        return dumps({})
+
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()

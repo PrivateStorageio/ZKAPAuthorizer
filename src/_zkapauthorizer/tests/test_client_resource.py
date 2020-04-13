@@ -146,6 +146,7 @@ from .strategies import (
     client_dummyredeemer_configurations,
     client_nonredeemer_configurations,
     client_errorredeemer_configurations,
+    unblinded_tokens,
     vouchers,
     requests,
 )
@@ -304,6 +305,54 @@ class UnblindedTokenTests(TestCase):
         super(UnblindedTokenTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
+
+    @given(
+        tahoe_configs(),
+        vouchers(),
+        lists(unblinded_tokens(), unique=True, min_size=1, max_size=1000),
+    )
+    def test_post(self, get_config, voucher, unblinded_tokens):
+        """
+        When the unblinded token collection receives a **POST**, the unblinded
+        tokens in the request body are inserted into the system and an OK
+        response is generated.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config, datetime.now)
+
+
+        agent = RequestTraversalAgent(root)
+        producer = FileBodyProducer(
+            BytesIO(dumps({u"unblinded-tokens": list(
+                token.unblinded_token
+                for token
+                in unblinded_tokens
+            )})),
+            cooperator=uncooperator(),
+        )
+        requesting = agent.request(
+            b"POST",
+            b"http://127.0.0.1/unblinded-token",
+            bodyProducer=producer,
+        )
+        self.assertThat(
+            requesting,
+            succeeded(
+                ok_response(headers=application_json()),
+            ),
+        )
+
+        stored_tokens = root.controller.store.backup()[u"unblinded-tokens"]
+
+        self.assertThat(
+            stored_tokens,
+            Equals(list(
+                token.unblinded_token
+                for token
+                in unblinded_tokens
+            )),
+        )
 
     @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
     def test_get(self, get_config, voucher, num_tokens):
