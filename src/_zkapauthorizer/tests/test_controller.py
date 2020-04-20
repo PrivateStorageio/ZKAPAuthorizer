@@ -60,6 +60,8 @@ from hypothesis import (
 from hypothesis.strategies import (
     integers,
     datetimes,
+    lists,
+    sampled_from,
 )
 from twisted.python.url import (
     URL,
@@ -73,6 +75,9 @@ from twisted.web.iweb import (
 from twisted.web.resource import (
     ErrorPage,
     Resource,
+)
+from twisted.web.http_headers import (
+    Headers,
 )
 from twisted.web.http import (
     UNSUPPORTED_MEDIA_TYPE,
@@ -116,6 +121,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
     voucher_objects,
+    voucher_counters,
     dummy_ristretto_keys,
     clocks,
 )
@@ -302,8 +308,8 @@ class RistrettoRedeemerTests(TestCase):
             Provides([IRedeemer]),
         )
 
-    @given(voucher_objects(), integers(min_value=1, max_value=100))
-    def test_good_ristretto_redemption(self, voucher, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
+    def test_good_ristretto_redemption(self, voucher, counter, num_tokens):
         """
         If the issuer returns a successful result then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
@@ -314,8 +320,9 @@ class RistrettoRedeemerTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        d = redeemer.redeem(
+        d = redeemer.redeemWithCounter(
             voucher,
+            counter,
             random_tokens,
         )
         self.assertThat(
@@ -335,8 +342,8 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_alreadyspent(self, voucher, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
+    def test_redemption_denied_alreadyspent(self, voucher, counter, num_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has already been spent, ``RistrettoRedeem``
@@ -347,8 +354,9 @@ class RistrettoRedeemerTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        d = redeemer.redeem(
+        d = redeemer.redeemWithCounter(
             voucher,
+            counter,
             random_tokens,
         )
         self.assertThat(
@@ -361,8 +369,8 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_unpaid(self, voucher, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
+    def test_redemption_denied_unpaid(self, voucher, counter, num_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has not been paid for, ``RistrettoRedeem``
@@ -373,8 +381,9 @@ class RistrettoRedeemerTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        d = redeemer.redeem(
+        d = redeemer.redeemWithCounter(
             voucher,
+            counter,
             random_tokens,
         )
         self.assertThat(
@@ -387,8 +396,8 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), integers(min_value=1, max_value=100))
-    def test_bad_ristretto_redemption(self, voucher, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
+    def test_bad_ristretto_redemption(self, voucher, counter, num_tokens):
         """
         If the issuer returns a successful result with an invalid proof then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
@@ -405,8 +414,9 @@ class RistrettoRedeemerTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        d = redeemer.redeem(
+        d = redeemer.redeemWithCounter(
             voucher,
+            counter,
             random_tokens,
         )
         self.addDetail(u"redeem Deferred", text_content(str(d)))
@@ -420,8 +430,8 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), integers(min_value=1, max_value=100))
-    def test_ristretto_pass_construction(self, voucher, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
+    def test_ristretto_pass_construction(self, voucher, counter, num_tokens):
         """
         The passes constructed using unblinded tokens and messages pass the
         Ristretto verification check.
@@ -434,8 +444,9 @@ class RistrettoRedeemerTests(TestCase):
         redeemer = RistrettoRedeemer(treq, NOWHERE)
 
         random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
-        d = redeemer.redeem(
+        d = redeemer.redeemWithCounter(
             voucher,
+            counter,
             random_tokens,
         )
         def unblinded_tokens_to_passes(result):
@@ -541,8 +552,9 @@ class AlreadySpentRedemption(Resource):
     that the voucher has already been redeemed.
     """
     def render_POST(self, request):
-        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
-            return bad_content_type(request)
+        request_error = check_redemption_request(request)
+        if request_error is not None:
+            return request_error
 
         return bad_request(request, {u"success": False, u"reason": u"double-spend"})
 
@@ -554,8 +566,9 @@ class UnpaidRedemption(Resource):
     the voucher has not been paid for.
     """
     def render_POST(self, request):
-        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
-            return bad_content_type(request)
+        request_error = check_redemption_request(request)
+        if request_error is not None:
+            return request_error
 
         return bad_request(request, {u"success": False, u"reason": u"unpaid"})
 
@@ -567,8 +580,9 @@ class RistrettoRedemption(Resource):
         self.public_key = PublicKey.from_signing_key(signing_key)
 
     def render_POST(self, request):
-        if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
-            return bad_content_type(request)
+        request_error = check_redemption_request(request)
+        if request_error is not None:
+            return request_error
 
         request_body = loads(request.content.read())
         marshaled_blinded_tokens = request_body[u"redeemTokens"]
@@ -603,6 +617,118 @@ class RistrettoRedemption(Resource):
             u"signatures": marshaled_signed_tokens,
             u"proof": marshaled_proof,
         })
+
+
+class CheckRedemptionRequestTests(TestCase):
+    """
+    Tests for ``check_redemption_request``.
+    """
+    def test_content_type(self):
+        """
+        If the request content-type is not application/json, the response is
+        **Unsupported Media Type**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            b"{}",
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(UNSUPPORTED_MEDIA_TYPE),
+                ),
+            ),
+        )
+
+    def test_not_json(self):
+        """
+        If the request body cannot be decoded as json, the response is **Bad
+        Request**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            b"foo",
+            headers=Headers({u"content-type": [u"application/json"]}),
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(BAD_REQUEST),
+                ),
+            ),
+        )
+
+    @given(
+        lists(
+            sampled_from(
+                [u"redeemVoucher", u"redeemCounter", u"redeemTokens"],
+            ),
+            # Something must be missing if the length is no longer than 2
+            # because there are 3 required properties.
+            max_size=2,
+            unique=True,
+        ),
+    )
+    def test_missing_properties(self, properties):
+        """
+        If the JSON object in the request body does not include all the necessary
+        properties, the response is **Bad Request**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            dumps(dict.fromkeys(properties)),
+            headers=Headers({u"content-type": [u"application/json"]}),
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(BAD_REQUEST),
+                ),
+            ),
+        )
+
+def check_redemption_request(request):
+    """
+    Verify that the given request conforms to the redemption server's public
+    interface.
+    """
+    if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
+        return bad_content_type(request)
+
+    p = request.content.tell()
+    content = request.content.read()
+    request.content.seek(p)
+
+    try:
+        request_body = loads(content)
+    except ValueError:
+        return bad_request(request, None)
+
+    expected_keys = {u"redeemVoucher", u"redeemCounter", u"redeemTokens"}
+    actual_keys = set(request_body.keys())
+    if expected_keys != actual_keys:
+        return bad_request(
+            request, {
+                u"success": False,
+                u"reason": u"{} != {}".format(
+                    expected_keys,
+                    actual_keys,
+                ),
+            },
+        )
+    return None
 
 
 def bad_request(request, body_object):

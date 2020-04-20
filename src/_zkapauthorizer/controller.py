@@ -150,7 +150,7 @@ class IRedeemer(Interface):
             anonymity property of the system.
         """
 
-    def redeem(voucher, random_tokens):
+    def redeemWithCounter(voucher, counter, random_tokens):
         """
         Redeem a voucher for unblinded tokens which can be used to construct
         passes.
@@ -161,6 +161,13 @@ class IRedeemer(Interface):
         arguments.
 
         :param Voucher voucher: The voucher to redeem.
+
+        :param int counter: The counter to use in this redemption attempt.  To
+            support vouchers which can be redeemed for a larger number of
+            tokens than is practical to handle at once, one voucher can be
+            partially redeemed repeatedly until the complete set of tokens has
+            been received.  Each partial redemption must have a distinct
+            counter value.
 
         :param list[RandomToken] random_tokens: The random tokens to use in
             the redemption process.
@@ -204,7 +211,7 @@ class NonRedeemer(object):
     def random_tokens_for_voucher(self, voucher, count):
         return dummy_random_tokens(voucher, count)
 
-    def redeem(self, voucher, random_tokens):
+    def redeemWithCounter(self, voucher, counter, random_tokens):
         # Don't try to redeem them.
         return Deferred()
 
@@ -234,7 +241,7 @@ class ErrorRedeemer(object):
     def random_tokens_for_voucher(self, voucher, count):
         return dummy_random_tokens(voucher, count)
 
-    def redeem(self, voucher, random_tokens):
+    def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(Exception(self.details))
 
     def tokens_to_passes(self, message, unblinded_tokens):
@@ -257,7 +264,7 @@ class DoubleSpendRedeemer(object):
     def random_tokens_for_voucher(self, voucher, count):
         return dummy_random_tokens(voucher, count)
 
-    def redeem(self, voucher, random_tokens):
+    def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(AlreadySpent(voucher))
 
 
@@ -275,7 +282,7 @@ class UnpaidRedeemer(object):
     def random_tokens_for_voucher(self, voucher, count):
         return dummy_random_tokens(voucher, count)
 
-    def redeem(self, voucher, random_tokens):
+    def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(Unpaid(voucher))
 
 
@@ -317,7 +324,7 @@ class DummyRedeemer(object):
         """
         return dummy_random_tokens(voucher, count)
 
-    def redeem(self, voucher, random_tokens):
+    def redeemWithCounter(self, voucher, counter, random_tokens):
         """
         :return: An already-fired ``Deferred`` that has a list of
           ``UnblindedToken`` instances wrapping meaningless values.
@@ -434,7 +441,7 @@ class RistrettoRedeemer(object):
         )
 
     @inlineCallbacks
-    def redeem(self, voucher, encoded_random_tokens):
+    def redeemWithCounter(self, voucher, counter, encoded_random_tokens):
         random_tokens = list(
             challenge_bypass_ristretto.RandomToken.decode_base64(token.token_value.encode("ascii"))
             for token
@@ -445,6 +452,7 @@ class RistrettoRedeemer(object):
             self._api_root.child(u"v1", u"redeem").to_text(),
             dumps({
                 u"redeemVoucher": voucher.number,
+                u"redeemCounter": counter,
                 u"redeemTokens": list(
                     token.encode_base64()
                     for token
@@ -649,7 +657,7 @@ class PaymentController(object):
                     voucher=voucher.number,
                 )
 
-    def _perform_redeem(self, voucher, random_tokens):
+    def _perform_redeem(self, voucher, counter, random_tokens):
         """
         Use the redeemer to redeem the given voucher and random tokens.
 
@@ -661,7 +669,7 @@ class PaymentController(object):
         d = bracket(
             lambda: setitem(self._active, voucher, self.store.now()),
             lambda: delitem(self._active, voucher),
-            lambda: self.redeemer.redeem(Voucher(voucher), random_tokens),
+            lambda: self.redeemer.redeemWithCounter(Voucher(voucher), counter, random_tokens),
         )
         d.addCallbacks(
             partial(self._redeemSuccess, voucher),
@@ -698,7 +706,14 @@ class PaymentController(object):
         if num_tokens is None:
             num_tokens = self.default_token_count
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
-        return self._perform_redeem(voucher, tokens)
+        # TODO: Actually count up from the voucher's current counter value to
+        # maxCounter instead of only passing 0 here.  Starting at 0 is fine
+        # for a new voucher but if we partially redeemed a voucher on a
+        # previous run and this call comes from `_check_pending_vouchers` then
+        # we should skip any already-redeemed counter values.
+        #
+        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
+        return self._perform_redeem(voucher, 0, tokens)
 
     def _redeemSuccess(self, voucher, result):
         """

@@ -343,6 +343,19 @@ def voucher_objects(states=voucher_states()):
     )
 
 
+def voucher_counters():
+    """
+    Build integers usable as counters in the voucher redemption process.
+    """
+    return integers(
+        min_value=0,
+        # This may or may not be the actual maximum value accepted by a
+        # PaymentServer.  If it is not exactly the maximum, it's probably at
+        # least in the same ballpark.
+        max_value=256,
+    )
+
+
 def byte_strings(label, length, entropy):
     """
     Build byte strings of the given length with at most the given amount of
