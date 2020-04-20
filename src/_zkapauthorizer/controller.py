@@ -707,6 +707,7 @@ class PaymentController(object):
             num_tokens = self.default_token_count
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
         # TODO: Actually count up from 0 to maxCounter instead of only passing 0 here.
+        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
         return self._perform_redeem(voucher, 0, tokens)
 
     def _redeemSuccess(self, voucher, result):
