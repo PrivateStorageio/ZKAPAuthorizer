@@ -60,6 +60,8 @@ from hypothesis import (
 from hypothesis.strategies import (
     integers,
     datetimes,
+    lists,
+    sampled_from,
 )
 from twisted.python.url import (
     URL,
@@ -73,6 +75,9 @@ from twisted.web.iweb import (
 from twisted.web.resource import (
     ErrorPage,
     Resource,
+)
+from twisted.web.http_headers import (
+    Headers,
 )
 from twisted.web.http import (
     UNSUPPORTED_MEDIA_TYPE,
@@ -614,7 +619,91 @@ class RistrettoRedemption(Resource):
         })
 
 
+class CheckRedemptionRequestTests(TestCase):
+    """
+    Tests for ``check_redemption_request``.
+    """
+    def test_content_type(self):
+        """
+        If the request content-type is not application/json, the response is
+        **Unsupported Media Type**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            b"{}",
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(UNSUPPORTED_MEDIA_TYPE),
+                ),
+            ),
+        )
+
+    def test_not_json(self):
+        """
+        If the request body cannot be decoded as json, the response is **Bad
+        Request**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            b"foo",
+            headers=Headers({u"content-type": [u"application/json"]}),
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(BAD_REQUEST),
+                ),
+            ),
+        )
+
+    @given(
+        lists(
+            sampled_from(
+                [u"redeemVoucher", u"redeemCounter", u"redeemTokens"],
+            ),
+            # Something must be missing if the length is no longer than 2
+            # because there are 3 required properties.
+            max_size=2,
+            unique=True,
+        ),
+    )
+    def test_missing_properties(self, properties):
+        """
+        If the JSON object in the request body does not include all the necessary
+        properties, the response is **Bad Request**.
+        """
+        issuer = UnpaidRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        d = treq.post(
+            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            dumps(dict.fromkeys(properties)),
+            headers=Headers({u"content-type": [u"application/json"]}),
+        )
+        self.assertThat(
+            d,
+            succeeded(
+                AfterPreprocessing(
+                    lambda response: response.code,
+                    Equals(BAD_REQUEST),
+                ),
+            ),
+        )
+
 def check_redemption_request(request):
+    """
+    Verify that the given request conforms to the redemption server's public
+    interface.
+    """
     if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
         return bad_content_type(request)
 
@@ -622,7 +711,11 @@ def check_redemption_request(request):
     content = request.content.read()
     request.content.seek(p)
 
-    request_body = loads(content)
+    try:
+        request_body = loads(content)
+    except ValueError:
+        return bad_request(request, None)
+
     expected_keys = {u"redeemVoucher", u"redeemCounter", u"redeemTokens"}
     actual_keys = set(request_body.keys())
     if expected_keys != actual_keys:
