@@ -706,7 +706,12 @@ class PaymentController(object):
         if num_tokens is None:
             num_tokens = self.default_token_count
         tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
-        # TODO: Actually count up from 0 to maxCounter instead of only passing 0 here.
+        # TODO: Actually count up from the voucher's current counter value to
+        # maxCounter instead of only passing 0 here.  Starting at 0 is fine
+        # for a new voucher but if we partially redeemed a voucher on a
+        # previous run and this call comes from `_check_pending_vouchers` then
+        # we should skip any already-redeemed counter values.
+        #
         # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
         return self._perform_redeem(voucher, 0, tokens)
 
