@@ -153,7 +153,7 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(model_Pending()),
+            Equals(model_Pending(counter=0)),
         )
 
     @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())

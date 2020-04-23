@@ -129,7 +129,7 @@ class VoucherStoreTests(TestCase):
             store.get(voucher),
             MatchesStructure(
                 number=Equals(voucher),
-                state=Equals(Pending()),
+                state=Equals(Pending(counter=0)),
                 created=Equals(now),
             ),
         )
@@ -148,7 +148,7 @@ class VoucherStoreTests(TestCase):
             MatchesStructure(
                 number=Equals(voucher),
                 created=Equals(now),
-                state=Equals(Pending()),
+                state=Equals(Pending(counter=0)),
             ),
         )
         self.assertThat(
