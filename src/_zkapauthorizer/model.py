@@ -211,7 +211,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count], [public-key]
+                [number], [created], [state], [finished], [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             WHERE
@@ -295,7 +295,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count], [public-key]
+                [number], [created], [state], [finished], [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             """,
@@ -637,6 +637,20 @@ def has_length(expected):
             )
     return validate_has_length
 
+def greater_than(expected):
+    def validate_relation(inst, attr, value):
+        if value > expected:
+            return None
+
+        raise ValueError(
+            "{name!r} must be greater than {expected}, instead it was {actual}".format(
+                name=attr.name,
+                expected=expected,
+                actual=value,
+            ),
+        )
+    return validate_relation
+
 
 @attr.s(frozen=True)
 class UnblindedToken(object):
@@ -708,14 +722,32 @@ class RandomToken(object):
     )
 
 
+def _counter_attribute():
+    return attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of((int, long)),
+            greater_than(-1),
+        ),
+    )
+
+
 @attr.s(frozen=True)
 class Pending(object):
+    """
+    The voucher has not yet been completely redeemed for ZKAPs.
+
+    :ivar int counter: The number of partial redemptions which have been
+        successfully performed for the voucher.
+    """
+    counter = _counter_attribute()
+
     def should_start_redemption(self):
         return True
 
     def to_json_v1(self):
         return {
             u"name": u"pending",
+            u"counter": self.counter,
         }
 
 
@@ -727,6 +759,7 @@ class Redeeming(object):
     progress.
     """
     started = attr.ib(validator=attr.validators.instance_of(datetime))
+    counter = _counter_attribute()
 
     def should_start_redemption(self):
         return False
@@ -821,7 +854,7 @@ class Error(object):
         }
 
 
-@attr.s
+@attr.s(frozen=True)
 class Voucher(object):
     """
     :ivar unicode number: The text string which gives this voucher its
@@ -845,13 +878,25 @@ class Voucher(object):
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
     )
-    state = attr.ib(default=Pending())
+    state = attr.ib(
+        default=Pending(counter=0),
+        validator=attr.validators.instance_of((
+            Pending,
+            Redeeming,
+            Redeemed,
+            DoubleSpend,
+            Unpaid,
+            Error,
+        )),
+    )
 
     @classmethod
     def from_row(cls, row):
         def state_from_row(state, row):
             if state == u"pending":
-                return Pending()
+                # TODO: The 0 here should be row[3] but I can't write a test
+                # to prove it yet.
+                return Pending(counter=0)
             if state == u"double-spend":
                 return DoubleSpend(
                     parse_datetime(row[0], delimiter=u" "),
@@ -888,10 +933,11 @@ class Voucher(object):
         state_json = values[u"state"]
         state_name = state_json[u"name"]
         if state_name == u"pending":
-            state = Pending()
+            state = Pending(counter=state_json[u"counter"])
         elif state_name == u"redeeming":
             state = Redeeming(
                 started=parse_datetime(state_json[u"started"]),
+                counter=0,
             )
         elif state_name == u"double-spend":
             state = DoubleSpend(

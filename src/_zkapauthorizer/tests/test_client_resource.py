@@ -795,6 +795,7 @@ class VoucherTests(TestCase):
                 created=Equals(now),
                 state=Equals(Redeeming(
                     started=now,
+                    counter=0,
                 )),
             ),
         )

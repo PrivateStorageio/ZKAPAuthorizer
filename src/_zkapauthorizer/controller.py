@@ -581,9 +581,9 @@ class PaymentController(object):
         redeeming a voucher, if no other count is given when the redemption is
         started.
 
-    :ivar dict[unicode, datetime] _active: A mapping from voucher identifiers
-        which currently have redemption attempts in progress to timestamps
-        when the attempt began.
+    :ivar dict[unicode, Redeeming] _active: A mapping from voucher identifiers
+        which currently have redemption attempts in progress to a
+        ``Redeeming`` state representing the attempt.
 
     :ivar dict[unicode, datetime] _error: A mapping from voucher identifiers
         which have recently failed with an unrecognized, transient error.
@@ -664,18 +664,32 @@ class PaymentController(object):
         This will not persist the voucher or random tokens but it will persist
         the result.
         """
+        if not isinstance(voucher.state, model_Pending):
+            raise ValueError(
+                "Cannot redeem voucher in state {} instead of Pending.".format(
+                    voucher.state,
+                ),
+            )
+
         # Ask the redeemer to do the real task of redemption.
         self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
         d = bracket(
-            lambda: setitem(self._active, voucher, self.store.now()),
-            lambda: delitem(self._active, voucher),
-            lambda: self.redeemer.redeemWithCounter(Voucher(voucher), counter, random_tokens),
+            lambda: setitem(
+                self._active,
+                voucher.number,
+                model_Redeeming(
+                    started=self.store.now(),
+                    counter=voucher.state.counter,
+                ),
+            ),
+            lambda: delitem(self._active, voucher.number),
+            lambda: self.redeemer.redeemWithCounter(voucher.number, counter, random_tokens),
         )
         d.addCallbacks(
-            partial(self._redeemSuccess, voucher),
-            partial(self._redeemFailure, voucher),
+            partial(self._redeemSuccess, voucher.number),
+            partial(self._redeemFailure, voucher.number),
         )
-        d.addErrback(partial(self._finalRedeemError, voucher))
+        d.addErrback(partial(self._finalRedeemError, voucher.number))
         return d
 
     def _get_random_tokens_for_voucher(self, voucher, num_tokens):
@@ -713,7 +727,7 @@ class PaymentController(object):
         # we should skip any already-redeemed counter values.
         #
         # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
-        return self._perform_redeem(voucher, 0, tokens)
+        return self._perform_redeem(self.store.get(voucher), 0, tokens)
 
     def _redeemSuccess(self, voucher, result):
         """
@@ -776,7 +790,7 @@ class PaymentController(object):
             if voucher.number in self._active:
                 return attr.evolve(
                     voucher,
-                    state=model_Redeeming(started=self._active[voucher.number]),
+                    state=self._active[voucher.number],
                 )
             if voucher.number in self._unpaid:
                 return attr.evolve(

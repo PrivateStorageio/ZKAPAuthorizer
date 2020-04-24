@@ -112,6 +112,7 @@ from ..controller import (
 from ..model import (
     UnblindedToken,
     Pending as model_Pending,
+    Redeeming as model_Redeeming,
     DoubleSpend as model_DoubleSpend,
     Redeemed as model_Redeemed,
     Unpaid as model_Unpaid,
@@ -153,7 +154,30 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(model_Pending()),
+            Equals(model_Pending(counter=0)),
+        )
+
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_redeeming(self, get_config, now, voucher):
+        """
+        A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
+        working on redeeming it.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            NonRedeemer(),
+            default_token_count=10,
+        )
+        controller.redeem(voucher)
+
+        controller_voucher = controller.get_voucher(voucher)
+        self.assertThat(
+            controller_voucher.state,
+            Equals(model_Redeeming(
+                started=now,
+                counter=0,
+            )),
         )
 
     @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())

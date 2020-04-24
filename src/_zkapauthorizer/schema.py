@@ -131,4 +131,11 @@ _UPGRADES = {
         ALTER TABLE [vouchers] ADD COLUMN [public-key] text
         """,
     ],
+
+    2: [
+        """
+        -- Keep track of progress through redemption of each voucher.
+        ALTER TABLE [vouchers] ADD COLUMN [counter] integer DEFAULT 0
+        """,
+    ],
 }

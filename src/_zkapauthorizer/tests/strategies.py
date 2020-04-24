@@ -310,10 +310,13 @@ def redeemed_states():
 
 def voucher_states():
     """
-    Build unicode strings giving states a Voucher can be in.
+    Build Python objects representing states a Voucher can be in.
     """
     return one_of(
-        just(Pending()),
+        builds(
+            Pending,
+            integers(min_value=0),
+        ),
         redeemed_states(),
         builds(
             DoubleSpend,
