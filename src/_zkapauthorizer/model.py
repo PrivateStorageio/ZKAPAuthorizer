@@ -722,6 +722,15 @@ class RandomToken(object):
     )
 
 
+def _counter_attribute():
+    return attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of((int, long)),
+            greater_than(-1),
+        ),
+    )
+
+
 @attr.s(frozen=True)
 class Pending(object):
     """
@@ -730,12 +739,7 @@ class Pending(object):
     :ivar int counter: The number of partial redemptions which have been
         successfully performed for the voucher.
     """
-    counter = attr.ib(
-        validator=attr.validators.and_(
-            attr.validators.instance_of((int, long)),
-            greater_than(-1),
-        ),
-    )
+    counter = _counter_attribute()
 
     def should_start_redemption(self):
         return True
@@ -755,6 +759,7 @@ class Redeeming(object):
     progress.
     """
     started = attr.ib(validator=attr.validators.instance_of(datetime))
+    counter = _counter_attribute()
 
     def should_start_redemption(self):
         return False
@@ -849,7 +854,7 @@ class Error(object):
         }
 
 
-@attr.s
+@attr.s(frozen=True)
 class Voucher(object):
     """
     :ivar unicode number: The text string which gives this voucher its
@@ -873,7 +878,17 @@ class Voucher(object):
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
     )
-    state = attr.ib(default=Pending(counter=0))
+    state = attr.ib(
+        default=Pending(counter=0),
+        validator=attr.validators.instance_of((
+            Pending,
+            Redeeming,
+            Redeemed,
+            DoubleSpend,
+            Unpaid,
+            Error,
+        )),
+    )
 
     @classmethod
     def from_row(cls, row):
@@ -922,6 +937,7 @@ class Voucher(object):
         elif state_name == u"redeeming":
             state = Redeeming(
                 started=parse_datetime(state_json[u"started"]),
+                counter=0,
             )
         elif state_name == u"double-spend":
             state = DoubleSpend(
