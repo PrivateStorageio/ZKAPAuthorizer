@@ -138,4 +138,12 @@ _UPGRADES = {
         ALTER TABLE [vouchers] ADD COLUMN [counter] integer DEFAULT 0
         """,
     ],
+
+    3: [
+        """
+        -- Reference to the counter these tokens go with.
+        ALTER TABLE [tokens] ADD COLUMN [counter] integer NOT NULL DEFAULT 0
+        """,
+
+    ],
 }

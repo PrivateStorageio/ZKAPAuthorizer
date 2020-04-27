@@ -696,11 +696,18 @@ class PaymentController(object):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
         """
+        counter = 0
         def get_tokens():
-            self._log.info("Generating random tokens for a voucher ({voucher}).", voucher=voucher)
-            return self.redeemer.random_tokens_for_voucher(Voucher(voucher), num_tokens)
+            self._log.info(
+                "Generating random tokens for a voucher ({voucher}).",
+                voucher=voucher,
+            )
+            return self.redeemer.random_tokens_for_voucher(
+                Voucher(voucher),
+                num_tokens,
+            )
 
-        return self.store.add(voucher, get_tokens)
+        return self.store.add(voucher, counter, get_tokens)
 
     def redeem(self, voucher, num_tokens=None):
         """
