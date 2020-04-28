@@ -416,7 +416,7 @@ class RistrettoRedeemerTests(TestCase):
         issuer = RistrettoRedemption(signing_key)
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -450,7 +450,7 @@ class RistrettoRedeemerTests(TestCase):
         issuer = AlreadySpentRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -477,7 +477,7 @@ class RistrettoRedeemerTests(TestCase):
         issuer = UnpaidRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -510,7 +510,7 @@ class RistrettoRedeemerTests(TestCase):
 
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -540,7 +540,7 @@ class RistrettoRedeemerTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
 
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,

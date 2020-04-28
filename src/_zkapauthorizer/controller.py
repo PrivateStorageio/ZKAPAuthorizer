@@ -137,7 +137,7 @@ class IRedeemer(Interface):
     """
     An ``IRedeemer`` can exchange a voucher for one or more passes.
     """
-    def random_tokens_for_voucher(voucher, count):
+    def random_tokens_for_voucher(voucher, counter, count):
         """
         Generate a number of random tokens to use in the redemption process for
         the given voucher.
@@ -212,8 +212,8 @@ class NonRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
-    def random_tokens_for_voucher(self, voucher, count):
-        return dummy_random_tokens(voucher, count)
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
         # Don't try to redeem them.
@@ -242,8 +242,8 @@ class ErrorRedeemer(object):
         ).decode("ascii")
         return cls(details)
 
-    def random_tokens_for_voucher(self, voucher, count):
-        return dummy_random_tokens(voucher, count)
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(Exception(self.details))
@@ -265,8 +265,8 @@ class DoubleSpendRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
-    def random_tokens_for_voucher(self, voucher, count):
-        return dummy_random_tokens(voucher, count)
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(AlreadySpent(voucher))
@@ -283,21 +283,21 @@ class UnpaidRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
-    def random_tokens_for_voucher(self, voucher, count):
-        return dummy_random_tokens(voucher, count)
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
         return fail(Unpaid(voucher))
 
 
-def dummy_random_tokens(voucher, count):
+def dummy_random_tokens(voucher, counter, count):
     v = urlsafe_b64decode(voucher.number.encode("ascii"))
     def dummy_random_token(n):
         return RandomToken(
             # Padding is 96 (random token length) - 32 (decoded voucher
-            # length)
+            # length) - 4 (fixed-width counter)
             b64encode(
-                v + u"{:0>64}".format(n).encode("ascii"),
+                v + u"{:0>4}{:0>60}".format(counter, n).encode("ascii"),
             ).decode("ascii"),
         )
     return list(
@@ -321,12 +321,12 @@ class DummyRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
-    def random_tokens_for_voucher(self, voucher, count):
+    def random_tokens_for_voucher(self, voucher, counter, count):
         """
         Generate some number of random tokens to submit along with a voucher for
         redemption.
         """
-        return dummy_random_tokens(voucher, count)
+        return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
         """
@@ -440,7 +440,7 @@ class RistrettoRedeemer(object):
             URL.from_text(configured_issuer),
         )
 
-    def random_tokens_for_voucher(self, voucher, count):
+    def random_tokens_for_voucher(self, voucher, counter, count):
         return list(
             RandomToken(
                 challenge_bypass_ristretto.RandomToken.create().encode_base64().decode("ascii"),
@@ -748,6 +748,7 @@ class PaymentController(object):
             )
             return self.redeemer.random_tokens_for_voucher(
                 Voucher(voucher),
+                counter,
                 num_tokens,
             )
 
