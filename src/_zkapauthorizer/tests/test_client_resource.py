@@ -78,6 +78,7 @@ from fixtures import (
 from hypothesis import (
     given,
     note,
+    assume,
 )
 from hypothesis.strategies import (
     one_of,
@@ -155,7 +156,7 @@ from .matchers import (
 )
 
 # A small number of tokens to work with in the tests.
-NUM_TOKENS = 10
+NUM_TOKENS = 100
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
@@ -367,6 +368,7 @@ class UnblindedTokenTests(TestCase):
         root = root_from_config(config, datetime.now)
 
         if num_tokens:
+            assume(num_tokens >= root.controller.num_redemption_groups)
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -401,6 +403,7 @@ class UnblindedTokenTests(TestCase):
         root = root_from_config(config, datetime.now)
 
         if num_tokens:
+            assume(num_tokens >= root.controller.num_redemption_groups)
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -420,7 +423,10 @@ class UnblindedTokenTests(TestCase):
         )
         self.assertThat(
             requesting,
-            succeeded_with_unblinded_tokens(num_tokens, min(num_tokens, limit)),
+            succeeded_with_unblinded_tokens(
+                num_tokens,
+                min(num_tokens, limit),
+            ),
         )
 
     @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), text(max_size=64))
@@ -435,6 +441,7 @@ class UnblindedTokenTests(TestCase):
         root = root_from_config(config, datetime.now)
 
         if num_tokens:
+            assume(num_tokens >= root.controller.num_redemption_groups)
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -499,6 +506,8 @@ class UnblindedTokenTests(TestCase):
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config, datetime.now)
+
+        assume(num_tokens >= root.controller.num_redemption_groups)
 
         # Put in a number of tokens with which to test.
         redeeming = root.controller.redeem(voucher, num_tokens)
