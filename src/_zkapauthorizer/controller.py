@@ -145,6 +145,8 @@ class IRedeemer(Interface):
         :param Voucher voucher: The voucher the tokens will be associated
             with.
 
+        :param int counter: See ``redeemWithCounter``.
+
         :param int count: The number of random tokens to generate.
 
         :return list[RandomToken]: The generated tokens.  Random tokens must
@@ -201,6 +203,26 @@ class IRedeemer(Interface):
             tokens.  There is one pass in the resulting list for each unblinded
             token in ``unblinded_tokens``.
         """
+
+
+@attr.s
+@implementer(IRedeemer)
+class IndexedRedeemer(object):
+    """
+    A ``IndexedRedeemer`` delegates redemption to a redeemer chosen to
+    correspond to the redemption counter given.
+    """
+    redeemers = attr.ib()
+
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
+
+    def redeemWithCounter(self, voucher, counter, random_tokens):
+        return self.redeemers[counter].redeemWithCounter(
+            voucher,
+            counter,
+            random_tokens,
+        )
 
 
 @implementer(IRedeemer)
@@ -636,12 +658,23 @@ class PaymentController(object):
         which have recently failed a redemption attempt due to an unpaid
         response from the redemption server to timestamps when the failure was
         observed.
+
+    :ivar int num_redemption_groups: The number of groups into which to divide
+        tokens during the redemption process, with each group being redeemed
+        separately from the rest.  This value needs to agree with the value
+        the PaymentServer is configured with.
+
+        TODO: Retrieve this value from the PaymentServer or from the
+        ZKAPAuthorizer configuration instead of just hard-coding a duplicate
+        value in this implementation.
     """
     _log = Logger()
 
     store = attr.ib()
     redeemer = attr.ib()
     default_token_count = attr.ib()
+
+    num_redemption_groups = attr.ib(default=16)
 
     _clock = attr.ib(
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
@@ -730,17 +763,16 @@ class PaymentController(object):
             lambda: self.redeemer.redeemWithCounter(voucher.number, counter, random_tokens),
         )
         d.addCallbacks(
-            partial(self._redeemSuccess, voucher.number),
-            partial(self._redeemFailure, voucher.number),
+            partial(self._redeem_success, voucher.number, counter),
+            partial(self._redeem_failure, voucher.number),
         )
-        d.addErrback(partial(self._finalRedeemError, voucher.number))
+        d.addErrback(partial(self._final_redeem_error, voucher.number))
         return d
 
-    def _get_random_tokens_for_voucher(self, voucher, num_tokens):
+    def _get_random_tokens_for_voucher(self, voucher, counter, num_tokens):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
         """
-        counter = 0
         def get_tokens():
             self._log.info(
                 "Generating random tokens for a voucher ({voucher}).",
@@ -754,34 +786,46 @@ class PaymentController(object):
 
         return self.store.add(voucher, counter, get_tokens)
 
+    @inlineCallbacks
     def redeem(self, voucher, num_tokens=None):
         """
         :param unicode voucher: A voucher to redeem.
 
         :param int num_tokens: A number of tokens to redeem.
         """
-        # Pre-generate the random tokens to use when redeeming the voucher.
-        # These are persisted with the voucher so the redemption can be made
-        # idempotent.  We don't want to lose the value if we fail after the
-        # server deems the voucher redeemed but before we persist the result.
-        # With a stable set of tokens, we can re-submit them and the server
-        # can re-sign them without fear of issuing excess passes.  Whether the
-        # server signs a given set of random tokens once or many times, the
-        # number of passes that can be constructed is still only the size of
-        # the set of random tokens.
         if num_tokens is None:
             num_tokens = self.default_token_count
-        tokens = self._get_random_tokens_for_voucher(voucher, num_tokens)
+
         # TODO: Actually count up from the voucher's current counter value to
-        # maxCounter instead of only passing 0 here.  Starting at 0 is fine
-        # for a new voucher but if we partially redeemed a voucher on a
-        # previous run and this call comes from `_check_pending_vouchers` then
-        # we should skip any already-redeemed counter values.
+        # num_redemption_groups instead of only passing 0 here.  Starting at 0
+        # is fine for a new voucher but if we partially redeemed a voucher on
+        # a previous run and this call comes from `_check_pending_vouchers`
+        # then we should skip any already-redeemed counter values.
         #
         # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
-        return self._perform_redeem(self.store.get(voucher), 0, tokens)
+        for counter in range(0, self.num_redemption_groups):
+            # Pre-generate the random tokens to use when redeeming the voucher.
+            # These are persisted with the voucher so the redemption can be made
+            # idempotent.  We don't want to lose the value if we fail after the
+            # server deems the voucher redeemed but before we persist the result.
+            # With a stable set of tokens, we can re-submit them and the server
+            # can re-sign them without fear of issuing excess passes.  Whether the
+            # server signs a given set of random tokens once or many times, the
+            # number of passes that can be constructed is still only the size of
+            # the set of random tokens.
+            token_count = token_count_for_group(self.num_redemption_groups, num_tokens, counter)
+            tokens = self._get_random_tokens_for_voucher(voucher, counter, token_count)
 
-    def _redeemSuccess(self, voucher, result):
+            # Reload state before each iteration.  We expect it to change each time.
+            voucher_obj = self.store.get(voucher)
+
+            if not voucher_obj.state.should_start_redemption():
+                # An earlier iteration may have encountered a fatal error.
+                break
+
+            yield self._perform_redeem(voucher_obj, counter, tokens)
+
+    def _redeem_success(self, voucher, counter, result):
         """
         Update the database state to reflect that a voucher was redeemed and to
         store the resulting unblinded tokens (which can be used to construct
@@ -795,9 +839,10 @@ class PaymentController(object):
             voucher,
             result.public_key,
             result.unblinded_tokens,
+            completed=(counter + 1 == self.num_redemption_groups),
         )
 
-    def _redeemFailure(self, voucher, reason):
+    def _redeem_failure(self, voucher, reason):
         if reason.check(AlreadySpent):
             self._log.error(
                 "Voucher {voucher} reported as already spent during redemption.",
@@ -822,7 +867,7 @@ class PaymentController(object):
             )
         return None
 
-    def _finalRedeemError(self, voucher, reason):
+    def _final_redeem_error(self, voucher, reason):
         self._log.failure("Redeeming random tokens for a voucher ({voucher}) encountered error.", reason, voucher=voucher)
         return None
 

@@ -52,6 +52,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import (
     succeeded,
+    has_no_result,
     failed,
 )
 
@@ -106,6 +107,7 @@ from ..controller import (
     DoubleSpendRedeemer,
     UnpaidRedeemer,
     RistrettoRedeemer,
+    IndexedRedeemer,
     PaymentController,
     AlreadySpent,
     Unpaid,
@@ -230,26 +232,47 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending(counter=0)),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_redeeming(self, get_config, now, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters())
+    def test_redeeming(self, get_config, now, voucher, num_successes):
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
-        working on redeeming it.
+        working on redeeming it with a counter value that reflects the number
+        of successful partial redemptions so far completed.
         """
+        # The voucher counter can be zero (no tries yet succeeded).  We want
+        # at least *one* run through so we'll bump this up to be sure we get
+        # that.
+        counter = num_successes + 1
+
+        success_redeemers = [DummyRedeemer()] * num_successes
+        hang_redeemers = [NonRedeemer()]
+        redeemers = success_redeemers + hang_redeemers
+        # A redeemer which will succeed `num_successes` times and then hang on
+        # the next attempt.
+        redeemer = IndexedRedeemer(redeemers)
+
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
-            NonRedeemer(),
-            default_token_count=100,
+            redeemer,
+            # This will give us one ZKAP per attempt.
+            default_token_count=counter,
+            # Require more success than we're going to get so it doesn't
+            # finish.
+            num_redemption_groups=counter,
         )
-        controller.redeem(voucher)
+
+        self.assertThat(
+            controller.redeem(voucher),
+            has_no_result(),
+        )
 
         controller_voucher = controller.get_voucher(voucher)
         self.assertThat(
             controller_voucher.state,
             Equals(model_Redeeming(
                 started=now,
-                counter=0,
+                counter=num_successes,
             )),
         )
 

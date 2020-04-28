@@ -418,12 +418,17 @@ class ClientPluginTests(TestCase):
             b"tub.port",
         )
 
+        # Give it enough for the allocate_buckets call below.
+        token_count = required_passes(BYTES_PER_PASS, [size] * len(sharenums))
+        # And few enough redemption groups given the number of tokens.
+        num_redemption_groups = token_count
+
         store = VoucherStore.from_node_config(node_config, lambda: now)
         controller = PaymentController(
             store,
             DummyRedeemer(),
-            # Give it enough for the allocate_buckets call below.
-            required_passes(BYTES_PER_PASS, [size] * len(sharenums)),
+            default_token_count=token_count,
+            num_redemption_groups=num_redemption_groups,
         )
         # Get a token inserted into the store.
         redeeming = controller.redeem(voucher)

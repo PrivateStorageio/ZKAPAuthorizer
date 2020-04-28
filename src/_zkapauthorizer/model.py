@@ -341,7 +341,7 @@ class VoucherStore(object):
         self._insert_unblinded_tokens(cursor, unblinded_tokens)
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -354,15 +354,23 @@ class VoucherStore(object):
 
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
             store.
+
+        :param bool completed: ``True`` if redemption of this voucher is now
+            complete, ``False`` otherwise.
         """
-        voucher_state = u"redeemed"
+        if  completed:
+            voucher_state = u"redeemed"
+        else:
+            voucher_state = u"pending"
+
         cursor.execute(
             """
             UPDATE [vouchers]
             SET [state] = ?
-              , [token-count] = ?
+              , [token-count] = COALESCE([token-count], 0) + ?
               , [finished] = ?
               , [public-key] = ?
+              , [counter] = [counter] + 1
             WHERE [number] = ?
             """,
             (
@@ -901,9 +909,7 @@ class Voucher(object):
     def from_row(cls, row):
         def state_from_row(state, row):
             if state == u"pending":
-                # TODO: The 0 here should be row[3] but I can't write a test
-                # to prove it yet.
-                return Pending(counter=0)
+                return Pending(counter=row[3])
             if state == u"double-spend":
                 return DoubleSpend(
                     parse_datetime(row[0], delimiter=u" "),
