@@ -41,6 +41,10 @@ from base64 import (
     b64encode,
     b64decode,
 )
+from hashlib import (
+    sha256,
+)
+
 import attr
 
 from zope.interface import (
@@ -346,11 +350,16 @@ class DummyRedeemer(object):
 
     def tokens_to_passes(self, message, unblinded_tokens):
         def token_to_pass(token):
-            # Smear the unblinded token value across the two new values we
-            # need.
-            bs = b64decode(token.unblinded_token.encode("ascii"))
-            preimage = bs[:48] + b"x" * 16
-            signature = bs[48:] + b"y" * 16
+            # Generate distinct strings based on the unblinded token which we
+            # can include in the resulting Pass.  This ensures the pass values
+            # will be unique if and only if the unblinded tokens were unique
+            # (barring improbable hash collisions).
+            token_digest = sha256(
+                token.unblinded_token.encode("ascii")
+            ).hexdigest().encode("ascii")
+
+            preimage = b"preimage-" + token_digest[len(b"preimage-"):]
+            signature = b"signature-" + token_digest[len(b"signature-"):]
             return Pass(
                 b64encode(preimage).decode("ascii"),
                 b64encode(signature).decode("ascii"),
