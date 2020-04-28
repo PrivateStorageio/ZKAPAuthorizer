@@ -147,7 +147,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             NonRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
         controller.redeem(voucher)
 
@@ -167,7 +167,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             NonRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
         controller.redeem(voucher)
 
@@ -189,7 +189,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DummyRedeemer(public_key),
-            default_token_count=10,
+            default_token_count=100,
         )
         controller.redeem(voucher)
 
@@ -198,7 +198,7 @@ class PaymentControllerTests(TestCase):
             persisted_voucher.state,
             Equals(model_Redeemed(
                 finished=now,
-                token_count=10,
+                token_count=100,
                 public_key=public_key,
             )),
         )
@@ -213,7 +213,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
         controller.redeem(voucher)
 
@@ -239,7 +239,7 @@ class PaymentControllerTests(TestCase):
         unpaid_controller = PaymentController(
             store,
             UnpaidRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
         unpaid_controller.redeem(voucher)
 
@@ -255,7 +255,7 @@ class PaymentControllerTests(TestCase):
         success_controller = PaymentController(
             store,
             DummyRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
 
         self.assertThat(
@@ -284,7 +284,7 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             UnpaidRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
             clock=clock,
         )
         controller.redeem(voucher)
