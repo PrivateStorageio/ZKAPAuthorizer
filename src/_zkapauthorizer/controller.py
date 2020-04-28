@@ -564,6 +564,41 @@ class RistrettoRedeemer(object):
         return passes
 
 
+def token_count_for_group(num_groups, total_tokens, group_number):
+    """
+    Determine a number of tokens to retrieve for a particular group out of an
+    overall redemption attempt.
+
+    :param int num_groups: The total number of groups the tokens will be
+        divided into.
+
+    :param int total_tokens: The total number of tokens to divide up.
+
+    :param int group_number: The particular group for which to determine a
+        token count.
+
+    :return int: A number of tokens to redeem in this group.
+    """
+    if total_tokens < num_groups:
+        raise ValueError(
+            "Cannot distribute {} tokens among {} groups coherently.".format(
+                total_tokens,
+                num_groups,
+            ),
+        )
+    if group_number >= num_groups or group_number < 0:
+        raise ValueError(
+            "Group number {} is out of valid range [0..{})".format(
+                group_number,
+                num_groups,
+            ),
+        )
+    group_size, remainder = divmod(total_tokens, num_groups)
+    if group_number < remainder:
+        return group_size + 1
+    return group_size
+
+
 @attr.s
 class PaymentController(object):
     """

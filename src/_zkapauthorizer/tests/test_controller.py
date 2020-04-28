@@ -18,6 +18,7 @@ Tests for ``_zkapauthorizer.controller``.
 
 from __future__ import (
     absolute_import,
+    division,
 )
 
 from json import (
@@ -56,6 +57,7 @@ from testtools.twistedsupport import (
 
 from hypothesis import (
     given,
+    assume,
 )
 from hypothesis.strategies import (
     integers,
@@ -107,6 +109,7 @@ from ..controller import (
     PaymentController,
     AlreadySpent,
     Unpaid,
+    token_count_for_group,
 )
 
 from ..model import (
@@ -123,15 +126,85 @@ from .strategies import (
     vouchers,
     voucher_objects,
     voucher_counters,
+    redemption_group_counts,
     dummy_ristretto_keys,
     clocks,
 )
 from .matchers import (
     Provides,
+    raises,
+    between,
 )
 from .fixtures import (
     TemporaryVoucherStore,
 )
+
+
+class TokenCountForGroupTests(TestCase):
+    """
+    Tests for ``token_count_for_group``.
+    """
+    @given(
+        integers(),
+        integers(),
+        integers(),
+    )
+    def test_out_of_bounds(self, num_groups, total_tokens, group_number):
+        """
+        If there are not enough tokens so that each group gets at least one or if
+        the indicated group number does properly identify a group from the
+        range then ``ValueError`` is raised.
+        """
+        assume(
+            group_number < 0 or
+            group_number >= num_groups or
+            total_tokens < num_groups
+        )
+        self.assertThat(
+            lambda: token_count_for_group(num_groups, total_tokens, group_number),
+            raises(ValueError),
+        )
+
+    @given(
+        redemption_group_counts(),
+        integers(min_value=1),
+    )
+    def test_sum(self, num_groups, total_tokens):
+        """
+        The sum of the token count for all groups equals the requested total
+        tokens.
+        """
+        assume(total_tokens >= num_groups)
+        self.assertThat(
+            sum(
+                token_count_for_group(num_groups, total_tokens, group_number)
+                for group_number
+                in range(num_groups)
+            ),
+            Equals(total_tokens),
+        )
+
+    @given(
+        redemption_group_counts(),
+        integers(min_value=1),
+    )
+    def test_well_distributed(self, num_groups, total_tokens):
+        """
+        Tokens are distributed roughly evenly across all group numbers.
+        """
+        assume(total_tokens >= num_groups)
+
+        lower_bound = total_tokens // num_groups
+        upper_bound = total_tokens // num_groups + 1
+
+        self.assertThat(
+            list(
+                token_count_for_group(num_groups, total_tokens, group_number)
+                for group_number
+                in range(num_groups)
+            ),
+            AllMatch(between(lower_bound, upper_bound)),
+        )
 
 class PaymentControllerTests(TestCase):
     """
