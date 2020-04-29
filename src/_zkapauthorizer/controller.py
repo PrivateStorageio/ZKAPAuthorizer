@@ -212,12 +212,20 @@ class IndexedRedeemer(object):
     A ``IndexedRedeemer`` delegates redemption to a redeemer chosen to
     correspond to the redemption counter given.
     """
+    _log = Logger()
+
     redeemers = attr.ib()
 
     def random_tokens_for_voucher(self, voucher, counter, count):
         return dummy_random_tokens(voucher, counter, count)
 
     def redeemWithCounter(self, voucher, counter, random_tokens):
+        self._log.info(
+            "IndexedRedeemer redeeming {voucher}[{counter}] using {delegate}.",
+            voucher=voucher,
+            counter=counter,
+            delegate=self.redeemers[counter],
+        )
         return self.redeemers[counter].redeemWithCounter(
             voucher,
             counter,
@@ -796,14 +804,30 @@ class PaymentController(object):
         if num_tokens is None:
             num_tokens = self.default_token_count
 
-        # TODO: Actually count up from the voucher's current counter value to
-        # num_redemption_groups instead of only passing 0 here.  Starting at 0
-        # is fine for a new voucher but if we partially redeemed a voucher on
-        # a previous run and this call comes from `_check_pending_vouchers`
-        # then we should skip any already-redeemed counter values.
-        #
-        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/124
-        for counter in range(0, self.num_redemption_groups):
+        # Try to get an existing voucher object for the given number.
+        try:
+            voucher_obj = self.store.get(voucher)
+        except KeyError:
+            # This is our first time dealing with this number.
+            counter_start = 0
+        else:
+            # Determine the starting point from the state.
+            if voucher_obj.state.should_start_redemption():
+                counter_start = voucher_obj.state.counter
+            else:
+                raise ValueError(
+                    "Cannot redeem voucher in state {}.".format(
+                        voucher_obj.state,
+                    ),
+                )
+
+        self._log.info(
+            "Starting redemption of {voucher}[{start}..{end}]",
+            voucher=voucher,
+            start=counter_start,
+            end=self.num_redemption_groups,
+        )
+        for counter in range(counter_start, self.num_redemption_groups):
             # Pre-generate the random tokens to use when redeeming the voucher.
             # These are persisted with the voucher so the redemption can be made
             # idempotent.  We don't want to lose the value if we fail after the

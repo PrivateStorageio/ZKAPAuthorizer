@@ -209,6 +209,7 @@ class TokenCountForGroupTests(TestCase):
             AllMatch(between(lower_bound, upper_bound)),
         )
 
+
 class PaymentControllerTests(TestCase):
     """
     Tests for ``PaymentController``.
@@ -247,14 +248,10 @@ class PaymentControllerTests(TestCase):
         # at least *one* run through so we'll bump this up to be sure we get
         # that.
         counter = num_successes + 1
-
-        success_redeemers = [DummyRedeemer()] * num_successes
-        hang_redeemers = [NonRedeemer()]
-        redeemers = success_redeemers + hang_redeemers
-        # A redeemer which will succeed `num_successes` times and then hang on
-        # the next attempt.
-        redeemer = IndexedRedeemer(redeemers)
-
+        redeemer = IndexedRedeemer(
+            [DummyRedeemer()] * num_successes +
+            [NonRedeemer()],
+        )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
@@ -278,6 +275,84 @@ class PaymentControllerTests(TestCase):
                 started=now,
                 counter=num_successes,
             )),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        voucher_counters(),
+        voucher_counters().map(lambda v: v + 1),
+    )
+    def test_restart_redeeming(self, get_config, now, voucher, before_restart, after_restart):
+        """
+        If some redemption groups for a voucher have succeeded but the process is
+        interrupted, redemption begins at the first incomplete redemption
+        group when it resumes.
+
+        :parm int before_restart: The number of redemption groups which will
+            be allowed to succeed before making the redeemer hang.  Redemption
+            will then be required to begin again from only database state.
+
+        :param int after_restart: The number of redemption groups which will
+            be required to succeed after restarting the process.
+        """
+        # Divide redemption into some groups that will succeed before a
+        # restart and some that must succeed after a restart.
+        num_redemption_groups = before_restart + after_restart
+        # Give it enough tokens so each group can have one.
+        num_tokens = num_redemption_groups
+
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+
+        def first_try():
+            controller = PaymentController(
+                store,
+                # It will let `before_restart` attempts succeed before hanging.
+                IndexedRedeemer(
+                    [DummyRedeemer()] * before_restart +
+                    [NonRedeemer()] * after_restart,
+                ),
+                default_token_count=num_tokens,
+                num_redemption_groups=num_redemption_groups,
+            )
+            self.assertThat(
+                controller.redeem(voucher),
+                has_no_result(),
+            )
+
+        def second_try():
+            # The controller will find the voucher in the voucher store and
+            # restart redemption on its own.
+            return PaymentController(
+                store,
+                # It will succeed only for the higher counter values which did
+                # not succeed or did not get started on the first try.
+                IndexedRedeemer(
+                    [NonRedeemer()] * before_restart +
+                    [DummyRedeemer()] * after_restart,
+                ),
+                # TODO: It shouldn't need a default token count.  It should
+                # respect whatever was given on the first redemption attempt.
+                default_token_count=num_tokens,
+                # The number of redemption groups must not change for
+                # redemption of a particular voucher.
+                num_redemption_groups=num_redemption_groups,
+            )
+
+        first_try()
+        controller = second_try()
+
+        persisted_voucher = controller.get_voucher(voucher)
+        self.assertThat(
+            persisted_voucher.state,
+            Equals(
+                model_Redeemed(
+                    finished=now,
+                    token_count=num_tokens,
+                    public_key=None,
+                ),
+            ),
         )
 
     @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())
