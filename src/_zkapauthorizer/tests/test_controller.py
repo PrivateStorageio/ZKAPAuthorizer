@@ -478,16 +478,15 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_alreadyspent(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_denied_alreadyspent(self, voucher, counter, extra_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has already been spent, ``RistrettoRedeem``
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``AlreadySpent``.
         """
-        assume(num_tokens >= counter)
-
+        num_tokens = counter + extra_tokens
         issuer = AlreadySpentRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
@@ -507,16 +506,15 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_unpaid(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_denied_unpaid(self, voucher, counter, extra_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has not been paid for, ``RistrettoRedeem``
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``Unpaid``.
         """
-        assume(num_tokens >= counter)
-
+        num_tokens = counter + extra_tokens
         issuer = UnpaidRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
@@ -536,15 +534,14 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_bad_ristretto_redemption(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_bad_ristretto_redemption(self, voucher, counter, extra_tokens):
         """
         If the issuer returns a successful result with an invalid proof then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
         ``Failure`` wrapping ``SecurityException``.
         """
-        assume(num_tokens >= counter)
-
+        num_tokens = counter + extra_tokens
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
 
@@ -572,16 +569,14 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_ristretto_pass_construction(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_ristretto_pass_construction(self, voucher, counter, extra_tokens):
         """
         The passes constructed using unblinded tokens and messages pass the
         Ristretto verification check.
         """
-        assume(num_tokens >= counter)
-
+        num_tokens = counter + extra_tokens
         message = b"hello world"
-
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
         treq = treq_for_loopback_ristretto(issuer)
