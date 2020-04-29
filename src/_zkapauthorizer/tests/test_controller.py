@@ -486,6 +486,8 @@ class RistrettoRedeemerTests(TestCase):
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``AlreadySpent``.
         """
+        assume(num_tokens >= counter)
+
         issuer = AlreadySpentRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
@@ -513,6 +515,8 @@ class RistrettoRedeemerTests(TestCase):
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``Unpaid``.
         """
+        assume(num_tokens >= counter)
+
         issuer = UnpaidRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
@@ -539,6 +543,8 @@ class RistrettoRedeemerTests(TestCase):
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
         ``Failure`` wrapping ``SecurityException``.
         """
+        assume(num_tokens >= counter)
+
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
 
@@ -572,6 +578,8 @@ class RistrettoRedeemerTests(TestCase):
         The passes constructed using unblinded tokens and messages pass the
         Ristretto verification check.
         """
+        assume(num_tokens >= counter)
+
         message = b"hello world"
 
         signing_key = random_signing_key()
