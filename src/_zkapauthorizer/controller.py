@@ -320,6 +320,24 @@ class UnpaidRedeemer(object):
         return fail(Unpaid(voucher))
 
 
+@implementer(IRedeemer)
+@attr.s
+class RecordingRedeemer(object):
+    """
+    A ``CountingRedeemer`` delegates redemption logic to another object but
+    records all redemption attempts.
+    """
+    original = attr.ib()
+    redemptions = attr.ib(default=attr.Factory(list))
+
+    def random_tokens_for_voucher(self, voucher, counter, count):
+        return dummy_random_tokens(voucher, counter, count)
+
+    def redeemWithCounter(self, voucher, counter, random_tokens):
+        self.redemptions.append((voucher, counter, random_tokens))
+        return self.original.redeemWithCounter(voucher, counter, random_tokens)
+
+
 def dummy_random_tokens(voucher, counter, count):
     v = urlsafe_b64decode(voucher.number.encode("ascii"))
     def dummy_random_token(n):

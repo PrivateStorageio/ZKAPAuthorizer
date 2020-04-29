@@ -109,6 +109,7 @@ from ..controller import (
     UnpaidRedeemer,
     RistrettoRedeemer,
     IndexedRedeemer,
+    RecordingRedeemer,
     PaymentController,
     AlreadySpent,
     Unpaid,
@@ -352,6 +353,37 @@ class PaymentControllerTests(TestCase):
                     token_count=num_tokens,
                     public_key=None,
                 ),
+            ),
+        )
+
+
+    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_stop_redeeming_on_error(self, get_config, now, voucher, counter, extra_tokens):
+        """
+        If an error is encountered on one of the redemption attempts performed by
+        ``IRedeemer.redeem``, the effort is suspended until the normal retry
+        logic activates.
+        """
+        num_redemption_groups = counter + 1
+        num_tokens = num_redemption_groups + extra_tokens
+        redeemer = RecordingRedeemer(UnpaidRedeemer())
+
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            redeemer,
+            default_token_count=num_tokens,
+            num_redemption_groups=num_redemption_groups,
+        )
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+        self.assertThat(
+            redeemer.redemptions,
+            AfterPreprocessing(
+                len,
+                Equals(1),
             ),
         )
 
