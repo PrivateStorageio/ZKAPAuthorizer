@@ -766,41 +766,6 @@ class PaymentController(object):
                     voucher=voucher.number,
                 )
 
-    def _perform_redeem(self, voucher, counter, random_tokens):
-        """
-        Use the redeemer to redeem the given voucher and random tokens.
-
-        This will not persist the voucher or random tokens but it will persist
-        the result.
-        """
-        if not isinstance(voucher.state, model_Pending):
-            raise ValueError(
-                "Cannot redeem voucher in state {} instead of Pending.".format(
-                    voucher.state,
-                ),
-            )
-
-        # Ask the redeemer to do the real task of redemption.
-        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
-        d = bracket(
-            lambda: setitem(
-                self._active,
-                voucher.number,
-                model_Redeeming(
-                    started=self.store.now(),
-                    counter=voucher.state.counter,
-                ),
-            ),
-            lambda: delitem(self._active, voucher.number),
-            lambda: self.redeemer.redeemWithCounter(voucher, counter, random_tokens),
-        )
-        d.addCallbacks(
-            partial(self._redeem_success, voucher.number, counter),
-            partial(self._redeem_failure, voucher.number),
-        )
-        d.addErrback(partial(self._final_redeem_error, voucher.number))
-        return d
-
     def _get_random_tokens_for_voucher(self, voucher, counter, num_tokens):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
@@ -871,7 +836,51 @@ class PaymentController(object):
                 # An earlier iteration may have encountered a fatal error.
                 break
 
-            yield self._perform_redeem(voucher_obj, counter, tokens)
+            succeeded = yield self._perform_redeem(voucher_obj, counter, tokens)
+            if not succeeded:
+                self._log.info(
+                    "Temporarily suspending redemption of {voucher} after non-success result.",
+                    voucher=voucher,
+                )
+                break
+
+    def _perform_redeem(self, voucher, counter, random_tokens):
+        """
+        Use the redeemer to redeem the given voucher and random tokens.
+
+        This will not persist the voucher or random tokens but it will persist
+        the result.
+
+        :return Deferred[bool]: A ``Deferred`` firing with ``True`` if and
+            only if redemption succeeds.
+        """
+        if not isinstance(voucher.state, model_Pending):
+            raise ValueError(
+                "Cannot redeem voucher in state {} instead of Pending.".format(
+                    voucher.state,
+                ),
+            )
+
+        # Ask the redeemer to do the real task of redemption.
+        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
+        d = bracket(
+            lambda: setitem(
+                self._active,
+                voucher.number,
+                model_Redeeming(
+                    started=self.store.now(),
+                    counter=voucher.state.counter,
+                ),
+            ),
+            lambda: delitem(self._active, voucher.number),
+            lambda: self.redeemer.redeemWithCounter(voucher, counter, random_tokens),
+        )
+        d.addCallbacks(
+            partial(self._redeem_success, voucher.number, counter),
+            partial(self._redeem_failure, voucher.number),
+        )
+        d.addErrback(partial(self._final_redeem_error, voucher.number))
+        return d
 
     def _redeem_success(self, voucher, counter, result):
         """
@@ -889,6 +898,7 @@ class PaymentController(object):
             result.unblinded_tokens,
             completed=(counter + 1 == self.num_redemption_groups),
         )
+        return True
 
     def _redeem_failure(self, voucher, reason):
         if reason.check(AlreadySpent):
@@ -913,11 +923,15 @@ class PaymentController(object):
                 finished=self.store.now(),
                 details=reason.getErrorMessage().decode("utf-8", "replace"),
             )
-        return None
+        return False
 
     def _final_redeem_error(self, voucher, reason):
-        self._log.failure("Redeeming random tokens for a voucher ({voucher}) encountered error.", reason, voucher=voucher)
-        return None
+        self._log.failure(
+            "Redeeming random tokens for a voucher ({voucher}) encountered error.",
+            reason,
+            voucher=voucher,
+        )
+        return False
 
     def get_voucher(self, number):
         return self.incorporate_transient_state(
