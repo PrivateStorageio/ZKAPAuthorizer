@@ -363,6 +363,12 @@ class DummyRedeemer(object):
         :return: An already-fired ``Deferred`` that has a list of
           ``UnblindedToken`` instances wrapping meaningless values.
         """
+        if not isinstance(voucher, Voucher):
+            raise TypeError(
+                "Got {}, expected instance of Voucher".format(
+                    voucher,
+                ),
+            )
         def dummy_unblinded_token(random_token):
             random_value = b64decode(random_token.token_value.encode("ascii"))
             unblinded_value = random_value + b"x" * (96 - len(random_value))
@@ -768,7 +774,7 @@ class PaymentController(object):
                 ),
             ),
             lambda: delitem(self._active, voucher.number),
-            lambda: self.redeemer.redeemWithCounter(voucher.number, counter, random_tokens),
+            lambda: self.redeemer.redeemWithCounter(voucher, counter, random_tokens),
         )
         d.addCallbacks(
             partial(self._redeem_success, voucher.number, counter),
