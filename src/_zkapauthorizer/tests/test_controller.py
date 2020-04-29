@@ -42,6 +42,7 @@ from testtools.content import (
     text_content,
 )
 from testtools.matchers import (
+    Always,
     Equals,
     MatchesAll,
     AllMatch,
@@ -224,7 +225,10 @@ class PaymentControllerTests(TestCase):
             NonRedeemer(),
             default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            has_no_result(),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
@@ -287,7 +291,10 @@ class PaymentControllerTests(TestCase):
             DummyRedeemer(public_key),
             default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
@@ -311,7 +318,10 @@ class PaymentControllerTests(TestCase):
             DoubleSpendRedeemer(),
             default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
@@ -337,7 +347,10 @@ class PaymentControllerTests(TestCase):
             UnpaidRedeemer(),
             default_token_count=100,
         )
-        unpaid_controller.redeem(voucher)
+        self.assertThat(
+            unpaid_controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         # Make sure we got where we wanted.
         self.assertThat(
@@ -383,7 +396,10 @@ class PaymentControllerTests(TestCase):
             default_token_count=100,
             clock=clock,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
         # It fails this time.
         self.assertThat(
             controller.get_voucher(voucher).state,
