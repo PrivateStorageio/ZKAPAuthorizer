@@ -1,6 +1,6 @@
 { lib
 , buildPythonPackage, sphinx, git
-, attrs, zope_interface, aniso8601, twisted, tahoe-lafs, challenge-bypass-ristretto, treq
+, attrs, zope_interface, eliot, aniso8601, twisted, tahoe-lafs, challenge-bypass-ristretto, treq
 , fixtures, testtools, hypothesis, pyflakes, coverage
 , hypothesisProfile ? null
 , collectCoverage ? false
@@ -31,6 +31,7 @@ buildPythonPackage rec {
     attrs
     zope_interface
     aniso8601
+    eliot
     twisted
     tahoe-lafs
     challenge-bypass-ristretto
