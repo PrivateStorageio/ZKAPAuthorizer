@@ -171,14 +171,14 @@ class TokenCountForGroupTests(TestCase):
 
     @given(
         redemption_group_counts(),
-        integers(min_value=1),
+        integers(min_value=0),
     )
-    def test_sum(self, num_groups, total_tokens):
+    def test_sum(self, num_groups, extra_tokens):
         """
         The sum of the token count for all groups equals the requested total
         tokens.
         """
-        assume(total_tokens >= num_groups)
+        total_tokens = num_groups + extra_tokens
         self.assertThat(
             sum(
                 token_count_for_group(num_groups, total_tokens, group_number)
@@ -190,13 +190,13 @@ class TokenCountForGroupTests(TestCase):
 
     @given(
         redemption_group_counts(),
-        integers(min_value=1),
+        integers(min_value=0),
     )
-    def test_well_distributed(self, num_groups, total_tokens):
+    def test_well_distributed(self, num_groups, extra_tokens):
         """
         Tokens are distributed roughly evenly across all group numbers.
         """
-        assume(total_tokens >= num_groups)
+        total_tokens = num_groups + extra_tokens
 
         lower_bound = total_tokens // num_groups
         upper_bound = total_tokens // num_groups + 1
