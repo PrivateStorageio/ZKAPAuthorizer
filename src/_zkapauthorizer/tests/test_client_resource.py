@@ -78,7 +78,6 @@ from fixtures import (
 from hypothesis import (
     given,
     note,
-    assume,
 )
 from hypothesis.strategies import (
     one_of,
@@ -297,6 +296,21 @@ class ResourceTests(TestCase):
         )
 
 
+def maybe_extra_tokens():
+    """
+    Build either ``None`` or a small integer for use in determining a number
+    of additional tokens to create in some tests.
+    """
+    # We might want to have some unblinded tokens or we might not.
+    return one_of(
+        just(None),
+        # If we do, we can't have fewer than the number of redemption groups
+        # which we don't know until we're further inside the test.  So supply
+        # an amount to add to that, in the case where we have tokens at all.
+        integers(min_value=0, max_value=100),
+    )
+
+
 class UnblindedTokenTests(TestCase):
     """
     Tests relating to ``/unblinded-token`` as implemented by the
@@ -355,8 +369,12 @@ class UnblindedTokenTests(TestCase):
             )),
         )
 
-    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
-    def test_get(self, get_config, voucher, num_tokens):
+    @given(
+        tahoe_configs(),
+        vouchers(),
+        maybe_extra_tokens(),
+    )
+    def test_get(self, get_config, voucher, extra_tokens):
         """
         When the unblinded token collection receives a **GET**, the response is
         the total number of unblinded tokens in the system, the unblinded
@@ -366,9 +384,10 @@ class UnblindedTokenTests(TestCase):
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config, datetime.now)
-
-        if num_tokens:
-            assume(num_tokens >= root.controller.num_redemption_groups)
+        if extra_tokens is None:
+            num_tokens = 0
+        else:
+            num_tokens = root.controller.num_redemption_groups + extra_tokens
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -391,8 +410,8 @@ class UnblindedTokenTests(TestCase):
             succeeded_with_unblinded_tokens(num_tokens, num_tokens),
         )
 
-    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), integers(min_value=0))
-    def test_get_limit(self, get_config, voucher, num_tokens, limit):
+    @given(tahoe_configs(), vouchers(), maybe_extra_tokens(), integers(min_value=0))
+    def test_get_limit(self, get_config, voucher, extra_tokens, limit):
         """
         When the unblinded token collection receives a **GET** with a **limit**
         query argument, it returns no more unblinded tokens than indicated by
@@ -402,8 +421,10 @@ class UnblindedTokenTests(TestCase):
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config, datetime.now)
 
-        if num_tokens:
-            assume(num_tokens >= root.controller.num_redemption_groups)
+        if extra_tokens is None:
+            num_tokens = 0
+        else:
+            num_tokens = root.controller.num_redemption_groups + extra_tokens
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -429,8 +450,8 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100), text(max_size=64))
-    def test_get_position(self, get_config, voucher, num_tokens, position):
+    @given(tahoe_configs(), vouchers(), maybe_extra_tokens(), text(max_size=64))
+    def test_get_position(self, get_config, voucher, extra_tokens, position):
         """
         When the unblinded token collection receives a **GET** with a **position**
         query argument, it returns all unblinded tokens which sort greater
@@ -440,8 +461,10 @@ class UnblindedTokenTests(TestCase):
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config, datetime.now)
 
-        if num_tokens:
-            assume(num_tokens >= root.controller.num_redemption_groups)
+        if extra_tokens is None:
+            num_tokens = 0
+        else:
+            num_tokens = root.controller.num_redemption_groups + extra_tokens
             # Put in a number of tokens with which to test.
             redeeming = root.controller.redeem(voucher, num_tokens)
             # Make sure the operation completed before proceeding.
@@ -475,8 +498,8 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), vouchers(), integers(min_value=1, max_value=100))
-    def test_get_order_matches_use_order(self, get_config, voucher, num_tokens):
+    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
+    def test_get_order_matches_use_order(self, get_config, voucher, extra_tokens):
         """
         The first unblinded token returned in a response to a **GET** request is
         the first token to be used to authorize a storage request.
@@ -507,7 +530,7 @@ class UnblindedTokenTests(TestCase):
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")
         root = root_from_config(config, datetime.now)
 
-        assume(num_tokens >= root.controller.num_redemption_groups)
+        num_tokens = root.controller.num_redemption_groups + extra_tokens
 
         # Put in a number of tokens with which to test.
         redeeming = root.controller.redeem(voucher, num_tokens)
