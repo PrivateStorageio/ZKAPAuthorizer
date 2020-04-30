@@ -335,6 +335,8 @@ class PaymentControllerTests(TestCase):
                 ),
                 # TODO: It shouldn't need a default token count.  It should
                 # respect whatever was given on the first redemption attempt.
+                #
+                # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/93
                 default_token_count=num_tokens,
                 # The number of redemption groups must not change for
                 # redemption of a particular voucher.
