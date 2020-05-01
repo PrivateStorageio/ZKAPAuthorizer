@@ -92,7 +92,6 @@ from ..api import (
     MorePassesRequired,
 )
 from ..storage_common import (
-    BYTES_PER_PASS,
     required_passes,
     allocate_buckets_message,
     add_lease_message,
@@ -107,6 +106,8 @@ class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
     """
+    pass_value = 128 * 1024
+
     @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
     def setUp(self):
         super(PassValidationTests, self).setUp()
@@ -119,6 +120,7 @@ class PassValidationTests(TestCase):
         self.signing_key = random_signing_key()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
+            self.pass_value,
             self.signing_key,
             self.clock,
         )
@@ -162,7 +164,7 @@ class PassValidationTests(TestCase):
 
         required_passes = 2
         share_nums = {3, 7}
-        allocated_size = int((required_passes * BYTES_PER_PASS) / len(share_nums))
+        allocated_size = int((required_passes * self.pass_value) / len(share_nums))
         storage_index = b"0123456789"
         renew_secret = b"x" * 32
         cancel_secret = b"y" * 32
@@ -250,7 +252,7 @@ class PassValidationTests(TestCase):
         :param make_data_vector: A one-argument callable.  It will be called
             with the current length of a slot share.  It should return a write
             vector which will increase the storage requirements of that slot
-            share by at least BYTES_PER_PASS.
+            share by at least ``self.pass_value``.
         """
         # hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
@@ -266,6 +268,7 @@ class PassValidationTests(TestCase):
 
         # print("test suite")
         required_pass_count = get_required_new_passes_for_mutable_write(
+            self.pass_value,
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
         )
@@ -355,7 +358,7 @@ class PassValidationTests(TestCase):
             test_and_write_vectors_for_shares,
             lambda current_length: (
                 [],
-                [(current_length, "x" * BYTES_PER_PASS)],
+                [(current_length, "x" * self.pass_value)],
                 None,
             ),
         )
@@ -387,7 +390,7 @@ class PassValidationTests(TestCase):
 
         renew_secret, cancel_secret = secrets
 
-        required_count = required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums))
+        required_count = required_passes(self.pass_value, [allocated_size] * len(sharenums))
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
             self.anonymous_storage_server,
@@ -524,6 +527,7 @@ class PassValidationTests(TestCase):
 
         # Create an initial share to toy with.
         required_pass_count = get_required_new_passes_for_mutable_write(
+            self.pass_value,
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
         )
