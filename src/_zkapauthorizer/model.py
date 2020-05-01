@@ -27,9 +27,6 @@ from json import (
 from datetime import (
     datetime,
 )
-from base64 import (
-    b64decode,
-)
 from zope.interface import (
     Interface,
     implementer,
@@ -56,8 +53,15 @@ from ._base64 import (
     urlsafe_b64decode,
 )
 
+from .validators import (
+    is_base64_encoded,
+    has_length,
+    greater_than,
+)
+
 from .storage_common import (
-    BYTES_PER_PASS,
+    pass_value_attribute,
+    get_configured_pass_value,
     required_passes,
 )
 
@@ -171,6 +175,8 @@ class VoucherStore(object):
     """
     _log = Logger()
 
+    pass_value = pass_value_attribute()
+
     database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
     now = attr.ib()
 
@@ -196,6 +202,7 @@ class VoucherStore(object):
             connect=connect,
         )
         return cls(
+            get_configured_pass_value(node_config),
             db_path,
             now,
             conn,
@@ -489,7 +496,7 @@ class VoucherStore(object):
 
         :return LeaseMaintenance: A new, started lease maintenance object.
         """
-        m = LeaseMaintenance(self.now, self._connection)
+        m = LeaseMaintenance(self.pass_value, self.now, self._connection)
         m.start()
         return m
 
@@ -533,6 +540,8 @@ class LeaseMaintenance(object):
     the ``observe`` and ``finish`` methods to persist state about a lease
     maintenance run.
 
+    :ivar int _pass_value: The value of a single ZKAP in byte-months.
+
     :ivar _now: A no-argument callable which returns a datetime giving a time
         to use as current.
 
@@ -543,6 +552,7 @@ class LeaseMaintenance(object):
         objects, the database row id that corresponds to the started run.
         This is used to make sure future updates go to the right row.
     """
+    _pass_value = pass_value_attribute()
     _now = attr.ib()
     _connection = attr.ib()
     _rowid = attr.ib(default=None)
@@ -569,7 +579,7 @@ class LeaseMaintenance(object):
         """
         Record a storage shares of the given sizes.
         """
-        count = required_passes(BYTES_PER_PASS, sizes)
+        count = required_passes(self._pass_value, sizes)
         cursor.execute(
             """
             UPDATE [lease-maintenance-spending]
@@ -611,46 +621,6 @@ class LeaseMaintenanceActivity(object):
 #
 # x = store.get_latest_lease_maintenance_activity()
 # xs.started, xs.passes_required, xs.finished
-
-def is_base64_encoded(b64decode=b64decode):
-    def validate_is_base64_encoded(inst, attr, value):
-        try:
-            b64decode(value.encode("ascii"))
-        except (TypeError, Error):
-            raise TypeError(
-                "{name!r} must be base64 encoded unicode, (got {value!r})".format(
-                    name=attr.name,
-                    value=value,
-                ),
-            )
-    return validate_is_base64_encoded
-
-def has_length(expected):
-    def validate_has_length(inst, attr, value):
-        if len(value) != expected:
-            raise ValueError(
-                "{name!r} must have length {expected}, instead has length {actual}".format(
-                    name=attr.name,
-                    expected=expected,
-                    actual=len(value),
-                ),
-            )
-    return validate_has_length
-
-def greater_than(expected):
-    def validate_relation(inst, attr, value):
-        if value > expected:
-            return None
-
-        raise ValueError(
-            "{name!r} must be greater than {expected}, instead it was {actual}".format(
-                name=attr.name,
-                expected=expected,
-                actual=value,
-            ),
-        )
-    return validate_relation
-
 
 @attr.s(frozen=True)
 class UnblindedToken(object):

@@ -71,7 +71,10 @@ from .model import (
 from .resource import (
     from_configuration as resource_from_configuration,
 )
-
+from .storage_common import (
+    BYTES_PER_PASS,
+    get_configured_pass_value,
+)
 from .controller import (
     get_redeemer,
 )
@@ -134,6 +137,7 @@ class ZKAPAuthorizer(object):
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         kwargs = configuration.copy()
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
+        pass_value = kwargs.pop(u"pass-value", BYTES_PER_PASS)
         signing_key = SigningKey.decode_base64(
             FilePath(
                 kwargs.pop(u"ristretto-signing-key-path"),
@@ -144,7 +148,8 @@ class ZKAPAuthorizer(object):
         }
         storage_server = ZKAPAuthorizerStorageServer(
             get_anonymous_storage_server(),
-            signing_key,
+            pass_value=pass_value,
+            signing_key=signing_key,
             **kwargs
         )
         return succeed(
@@ -170,6 +175,7 @@ class ZKAPAuthorizer(object):
             return redeemer.tokens_to_passes(message, unblinded_tokens)
 
         return ZKAPAuthorizerStorageClient(
+            get_configured_pass_value(node_config),
             get_rref,
             get_passes,
         )

@@ -108,7 +108,6 @@ from ..controller import (
     DummyRedeemer,
 )
 from ..storage_common import (
-    BYTES_PER_PASS,
     required_passes,
 )
 from .._storage_client import (
@@ -423,7 +422,7 @@ class ClientPluginTests(TestCase):
             store,
             DummyRedeemer(),
             # Give it enough for the allocate_buckets call below.
-            required_passes(BYTES_PER_PASS, [size] * len(sharenums)),
+            required_passes(store.pass_value, [size] * len(sharenums)),
         )
         # Get a token inserted into the store.
         redeeming = controller.redeem(voucher)

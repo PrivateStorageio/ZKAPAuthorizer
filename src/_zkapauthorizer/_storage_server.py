@@ -86,7 +86,7 @@ from .foolscap import (
     RIPrivacyPassAuthorizedStorageServer,
 )
 from .storage_common import (
-    BYTES_PER_PASS,
+    pass_value_attribute,
     required_passes,
     allocate_buckets_message,
     add_lease_message,
@@ -153,6 +153,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     LEASE_PERIOD = timedelta(days=31)
 
     _original = attr.ib(validator=provides(RIStorageServer))
+    _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
     _clock = attr.ib(
         validator=provides(IReactorTime),
@@ -217,7 +218,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocate_buckets_message(storage_index),
             passes,
         )
-        check_pass_quantity_for_write(len(valid_passes), sharenums, allocated_size)
+        check_pass_quantity_for_write(
+            self._pass_value,
+            len(valid_passes),
+            sharenums,
+            allocated_size,
+        )
 
         return self._original.remote_allocate_buckets(
             storage_index,
@@ -243,6 +249,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # print("server add_lease({}, {!r})".format(len(passes), storage_index))
         valid_passes = self._validate_passes(add_lease_message(storage_index), passes)
         check_pass_quantity_for_lease(
+            self._pass_value,
             storage_index,
             valid_passes,
             self._original,
@@ -256,6 +263,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         valid_passes = self._validate_passes(renew_lease_message(storage_index), passes)
         check_pass_quantity_for_lease(
+            self._pass_value,
             storage_index,
             valid_passes,
             self._original,
@@ -324,6 +332,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 renew_leases = True
 
             required_new_passes = get_required_new_passes_for_mutable_write(
+                self._pass_value,
                 current_sizes,
                 tw_vectors,
             )
@@ -372,23 +381,7 @@ def has_active_lease(storage_server, storage_index, now):
     )
 
 
-def check_pass_quantity_for_lease(storage_index, valid_passes, storage_server):
-    """
-    Check that the given number of passes is sufficient to add or renew a
-    lease for one period for the given storage index.
-    """
-    allocated_sizes = dict(
-        get_share_sizes(
-            storage_server,
-            storage_index,
-            list(get_all_share_numbers(storage_server, storage_index)),
-        ),
-    ).values()
-    # print("allocated_sizes: {}".format(allocated_sizes))
-    check_pass_quantity(len(valid_passes), allocated_sizes)
-    # print("Checked out")
-
-def check_pass_quantity(valid_count, share_sizes):
+def check_pass_quantity(pass_value, valid_count, share_sizes):
     """
     Check that the given number of passes is sufficient to cover leases for
     one period for shares of the given sizes.
@@ -402,14 +395,30 @@ def check_pass_quantity(valid_count, share_sizes):
 
     :return: ``None`` if the given number of passes is sufficient.
     """
-    required_pass_count = required_passes(BYTES_PER_PASS, share_sizes)
+    required_pass_count = required_passes(pass_value, share_sizes)
     if valid_count < required_pass_count:
         raise MorePassesRequired(
             valid_count,
             required_pass_count,
         )
 
-def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
+
+def check_pass_quantity_for_lease(pass_value, storage_index, valid_passes, storage_server):
+    """
+    Check that the given number of passes is sufficient to add or renew a
+    lease for one period for the given storage index.
+    """
+    allocated_sizes = dict(
+        get_share_sizes(
+            storage_server,
+            storage_index,
+            list(get_all_share_numbers(storage_server, storage_index)),
+        ),
+    ).values()
+    check_pass_quantity(pass_value, len(valid_passes), allocated_sizes)
+
+
+def check_pass_quantity_for_write(pass_value, valid_count, sharenums, allocated_size):
     """
     Determine if the given number of valid passes is sufficient for an
     attempted write.
@@ -423,7 +432,7 @@ def check_pass_quantity_for_write(valid_count, sharenums, allocated_size):
 
     :return: ``None`` if the number of valid passes given is sufficient.
     """
-    check_pass_quantity(valid_count, [allocated_size] * len(sharenums))
+    check_pass_quantity(pass_value, valid_count, [allocated_size] * len(sharenums))
 
 
 def get_all_share_paths(storage_server, storage_index):
