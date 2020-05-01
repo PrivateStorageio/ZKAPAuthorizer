@@ -42,6 +42,7 @@ from os.path import (
 )
 from os import (
     listdir,
+    stat,
 )
 from datetime import (
     timedelta,
@@ -517,23 +518,49 @@ def get_storage_index_share_size(sharepath):
 
     :return int: The data size of the share in bytes.
     """
-    # Note Tahoe-LAFS immutable/layout.py makes some claims about how the
-    # share data is structured.  A lot of this seems to be wrong.
-    # storage/immutable.py appears to have the correct information.
-    fmt = ">LL"
-    with open(sharepath, "rb") as share_file:
-        header = share_file.read(calcsize(fmt))
+    # From src/allmydata/storage/immutable.py
+    #
+    # The share file has the following layout:
+    #  0x00: share file version number, four bytes, current version is 1
+    #  0x04: share data length, four bytes big-endian = A # See Footnote 1 below.
+    #  0x08: number of leases, four bytes big-endian
+    #  0x0c: beginning of share data (see immutable.layout.WriteBucketProxy)
+    #  A+0x0c = B: first lease. Lease format is:
+    #   B+0x00: owner number, 4 bytes big-endian, 0 is reserved for no-owner
+    #   B+0x04: renew secret, 32 bytes (SHA256)
+    #   B+0x24: cancel secret, 32 bytes (SHA256)
+    #   B+0x44: expiration time, 4 bytes big-endian seconds-since-epoch
+    #   B+0x48: next lease, or end of record
+    #
+    # Footnote 1: as of Tahoe v1.3.0 this field is not used by storage
+    # servers, but it is still filled in by storage servers in case the
+    # storage server software gets downgraded from >= Tahoe v1.3.0 to < Tahoe
+    # v1.3.0, or the share file is moved from one storage server to
+    # another. The value stored in this field is truncated, so if the actual
+    # share data length is >= 2**32, then the value stored in this field will
+    # be the actual share data length modulo 2**32.
 
-    if len(header) != calcsize(fmt):
+    share_file_size = stat(sharepath).st_size
+    header_format = ">LLL"
+    with open(sharepath, "rb") as share_file:
+        header = share_file.read(calcsize(header_format))
+
+    if len(header) != calcsize(header_format):
         raise ValueError(
             "Tried to read {} bytes of share file header, got {!r} instead.".format(
-                calcsize(fmt),
+                calcsize(header_format),
                 header,
             ),
         )
 
-    version, share_data_length = unpack(fmt, header)
-    return share_data_length
+    version, _, number_of_leases = unpack(header_format, header)
+
+    if version != 1:
+        raise ValueError(
+            "Cannot interpret version {} share file.".format(version),
+        )
+
+    return share_file_size - 0x0c - (number_of_leases * (4 + 32 + 32 + 4))
 
 
 def get_lease_expiration(get_leases, storage_index_or_slot):

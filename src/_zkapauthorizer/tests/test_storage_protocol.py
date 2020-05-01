@@ -20,6 +20,13 @@ from __future__ import (
     absolute_import,
 )
 
+from os import (
+    SEEK_CUR,
+)
+from struct import (
+    pack,
+)
+
 from fixtures import (
     MonkeyPatch,
 )
@@ -68,6 +75,10 @@ from foolscap.referenceable import (
 from challenge_bypass_ristretto import (
     RandomToken,
     random_signing_key,
+)
+
+from allmydata.storage.common import (
+    storage_index_to_dir,
 )
 
 from .common import (
@@ -119,6 +130,8 @@ from ..foolscap import (
     ShareStat,
 )
 
+# Hard-coded in Tahoe-LAFS
+LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 class RequiredPassesTests(TestCase):
     """
@@ -353,20 +366,7 @@ class ShareTests(TestCase):
             Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
         )
 
-    @given(
-        storage_index=storage_indexes(),
-        renew_secret=lease_renew_secrets(),
-        cancel_secret=lease_cancel_secrets(),
-        sharenum=sharenums(),
-        size=sizes(),
-        clock=clocks(),
-        leases=lists(lease_renew_secrets(), unique=True),
-    )
-    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock, leases):
-        """
-        Size and lease information about immutable shares can be retrieved from a
-        storage server.
-        """
+    def _stat_shares_immutable_test(self, storage_index, sharenum, size, clock, leases, write_shares):
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -377,11 +377,9 @@ class ShareTests(TestCase):
         try:
             patch.setUp()
             # Create a share we can toy with.
-            write_toy_shares(
+            write_shares(
                 self.anonymous_storage_server,
                 storage_index,
-                renew_secret,
-                cancel_secret,
                 {sharenum},
                 size,
                 canary=self.canary,
@@ -400,8 +398,6 @@ class ShareTests(TestCase):
         stats = extract_result(
             self.client.stat_shares([storage_index]),
         )
-        # Hard-coded in Tahoe-LAFS
-        LEASE_INTERVAL = 60 * 60 * 24 * 31
         expected = [{
             sharenum: ShareStat(
                 size=size,
@@ -413,6 +409,105 @@ class ShareTests(TestCase):
             Equals(expected),
         )
 
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenum=sharenums(),
+        size=sizes(),
+        clock=clocks(),
+        leases=lists(lease_renew_secrets(), unique=True),
+    )
+    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock, leases):
+        """
+        Size and lease information about immutable shares can be retrieved from a
+        storage server.
+        """
+        return self._stat_shares_immutable_test(
+            storage_index,
+            sharenum,
+            size,
+            clock,
+            leases,
+            lambda storage_server, storage_index, sharenums, size, canary: write_toy_shares(
+                storage_server,
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary,
+            ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        sharenum=sharenums(),
+        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
+        clock=clocks(),
+        leases=lists(lease_renew_secrets(), unique=True, min_size=1),
+    )
+    def test_stat_shares_immutable_large(self, storage_index, sharenum, size, clock, leases):
+        """
+        Size and lease information about very large immutable shares can be
+        retrieved from a storage server.
+
+        This is more of a whitebox test.  It assumes knowledge of Tahoe-LAFS
+        share placement and layout.  This is necessary to avoid having to
+        write real multi-gigabyte files to exercise the behavior.
+        """
+        header_format = ">LLL"
+        lease_format = ">L32s32sL"
+        def write_shares(storage_server, storage_index, sharenums, size, canary):
+            sharedir = FilePath(storage_server.sharedir).preauthChild(
+                # storage_index_to_dir likes to return multiple segments
+                # joined by pathsep
+                storage_index_to_dir(storage_index),
+            )
+            for sharenum in sharenums:
+                sharepath = sharedir.child(u"{}".format(sharenum))
+                sharepath.parent().makedirs()
+                with sharepath.open("wb") as share:
+                    share.write(
+                        pack(
+                            header_format,
+                            # Version
+                            1,
+                            # Maybe-saturated size (what at least one
+                            # Tahoe-LAFS comment claims is appropriate for
+                            # large files)
+                            min(size, 2 ** 32 - 1),
+                            len(leases),
+                        ),
+                    )
+                    # Try to make it sparse by skipping all the data.
+                    share.seek(size - 1, SEEK_CUR),
+                    share.write(b"\0")
+                    share.write(
+                        b"".join(
+                            pack(
+                                lease_format,
+                                # no owner
+                                0,
+                                renew,
+                                # no cancel secret
+                                b"",
+                                # expiration timestamp
+                                int(clock.seconds() + LEASE_INTERVAL),
+                            )
+                            for renew
+                            in leases
+                        ),
+                    )
+
+        return self._stat_shares_immutable_test(
+            storage_index,
+            sharenum,
+            size,
+            clock,
+            leases,
+            write_shares,
+        )
 
     @skipIf(platform.isWindows(), "Storage server miscomputes slot size on Windows")
     @given(
@@ -463,8 +558,6 @@ class ShareTests(TestCase):
         stats = extract_result(
             self.client.stat_shares([storage_index]),
         )
-        # Hard-coded in Tahoe-LAFS
-        LEASE_INTERVAL = 60 * 60 * 24 * 31
         expected = [{
             sharenum: ShareStat(
                 size=get_implied_data_length(
