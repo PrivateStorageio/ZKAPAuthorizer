@@ -47,7 +47,7 @@ slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_
 
 # The number of bytes we're willing to store for a lease period for each pass
 # submitted.
-BYTES_PER_PASS = 128 * 1024
+BYTES_PER_PASS = 1024 * 1024
 
 def get_configured_pass_value(node_config):
     """
