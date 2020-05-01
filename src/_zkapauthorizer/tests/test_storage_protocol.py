@@ -360,8 +360,9 @@ class ShareTests(TestCase):
         sharenum=sharenums(),
         size=sizes(),
         clock=clocks(),
+        leases=lists(lease_renew_secrets(), unique=True),
     )
-    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock):
+    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock, leases):
         """
         Size and lease information about immutable shares can be retrieved from a
         storage server.
@@ -385,6 +386,14 @@ class ShareTests(TestCase):
                 size,
                 canary=self.canary,
             )
+            # Perhaps put some more leases on it.  Leases might impact our
+            # ability to determine share data size.
+            for renew_secret in leases:
+                self.anonymous_storage_server.remote_add_lease(
+                    storage_index,
+                    renew_secret,
+                    b"",
+                )
         finally:
             patch.cleanUp()
 
