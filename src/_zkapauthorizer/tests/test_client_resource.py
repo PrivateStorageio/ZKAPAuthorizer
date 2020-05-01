@@ -991,7 +991,8 @@ class VoucherTests(TestCase):
             Equals({
                 u"vouchers": list(
                     Voucher(
-                        voucher,
+                        number=voucher,
+                        expected_tokens=NUM_TOKENS,
                         created=now,
                         state=Redeemed(
                             finished=now,
@@ -1022,7 +1023,8 @@ class VoucherTests(TestCase):
             Equals({
                 u"vouchers": list(
                     Voucher(
-                        voucher,
+                        number=voucher,
+                        expected_tokens=NUM_TOKENS,
                         created=now,
                         state=Unpaid(
                             finished=now,

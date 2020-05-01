@@ -211,7 +211,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count], [public-key], [counter]
+                [number], [created], [expected-tokens], [state], [finished], [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             WHERE
@@ -225,7 +225,7 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher, counter, get_tokens):
+    def add(self, cursor, voucher, expected_tokens, counter, get_tokens):
         """
         Add random tokens associated with a voucher (possibly new, possibly
         existing) to the database.  If the (voucher, counter) pair is already
@@ -233,6 +233,16 @@ class VoucherStore(object):
 
         :param unicode voucher: The text value of a voucher with which to
             associate the tokens.
+
+        :param int expected_tokens: The total number of tokens for which this
+            voucher is expected to be redeemed.  This is only respected the
+            first time a voucher is added.  Subsequent calls with the same
+            voucher but a different count ignore the value because it is
+            already known (and the database knows better than the caller what
+            it should be).
+
+            This probably means ``add`` is a broken interface for doing these
+            two things.  Maybe it should be fixed someday.
 
         :param int counter: The redemption counter for the given voucher with
             which to associate the tokens.
@@ -275,9 +285,9 @@ class VoucherStore(object):
             )
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO [vouchers] ([number], [created]) VALUES (?, ?)
+                INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
                 """,
-                (voucher, self.now())
+                (voucher, expected_tokens, self.now())
             )
             cursor.executemany(
                 """
@@ -302,7 +312,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [state], [finished], [token-count], [public-key], [counter]
+                [number], [created], [expected-tokens], [state], [finished], [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             """,
@@ -878,6 +888,11 @@ class Voucher(object):
     :ivar datetime created: The time at which this voucher was added to this
         node.
 
+    :ivar expected_tokens: The total number of tokens for which we expect to
+        be able to redeem this voucher.  Tokens are redeemed in smaller
+        groups, progress of which is tracked in ``state``.  This only gives
+        the total we expect to reach at completion.
+
     :ivar state: An indication of the current state of this voucher.  This is
         an instance of ``Pending``, ``Redeeming``, ``Redeemed``,
         ``DoubleSpend``, ``Unpaid``, or ``Error``.
@@ -889,10 +904,21 @@ class Voucher(object):
             has_length(44),
         ),
     )
+
+    expected_tokens = attr.ib(
+        validator=attr.validators.optional(
+            attr.validators.and_(
+                attr.validators.instance_of((int, long)),
+                greater_than(0),
+            ),
+        ),
+    )
+
     created = attr.ib(
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
     )
+
     state = attr.ib(
         default=Pending(counter=0),
         validator=attr.validators.instance_of((
@@ -922,16 +948,21 @@ class Voucher(object):
                 )
             raise ValueError("Unknown voucher state {}".format(state))
 
-        number, created, state = row[:3]
+        number, created, expected_tokens, state = row[:4]
+
+        if expected_tokens is None:
+            raise ValueError("Bluib")
+
         return cls(
-            number,
+            number=number,
+            expected_tokens=expected_tokens,
             # All Python datetime-based date/time libraries fail to handle
             # leap seconds.  This parse call might raise an exception of the
             # value represents a leap second.  However, since we also use
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
-            parse_datetime(created, delimiter=u" "),
-            state_from_row(state, row[3:])
+            created=parse_datetime(created, delimiter=u" "),
+            state=state_from_row(state, row[4:]),
         )
 
     @classmethod
@@ -976,6 +1007,7 @@ class Voucher(object):
 
         return cls(
             number=values[u"number"],
+            expected_tokens=values[u"expected-tokens"],
             created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
             state=state,
         )
@@ -993,6 +1025,7 @@ class Voucher(object):
         state = self.state.to_json_v1()
         return {
             u"number": self.number,
+            u"expected-tokens": self.expected_tokens,
             u"created": None if self.created is None else self.created.isoformat(),
             u"state": state,
             u"version": 1,

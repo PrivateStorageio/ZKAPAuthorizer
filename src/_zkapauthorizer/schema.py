@@ -144,6 +144,12 @@ _UPGRADES = {
         -- Reference to the counter these tokens go with.
         ALTER TABLE [tokens] ADD COLUMN [counter] integer NOT NULL DEFAULT 0
         """,
-
+        """
+        -- Record the total number of tokens for which we expect to be able to
+        -- redeem this voucher.  For rows in the database before this column
+        -- was added, we forgot how many tokens we expected.  All rows added
+        -- after this column is added should have a non-NULL value.
+        ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer
+        """,
     ],
 }

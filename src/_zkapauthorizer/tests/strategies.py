@@ -342,6 +342,7 @@ def voucher_objects(states=voucher_states()):
         Voucher,
         number=vouchers(),
         created=one_of(none(), datetimes()),
+        expected_tokens=integers(min_value=1),
         state=states,
     )
 
