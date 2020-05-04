@@ -35,6 +35,13 @@ For example::
 Note that ``ristretto-issuer-root-url`` must agree with whichever storage servers the client will be configured to interact with.
 If the values are not the same, the client will decline to use the storage servers.
 
+The client can also be configured with the value of a single pass::
+
+    [storageclient.plugins.privatestorageio-zkapauthz-v1]
+    pass-value = 1048576
+
+The value given here must agree with the value servers use in their configuration or the storage service will be unusable.
+
 Server
 ------
 
@@ -48,6 +55,14 @@ Then also configure the Ristretto-flavored PrivacyPass issuer the server will an
 
   [storageserver.plugins.privatestorageio-zkapauthz-v1]
   ristretto-issuer-root-url = https://issuer.example.invalid/
+
+The value of a single pass in the system can be configured here as well::
+
+  [storageserver.plugins.privatestorageio-zkapauthz-v1]
+  pass-value = 1048576
+
+If no ``pass-value`` is given then a default will be used.
+The value given here must agree with the value clients use in their configuration or the storage service will be unusable.
 
 The storage server must also be configured with the path to the Ristretto-flavored PrivacyPass signing key.
 To avoid placing secret material in tahoe.cfg,

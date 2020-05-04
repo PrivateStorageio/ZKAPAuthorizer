@@ -68,10 +68,6 @@ from twisted.python.runtime import (
     platform,
 )
 
-from ..storage_common import (
-    BYTES_PER_PASS,
-)
-
 from ..model import (
     StoreOpenError,
     NotEnoughTokens,
@@ -355,8 +351,11 @@ class LeaseMaintenanceTests(TestCase):
                     tuples(
                         # The activity itself, in pass count
                         integers(min_value=1, max_value=2 ** 16 - 1),
-                        # Amount by which to trim back the share sizes
-                        integers(min_value=0, max_value=BYTES_PER_PASS - 1),
+                        # Amount by which to trim back the share sizes.  This
+                        # might exceed the value of a single pass but we don't
+                        # know that value yet.  We'll map it into a coherent
+                        # range with mod inside the test.
+                        integers(min_value=0),
                     ),
                 ),
                 # How much time passes before this activity finishes
@@ -382,8 +381,9 @@ class LeaseMaintenanceTests(TestCase):
             passes_required = 0
             for (num_passes, trim_size) in sizes:
                 passes_required += num_passes
+                trim_size %= store.pass_value
                 x.observe([
-                    num_passes * BYTES_PER_PASS - trim_size,
+                    num_passes * store.pass_value - trim_size,
                 ])
             now += finish_delay
             x.finish()

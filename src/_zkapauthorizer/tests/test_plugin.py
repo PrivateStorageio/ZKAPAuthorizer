@@ -121,7 +121,6 @@ from ..controller import (
     DummyRedeemer,
 )
 from ..storage_common import (
-    BYTES_PER_PASS,
     required_passes,
     allocate_buckets_message,
 )
@@ -440,7 +439,7 @@ class ClientPluginTests(TestCase):
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        expected_pass_cost = required_passes(BYTES_PER_PASS, [size] * len(sharenums))
+        expected_pass_cost = required_passes(store.pass_value, [size] * len(sharenums))
         controller = PaymentController(
             store,
             DummyRedeemer(),

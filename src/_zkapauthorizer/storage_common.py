@@ -24,6 +24,12 @@ from base64 import (
     b64encode,
 )
 
+import attr
+
+from .validators import (
+    greater_than,
+)
+
 def _message_maker(label):
     def make_message(storage_index):
         return u"{label} {storage_index}".format(
@@ -41,7 +47,22 @@ slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_
 
 # The number of bytes we're willing to store for a lease period for each pass
 # submitted.
-BYTES_PER_PASS = 128 * 1024
+BYTES_PER_PASS = 1024 * 1024
+
+def get_configured_pass_value(node_config):
+    """
+    Determine the configuration-specified value of a single ZKAP.
+
+    If no value is explicitly configured, a default value is returned.  The
+    value is read from the **pass-value** option of the ZKAPAuthorizer plugin
+    client section.
+    """
+    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    return int(node_config.get_config(
+        section=section_name,
+        option=u"pass-value",
+        default=BYTES_PER_PASS,
+    ))
 
 def required_passes(bytes_per_pass, share_sizes):
     """
@@ -136,10 +157,13 @@ def get_implied_data_length(data_vector, new_length):
     return min(new_length, data_based_size)
 
 
-def get_required_new_passes_for_mutable_write(current_sizes, tw_vectors):
+def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vectors):
+    """
+    :param int pass_value: The value of a single pass in byte-months.
+    """
     # print("get_required_new_passes_for_mutable_write({}, {})".format(current_sizes, summarize(tw_vectors)))
     current_passes = required_passes(
-        BYTES_PER_PASS,
+        pass_value,
         current_sizes.values(),
     )
 
@@ -155,7 +179,7 @@ def get_required_new_passes_for_mutable_write(current_sizes, tw_vectors):
 
     new_sizes.update()
     new_passes = required_passes(
-        BYTES_PER_PASS,
+        pass_value,
         new_sizes.values(),
     )
     required_new_passes = new_passes - current_passes
@@ -180,3 +204,14 @@ def summarize(tw_vectors):
         for (sharenum, (test_vector, data_vectors, new_length))
         in tw_vectors.items()
     }
+
+def pass_value_attribute():
+    """
+    Define an attribute for an attrs-based object which can hold a pass value.
+    """
+    return attr.ib(
+        validator=attr.validators.and_(
+            attr.validators.instance_of((int, long)),
+            greater_than(0),
+        ),
+    )
