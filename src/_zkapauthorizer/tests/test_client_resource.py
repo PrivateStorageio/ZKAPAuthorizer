@@ -135,7 +135,6 @@ from ..resource import (
 )
 
 from ..storage_common import (
-    BYTES_PER_PASS,
     required_passes,
 )
 
@@ -578,7 +577,7 @@ class UnblindedTokenTests(TestCase):
         total = 0
         activity = root.store.start_lease_maintenance()
         for sizes in size_observations:
-            total += required_passes(BYTES_PER_PASS, sizes)
+            total += required_passes(root.store.pass_value, sizes)
             activity.observe(sizes)
         activity.finish()
 

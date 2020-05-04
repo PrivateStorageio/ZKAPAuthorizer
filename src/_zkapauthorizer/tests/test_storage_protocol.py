@@ -167,6 +167,8 @@ class ShareTests(TestCase):
         iteration of the test so far, probably; so make relative comparisons
         instead of absolute ones).
     """
+    pass_value = 128 * 1024
+
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
@@ -187,10 +189,12 @@ class ShareTests(TestCase):
             )
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
+            self.pass_value,
             self.signing_key,
         )
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
+            self.pass_value,
             get_rref=lambda: self.local_remote_server,
             get_passes=get_passes,
         )
