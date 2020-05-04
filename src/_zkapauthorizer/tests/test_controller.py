@@ -358,7 +358,6 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-
     @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), integers(min_value=0, max_value=100))
     def test_stop_redeeming_on_error(self, get_config, now, voucher, counter, extra_tokens):
         """

@@ -42,31 +42,34 @@ If the voucher is not known then the response is **NOT FOUND**.
 For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  { "value": <string>
+  { "number": <string>
+  , "expected-tokens": <integer>
   , "created": <iso8601 timestamp>
   , "state": <state object>
   , "version": 1
   }
 
-The ``value`` property merely indicates the voucher which was requested.
+The ``number`` property merely indicates the voucher which was requested.
+The ``expected-tokens`` property indicates the total number of ZKAPs the client for which the client intends to redeem the voucher.
+Vouchers created using old versions of ZKAPAuthorizer will have a best-guess value here because the real value was not recorded.
 The ``created`` property indicates when the voucher was first added to the node.
-The ``redeemed`` property indicates whether or not the voucher has successfully been redeemed with a payment server yet.
-The ``token-count`` property gives the number of blinded token signatures the client received in exchange for redemption of the voucher
-(each blinded token signature can be used to construct a one ZKAP),
-if it has been redeemed.
-If it has not been redeemed then it is ``null``.
-
 The ``state`` property is an object that gives more details about the current state of the voucher.
 The following values are possible::
 
   { "name": "pending"
+  , "counter": <integer>
   }
+
+The integer *counter* value indicates how many successful sub-redemptions have completed for this voucher.
 
 ::
 
   { "name": "redeeming"
   , "started": <iso8601 timestamp>
+  , "counter": <integer>
   }
+
+The integer *counter* value has the same meaning as it does for the *pending* state.
 
 ::
 

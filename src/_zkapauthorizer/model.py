@@ -951,9 +951,6 @@ class Voucher(object):
 
         number, created, expected_tokens, state = row[:4]
 
-        if expected_tokens is None:
-            raise ValueError("Bluib")
-
         return cls(
             number=number,
             expected_tokens=expected_tokens,

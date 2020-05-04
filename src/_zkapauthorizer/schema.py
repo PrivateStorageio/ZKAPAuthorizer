@@ -146,10 +146,14 @@ _UPGRADES = {
         """,
         """
         -- Record the total number of tokens for which we expect to be able to
-        -- redeem this voucher.  For rows in the database before this column
-        -- was added, we forgot how many tokens we expected.  All rows added
-        -- after this column is added should have a non-NULL value.
-        ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer
+        -- redeem this voucher.  We don't want to allow NULL values here at
+        -- all because that allows insertion of garbage data going forward.
+        -- However to add a non-NULL column to a table we have to supply a
+        -- default value.  Since no real vouchers have ever been issued at the
+        -- time of this upgrade we'll just make up some value.  It doesn't
+        -- particularly matter if it is wrong for some testing voucher someone
+        -- used.
+        ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer NOT NULL DEFAULT 32768
         """,
     ],
 }
