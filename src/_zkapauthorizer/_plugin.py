@@ -45,6 +45,11 @@ from twisted.internet.defer import (
     succeed,
 )
 
+from eliot import (
+    MessageType,
+    Field,
+)
+
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
@@ -85,6 +90,24 @@ from .lease_maintenance import (
 )
 
 _log = Logger()
+
+PRIVACYPASS_MESSAGE = Field(
+    u"message",
+    unicode,
+    u"The PrivacyPass request-binding data associated with a pass.",
+)
+
+PASS_COUNT = Field(
+    u"count",
+    int,
+    u"A number of passes.",
+)
+
+GET_PASSES = MessageType(
+    u"zkapauthorizer:get-passes",
+    [PRIVACYPASS_MESSAGE, PASS_COUNT],
+    u"Passes are being spent.",
+)
 
 @implementer(IAnnounceableStorageServer)
 @attr.s
@@ -172,7 +195,12 @@ class ZKAPAuthorizer(object):
         extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
         def get_passes(message, count):
             unblinded_tokens = extract_unblinded_tokens(count)
-            return redeemer.tokens_to_passes(message, unblinded_tokens)
+            passes = redeemer.tokens_to_passes(message, unblinded_tokens)
+            GET_PASSES.log(
+                message=message,
+                count=count,
+            )
+            return passes
 
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),
