@@ -793,6 +793,7 @@ class Redeeming(object):
         return {
             u"name": u"redeeming",
             u"started": self.started.isoformat(),
+            u"counter": self.counter,
         }
 
 
@@ -981,7 +982,7 @@ class Voucher(object):
         elif state_name == u"redeeming":
             state = Redeeming(
                 started=parse_datetime(state_json[u"started"]),
-                counter=0,
+                counter=state_json[u"counter"],
             )
         elif state_name == u"double-spend":
             state = DoubleSpend(

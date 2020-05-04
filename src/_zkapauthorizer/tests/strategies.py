@@ -77,6 +77,7 @@ from ..model import (
     DoubleSpend,
     Unpaid,
     Error,
+    Redeeming,
     Redeemed,
 )
 
@@ -297,6 +298,7 @@ def vouchers():
         lambda voucher: voucher.decode("ascii"),
     )
 
+
 def redeemed_states():
     """
     Build ``Redeemed`` instances.
@@ -308,6 +310,20 @@ def redeemed_states():
         public_key=dummy_ristretto_keys(),
     )
 
+
+def voucher_counters():
+    """
+    Build integers usable as counters in the voucher redemption process.
+    """
+    return integers(
+        min_value=0,
+        # This may or may not be the actual maximum value accepted by a
+        # PaymentServer.  If it is not exactly the maximum, it's probably at
+        # least in the same ballpark.
+        max_value=256,
+    )
+
+
 def voucher_states():
     """
     Build Python objects representing states a Voucher can be in.
@@ -315,7 +331,12 @@ def voucher_states():
     return one_of(
         builds(
             Pending,
-            integers(min_value=0),
+            counter=integers(min_value=0),
+        ),
+        builds(
+            Redeeming,
+            started=datetimes(),
+            counter=voucher_counters(),
         ),
         redeemed_states(),
         builds(
@@ -344,19 +365,6 @@ def voucher_objects(states=voucher_states()):
         created=one_of(none(), datetimes()),
         expected_tokens=integers(min_value=1),
         state=states,
-    )
-
-
-def voucher_counters():
-    """
-    Build integers usable as counters in the voucher redemption process.
-    """
-    return integers(
-        min_value=0,
-        # This may or may not be the actual maximum value accepted by a
-        # PaymentServer.  If it is not exactly the maximum, it's probably at
-        # least in the same ballpark.
-        max_value=256,
     )
 
 
