@@ -444,7 +444,6 @@ class ClientPluginTests(TestCase):
         num_redemption_groups = token_count
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        expected_pass_cost =
         controller = PaymentController(
             store,
             DummyRedeemer(),
@@ -491,7 +490,7 @@ class ClientPluginTests(TestCase):
                         lambda logged_message: logged_message.message,
                         ContainsDict({
                             u"message": Equals(allocate_buckets_message(storage_index)),
-                            u"count": Equals(expected_pass_cost),
+                            u"count": Equals(token_count),
                         }),
                     ),
                 ),
