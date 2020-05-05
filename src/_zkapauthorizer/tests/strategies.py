@@ -511,6 +511,13 @@ def write_enabler_secrets():
     )
 
 
+def share_versions():
+    """
+    Build integers which could be Tahoe-LAFS share file version numbers.
+    """
+    return integers(min_value=0, max_value=2 ** 32 - 1)
+
+
 def sharenums():
     """
     Build Tahoe-LAFS share numbers.

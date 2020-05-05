@@ -20,13 +20,6 @@ from __future__ import (
     absolute_import,
 )
 
-from os import (
-    SEEK_CUR,
-)
-from struct import (
-    pack,
-)
-
 from fixtures import (
     MonkeyPatch,
 )
@@ -93,6 +86,7 @@ from .strategies import (
     lease_renew_secrets,
     lease_cancel_secrets,
     write_enabler_secrets,
+    share_versions,
     sharenums,
     sharenum_sets,
     sizes,
@@ -108,8 +102,10 @@ from .fixtures import (
     AnonymousStorageServer,
 )
 from .storage_common import (
+    LEASE_INTERVAL,
     cleanup_storage_server,
     write_toy_shares,
+    whitebox_write_sparse_share,
 )
 from .foolscap import (
     LocalRemote,
@@ -129,9 +125,6 @@ from ..model import (
 from ..foolscap import (
     ShareStat,
 )
-
-# Hard-coded in Tahoe-LAFS
-LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 class RequiredPassesTests(TestCase):
     """
@@ -440,6 +433,99 @@ class ShareTests(TestCase):
             ),
         )
 
+    @given(
+        storage_index=storage_indexes(),
+        sharenum=sharenums(),
+        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
+        clock=clocks(),
+        leases=lists(lease_renew_secrets(), unique=True, min_size=1),
+        version=share_versions(),
+    )
+    def test_stat_shares_immutable_wrong_version(self, storage_index, sharenum, size, clock, leases, version):
+        """
+        If a share file with an unexpected version is found, ``stat_shares``
+        declines to offer a result (by raising ``ValueError``).
+        """
+        assume(version != 1)
+
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
+            # storage_index_to_dir likes to return multiple segments
+            # joined by pathsep
+            storage_index_to_dir(storage_index),
+        )
+        sharepath = sharedir.child(u"{}".format(sharenum))
+        sharepath.parent().makedirs()
+        whitebox_write_sparse_share(
+            sharepath,
+            version=version,
+            size=size,
+            leases=leases,
+            now=clock.seconds(),
+        )
+
+        self.assertThat(
+            self.client.stat_shares([storage_index]),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(ValueError),
+                ),
+            ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        sharenum=sharenums(),
+        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
+        clock=clocks(),
+        version=share_versions(),
+        # Encode our knowledge of the share header format and size right here...
+        position=integers(min_value=0, max_value=11),
+    )
+    def test_stat_shares_truncated_file(self, storage_index, sharenum, size, clock, version, position):
+        """
+        If a share file is truncated in the middle of the header,
+        ``stat_shares`` declines to offer a result (by raising
+        ``ValueError``).
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
+            # storage_index_to_dir likes to return multiple segments
+            # joined by pathsep
+            storage_index_to_dir(storage_index),
+        )
+        sharepath = sharedir.child(u"{}".format(sharenum))
+        sharepath.parent().makedirs()
+        whitebox_write_sparse_share(
+            sharepath,
+            version=version,
+            size=size,
+            # We know leases are at the end, where they'll get chopped off, so
+            # we don't bother to write any.
+            leases=[],
+            now=clock.seconds(),
+        )
+        with sharepath.open("wb") as fobj:
+            fobj.truncate(position)
+
+        self.assertThat(
+            self.client.stat_shares([storage_index]),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(ValueError),
+                ),
+            ),
+        )
+
+
     @skipIf(platform.isWindows(), "Creating large files on Windows (no sparse files) is too slow")
     @given(
         storage_index=storage_indexes(),
@@ -457,8 +543,6 @@ class ShareTests(TestCase):
         share placement and layout.  This is necessary to avoid having to
         write real multi-gigabyte files to exercise the behavior.
         """
-        header_format = ">LLL"
-        lease_format = ">L32s32sL"
         def write_shares(storage_server, storage_index, sharenums, size, canary):
             sharedir = FilePath(storage_server.sharedir).preauthChild(
                 # storage_index_to_dir likes to return multiple segments
@@ -468,38 +552,13 @@ class ShareTests(TestCase):
             for sharenum in sharenums:
                 sharepath = sharedir.child(u"{}".format(sharenum))
                 sharepath.parent().makedirs()
-                with sharepath.open("wb") as share:
-                    share.write(
-                        pack(
-                            header_format,
-                            # Version
-                            1,
-                            # Maybe-saturated size (what at least one
-                            # Tahoe-LAFS comment claims is appropriate for
-                            # large files)
-                            min(size, 2 ** 32 - 1),
-                            len(leases),
-                        ),
-                    )
-                    # Try to make it sparse by skipping all the data.
-                    share.seek(size - 1, SEEK_CUR),
-                    share.write(b"\0")
-                    share.write(
-                        b"".join(
-                            pack(
-                                lease_format,
-                                # no owner
-                                0,
-                                renew,
-                                # no cancel secret
-                                b"",
-                                # expiration timestamp
-                                int(clock.seconds() + LEASE_INTERVAL),
-                            )
-                            for renew
-                            in leases
-                        ),
-                    )
+                whitebox_write_sparse_share(
+                    sharepath,
+                    version=1,
+                    size=size,
+                    leases=leases,
+                    now=clock.seconds(),
+                )
 
         return self._stat_shares_immutable_test(
             storage_index,
