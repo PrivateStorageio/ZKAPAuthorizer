@@ -630,7 +630,7 @@ class ShareTests(TestCase):
     )
     def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
-        Mutable share data written using *slot_testv_and_readv_abbnd_writev* can be
+        Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
         # Hypothesis causes our storage server to be used many times.  Clean
