@@ -19,6 +19,9 @@ buildPythonPackage rec {
   checkInputs = [ testtools pytest hypothesis ];
   propagatedBuildInputs = [ zope_interface pyrsistent boltons ];
 
+  # https://github.com/itamarst/eliot/issues/436
+  doCheck = false;
+
   meta = with lib; {
     homepage = https://github.com/itamarst/eliot/;
     description = "Logging library that tells you why it happened";
