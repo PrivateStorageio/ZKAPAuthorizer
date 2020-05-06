@@ -542,10 +542,11 @@ def get_storage_index_share_size(sharepath):
 
     share_file_size = stat(sharepath).st_size
     header_format = ">LLL"
+    header_size = calcsize(header_format)
     with open(sharepath, "rb") as share_file:
         header = share_file.read(calcsize(header_format))
 
-    if len(header) != calcsize(header_format):
+    if len(header) != header_size:
         raise ValueError(
             "Tried to read {} bytes of share file header, got {!r} instead.".format(
                 calcsize(header_format),
@@ -560,7 +561,7 @@ def get_storage_index_share_size(sharepath):
             "Cannot interpret version {} share file.".format(version),
         )
 
-    return share_file_size - 0x0c - (number_of_leases * (4 + 32 + 32 + 4))
+    return share_file_size - header_size - (number_of_leases * (4 + 32 + 32 + 4))
 
 
 def get_lease_expiration(get_leases, storage_index_or_slot):
