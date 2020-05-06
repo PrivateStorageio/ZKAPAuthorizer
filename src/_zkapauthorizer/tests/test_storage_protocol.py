@@ -436,7 +436,7 @@ class ShareTests(TestCase):
     @given(
         storage_index=storage_indexes(),
         sharenum=sharenums(),
-        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
+        size=sizes(),
         clock=clocks(),
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
         version=share_versions(),
@@ -480,7 +480,7 @@ class ShareTests(TestCase):
     @given(
         storage_index=storage_indexes(),
         sharenum=sharenums(),
-        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
+        size=sizes(),
         clock=clocks(),
         version=share_versions(),
         # Encode our knowledge of the share header format and size right here...
