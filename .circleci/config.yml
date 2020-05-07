@@ -125,7 +125,7 @@ jobs:
             #
             # Also limit the number of concurrent jobs because of resource
             # constraints on CircleCI. :/
-            nix-build --jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            nix-build --max-jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - run:
           name: "Cache codecov"
