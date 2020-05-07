@@ -7,5 +7,6 @@ source =
 source =
     src/
     /nix/store/*/lib/python*/site-packages/
+    C:\hostedtoolcache\windows\Python\2.7.18\x64\Lib\site-packages\
 
 branch = True
