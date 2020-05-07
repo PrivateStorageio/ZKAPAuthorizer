@@ -61,7 +61,6 @@ buildPythonPackage rec {
     python -m coverage html
     mkdir -p "$doc/share/doc/${name}"
     cp -vr .coverage htmlcov "$doc/share/doc/${name}"
-    python -m coverage report
     ''
     else "";
 }

@@ -68,6 +68,7 @@ jobs:
 
     - name: "Convert Coverage"
       run: |
+        coverage report
         coverage xml
 
     - uses: codecov/codecov-action@v1

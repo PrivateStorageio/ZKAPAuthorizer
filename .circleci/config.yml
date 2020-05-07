@@ -145,9 +145,12 @@ jobs:
 
       - run:
           name: "Report Coverage"
+          shell: "nix-shell -p 'python.withPackages (ps: [ ps.codecov ])'"
           command: |
-            nix-shell -p 'python.withPackages (ps: [ ps.codecov ])' --run \
-              'cp ./result-doc/share/doc/*/.coverage ./; coverage combine; codecov --file .coverage'
+            cp ./result-doc/share/doc/*/.coverage ./
+            python -m coverage combine
+            python -m coverage report
+            codecov --file .coverage'
 
 workflows:
   version: 2
