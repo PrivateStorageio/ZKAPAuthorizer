@@ -106,8 +106,8 @@ jobs:
             # If nixpkgs changes then potentially a lot of cached packages for
             # the base system will be invalidated so we may as well drop them
             # and make a new cache with the new packages.
-            - zkapauthorizer-nix-store-v3-{{ checksum "nixpkgs.rev" }}
-            - zkapauthorizer-nix-store-v3-
+            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+            - zkapauthorizer-nix-store-v4-
 
       - run:
           name: "Run Test Suite"
@@ -139,7 +139,7 @@ jobs:
 
       - save_cache:
           name: "Cache Nix Store Paths"
-          key: zkapauthorizer-nix-store-v3-{{ checksum "nixpkgs.rev" }}
+          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
           paths:
             - "/nix"
 
