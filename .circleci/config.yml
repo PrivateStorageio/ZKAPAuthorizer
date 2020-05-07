@@ -150,7 +150,7 @@ jobs:
             cp ./result-doc/share/doc/*/.coverage ./
             python -m coverage combine
             python -m coverage report
-            codecov --file .coverage'
+            codecov --file .coverage
 
 workflows:
   version: 2
