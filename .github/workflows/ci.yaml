@@ -68,6 +68,7 @@ jobs:
 
     - name: "Convert Coverage"
       run: |
+        coverage combine
         coverage report
         coverage xml
 
