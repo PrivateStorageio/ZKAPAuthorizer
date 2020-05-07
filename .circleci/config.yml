@@ -122,7 +122,10 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            #
+            # Also limit the number of concurrent jobs because of resource
+            # constraints on CircleCI. :/
+            nix-build --jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - run:
           name: "Cache codecov"
