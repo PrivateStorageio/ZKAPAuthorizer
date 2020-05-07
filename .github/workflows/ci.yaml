@@ -65,11 +65,15 @@ jobs:
       run: |
         python -m coverage run -m twisted.trial _zkapauthorizer
 
-
     - name: "Convert Coverage"
       run: |
+        echo "Files:"
+        dir
+        echo "Combining"
         coverage combine .coverage
+        echo "Reporting"
         coverage report
+        echo "Converting to XML"
         coverage xml
 
     - uses: codecov/codecov-action@v1
