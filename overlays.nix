@@ -15,12 +15,9 @@ self: super: {
       # 2 support.
       typing = python-self.callPackage ./typing.nix { };
 
-      # new tahoe-lafs dependency
-      eliot = python-self.callPackage ./eliot.nix { };
-
       # tahoe-lafs in nixpkgs is packaged as an application!  so we have to
       # re-package it ourselves as a library.
-      tahoe-lafs = python-self.callPackage ((import ./tahoe-lafs.nix) + "/nix") { };
+      tahoe-lafs = python-self.callPackage ./tahoe-lafs.nix { };
 
       # we depend on the challenge-bypass-ristretto python package, a set of
       # bindings to the challenge-bypass-ristretto Rust crate.
