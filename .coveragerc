@@ -3,4 +3,9 @@ source =
     _zkapauthorizer
     twisted.plugins.zkapauthorizer
 
+[paths]
+source =
+    src/
+    /nix/store/*/lib/python*/site-packages/
+
 branch = True
