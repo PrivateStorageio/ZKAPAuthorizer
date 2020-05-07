@@ -145,13 +145,8 @@ jobs:
 
       - run:
           name: "Report Coverage"
-          shell: "/usr/bin/env nix-shell"
           command: |
-            #! nix-shell -i bash -p "python.withPackages (ps: [ ps.codecov ])"
-            cp ./result-doc/share/doc/*/.coverage ./
-            python -m coverage combine
-            python -m coverage report
-            codecov --file .coverage
+            ./.circleci/report-coverage.sh
 
 workflows:
   version: 2
