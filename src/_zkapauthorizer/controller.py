@@ -832,10 +832,6 @@ class PaymentController(object):
             # Reload state before each iteration.  We expect it to change each time.
             voucher_obj = self.store.get(voucher)
 
-            if not voucher_obj.state.should_start_redemption():
-                # An earlier iteration may have encountered a fatal error.
-                break
-
             succeeded = yield self._perform_redeem(voucher_obj, counter, tokens)
             if not succeeded:
                 self._log.info(
