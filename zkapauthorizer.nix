@@ -50,7 +50,7 @@ buildPythonPackage rec {
     runHook preCheck
     "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
-      then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
+      then "coverage run --debug=config --module"
       else ""
     } twisted.trial ${extraTrialArgs} ${testSuite'}
     runHook postCheck
@@ -58,10 +58,8 @@ buildPythonPackage rec {
 
   postCheck = if collectCoverage
     then ''
-    python -m coverage html
     mkdir -p "$doc/share/doc/${name}"
-    cp -vr .coverage htmlcov "$doc/share/doc/${name}"
-    python -m coverage report
+    cp -v .coverage.* "$doc/share/doc/${name}"
     ''
     else "";
 }
