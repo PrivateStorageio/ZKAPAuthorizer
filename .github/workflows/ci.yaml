@@ -37,19 +37,19 @@ jobs:
 
     - name: "Upgrade Pip"
       run: |
-        python -m pip install --unstable-feature=resolver -v --upgrade pip
+        python -m pip install -v --upgrade pip
 
     - name: "Install CI Dependencies"
       run: |
-        python -m pip install --unstable-feature=resolver -v wheel coverage
+        python -m pip install -v wheel coverage
 
     - name: "Install Test Dependencies"
       run: |
-        python -m pip install --unstable-feature=resolver -v -r test-requirements.txt
+        python -m pip install -v -r test-requirements.txt
 
     - name: "Install ZKAPAuthorizer"
       run: |
-        python -m pip install --unstable-feature=resolver -v ./
+        python -m pip install -v ./
 
     - name: "Dump Python Environment"
       run: |
