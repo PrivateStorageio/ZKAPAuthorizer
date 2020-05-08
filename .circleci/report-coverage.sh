@@ -3,4 +3,5 @@
 cp ./result-doc/share/doc/*/.coverage ./
 python -m coverage combine .coverage
 python -m coverage report
-codecov --file .coverage
+python -m coverage xml
+codecov --file coverage.xml
