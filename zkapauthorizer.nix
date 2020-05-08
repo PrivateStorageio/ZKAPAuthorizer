@@ -58,10 +58,8 @@ buildPythonPackage rec {
 
   postCheck = if collectCoverage
     then ''
-    python -m coverage combine
-    python -m coverage html
     mkdir -p "$doc/share/doc/${name}"
-    cp -vr .coverage htmlcov "$doc/share/doc/${name}"
+    cp -v .coverage.* "$doc/share/doc/${name}"
     ''
     else "";
 }
