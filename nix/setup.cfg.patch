@@ -1,0 +1,13 @@
+diff --git a/setup.cfg b/setup.cfg
+index 3856a101..371a19b3 100644
+--- a/setup.cfg
++++ b/setup.cfg
+@@ -38,7 +38,7 @@ install_requires =
+     python-challenge-bypass-ristretto
+     # Inherit our Twisted dependency from tahoe-lafs so we don't accidentally
+     # get the extras wrong here and break stuff.
+-    tahoe-lafs==1.14.0
++    tahoe-lafs
+     treq
+ 
+ [versioneer]
