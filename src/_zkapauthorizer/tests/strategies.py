@@ -511,6 +511,13 @@ def write_enabler_secrets():
     )
 
 
+def share_versions():
+    """
+    Build integers which could be Tahoe-LAFS share file version numbers.
+    """
+    return integers(min_value=0, max_value=2 ** 32 - 1)
+
+
 def sharenums():
     """
     Build Tahoe-LAFS share numbers.
@@ -532,17 +539,19 @@ def sharenum_sets():
     )
 
 
-def sizes():
+def sizes(
+    # Size 0 data isn't data, it's nothing.
+    min_value=1,
+    # Let this be larger than a single segment (2 ** 17) in case that matters
+    # to Tahoe-LAFS storage at all.  I don't think it does, though.
+    max_value=2 ** 18,
+):
     """
     Build Tahoe-LAFS share sizes.
     """
     return integers(
-        # Size 0 data isn't data, it's nothing.
-        min_value=1,
-        # Let this be larger than a single segment (2 ** 17) in case that
-        # matters to Tahoe-LAFS storage at all.  I don't think it does,
-        # though.
-        max_value=2 ** 18,
+        min_value=min_value,
+        max_value=max_value,
     )
 
 

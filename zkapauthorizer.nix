@@ -1,6 +1,6 @@
 { lib
 , buildPythonPackage, sphinx, git
-, attrs, zope_interface, eliot, aniso8601, twisted, tahoe-lafs, challenge-bypass-ristretto, treq
+, attrs, zope_interface, aniso8601, twisted, tahoe-lafs, challenge-bypass-ristretto, treq
 , fixtures, testtools, hypothesis, pyflakes, coverage
 , hypothesisProfile ? null
 , collectCoverage ? false
@@ -31,7 +31,8 @@ buildPythonPackage rec {
     attrs
     zope_interface
     aniso8601
-    eliot
+    # Inherit eliot from tahoe-lafs
+    # eliot
     twisted
     tahoe-lafs
     challenge-bypass-ristretto
@@ -49,7 +50,7 @@ buildPythonPackage rec {
     runHook preCheck
     "${pyflakes}/bin/pyflakes" src/_zkapauthorizer
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} python -m ${if collectCoverage
-      then "coverage run --branch --source _zkapauthorizer,twisted.plugins.zkapauthorizer --module"
+      then "coverage run --debug=config --module"
       else ""
     } twisted.trial ${extraTrialArgs} ${testSuite'}
     runHook postCheck
@@ -57,10 +58,8 @@ buildPythonPackage rec {
 
   postCheck = if collectCoverage
     then ''
-    python -m coverage html
     mkdir -p "$doc/share/doc/${name}"
-    cp -vr .coverage htmlcov "$doc/share/doc/${name}"
-    python -m coverage report
+    cp -v .coverage.* "$doc/share/doc/${name}"
     ''
     else "";
 }

@@ -1,9 +1,20 @@
+{ python2Packages }:
 let
-  pkgs = import <nixpkgs> {};
+  # Manually assemble the tahoe-lafs build inputs because tahoe-lafs 1.14.0
+  # eliot package runs the eliot test suite which is flaky.  Doing this gives
+  # us a place to insert a `doCheck = false` (at the cost of essentially
+  # duplicating tahoe-lafs' default.nix).  Not ideal but at least we can throw
+  # it away when we upgrade to the next tahoe-lafs version.
+  repo = ((import ./tahoe-lafs-repo.nix) + "/nix");
+  nevow-drv = repo + "/nevow.nix";
+  nevow = python2Packages.callPackage nevow-drv { };
+  eliot-drv = repo + "/eliot.nix";
+  eliot = (python2Packages.callPackage eliot-drv { }).overrideAttrs (old: {
+    doInstallCheck = false;
+  });
+  tahoe-lafs-drv = repo + "/tahoe-lafs.nix";
+  tahoe-lafs = python2Packages.callPackage tahoe-lafs-drv {
+    inherit nevow eliot;
+  };
 in
-  pkgs.fetchFromGitHub {
-    owner = "tahoe-lafs";
-    repo = "tahoe-lafs";
-    rev = "tahoe-lafs-1.14.0";
-    sha256 = "1ahdiapg57g6icv7p2wbzgkwl9lzdlgrsvbm5485414m7z2d6las";
-  }
+  tahoe-lafs
