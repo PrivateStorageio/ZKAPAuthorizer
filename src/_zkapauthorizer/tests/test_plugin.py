@@ -440,14 +440,14 @@ class ClientPluginTests(TestCase):
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
         # Give it enough for the allocate_buckets call below.
-        token_count = required_passes(store.pass_value, [size] * len(sharenums))
+        expected_pass_cost = required_passes(store.pass_value, [size] * len(sharenums))
         # And few enough redemption groups given the number of tokens.
-        num_redemption_groups = token_count
+        num_redemption_groups = expected_pass_cost
 
         controller = PaymentController(
             store,
             DummyRedeemer(),
-            default_token_count=token_count,
+            default_token_count=expected_pass_cost,
             num_redemption_groups=num_redemption_groups,
         )
         # Get a token inserted into the store.
@@ -490,7 +490,7 @@ class ClientPluginTests(TestCase):
                         lambda logged_message: logged_message.message,
                         ContainsDict({
                             u"message": Equals(allocate_buckets_message(storage_index)),
-                            u"count": Equals(token_count),
+                            u"count": Equals(expected_pass_cost),
                         }),
                     ),
                 ),
