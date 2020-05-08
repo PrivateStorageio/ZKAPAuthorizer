@@ -16,6 +16,13 @@
 ``allmydata.storage``-related helpers shared across the test suite.
 """
 
+from os import (
+    SEEK_CUR,
+)
+from struct import (
+    pack,
+)
+
 from twisted.python.filepath import (
     FilePath,
 )
@@ -24,6 +31,9 @@ from .strategies import (
     # Not really a strategy...
     bytes_for_share,
 )
+
+# Hard-coded in Tahoe-LAFS
+LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 def cleanup_storage_server(storage_server):
     """
@@ -73,3 +83,53 @@ def write_toy_shares(
     for (sharenum, writer) in allocated.items():
         writer.remote_write(0, bytes_for_share(sharenum, size))
         writer.remote_close()
+
+
+def whitebox_write_sparse_share(sharepath, version, size, leases, now):
+    """
+    Write a zero-filled sparse (if the filesystem supports it) immutable share
+    to the given path.
+
+    This assumes knowledge of the Tahoe-LAFS share file format.
+
+    :param FilePath sharepath: The path to which to write the share file.
+    :param int version: The share version to write to the file.
+    :param int size: The share data size to write.
+    :param list leases: Renewal secrets for leases to write to the share file.
+    :param float now: The current time as a POSIX timestamp.
+    """
+    # Maybe-saturated size (what at least one Tahoe-LAFS comment claims is
+    # appropriate for large files)
+    internal_size = min(size, 2 ** 32 - 1)
+    apparent_size = size
+
+    header_format = ">LLL"
+    lease_format = ">L32s32sL"
+    with sharepath.open("wb") as share:
+        share.write(
+            pack(
+                header_format,
+                version,
+                internal_size,
+                len(leases),
+            ),
+        )
+        # Try to make it sparse by skipping all the data.
+        share.seek(apparent_size - 1, SEEK_CUR),
+        share.write(b"\0")
+        share.write(
+            b"".join(
+                pack(
+                    lease_format,
+                    # no owner
+                    0,
+                    renew,
+                    # no cancel secret
+                    b"",
+                    # expiration timestamp
+                    int(now + LEASE_INTERVAL),
+                )
+                for renew
+                in leases
+            ),
+        )
