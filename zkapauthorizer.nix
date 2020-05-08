@@ -27,6 +27,12 @@ buildPythonPackage rec {
     sphinx
   ];
 
+  patches = [
+    # Remove the Tahoe-LAFS version pin in distutils config.  We have our own
+    # pinning and also our Tahoe-LAFS package has a bogus version number. :/
+    ./nix/setup.cfg.patch
+  ];
+
   propagatedBuildInputs = [
     attrs
     zope_interface
