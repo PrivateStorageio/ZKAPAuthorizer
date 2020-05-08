@@ -70,7 +70,7 @@ jobs:
         echo "Files:"
         dir
         echo "Combining"
-        coverage combine .coverage
+        coverage combine
         echo "Reporting"
         coverage report
         echo "Converting to XML"
