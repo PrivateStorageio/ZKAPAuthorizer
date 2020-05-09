@@ -176,8 +176,23 @@ class VoucherStoreTests(TestCase):
         in the same state as a single call.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
-        first_tokens = store.add(voucher, len(tokens), 0, lambda: tokens)
-        second_tokens = store.add(voucher, 0, 0, lambda: [])
+        first_tokens = store.add(
+            voucher,
+            expected_tokens=len(tokens),
+            counter=0,
+            get_tokens=lambda: tokens,
+        )
+        second_tokens = store.add(
+            voucher,
+            # The voucher should already exists in the store so the
+            # expected_tokens value supplied here is ignored.
+            expected_tokens=0,
+            counter=0,
+            # Likewise, no need to generate tokens here because counter value
+            # 0 was already added and tokens were generated then.  If
+            # get_tokens were called here, it would be an error.
+            get_tokens=None,
+        )
         self.assertThat(
             store.get(voucher),
             MatchesStructure(
