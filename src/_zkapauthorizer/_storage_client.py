@@ -34,7 +34,7 @@ from allmydata.interfaces import (
 )
 
 from .storage_common import (
-    BYTES_PER_PASS,
+    pass_value_attribute,
     required_passes,
     allocate_buckets_message,
     add_lease_message,
@@ -92,7 +92,7 @@ class ZKAPAuthorizerStorageClient(object):
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
-
+    _pass_value = pass_value_attribute()
     _get_rref = attr.ib()
     _get_passes = attr.ib()
 
@@ -148,7 +148,7 @@ class ZKAPAuthorizerStorageClient(object):
             "allocate_buckets",
             self._get_encoded_passes(
                 allocate_buckets_message(storage_index),
-                required_passes(BYTES_PER_PASS, [allocated_size] * len(sharenums)),
+                required_passes(self._pass_value, [allocated_size] * len(sharenums)),
             ),
             storage_index,
             renew_secret,
@@ -179,7 +179,7 @@ class ZKAPAuthorizerStorageClient(object):
             storage_index,
             None,
         )).values()
-        num_passes = required_passes(BYTES_PER_PASS, share_sizes)
+        num_passes = required_passes(self._pass_value, share_sizes)
         # print("Adding lease to {!r} with sizes {} with {} passes".format(
         #     storage_index,
         #     share_sizes,
@@ -206,7 +206,7 @@ class ZKAPAuthorizerStorageClient(object):
             storage_index,
             None,
         )).values()
-        num_passes = required_passes(BYTES_PER_PASS, share_sizes)
+        num_passes = required_passes(self._pass_value, share_sizes)
         returnValue((
             yield self._rref.callRemote(
                 "renew_lease",
@@ -265,6 +265,7 @@ class ZKAPAuthorizerStorageClient(object):
             )
             # Determine the cost of the new storage for the operation.
             required_new_passes = get_required_new_passes_for_mutable_write(
+                self._pass_value,
                 current_sizes,
                 tw_vectors,
             )

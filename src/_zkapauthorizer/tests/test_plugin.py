@@ -41,7 +41,12 @@ from testtools import (
 from testtools.matchers import (
     Always,
     Contains,
+    Equals,
     AfterPreprocessing,
+    MatchesAll,
+    HasLength,
+    AllMatch,
+    ContainsDict,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -79,6 +84,10 @@ from allmydata.client import (
     create_client_from_config,
 )
 
+from eliot.testing import (
+    LoggedMessage,
+)
+
 from twisted.python.filepath import (
     FilePath,
 )
@@ -95,6 +104,10 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
+from .._plugin import (
+    GET_PASSES,
+)
+
 from ..foolscap import (
     RIPrivacyPassAuthorizedStorageServer,
 )
@@ -108,8 +121,8 @@ from ..controller import (
     DummyRedeemer,
 )
 from ..storage_common import (
-    BYTES_PER_PASS,
     required_passes,
+    allocate_buckets_message,
 )
 from .._storage_client import (
     IncorrectStorageServerReference,
@@ -142,6 +155,11 @@ from .foolscap import (
     get_anonymous_storage_server,
     DummyReferenceable,
 )
+
+from .eliot import (
+    capture_logging,
+)
+
 
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
@@ -386,18 +404,20 @@ class ClientPluginTests(TestCase):
         )
 
     @given(
-        tahoe_configs_with_dummy_redeemer,
-        datetimes(),
-        announcements(),
-        vouchers(),
-        storage_indexes(),
-        lease_renew_secrets(),
-        lease_cancel_secrets(),
-        sharenum_sets(),
-        sizes(),
+        get_config=tahoe_configs_with_dummy_redeemer,
+        now=datetimes(),
+        announcement=announcements(),
+        voucher=vouchers(),
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
     )
+    @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_extracted(
             self,
+            logger,
             get_config,
             now,
             announcement,
@@ -418,16 +438,16 @@ class ClientPluginTests(TestCase):
             b"tub.port",
         )
 
-        # Give it enough for the allocate_buckets call below.
-        token_count = required_passes(BYTES_PER_PASS, [size] * len(sharenums))
-        # And few enough redemption groups given the number of tokens.
-        num_redemption_groups = token_count
-
         store = VoucherStore.from_node_config(node_config, lambda: now)
+        # Give it enough for the allocate_buckets call below.
+        expected_pass_cost = required_passes(store.pass_value, [size] * len(sharenums))
+        # And few enough redemption groups given the number of tokens.
+        num_redemption_groups = expected_pass_cost
+
         controller = PaymentController(
             store,
             DummyRedeemer(),
-            default_token_count=token_count,
+            default_token_count=expected_pass_cost,
             num_redemption_groups=num_redemption_groups,
         )
         # Get a token inserted into the store.
@@ -458,6 +478,23 @@ class ClientPluginTests(TestCase):
         self.assertThat(
             lambda: store.extract_unblinded_tokens(1),
             raises(NotEnoughTokens),
+        )
+
+        messages = LoggedMessage.of_type(logger.messages, GET_PASSES)
+        self.assertThat(
+            messages,
+            MatchesAll(
+                HasLength(1),
+                AllMatch(
+                    AfterPreprocessing(
+                        lambda logged_message: logged_message.message,
+                        ContainsDict({
+                            u"message": Equals(allocate_buckets_message(storage_index)),
+                            u"count": Equals(expected_pass_cost),
+                        }),
+                    ),
+                ),
+            ),
         )
 
 

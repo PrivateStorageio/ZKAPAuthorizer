@@ -106,8 +106,8 @@ jobs:
             # If nixpkgs changes then potentially a lot of cached packages for
             # the base system will be invalidated so we may as well drop them
             # and make a new cache with the new packages.
-            - zkapauthorizer-nix-store-v3-{{ checksum "nixpkgs.rev" }}
-            - zkapauthorizer-nix-store-v3-
+            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+            - zkapauthorizer-nix-store-v4-
 
       - run:
           name: "Run Test Suite"
@@ -122,7 +122,10 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            #
+            # Also limit the number of concurrent jobs because of resource
+            # constraints on CircleCI. :/
+            nix-build --cores 1 --max-jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - run:
           name: "Cache codecov"
@@ -136,15 +139,14 @@ jobs:
 
       - save_cache:
           name: "Cache Nix Store Paths"
-          key: zkapauthorizer-nix-store-v3-{{ checksum "nixpkgs.rev" }}
+          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
           paths:
             - "/nix"
 
       - run:
           name: "Report Coverage"
           command: |
-            nix-shell -p 'python.withPackages (ps: [ ps.codecov ])' --run \
-              'codecov --file ./result-doc/share/doc/*/.coverage'
+            ./.circleci/report-coverage.sh
 
 workflows:
   version: 2
