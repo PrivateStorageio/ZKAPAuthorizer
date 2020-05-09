@@ -766,9 +766,14 @@ class PaymentController(object):
                     voucher=voucher.number,
                 )
 
-    def _get_random_tokens_for_voucher(self, voucher, counter, num_tokens):
+    def _get_random_tokens_for_voucher(self, voucher, counter, num_tokens, total_tokens):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
+
+        :param int num_tokens: The number of tokens to get.
+
+        :param int total_tokens: The total number of tokens for which this
+            voucher is expected to be redeemed.
         """
         def get_tokens():
             self._log.info(
@@ -776,12 +781,23 @@ class PaymentController(object):
                 voucher=voucher,
             )
             return self.redeemer.random_tokens_for_voucher(
-                Voucher(voucher),
+                Voucher(
+                    number=voucher,
+                    # Unclear whether this information is useful to redeemers
+                    # but we cannot construct a Voucher without some value
+                    # here.
+                    expected_tokens=total_tokens,
+                ),
                 counter,
                 num_tokens,
             )
 
-        return self.store.add(voucher, counter, get_tokens)
+        return self.store.add(
+            voucher,
+            total_tokens,
+            counter,
+            get_tokens,
+        )
 
     @inlineCallbacks
     def redeem(self, voucher, num_tokens=None):
@@ -790,16 +806,16 @@ class PaymentController(object):
 
         :param int num_tokens: A number of tokens to redeem.
         """
-        if num_tokens is None:
-            num_tokens = self.default_token_count
-
         # Try to get an existing voucher object for the given number.
         try:
             voucher_obj = self.store.get(voucher)
         except KeyError:
             # This is our first time dealing with this number.
             counter_start = 0
+            if num_tokens is None:
+                num_tokens = self.default_token_count
         else:
+            num_tokens = voucher_obj.expected_tokens
             # Determine the starting point from the state.
             if voucher_obj.state.should_start_redemption():
                 counter_start = voucher_obj.state.counter
@@ -811,10 +827,11 @@ class PaymentController(object):
                 )
 
         self._log.info(
-            "Starting redemption of {voucher}[{start}..{end}]",
+            "Starting redemption of {voucher}[{start}..{end}] for {num_tokens} tokens.",
             voucher=voucher,
             start=counter_start,
             end=self.num_redemption_groups,
+            num_tokens=num_tokens,
         )
         for counter in range(counter_start, self.num_redemption_groups):
             # Pre-generate the random tokens to use when redeeming the voucher.
@@ -827,7 +844,12 @@ class PaymentController(object):
             # number of passes that can be constructed is still only the size of
             # the set of random tokens.
             token_count = token_count_for_group(self.num_redemption_groups, num_tokens, counter)
-            tokens = self._get_random_tokens_for_voucher(voucher, counter, token_count)
+            tokens = self._get_random_tokens_for_voucher(
+                voucher,
+                counter,
+                num_tokens=token_count,
+                total_tokens=num_tokens,
+            )
 
             # Reload state before each iteration.  We expect it to change each time.
             voucher_obj = self.store.get(voucher)

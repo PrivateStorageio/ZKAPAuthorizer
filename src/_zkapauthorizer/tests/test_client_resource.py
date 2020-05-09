@@ -823,6 +823,7 @@ class VoucherTests(TestCase):
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
+                expected_tokens=Equals(NUM_TOKENS),
                 created=Equals(now),
                 state=Equals(Redeeming(
                     started=now,
@@ -845,6 +846,7 @@ class VoucherTests(TestCase):
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
+                expected_tokens=Equals(NUM_TOKENS),
                 created=Equals(now),
                 state=Equals(Redeemed(
                     finished=now,
@@ -869,6 +871,7 @@ class VoucherTests(TestCase):
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
+                expected_tokens=Equals(NUM_TOKENS),
                 created=Equals(now),
                 state=Equals(DoubleSpend(
                     finished=now,
@@ -891,6 +894,7 @@ class VoucherTests(TestCase):
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
+                expected_tokens=Equals(NUM_TOKENS),
                 created=Equals(now),
                 state=Equals(Unpaid(
                     finished=now,
@@ -913,6 +917,7 @@ class VoucherTests(TestCase):
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
+                expected_tokens=Equals(NUM_TOKENS),
                 created=Equals(now),
                 state=Equals(Error(
                     finished=now,
@@ -990,7 +995,8 @@ class VoucherTests(TestCase):
             Equals({
                 u"vouchers": list(
                     Voucher(
-                        voucher,
+                        number=voucher,
+                        expected_tokens=NUM_TOKENS,
                         created=now,
                         state=Redeemed(
                             finished=now,
@@ -1021,7 +1027,8 @@ class VoucherTests(TestCase):
             Equals({
                 u"vouchers": list(
                     Voucher(
-                        voucher,
+                        number=voucher,
+                        expected_tokens=NUM_TOKENS,
                         created=now,
                         state=Unpaid(
                             finished=now,

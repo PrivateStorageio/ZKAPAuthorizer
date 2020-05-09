@@ -42,31 +42,40 @@ If the voucher is not known then the response is **NOT FOUND**.
 For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  { "value": <string>
+  { "version": 1
+  , "number": <string>
+  , "expected-tokens": <integer>
   , "created": <iso8601 timestamp>
   , "state": <state object>
-  , "version": 1
   }
 
-The ``value`` property merely indicates the voucher which was requested.
-The ``created`` property indicates when the voucher was first added to the node.
-The ``redeemed`` property indicates whether or not the voucher has successfully been redeemed with a payment server yet.
-The ``token-count`` property gives the number of blinded token signatures the client received in exchange for redemption of the voucher
-(each blinded token signature can be used to construct a one ZKAP),
-if it has been redeemed.
-If it has not been redeemed then it is ``null``.
+The ``version`` property indicates the semantic version of the data being returned.
+When properties are removed or the meaning of a property is changed,
+the value of the ``version`` property will be incremented.
+The addition of new properties is **not** accompanied by a bumped version number.
 
+The ``number`` property merely indicates the voucher which was requested.
+The ``expected-tokens`` property indicates the total number of ZKAPs for which the client intends to redeem the voucher.
+Vouchers created using old versions of ZKAPAuthorizer will have a best-guess value here because the real value was not recorded.
+The ``created`` property indicates when the voucher was first added to the node.
 The ``state`` property is an object that gives more details about the current state of the voucher.
 The following values are possible::
 
   { "name": "pending"
+  , "counter": <integer>
   }
+
+The integer *counter* value indicates how many successful sub-redemptions have completed for this voucher.
 
 ::
 
   { "name": "redeeming"
   , "started": <iso8601 timestamp>
+  , "counter": <integer>
   }
+
+The *started* timestamp gives the time when the most recent redemption attempt began.
+The integer *counter* value has the same meaning as it does for the *pending* state.
 
 ::
 
@@ -75,17 +84,24 @@ The following values are possible::
   , "token-count": <number>
   }
 
+The *finished* timestamp gives the time when redemption completed successfully.
+The integer *token-count* gives the number tokens for which the voucher was redeemed.
+
 ::
 
   { "name": "double-spend"
   , "finished": <iso8601 timestamp>
   }
 
+The *finished* timestamp gives the time when the double-spend error was encountered.
+
 ::
 
   { "name": "unpaid"
   , "finished": <iso8601 timestamp>
   }
+
+The *finished* timestamp gives the time when the unpaid error was encountered.
 
 ::
 
@@ -94,10 +110,8 @@ The following values are possible::
   , "details": <text>
   }
 
-The ``version`` property indicates the semantic version of the data being returned.
-When properties are removed or the meaning of a property is changed,
-the value of the ``version`` property will be incremented.
-The addition of new properties is **not** accompanied by a bumped version number.
+The *finished* timestamp gives the time when this other error condition was encountered.
+The *details* string may give additional details about what the error was.
 
 ``GET /storage-plugins/privatestorageio-zkapauthz-v1/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

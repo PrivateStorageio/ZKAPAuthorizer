@@ -368,11 +368,11 @@ class PaymentControllerTests(TestCase):
                     [NonRedeemer()] * before_restart +
                     [DummyRedeemer()] * after_restart,
                 ),
-                # TODO: It shouldn't need a default token count.  It should
-                # respect whatever was given on the first redemption attempt.
-                #
-                # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/93
-                default_token_count=num_tokens,
+                # The default token count for this new controller doesn't
+                # matter.  The redemption attempt already started with some
+                # token count.  That token count must be respected on
+                # resumption.
+                default_token_count=0,
                 # The number of redemption groups must not change for
                 # redemption of a particular voucher.
                 num_redemption_groups=num_redemption_groups,
@@ -392,7 +392,6 @@ class PaymentControllerTests(TestCase):
                 ),
             ),
         )
-
 
     @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), integers(min_value=0, max_value=100))
     def test_stop_redeeming_on_error(self, get_config, now, voucher, counter, extra_tokens):
