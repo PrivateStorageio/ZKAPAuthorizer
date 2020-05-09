@@ -104,19 +104,27 @@ class _Returns(Matcher):
         return "Returns({})".format(self.result_matcher)
 
 
+def greater_or_equal(v):
+    """
+    Matches a value greater than or equal to ``v``.
+    """
+    return MatchesAny(GreaterThan(v), Equals(v))
+
+
+def lesser_or_equal(v):
+    """
+    Matches a value less than or equal to ``v``.
+    """
+    return MatchesAny(LessThan(v), Equals(v))
+
+
 def between(low, high):
     """
     Matches a value in the range [low, high].
     """
     return MatchesAll(
-        MatchesAny(
-            Equals(low),
-            GreaterThan(low),
-        ),
-        MatchesAny(
-            Equals(high),
-            LessThan(high),
-        ),
+        greater_or_equal(low),
+        lesser_or_equal(high),
     )
 
 

@@ -232,12 +232,17 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher, get_tokens):
+    def add(self, cursor, voucher, counter, get_tokens):
         """
-        Add a new voucher and associated random tokens to the database.  If a
-        voucher with the given text value is already present, do nothing.
+        Add random tokens associated with a voucher (possibly new, possibly
+        existing) to the database.  If the (voucher, counter) pair is already
+        present, do nothing.
 
-        :param unicode voucher: The text value of a voucher to add.
+        :param unicode voucher: The text value of a voucher with which to
+            associate the tokens.
+
+        :param int counter: The redemption counter for the given voucher with
+            which to associate the tokens.
 
         :param list[RandomToken]: The tokens to add alongside the voucher.
         """
@@ -250,16 +255,17 @@ class VoucherStore(object):
             """
             SELECT ([text])
             FROM [tokens]
-            WHERE [voucher] = ?
+            WHERE [voucher] = ? AND [counter] = ?
             """,
-            (voucher,),
+            (voucher, counter),
         )
         rows = cursor.fetchall()
         if len(rows) > 0:
             self._log.info(
-                "Loaded {count} random tokens for a voucher ({voucher}).",
+                "Loaded {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(rows),
                 voucher=voucher,
+                counter=counter,
             )
             tokens = list(
                 RandomToken(token_value)
@@ -269,9 +275,10 @@ class VoucherStore(object):
         else:
             tokens = get_tokens()
             self._log.info(
-                "Persisting {count} random tokens for a voucher ({voucher}).",
+                "Persisting {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(tokens),
                 voucher=voucher,
+                counter=counter,
             )
             cursor.execute(
                 """
@@ -281,10 +288,10 @@ class VoucherStore(object):
             )
             cursor.executemany(
                 """
-                INSERT INTO [tokens] ([voucher], [text]) VALUES (?, ?)
+                INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
                 """,
                 list(
-                    (voucher, token.token_value)
+                    (voucher, counter, token.token_value)
                     for token
                     in tokens
                 ),
@@ -341,7 +348,7 @@ class VoucherStore(object):
         self._insert_unblinded_tokens(cursor, unblinded_tokens)
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -354,15 +361,23 @@ class VoucherStore(object):
 
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
             store.
+
+        :param bool completed: ``True`` if redemption of this voucher is now
+            complete, ``False`` otherwise.
         """
-        voucher_state = u"redeemed"
+        if  completed:
+            voucher_state = u"redeemed"
+        else:
+            voucher_state = u"pending"
+
         cursor.execute(
             """
             UPDATE [vouchers]
             SET [state] = ?
-              , [token-count] = ?
+              , [token-count] = COALESCE([token-count], 0) + ?
               , [finished] = ?
               , [public-key] = ?
+              , [counter] = [counter] + 1
             WHERE [number] = ?
             """,
             (
@@ -864,9 +879,7 @@ class Voucher(object):
     def from_row(cls, row):
         def state_from_row(state, row):
             if state == u"pending":
-                # TODO: The 0 here should be row[3] but I can't write a test
-                # to prove it yet.
-                return Pending(counter=0)
+                return Pending(counter=row[3])
             if state == u"double-spend":
                 return DoubleSpend(
                     parse_datetime(row[0], delimiter=u" "),

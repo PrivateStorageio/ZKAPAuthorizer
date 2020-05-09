@@ -18,6 +18,7 @@ Tests for ``_zkapauthorizer.controller``.
 
 from __future__ import (
     absolute_import,
+    division,
 )
 
 from json import (
@@ -41,6 +42,7 @@ from testtools.content import (
     text_content,
 )
 from testtools.matchers import (
+    Always,
     Equals,
     MatchesAll,
     AllMatch,
@@ -51,11 +53,13 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import (
     succeeded,
+    has_no_result,
     failed,
 )
 
 from hypothesis import (
     given,
+    assume,
 )
 from hypothesis.strategies import (
     integers,
@@ -104,9 +108,12 @@ from ..controller import (
     DoubleSpendRedeemer,
     UnpaidRedeemer,
     RistrettoRedeemer,
+    IndexedRedeemer,
+    RecordingRedeemer,
     PaymentController,
     AlreadySpent,
     Unpaid,
+    token_count_for_group,
 )
 
 from ..model import (
@@ -123,20 +130,126 @@ from .strategies import (
     vouchers,
     voucher_objects,
     voucher_counters,
+    redemption_group_counts,
     dummy_ristretto_keys,
     clocks,
 )
 from .matchers import (
     Provides,
+    raises,
+    between,
 )
 from .fixtures import (
     TemporaryVoucherStore,
 )
 
+
+class TokenCountForGroupTests(TestCase):
+    """
+    Tests for ``token_count_for_group``.
+    """
+    @given(
+        integers(),
+        integers(),
+        integers(),
+    )
+    def test_out_of_bounds(self, num_groups, total_tokens, group_number):
+        """
+        If there are not enough tokens so that each group gets at least one or if
+        the indicated group number does properly identify a group from the
+        range then ``ValueError`` is raised.
+        """
+        assume(
+            group_number < 0 or
+            group_number >= num_groups or
+            total_tokens < num_groups
+        )
+        self.assertThat(
+            lambda: token_count_for_group(num_groups, total_tokens, group_number),
+            raises(ValueError),
+        )
+
+    @given(
+        redemption_group_counts(),
+        integers(min_value=0),
+    )
+    def test_sum(self, num_groups, extra_tokens):
+        """
+        The sum of the token count for all groups equals the requested total
+        tokens.
+        """
+        total_tokens = num_groups + extra_tokens
+        self.assertThat(
+            sum(
+                token_count_for_group(num_groups, total_tokens, group_number)
+                for group_number
+                in range(num_groups)
+            ),
+            Equals(total_tokens),
+        )
+
+    @given(
+        redemption_group_counts(),
+        integers(min_value=0),
+    )
+    def test_well_distributed(self, num_groups, extra_tokens):
+        """
+        Tokens are distributed roughly evenly across all group numbers.
+        """
+        total_tokens = num_groups + extra_tokens
+
+        lower_bound = total_tokens // num_groups
+        upper_bound = total_tokens // num_groups + 1
+
+        self.assertThat(
+            list(
+                token_count_for_group(num_groups, total_tokens, group_number)
+                for group_number
+                in range(num_groups)
+            ),
+            AllMatch(between(lower_bound, upper_bound)),
+        )
+
+
 class PaymentControllerTests(TestCase):
     """
     Tests for ``PaymentController``.
     """
+    @given(tahoe_configs(), datetimes(), vouchers())
+    def test_should_not_redeem(self, get_config, now, voucher):
+        """
+        ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
+        a state when redemption should not be started.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            DummyRedeemer(),
+            default_token_count=100,
+        )
+
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+
+        # Sanity check.  It should be redeemed now.
+        voucher_obj = controller.get_voucher(voucher)
+        self.assertThat(
+            voucher_obj.state.should_start_redemption(),
+            Equals(False),
+        )
+
+        self.assertThat(
+            controller.redeem(voucher),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.type,
+                    Equals(ValueError),
+                ),
+            ),
+        )
+
     @given(tahoe_configs(), datetimes(), vouchers())
     def test_not_redeemed_while_redeeming(self, get_config, now, voucher):
         """
@@ -147,9 +260,12 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             NonRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            has_no_result(),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
@@ -157,27 +273,155 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending(counter=0)),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_redeeming(self, get_config, now, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters())
+    def test_redeeming(self, get_config, now, voucher, num_successes):
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
-        working on redeeming it.
+        working on redeeming it with a counter value that reflects the number
+        of successful partial redemptions so far completed.
         """
+        # The voucher counter can be zero (no tries yet succeeded).  We want
+        # at least *one* run through so we'll bump this up to be sure we get
+        # that.
+        counter = num_successes + 1
+        redeemer = IndexedRedeemer(
+            [DummyRedeemer()] * num_successes +
+            [NonRedeemer()],
+        )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
-            NonRedeemer(),
-            default_token_count=10,
+            redeemer,
+            # This will give us one ZKAP per attempt.
+            default_token_count=counter,
+            # Require more success than we're going to get so it doesn't
+            # finish.
+            num_redemption_groups=counter,
         )
-        controller.redeem(voucher)
+
+        self.assertThat(
+            controller.redeem(voucher),
+            has_no_result(),
+        )
 
         controller_voucher = controller.get_voucher(voucher)
         self.assertThat(
             controller_voucher.state,
             Equals(model_Redeeming(
                 started=now,
-                counter=0,
+                counter=num_successes,
             )),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        voucher_counters(),
+        voucher_counters().map(lambda v: v + 1),
+    )
+    def test_restart_redeeming(self, get_config, now, voucher, before_restart, after_restart):
+        """
+        If some redemption groups for a voucher have succeeded but the process is
+        interrupted, redemption begins at the first incomplete redemption
+        group when it resumes.
+
+        :parm int before_restart: The number of redemption groups which will
+            be allowed to succeed before making the redeemer hang.  Redemption
+            will then be required to begin again from only database state.
+
+        :param int after_restart: The number of redemption groups which will
+            be required to succeed after restarting the process.
+        """
+        # Divide redemption into some groups that will succeed before a
+        # restart and some that must succeed after a restart.
+        num_redemption_groups = before_restart + after_restart
+        # Give it enough tokens so each group can have one.
+        num_tokens = num_redemption_groups
+
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+
+        def first_try():
+            controller = PaymentController(
+                store,
+                # It will let `before_restart` attempts succeed before hanging.
+                IndexedRedeemer(
+                    [DummyRedeemer()] * before_restart +
+                    [NonRedeemer()] * after_restart,
+                ),
+                default_token_count=num_tokens,
+                num_redemption_groups=num_redemption_groups,
+            )
+            self.assertThat(
+                controller.redeem(voucher),
+                has_no_result(),
+            )
+
+        def second_try():
+            # The controller will find the voucher in the voucher store and
+            # restart redemption on its own.
+            return PaymentController(
+                store,
+                # It will succeed only for the higher counter values which did
+                # not succeed or did not get started on the first try.
+                IndexedRedeemer(
+                    [NonRedeemer()] * before_restart +
+                    [DummyRedeemer()] * after_restart,
+                ),
+                # TODO: It shouldn't need a default token count.  It should
+                # respect whatever was given on the first redemption attempt.
+                #
+                # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/93
+                default_token_count=num_tokens,
+                # The number of redemption groups must not change for
+                # redemption of a particular voucher.
+                num_redemption_groups=num_redemption_groups,
+            )
+
+        first_try()
+        controller = second_try()
+
+        persisted_voucher = controller.get_voucher(voucher)
+        self.assertThat(
+            persisted_voucher.state,
+            Equals(
+                model_Redeemed(
+                    finished=now,
+                    token_count=num_tokens,
+                    public_key=None,
+                ),
+            ),
+        )
+
+
+    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_stop_redeeming_on_error(self, get_config, now, voucher, counter, extra_tokens):
+        """
+        If an error is encountered on one of the redemption attempts performed by
+        ``IRedeemer.redeem``, the effort is suspended until the normal retry
+        logic activates.
+        """
+        num_redemption_groups = counter + 1
+        num_tokens = num_redemption_groups + extra_tokens
+        redeemer = RecordingRedeemer(UnpaidRedeemer())
+
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            redeemer,
+            default_token_count=num_tokens,
+            num_redemption_groups=num_redemption_groups,
+        )
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+        self.assertThat(
+            redeemer.redemptions,
+            AfterPreprocessing(
+                len,
+                Equals(1),
+            ),
         )
 
     @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())
@@ -189,16 +433,19 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DummyRedeemer(public_key),
-            default_token_count=10,
+            default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
             Equals(model_Redeemed(
                 finished=now,
-                token_count=10,
+                token_count=100,
                 public_key=public_key,
             )),
         )
@@ -213,9 +460,12 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         persisted_voucher = store.get(voucher)
         self.assertThat(
@@ -239,9 +489,12 @@ class PaymentControllerTests(TestCase):
         unpaid_controller = PaymentController(
             store,
             UnpaidRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
-        unpaid_controller.redeem(voucher)
+        self.assertThat(
+            unpaid_controller.redeem(voucher),
+            succeeded(Always()),
+        )
 
         # Make sure we got where we wanted.
         self.assertThat(
@@ -255,7 +508,7 @@ class PaymentControllerTests(TestCase):
         success_controller = PaymentController(
             store,
             DummyRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
         )
 
         self.assertThat(
@@ -284,10 +537,13 @@ class PaymentControllerTests(TestCase):
         controller = PaymentController(
             store,
             UnpaidRedeemer(),
-            default_token_count=10,
+            default_token_count=100,
             clock=clock,
         )
-        controller.redeem(voucher)
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
         # It fails this time.
         self.assertThat(
             controller.get_voucher(voucher).state,
@@ -343,7 +599,7 @@ class RistrettoRedeemerTests(TestCase):
         issuer = RistrettoRedemption(signing_key)
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -366,18 +622,19 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_alreadyspent(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_denied_alreadyspent(self, voucher, counter, extra_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has already been spent, ``RistrettoRedeem``
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``AlreadySpent``.
         """
+        num_tokens = counter + extra_tokens
         issuer = AlreadySpentRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -393,18 +650,19 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_redemption_denied_unpaid(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_denied_unpaid(self, voucher, counter, extra_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has not been paid for, ``RistrettoRedeem``
         returns a ``Deferred`` that fires with a ``Failure`` wrapping
         ``Unpaid``.
         """
+        num_tokens = counter + extra_tokens
         issuer = UnpaidRedemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -420,13 +678,14 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_bad_ristretto_redemption(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_bad_ristretto_redemption(self, voucher, counter, extra_tokens):
         """
         If the issuer returns a successful result with an invalid proof then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
         ``Failure`` wrapping ``SecurityException``.
         """
+        num_tokens = counter + extra_tokens
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
 
@@ -437,7 +696,7 @@ class RistrettoRedeemerTests(TestCase):
 
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,
@@ -454,20 +713,20 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-    @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_ristretto_pass_construction(self, voucher, counter, num_tokens):
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_ristretto_pass_construction(self, voucher, counter, extra_tokens):
         """
         The passes constructed using unblinded tokens and messages pass the
         Ristretto verification check.
         """
+        num_tokens = counter + extra_tokens
         message = b"hello world"
-
         signing_key = random_signing_key()
         issuer = RistrettoRedemption(signing_key)
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
 
-        random_tokens = redeemer.random_tokens_for_voucher(voucher, num_tokens)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
         d = redeemer.redeemWithCounter(
             voucher,
             counter,

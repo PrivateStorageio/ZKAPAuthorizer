@@ -359,6 +359,19 @@ def voucher_counters():
     )
 
 
+def redemption_group_counts():
+    """
+    Build integers which can represent the number of groups in the redemption
+    process.
+    """
+    return integers(
+        min_value=1,
+        # Make this similar to the max_value of voucher_counters since those
+        # counters count through the groups.
+        max_value=256,
+    )
+
+
 def byte_strings(label, length, entropy):
     """
     Build byte strings of the given length with at most the given amount of
