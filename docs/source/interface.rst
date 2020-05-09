@@ -42,15 +42,20 @@ If the voucher is not known then the response is **NOT FOUND**.
 For any voucher which has previously been submitted,
 the response is **OK** with an ``application/json`` content-type response body like::
 
-  { "number": <string>
+  { "version": 1
+  , "number": <string>
   , "expected-tokens": <integer>
   , "created": <iso8601 timestamp>
   , "state": <state object>
-  , "version": 1
   }
 
+The ``version`` property indicates the semantic version of the data being returned.
+When properties are removed or the meaning of a property is changed,
+the value of the ``version`` property will be incremented.
+The addition of new properties is **not** accompanied by a bumped version number.
+
 The ``number`` property merely indicates the voucher which was requested.
-The ``expected-tokens`` property indicates the total number of ZKAPs the client for which the client intends to redeem the voucher.
+The ``expected-tokens`` property indicates the total number of ZKAPs for which the client intends to redeem the voucher.
 Vouchers created using old versions of ZKAPAuthorizer will have a best-guess value here because the real value was not recorded.
 The ``created`` property indicates when the voucher was first added to the node.
 The ``state`` property is an object that gives more details about the current state of the voucher.
@@ -69,6 +74,7 @@ The integer *counter* value indicates how many successful sub-redemptions have c
   , "counter": <integer>
   }
 
+The *started* timestamp gives the time when the most recent redemption attempt began.
 The integer *counter* value has the same meaning as it does for the *pending* state.
 
 ::
@@ -78,17 +84,24 @@ The integer *counter* value has the same meaning as it does for the *pending* st
   , "token-count": <number>
   }
 
+The *finished* timestamp gives the time when redemption completed successfully.
+The integer *token-count* gives the number tokens for which the voucher was redeemed.
+
 ::
 
   { "name": "double-spend"
   , "finished": <iso8601 timestamp>
   }
 
+The *finished* timestamp gives the time when the double-spend error was encountered.
+
 ::
 
   { "name": "unpaid"
   , "finished": <iso8601 timestamp>
   }
+
+The *finished* timestamp gives the time when the unpaid error was encountered.
 
 ::
 
@@ -97,10 +110,8 @@ The integer *counter* value has the same meaning as it does for the *pending* st
   , "details": <text>
   }
 
-The ``version`` property indicates the semantic version of the data being returned.
-When properties are removed or the meaning of a property is changed,
-the value of the ``version`` property will be incremented.
-The addition of new properties is **not** accompanied by a bumped version number.
+The *finished* timestamp gives the time when this other error condition was encountered.
+The *details* string may give additional details about what the error was.
 
 ``GET /storage-plugins/privatestorageio-zkapauthz-v1/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
