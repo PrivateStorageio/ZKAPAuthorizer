@@ -216,6 +216,41 @@ class PaymentControllerTests(TestCase):
     Tests for ``PaymentController``.
     """
     @given(tahoe_configs(), datetimes(), vouchers())
+    def test_should_not_redeem(self, get_config, now, voucher):
+        """
+        ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
+        a state when redemption should not be started.
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            DummyRedeemer(),
+            default_token_count=100,
+        )
+
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+
+        # Sanity check.  It should be redeemed now.
+        voucher_obj = controller.get_voucher(voucher)
+        self.assertThat(
+            voucher_obj.state.should_start_redemption(),
+            Equals(False),
+        )
+
+        self.assertThat(
+            controller.redeem(voucher),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.type,
+                    Equals(ValueError),
+                ),
+            ),
+        )
+
+    @given(tahoe_configs(), datetimes(), vouchers())
     def test_not_redeemed_while_redeeming(self, get_config, now, voucher):
         """
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
