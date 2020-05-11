@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2019 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,9 +113,88 @@ class MorePassesRequired(Exception):
 
     ivar int required_count: The number of valid passes which must be
         presented for the operation to be authorized.
+
+    :ivar list[int] signature_check_failed: Indices into the supplied list of
+        passes indicating passes which failed the signature check.
     """
     valid_count = attr.ib()
     required_count = attr.ib()
+    signature_check_failed = attr.ib()
+
+
+@attr.s
+class _ValidationResult(object):
+    """
+    The result of validating a list of passes.
+
+    :ivar list[int] valid: A list of indexes (into the validated list) of which
+        are acceptable.
+
+    :ivar list[int] signature_check_failed: A list of indexes (into the
+        validated list) of passes which did not have a correct signature.
+    """
+    valid = attr.ib()
+    signature_check_failed = attr.ib()
+
+    @classmethod
+    def _is_invalid_pass(cls, message, pass_, signing_key):
+        """
+        Cryptographically check the validity of a single pass.
+
+        :param unicode message: The shared message for pass validation.
+        :param bytes pass_: The encoded pass to validate.
+
+        :return bool: ``False`` (invalid) if the pass includes a valid
+            signature, ``True`` (valid) otherwise.
+        """
+        assert isinstance(message, unicode), "message %r not unicode" % (message,)
+        assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
+        try:
+            preimage_base64, signature_base64 = pass_.split(b" ")
+            preimage = TokenPreimage.decode_base64(preimage_base64)
+            proposed_signature = VerificationSignature.decode_base64(signature_base64)
+            unblinded_token = signing_key.rederive_unblinded_token(preimage)
+            verification_key = unblinded_token.derive_verification_key_sha512()
+            invalid_pass = verification_key.invalid_sha512(proposed_signature, message.encode("utf-8"))
+            return invalid_pass
+        except Exception:
+            # It would be pretty nice to log something here, sometimes, I guess?
+            return True
+
+    @classmethod
+    def validate_passes(cls, message, passes, signing_key):
+        """
+        Check all of the given passes for validity.
+
+        :param unicode message: The shared message for pass validation.
+        :param list[bytes] passes: The encoded passes to validate.
+        :param SigningKey signing_key: The signing key to use to check the passes.
+
+        :return: An instance of this class describing the validation result
+            for all passes given.
+        """
+        valid = []
+        signature_check_failed = []
+        for idx, pass_ in enumerate(passes):
+            if cls._is_invalid_pass(message, pass_, signing_key):
+                signature_check_failed.append(idx)
+            else:
+                valid.append(idx)
+        return cls(
+            valid=valid,
+            signature_check_failed=signature_check_failed,
+        )
+
+    def raise_for(self, required_pass_count):
+        """
+        :raise MorePassesRequired: Always raised with fields populated from this
+            instance and the given ``required_pass_count``.
+        """
+        raise MorePassesRequired(
+            len(self.valid),
+            required_pass_count,
+            self.signature_check_failed,
+        )
 
 
 class LeaseRenewalRequired(Exception):
@@ -152,48 +232,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
-    def _is_invalid_pass(self, message, pass_):
-        """
-        Cryptographically check the validity of a single pass.
-
-        :param unicode message: The shared message for pass validation.
-        :param bytes pass_: The encoded pass to validate.
-
-        :return bool: ``False`` (invalid) if the pass includes a valid
-            signature, ``True`` (valid) otherwise.
-        """
-        assert isinstance(message, unicode), "message %r not unicode" % (message,)
-        assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
-        try:
-            preimage_base64, signature_base64 = pass_.split(b" ")
-            preimage = TokenPreimage.decode_base64(preimage_base64)
-            proposed_signature = VerificationSignature.decode_base64(signature_base64)
-            unblinded_token = self._signing_key.rederive_unblinded_token(preimage)
-            verification_key = unblinded_token.derive_verification_key_sha512()
-            invalid_pass = verification_key.invalid_sha512(proposed_signature, message.encode("utf-8"))
-            return invalid_pass
-        except Exception:
-            # It would be pretty nice to log something here, sometimes, I guess?
-            return True
-
-    def _validate_passes(self, message, passes):
-        """
-        Check all of the given passes for validity.
-
-        :param unicode message: The shared message for pass validation.
-        :param list[bytes] passes: The encoded passes to validate.
-
-        :return list[bytes]: The passes which are found to be valid.
-        """
-        result = list(
-            pass_
-            for pass_
-            in passes
-            if not self._is_invalid_pass(message, pass_)
-        )
-        # print("{}: {} passes, {} valid".format(message, len(passes), len(result)))
-        return result
-
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
@@ -206,13 +244,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through after a pass check to ensure that clients can only allocate
         storage for immutable shares if they present valid passes.
         """
-        valid_passes = self._validate_passes(
+        validation = _ValidationResult.validate_passes(
             allocate_buckets_message(storage_index),
             passes,
+            self._signing_key,
         )
         check_pass_quantity_for_write(
             self._pass_value,
-            len(valid_passes),
+            validation,
             sharenums,
             allocated_size,
         )
@@ -238,12 +277,15 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        # print("server add_lease({}, {!r})".format(len(passes), storage_index))
-        valid_passes = self._validate_passes(add_lease_message(storage_index), passes)
+        validation = _ValidationResult.validate_passes(
+            add_lease_message(storage_index),
+            passes,
+            self._signing_key,
+        )
         check_pass_quantity_for_lease(
             self._pass_value,
             storage_index,
-            valid_passes,
+            validation,
             self._original,
         )
         return self._original.remote_add_lease(storage_index, *a, **kw)
@@ -253,7 +295,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
         """
-        valid_passes = self._validate_passes(renew_lease_message(storage_index), passes)
+        valid_passes = _ValidationResult.validate_passes(
+            renew_lease_message(storage_index),
+            passes,
+            self._signing_key,
+        )
         check_pass_quantity_for_lease(
             self._pass_value,
             storage_index,
@@ -306,9 +352,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             # necessary lease as part of the same operation.  This must be
             # supported because there is no separate protocol action to
             # *create* a slot.  Clients just begin writing to it.
-            valid_passes = self._validate_passes(
+            validation = _ValidationResult.validate_passes(
                 slot_testv_and_readv_and_writev_message(storage_index),
                 passes,
+                self._signing_key,
             )
             if has_active_lease(self._original, storage_index, self._clock.seconds()):
                 # Some of the storage is paid for already.
@@ -328,8 +375,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 current_sizes,
                 tw_vectors,
             )
-            if required_new_passes > len(valid_passes):
-                raise MorePassesRequired(len(valid_passes), required_new_passes)
+            if required_new_passes > len(validation.valid):
+                validation.raise_for(required_new_passes)
 
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
@@ -373,12 +420,15 @@ def has_active_lease(storage_server, storage_index, now):
     )
 
 
-def check_pass_quantity(pass_value, valid_count, share_sizes):
+def check_pass_quantity(pass_value, validation, share_sizes):
     """
     Check that the given number of passes is sufficient to cover leases for
     one period for shares of the given sizes.
 
-    :param int valid_count: The number of passes.
+    :param int pass_value: The value of a single pass in bytes × lease periods.
+
+    :param _ValidationResult validation: The validating results for a list of passes.
+
     :param list[int] share_sizes: The sizes of the shares for which the lease
         is being created.
 
@@ -388,17 +438,23 @@ def check_pass_quantity(pass_value, valid_count, share_sizes):
     :return: ``None`` if the given number of passes is sufficient.
     """
     required_pass_count = required_passes(pass_value, share_sizes)
-    if valid_count < required_pass_count:
-        raise MorePassesRequired(
-            valid_count,
-            required_pass_count,
-        )
+    if len(validation.valid) < required_pass_count:
+        validation.raise_for(required_pass_count)
 
 
-def check_pass_quantity_for_lease(pass_value, storage_index, valid_passes, storage_server):
+def check_pass_quantity_for_lease(pass_value, storage_index, validation, storage_server):
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
+
+    :param int pass_value: The value of a single pass in bytes × lease periods.
+
+    :param _ValidationResult validation: The validating results for a list of passes.
+
+    :raise MorePassesRequired: If the given number of passes is too few for
+        the share sizes at the given storage index.
+
+    :return: ``None`` if the given number of passes is sufficient.
     """
     allocated_sizes = dict(
         get_share_sizes(
@@ -407,16 +463,20 @@ def check_pass_quantity_for_lease(pass_value, storage_index, valid_passes, stora
             list(get_all_share_numbers(storage_server, storage_index)),
         ),
     ).values()
-    check_pass_quantity(pass_value, len(valid_passes), allocated_sizes)
+    check_pass_quantity(pass_value, validation, allocated_sizes)
 
 
-def check_pass_quantity_for_write(pass_value, valid_count, sharenums, allocated_size):
+def check_pass_quantity_for_write(pass_value, validation, sharenums, allocated_size):
     """
     Determine if the given number of valid passes is sufficient for an
     attempted write.
 
-    :param int valid_count: The number of valid passes to consider.
+    :param int pass_value: The value of a single pass in bytes × lease periods.
+
+    :param _ValidationResult validation: The validating results for a list of passes.
+
     :param set[int] sharenums: The shares being written to.
+
     :param int allocated_size: The size of each share.
 
     :raise MorePassedRequired: If the number of valid passes given is too
@@ -424,7 +484,7 @@ def check_pass_quantity_for_write(pass_value, valid_count, sharenums, allocated_
 
     :return: ``None`` if the number of valid passes given is sufficient.
     """
-    check_pass_quantity(pass_value, valid_count, [allocated_size] * len(sharenums))
+    check_pass_quantity(pass_value, validation, [allocated_size] * len(sharenums))
 
 
 def get_all_share_paths(storage_server, storage_index):
