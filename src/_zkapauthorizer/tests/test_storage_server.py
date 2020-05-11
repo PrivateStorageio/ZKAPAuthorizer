@@ -34,8 +34,6 @@ from testtools import (
 from testtools.matchers import (
     Equals,
     AfterPreprocessing,
-    MatchesStructure,
-    raises,
 )
 from hypothesis import (
     given,
@@ -69,6 +67,9 @@ from .common import (
 )
 from .privacypass import (
     make_passes,
+)
+from .matchers import (
+    raises,
 )
 from .strategies import (
     zkaps,
@@ -231,8 +232,13 @@ class PassValidationTests(TestCase):
             result = mutable_write()
         except MorePassesRequired as e:
             self.assertThat(
-                e.required_count,
-                Equals(1),
+                e,
+                Equals(
+                    MorePassesRequired(
+                        valid_count=0,
+                        required_count=1,
+                    ),
+                ),
             )
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
@@ -329,9 +335,11 @@ class PassValidationTests(TestCase):
         except MorePassesRequired as e:
             self.assertThat(
                 e,
-                MatchesStructure(
-                    valid_count=Equals(0),
-                    required_count=Equals(1),
+                Equals(
+                    MorePassesRequired(
+                        valid_count=0,
+                        required_count=1,
+                    ),
                 ),
             )
         else:
@@ -423,9 +431,11 @@ class PassValidationTests(TestCase):
         except MorePassesRequired as e:
             self.assertThat(
                 e,
-                MatchesStructure(
-                    valid_count=Equals(len(passes)),
-                    required_count=Equals(required_count),
+                Equals(
+                    MorePassesRequired(
+                        valid_count=len(passes),
+                        required_count=required_count,
+                    ),
                 ),
             )
         else:

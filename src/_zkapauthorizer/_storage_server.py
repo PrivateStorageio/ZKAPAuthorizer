@@ -101,6 +101,7 @@ from .storage_common import (
 SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
 
+@attr.s
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -112,9 +113,8 @@ class MorePassesRequired(Exception):
     ivar int required_count: The number of valid passes which must be
         presented for the operation to be authorized.
     """
-    def __init__(self, valid_count, required_count):
-        self.valid_count = valid_count
-        self.required_count = required_count
+    valid_count = attr.ib()
+    required_count = attr.ib()
 
     def __repr__(self):
         return "MorePassedRequired(valid_count={}, required_count={})".format(
