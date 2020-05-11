@@ -116,15 +116,6 @@ class MorePassesRequired(Exception):
     valid_count = attr.ib()
     required_count = attr.ib()
 
-    def __repr__(self):
-        return "MorePassedRequired(valid_count={}, required_count={})".format(
-            self.valid_count,
-            self.required_count,
-        )
-
-    def __str__(self):
-        return repr(self)
-
 
 class LeaseRenewalRequired(Exception):
     """
