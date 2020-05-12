@@ -33,9 +33,6 @@ from testtools import (
 )
 from testtools.matchers import (
     Equals,
-    AfterPreprocessing,
-    MatchesStructure,
-    raises,
 )
 from hypothesis import (
     given,
@@ -70,6 +67,9 @@ from .common import (
 from .privacypass import (
     make_passes,
 )
+from .matchers import (
+    raises,
+)
 from .strategies import (
     zkaps,
     sizes,
@@ -101,6 +101,62 @@ from ..storage_common import (
     get_required_new_passes_for_mutable_write,
     summarize,
 )
+from .._storage_server import (
+    _ValidationResult,
+)
+
+
+class ValidationResultTests(TestCase):
+    """
+    Tests for ``_ValidationResult``.
+    """
+    def setUp(self):
+        super(ValidationResultTests, self).setUp()
+        self.signing_key = random_signing_key()
+
+    @given(integers(min_value=0, max_value=64), lists(zkaps(), max_size=64))
+    def test_validation_result(self, valid_count, invalid_passes):
+        """
+        ``validate_passes`` returns a ``_ValidationResult`` instance which
+        describes the valid and invalid passes.
+        """
+        message = u"hello world"
+        valid_passes = make_passes(
+            self.signing_key,
+            message,
+            list(RandomToken.create() for i in range(valid_count)),
+        )
+        all_passes = valid_passes + list(
+            pass_.pass_text.encode("ascii")
+            for pass_
+            in invalid_passes
+        )
+        shuffle(all_passes)
+
+        self.assertThat(
+            _ValidationResult.validate_passes(
+                message,
+                all_passes,
+                self.signing_key,
+            ),
+            Equals(
+                _ValidationResult(
+                    valid=list(
+                        idx
+                        for (idx, pass_)
+                        in enumerate(all_passes)
+                        if pass_ in valid_passes
+                    ),
+                    signature_check_failed=list(
+                        idx
+                        for (idx, pass_)
+                        in enumerate(all_passes)
+                        if pass_ not in valid_passes
+                    ),
+                ),
+            ),
+        )
+
 
 class PassValidationTests(TestCase):
     """
@@ -123,33 +179,6 @@ class PassValidationTests(TestCase):
             self.pass_value,
             self.signing_key,
             self.clock,
-        )
-
-    @given(integers(min_value=0, max_value=64), lists(zkaps(), max_size=64))
-    def test_validation_result(self, valid_count, invalid_passes):
-        """
-        ``_get_valid_passes`` returns the number of cryptographically valid passes
-        in the list passed to it.
-        """
-        message = u"hello world"
-        valid_passes = make_passes(
-            self.signing_key,
-            message,
-            list(RandomToken.create() for i in range(valid_count)),
-        )
-        all_passes = valid_passes + list(
-            pass_.pass_text.encode("ascii")
-            for pass_
-            in invalid_passes
-        )
-        shuffle(all_passes)
-
-        self.assertThat(
-            self.storage_server._validate_passes(message, all_passes),
-            AfterPreprocessing(
-                set,
-                Equals(set(valid_passes)),
-            ),
         )
 
     def test_allocate_buckets_fails_without_enough_passes(self):
@@ -231,8 +260,14 @@ class PassValidationTests(TestCase):
             result = mutable_write()
         except MorePassesRequired as e:
             self.assertThat(
-                e.required_count,
-                Equals(1),
+                e,
+                Equals(
+                    MorePassesRequired(
+                        valid_count=0,
+                        required_count=1,
+                        signature_check_failed=[],
+                    ),
+                ),
             )
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
@@ -329,9 +364,12 @@ class PassValidationTests(TestCase):
         except MorePassesRequired as e:
             self.assertThat(
                 e,
-                MatchesStructure(
-                    valid_count=Equals(0),
-                    required_count=Equals(1),
+                Equals(
+                    MorePassesRequired(
+                        valid_count=0,
+                        required_count=1,
+                        signature_check_failed=[],
+                    ),
                 ),
             )
         else:
@@ -423,9 +461,12 @@ class PassValidationTests(TestCase):
         except MorePassesRequired as e:
             self.assertThat(
                 e,
-                MatchesStructure(
-                    valid_count=Equals(len(passes)),
-                    required_count=Equals(required_count),
+                Equals(
+                    MorePassesRequired(
+                        valid_count=len(passes),
+                        required_count=required_count,
+                        signature_check_failed=[],
+                    ),
                 ),
             )
         else:
