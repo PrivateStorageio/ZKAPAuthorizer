@@ -111,6 +111,7 @@ from .foolscap import (
     LocalRemote,
 )
 from ..api import (
+    MorePassesRequired,
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
@@ -213,6 +214,55 @@ class ShareTests(TestCase):
         self.assertThat(
             self.client.get_version(),
             succeeded(matches_version_dictionary()),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_rejected_passes_reported(self, storage_index, renew_secret, cancel_secret, sharenums, size):
+        """
+        Any passes rejected by the storage server are reported with a
+        ``MorePassesRequired`` exception sent to the client.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Break our infinite pass factory by replacing the expected key with a
+        # new one.  Now the passes are mis-signed as far as the server is
+        # concerned.  The clunky way we control pass generation means it's
+        # hard to have anything but an all-or-nothing test.  Perhaps some
+        # future refactoring will let us exercise a mix of passes with valid
+        # and invalid signatures.
+        self.signing_key = random_signing_key()
+
+        num_passes = required_passes(self.pass_value, [size] * len(sharenums))
+
+        self.assertThat(
+            self.client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
+            ),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        MorePassesRequired(
+                            valid_count=0,
+                            required_count=num_passes,
+                            signature_check_failed=range(num_passes),
+                        ),
+                    ),
+                ),
+            ),
         )
 
     @given(
