@@ -20,6 +20,10 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
+from functools import (
+    partial,
+)
+
 import attr
 
 from zope.interface import (
@@ -28,12 +32,14 @@ from zope.interface import (
 from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
+    maybeDeferred,
 )
 from allmydata.interfaces import (
     IStorageServer,
 )
 
 from .storage_common import (
+    MorePassesRequired,
     pass_value_attribute,
     required_passes,
     allocate_buckets_message,
@@ -62,6 +68,42 @@ class IncorrectStorageServerReference(Exception):
             self.actual_name,
             self.expected_name,
         )
+
+
+def call_with_passes(method, num_passes, get_passes):
+    """
+    Call a method, passing the requested number of passes as the first
+    argument, and try again if the call fails with an error related to some of
+    the passes being rejected.
+
+    :param method: A callable which accepts a list of encoded passes as its
+        only argument and returns a ``Deferred``.  If the ``Deferred`` fires
+        with ``MorePassesRequired`` then the invalid passes will be discarded
+        and replacement passes will be requested for a new call of ``method``.
+        This will repeat until no passes remain, the method succeeds, or the
+        methods fails in a different way.
+
+    :param int num_passes: The number of passes to pass to the call.
+
+    :param (unicode -> int -> [bytes]) get_passes: A function for getting
+        passes.
+
+    :return: Whatever ``method`` returns.
+    """
+    def get_more_passes(reason):
+        reason.trap(MorePassesRequired)
+        new_passes = get_passes(len(reason.value.signature_check_failed))
+        for idx, new_pass in zip(reason.value.signature_check_failed, new_passes):
+            passes[idx] = new_pass
+        return go(passes)
+
+    def go(passes):
+        d = maybeDeferred(method, passes)
+        d.addErrback(get_more_passes)
+        return d
+
+    passes = get_passes(num_passes)
+    return go(passes)
 
 
 @implementer(IStorageServer)
@@ -144,18 +186,24 @@ class ZKAPAuthorizerStorageClient(object):
             allocated_size,
             canary,
     ):
-        return self._rref.callRemote(
-            "allocate_buckets",
-            self._get_encoded_passes(
-                allocate_buckets_message(storage_index),
-                required_passes(self._pass_value, [allocated_size] * len(sharenums)),
+        # XXX _rref is a property and reading it does some stuff that needs to
+        # happen before we get passes.  Read it eagerly here.  Blech.
+        rref = self._rref
+        message = allocate_buckets_message(storage_index)
+        num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
+        return call_with_passes(
+            lambda passes: rref.callRemote(
+                "allocate_buckets",
+                passes,
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                allocated_size,
+                canary,
             ),
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            allocated_size,
-            canary,
+            num_passes,
+            partial(self._get_encoded_passes, message),
         )
 
     def get_buckets(

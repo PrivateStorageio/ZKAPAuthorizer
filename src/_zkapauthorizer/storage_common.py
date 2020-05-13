@@ -30,7 +30,7 @@ from .validators import (
     greater_than,
 )
 
-@attr.s
+@attr.s(frozen=True)
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -47,7 +47,7 @@ class MorePassesRequired(Exception):
     """
     valid_count = attr.ib()
     required_count = attr.ib()
-    signature_check_failed = attr.ib()
+    signature_check_failed = attr.ib(converter=frozenset)
 
 
 def _message_maker(label):
