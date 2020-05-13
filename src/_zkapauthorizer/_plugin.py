@@ -45,11 +45,6 @@ from twisted.internet.defer import (
     succeed,
 )
 
-from eliot import (
-    MessageType,
-    Field,
-)
-
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
@@ -67,6 +62,10 @@ from challenge_bypass_ristretto import (
 from .api import (
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
+)
+
+from .eliot import (
+    GET_PASSES,
 )
 
 from .model import (
@@ -90,24 +89,6 @@ from .lease_maintenance import (
 )
 
 _log = Logger()
-
-PRIVACYPASS_MESSAGE = Field(
-    u"message",
-    unicode,
-    u"The PrivacyPass request-binding data associated with a pass.",
-)
-
-PASS_COUNT = Field(
-    u"count",
-    int,
-    u"A number of passes.",
-)
-
-GET_PASSES = MessageType(
-    u"zkapauthorizer:get-passes",
-    [PRIVACYPASS_MESSAGE, PASS_COUNT],
-    u"Passes are being spent.",
-)
 
 @implementer(IAnnounceableStorageServer)
 @attr.s

@@ -20,6 +20,10 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
+from __future__ import (
+    absolute_import,
+)
+
 from functools import (
     partial,
     wraps,
@@ -30,6 +34,11 @@ import attr
 from zope.interface import (
     implementer,
 )
+
+from eliot.twisted import (
+    DeferredContext,
+)
+
 from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
@@ -37,6 +46,11 @@ from twisted.internet.defer import (
 )
 from allmydata.interfaces import (
     IStorageServer,
+)
+
+from .eliot import (
+    SIGNATURE_CHECK_FAILED,
+    CALL_WITH_PASSES,
 )
 
 from .storage_common import (
@@ -50,7 +64,6 @@ from .storage_common import (
     has_writes,
     get_required_new_passes_for_mutable_write,
 )
-
 
 class IncorrectStorageServerReference(Exception):
     """
@@ -93,7 +106,8 @@ def call_with_passes(method, num_passes, get_passes):
     """
     def get_more_passes(reason):
         reason.trap(MorePassesRequired)
-        if len(reason.value.signature_check_failed) == 0:
+        num_failed = len(reason.value.signature_check_failed)
+        if num_failed == 0:
             # If no signature checks failed then the call just didn't supply
             # enough passes.  The exception tells us how many passes we should
             # spend so we could try again with that number of passes but for
@@ -102,18 +116,23 @@ def call_with_passes(method, num_passes, get_passes):
             # this case is somewhat suspicious.  Err on the side of lack of
             # service instead of burning extra passes.
             return reason
-        new_passes = get_passes(len(reason.value.signature_check_failed))
+        SIGNATURE_CHECK_FAILED.log(count=num_failed)
+        new_passes = get_passes(num_failed)
         for idx, new_pass in zip(reason.value.signature_check_failed, new_passes):
             passes[idx] = new_pass
         return go(passes)
 
     def go(passes):
-        d = maybeDeferred(method, passes)
+        # Capture the Eliot context for the errback.
+        d = DeferredContext(maybeDeferred(method, passes))
         d.addErrback(get_more_passes)
-        return d
+        # Return the underlying Deferred without finishing the action.
+        return d.result
 
-    passes = get_passes(num_passes)
-    return go(passes)
+    with CALL_WITH_PASSES(count=num_passes).context():
+        passes = get_passes(num_passes)
+        # Finish the Eliot action when this is done.
+        return DeferredContext(go(passes)).addActionFinish()
 
 
 def with_rref(f):
