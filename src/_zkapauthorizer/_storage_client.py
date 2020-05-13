@@ -22,6 +22,7 @@ implemented in ``_storage_server.py``.
 
 from functools import (
     partial,
+    wraps,
 )
 
 import attr
@@ -92,6 +93,15 @@ def call_with_passes(method, num_passes, get_passes):
     """
     def get_more_passes(reason):
         reason.trap(MorePassesRequired)
+        if len(reason.value.signature_check_failed) == 0:
+            # If no signature checks failed then the call just didn't supply
+            # enough passes.  The exception tells us how many passes we should
+            # spend so we could try again with that number of passes but for
+            # now we'll just let the exception propagate.  The client should
+            # always figure out the number of passes right on the first try so
+            # this case is somewhat suspicious.  Err on the side of lack of
+            # service instead of burning extra passes.
+            return reason
         new_passes = get_passes(len(reason.value.signature_check_failed))
         for idx, new_pass in zip(reason.value.signature_check_failed, new_passes):
             passes[idx] = new_pass
@@ -104,6 +114,20 @@ def call_with_passes(method, num_passes, get_passes):
 
     passes = get_passes(num_passes)
     return go(passes)
+
+
+def with_rref(f):
+    """
+    Decorate a function so that it automatically receives a
+    ``RemoteReference`` as its first argument when called.
+
+    The ``RemoteReference`` is retrieved by calling ``_rref`` on the first
+    argument passed to the function (expected to be ``self``).
+    """
+    @wraps(f)
+    def g(self, *args, **kwargs):
+        return f(self, self._rref(), *args, **kwargs)
+    return g
 
 
 @implementer(IStorageServer)
@@ -138,7 +162,6 @@ class ZKAPAuthorizerStorageClient(object):
     _get_rref = attr.ib()
     _get_passes = attr.ib()
 
-    @property
     def _rref(self):
         rref = self._get_rref()
         # rref provides foolscap.ipb.IRemoteReference but in practice it is a
@@ -172,13 +195,16 @@ class ZKAPAuthorizerStorageClient(object):
             in self._get_passes(message.encode("utf-8"), count)
         )
 
-    def get_version(self):
-        return self._rref.callRemote(
+    @with_rref
+    def get_version(self, rref):
+        return rref.callRemote(
             "get_version",
         )
 
+    @with_rref
     def allocate_buckets(
             self,
+            rref,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -186,9 +212,6 @@ class ZKAPAuthorizerStorageClient(object):
             allocated_size,
             canary,
     ):
-        # XXX _rref is a property and reading it does some stuff that needs to
-        # happen before we get passes.  Read it eagerly here.  Blech.
-        rref = self._rref
         message = allocate_buckets_message(storage_index)
         num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
         return call_with_passes(
@@ -206,78 +229,90 @@ class ZKAPAuthorizerStorageClient(object):
             partial(self._get_encoded_passes, message),
         )
 
+    @with_rref
     def get_buckets(
             self,
+            rref,
             storage_index,
     ):
-        return self._rref.callRemote(
+        return rref.callRemote(
             "get_buckets",
             storage_index,
         )
 
     @inlineCallbacks
+    @with_rref
     def add_lease(
             self,
+            rref,
             storage_index,
             renew_secret,
             cancel_secret,
     ):
-        share_sizes = (yield self._rref.callRemote(
+        share_sizes = (yield rref.callRemote(
             "share_sizes",
             storage_index,
             None,
         )).values()
         num_passes = required_passes(self._pass_value, share_sizes)
-        # print("Adding lease to {!r} with sizes {} with {} passes".format(
-        #     storage_index,
-        #     share_sizes,
-        #     num_passes,
-        # ))
-        returnValue((
-            yield self._rref.callRemote(
+
+        result = yield call_with_passes(
+            lambda passes: rref.callRemote(
                 "add_lease",
-                self._get_encoded_passes(add_lease_message(storage_index), num_passes),
+                passes,
                 storage_index,
                 renew_secret,
                 cancel_secret,
-            )
-        ))
+            ),
+            num_passes,
+            partial(self._get_encoded_passes, add_lease_message(storage_index)),
+        )
+        returnValue(result)
 
     @inlineCallbacks
+    @with_rref
     def renew_lease(
             self,
+            rref,
             storage_index,
             renew_secret,
     ):
-        share_sizes = (yield self._rref.callRemote(
+        share_sizes = (yield rref.callRemote(
             "share_sizes",
             storage_index,
             None,
         )).values()
         num_passes = required_passes(self._pass_value, share_sizes)
-        returnValue((
-            yield self._rref.callRemote(
+
+        result = yield call_with_passes(
+            lambda passes: rref.callRemote(
                 "renew_lease",
-                self._get_encoded_passes(renew_lease_message(storage_index), num_passes),
+                passes,
                 storage_index,
                 renew_secret,
-            )
-        ))
+            ),
+            num_passes,
+            partial(self._get_encoded_passes, renew_lease_message(storage_index)),
+        )
+        returnValue(result)
 
-    def stat_shares(self, storage_indexes):
-        return self._rref.callRemote(
+    @with_rref
+    def stat_shares(self, rref, storage_indexes):
+        return rref.callRemote(
             "stat_shares",
             storage_indexes,
         )
 
+    @with_rref
     def advise_corrupt_share(
             self,
+            rref,
             share_type,
             storage_index,
             shnum,
             reason,
     ):
-        return self._rref.callRemote(
+        return rref.callRemote(
             "advise_corrupt_share",
             share_type,
             storage_index,
@@ -286,15 +321,17 @@ class ZKAPAuthorizerStorageClient(object):
         )
 
     @inlineCallbacks
+    @with_rref
     def slot_testv_and_readv_and_writev(
             self,
+            rref,
             storage_index,
             secrets,
             tw_vectors,
             r_vector,
     ):
-        # Non-write operations on slots are free.
-        passes = []
+        # Read operations are free.
+        num_passes = 0
 
         if has_writes(tw_vectors):
             # When performing writes, if we're increasing the storage
@@ -306,43 +343,44 @@ class ZKAPAuthorizerStorageClient(object):
             # on the storage server that will give us a really good estimate
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
-            current_sizes = yield self._rref.callRemote(
+            current_sizes = yield rref.callRemote(
                 "share_sizes",
                 storage_index,
                 set(tw_vectors),
             )
             # Determine the cost of the new storage for the operation.
-            required_new_passes = get_required_new_passes_for_mutable_write(
+            num_passes = get_required_new_passes_for_mutable_write(
                 self._pass_value,
                 current_sizes,
                 tw_vectors,
             )
-            # Prepare to pay it.
-            if required_new_passes:
-                passes = self._get_encoded_passes(
-                    slot_testv_and_readv_and_writev_message(storage_index),
-                    required_new_passes,
-                )
 
-        # Perform the operation with the passes we determined are required.
-        returnValue((
-            yield self._rref.callRemote(
+        result = yield call_with_passes(
+            lambda passes: rref.callRemote(
                 "slot_testv_and_readv_and_writev",
                 passes,
                 storage_index,
                 secrets,
                 tw_vectors,
                 r_vector,
-            )
-        ))
+            ),
+            num_passes,
+            partial(
+                self._get_encoded_passes,
+                slot_testv_and_readv_and_writev_message(storage_index),
+            ),
+        )
+        returnValue(result)
 
+    @with_rref
     def slot_readv(
             self,
+            rref,
             storage_index,
             shares,
             r_vector,
     ):
-        return self._rref.callRemote(
+        return rref.callRemote(
             "slot_readv",
             storage_index,
             shares,

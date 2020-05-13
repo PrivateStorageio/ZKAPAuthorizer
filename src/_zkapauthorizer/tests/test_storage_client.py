@@ -49,6 +49,10 @@ from twisted.internet.defer import (
     fail,
 )
 
+from ..api import (
+    MorePassesRequired,
+)
+
 from .._storage_client import (
     call_with_passes,
 )
@@ -173,4 +177,39 @@ class CallWithPassesTests(TestCase):
                 passes.get,
             ),
             succeeded(Always()),
+        )
+
+    @given(pass_counts())
+    def test_pass_through_too_few_passes(self, num_passes):
+        """
+        ``call_with_passes`` lets ``MorePassesRequired`` propagate through it if
+        no passes have been marked as invalid.  This happens if all passes
+        given were valid but too fewer were given.
+        """
+        passes = pass_factory()
+
+        def reject_passes(passes):
+            _ValidationResult(
+                valid=range(len(passes)),
+                signature_check_failed=[],
+            ).raise_for(len(passes) + 1)
+
+        self.assertThat(
+            call_with_passes(
+                reject_passes,
+                num_passes,
+                passes.get,
+            ),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        MorePassesRequired(
+                            valid_count=num_passes,
+                            required_count=num_passes + 1,
+                            signature_check_failed=[],
+                        ),
+                    ),
+                ),
+            ),
         )

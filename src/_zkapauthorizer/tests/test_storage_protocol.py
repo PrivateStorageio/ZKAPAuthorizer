@@ -921,7 +921,7 @@ class ShareTests(TestCase):
         # The nice Python API doesn't let you do this so we drop down to
         # the layer below.  We also use positional arguments because they
         # transit the network differently from keyword arguments.  Yay.
-        d = self.client._rref.callRemote(
+        d = self.local_remote_server.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
             self.client._get_encoded_passes(
