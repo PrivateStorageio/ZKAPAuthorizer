@@ -20,8 +20,10 @@ __all__ = [
     "ZKAPAuthorizer",
 ]
 
-from ._storage_server import (
+from .storage_common import (
     MorePassesRequired,
+)
+from ._storage_server import (
     LeaseRenewalRequired,
     ZKAPAuthorizerStorageServer,
 )

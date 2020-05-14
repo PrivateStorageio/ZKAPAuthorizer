@@ -52,6 +52,7 @@ from hypothesis.strategies import (
     lists,
     tuples,
     integers,
+    data as data_strategy,
 )
 
 from twisted.python.runtime import (
@@ -111,11 +112,13 @@ from .foolscap import (
     LocalRemote,
 )
 from ..api import (
+    MorePassesRequired,
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
 from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
+    allocate_buckets_message,
     get_implied_data_length,
     required_passes,
 )
@@ -164,6 +167,28 @@ class RequiredPassesTests(TestCase):
         )
 
 
+def get_passes(message, count, signing_key):
+    """
+    :param unicode message: Request-binding message for PrivacyPass.
+
+    :param int count: The number of passes to get.
+
+    :param SigningKEy signing_key: The key to use to sign the passes.
+
+    :return list[Pass]: ``count`` new random passes signed with the given key
+        and bound to the given message.
+    """
+    return list(
+        Pass(*pass_.split(u" "))
+        for pass_
+        in make_passes(
+            signing_key,
+            message,
+            list(RandomToken.create() for n in range(count)),
+        )
+    )
+
+
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -182,17 +207,10 @@ class ShareTests(TestCase):
         self.signing_key = random_signing_key()
         self.spent_passes = 0
 
-        def get_passes(message, count):
+        def counting_get_passes(message, count):
             self.spent_passes += count
-            return list(
-                Pass(*pass_.split(u" "))
-                for pass_
-                in make_passes(
-                    self.signing_key,
-                    message,
-                    list(RandomToken.create() for n in range(count)),
-                )
-            )
+            return get_passes(message, count, self.signing_key)
+
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
@@ -202,7 +220,7 @@ class ShareTests(TestCase):
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
-            get_passes=get_passes,
+            get_passes=counting_get_passes,
         )
 
     def test_get_version(self):
@@ -213,6 +231,95 @@ class ShareTests(TestCase):
         self.assertThat(
             self.client.get_version(),
             succeeded(matches_version_dictionary()),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
+        data=data_strategy(),
+    )
+    def test_rejected_passes_reported(self, storage_index, renew_secret, cancel_secret, sharenums, size, data):
+        """
+        Any passes rejected by the storage server are reported with a
+        ``MorePassesRequired`` exception sent to the client.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        num_passes = required_passes(self.pass_value, [size] * len(sharenums))
+
+        # Pick some passes to mess with.
+        bad_pass_indexes = data.draw(
+            lists(
+                integers(
+                    min_value=0,
+                    max_value=num_passes - 1,
+                ),
+                min_size=1,
+                max_size=num_passes,
+                unique=True,
+            ),
+        )
+
+        # Make some passes with a key untrusted by the server.
+        bad_passes = get_passes(
+            allocate_buckets_message(storage_index),
+            len(bad_pass_indexes),
+            random_signing_key(),
+        )
+
+        # Make some passes with a key trusted by the server.
+        good_passes = get_passes(
+            allocate_buckets_message(storage_index),
+            num_passes - len(bad_passes),
+            self.signing_key,
+        )
+
+        all_passes = []
+        for i in range(num_passes):
+            if i in bad_pass_indexes:
+                all_passes.append(bad_passes.pop())
+            else:
+                all_passes.append(good_passes.pop())
+
+        # Sanity checks
+        self.assertThat(bad_passes, Equals([]))
+        self.assertThat(good_passes, Equals([]))
+        self.assertThat(all_passes, HasLength(num_passes))
+
+        self.assertThat(
+            # Bypass the client handling of MorePassesRequired so we can see
+            # it.
+            self.local_remote_server.callRemote(
+                "allocate_buckets",
+                list(
+                    pass_.pass_text.encode("ascii")
+                    for pass_
+                    in all_passes
+                ),
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
+            ),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        MorePassesRequired(
+                            valid_count=num_passes - len(bad_pass_indexes),
+                            required_count=num_passes,
+                            signature_check_failed=bad_pass_indexes,
+                        ),
+                    ),
+                ),
+            ),
         )
 
     @given(
@@ -814,7 +921,7 @@ class ShareTests(TestCase):
         # The nice Python API doesn't let you do this so we drop down to
         # the layer below.  We also use positional arguments because they
         # transit the network differently from keyword arguments.  Yay.
-        d = self.client._rref.callRemote(
+        d = self.local_remote_server.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
             self.client._get_encoded_passes(

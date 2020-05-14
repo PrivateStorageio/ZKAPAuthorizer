@@ -88,6 +88,7 @@ from .foolscap import (
     RIPrivacyPassAuthorizedStorageServer,
 )
 from .storage_common import (
+    MorePassesRequired,
     pass_value_attribute,
     required_passes,
     allocate_buckets_message,
@@ -101,26 +102,6 @@ from .storage_common import (
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
-
-@attr.s
-class MorePassesRequired(Exception):
-    """
-    Storage operations fail with ``MorePassesRequired`` when they are not
-    accompanied by a sufficient number of valid passes.
-
-    :ivar int valid_count: The number of valid passes presented in the
-        operation.
-
-    ivar int required_count: The number of valid passes which must be
-        presented for the operation to be authorized.
-
-    :ivar list[int] signature_check_failed: Indices into the supplied list of
-        passes indicating passes which failed the signature check.
-    """
-    valid_count = attr.ib()
-    required_count = attr.ib()
-    signature_check_failed = attr.ib()
-
 
 @attr.s
 class _ValidationResult(object):
