@@ -27,6 +27,7 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Always,
     Equals,
     HasLength,
     IsInstance,
@@ -380,12 +381,13 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.add_lease(
                 storage_index,
                 renew_lease_secret,
                 cancel_secret,
             ),
+            succeeded(Always()),
         )
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
@@ -422,11 +424,12 @@ class ShareTests(TestCase):
         )
 
         now += 100000
-        extract_result(
+        self.assertThat(
             self.client.renew_lease(
                 storage_index,
                 renew_secret,
             ),
+            succeeded(Always()),
         )
 
         [lease] = self.anonymous_storage_server.get_leases(storage_index)
@@ -464,9 +467,6 @@ class ShareTests(TestCase):
         finally:
             patch.cleanUp()
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=size,
@@ -474,8 +474,8 @@ class ShareTests(TestCase):
             ),
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
     @given(
@@ -691,9 +691,6 @@ class ShareTests(TestCase):
             u"Server rejected a write to a new mutable slot",
         )
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=get_implied_data_length(
@@ -706,8 +703,8 @@ class ShareTests(TestCase):
             in test_and_write_vectors_for_shares.items()
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
 
@@ -741,13 +738,14 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.advise_corrupt_share(
                 b"immutable",
                 storage_index,
                 sharenum,
                 b"the bits look bad",
             ),
+            succeeded(Always()),
         )
         self.assertThat(
             FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
