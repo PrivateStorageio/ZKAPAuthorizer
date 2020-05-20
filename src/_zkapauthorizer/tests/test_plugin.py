@@ -104,7 +104,7 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
-from .._plugin import (
+from ..spending import (
     GET_PASSES,
 )
 

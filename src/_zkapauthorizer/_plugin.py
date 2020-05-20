@@ -64,10 +64,6 @@ from .api import (
     ZKAPAuthorizerStorageClient,
 )
 
-from .eliot import (
-    GET_PASSES,
-)
-
 from .model import (
     VoucherStore,
 )
@@ -82,6 +78,10 @@ from .storage_common import (
 from .controller import (
     get_redeemer,
 )
+from .spending import (
+    SpendingController,
+)
+
 from .lease_maintenance import (
     SERVICE_NAME,
     lease_maintenance_service,
@@ -173,16 +173,13 @@ class ZKAPAuthorizer(object):
         """
         from twisted.internet import reactor
         redeemer = self._get_redeemer(node_config, announcement, reactor)
-        extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
-        def get_passes(message, count):
-            unblinded_tokens = extract_unblinded_tokens(count)
-            passes = redeemer.tokens_to_passes(message, unblinded_tokens)
-            GET_PASSES.log(
-                message=message,
-                count=count,
-            )
-            return passes
-
+        store = self._get_store(node_config)
+        # XXX Need to ensure one of these per store
+        controller = SpendingController(
+            store.extract_unblinded_tokens,
+            redeemer.tokens_to_passes,
+        )
+        get_passes = controller.get
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),
             get_rref,
