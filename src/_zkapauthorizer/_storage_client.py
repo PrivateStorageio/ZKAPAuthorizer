@@ -149,6 +149,19 @@ def with_rref(f):
     return g
 
 
+def _get_encoded_passes(passes):
+    """
+    :param list[Pass] passes: A group of passes to encode.
+
+    :return list[bytes]: The encoded form of the passes in the given group.
+    """
+    return list(
+        t.pass_text.encode("ascii")
+        for t
+        in passes
+    )
+
+
 @implementer(IStorageServer)
 @attr.s
 class ZKAPAuthorizerStorageClient(object):
@@ -200,20 +213,6 @@ class ZKAPAuthorizerStorageClient(object):
             )
         return rref
 
-    def _get_encoded_passes(self, message, count):
-        """
-        :param unicode message: The message to which to bind the passes.
-
-        :return: A list of passes from ``_get_passes`` encoded into their
-            ``bytes`` representation.
-        """
-        assert isinstance(message, unicode)
-        return list(
-            t.pass_text.encode("ascii")
-            for t
-            in self._get_passes(message.encode("utf-8"), count)
-        )
-
     @with_rref
     def get_version(self, rref):
         return rref.callRemote(
@@ -236,7 +235,7 @@ class ZKAPAuthorizerStorageClient(object):
         return call_with_passes(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
-                passes,
+                _get_encoded_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -245,7 +244,7 @@ class ZKAPAuthorizerStorageClient(object):
                 canary,
             ),
             num_passes,
-            partial(self._get_encoded_passes, message),
+            partial(self._get_passes, message.encode("utf-8")),
         )
 
     @with_rref
@@ -278,13 +277,13 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "add_lease",
-                passes,
+                _get_encoded_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
             ),
             num_passes,
-            partial(self._get_encoded_passes, add_lease_message(storage_index)),
+            partial(self._get_passes, add_lease_message(storage_index).encode("utf-8")),
         )
         returnValue(result)
 
@@ -306,12 +305,12 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "renew_lease",
-                passes,
+                _get_encoded_passes(passes),
                 storage_index,
                 renew_secret,
             ),
             num_passes,
-            partial(self._get_encoded_passes, renew_lease_message(storage_index)),
+            partial(self._get_passes, renew_lease_message(storage_index).encode("utf-8")),
         )
         returnValue(result)
 
@@ -377,7 +376,7 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "slot_testv_and_readv_and_writev",
-                passes,
+                _get_encoded_passes(passes),
                 storage_index,
                 secrets,
                 tw_vectors,
@@ -385,8 +384,8 @@ class ZKAPAuthorizerStorageClient(object):
             ),
             num_passes,
             partial(
-                self._get_encoded_passes,
-                slot_testv_and_readv_and_writev_message(storage_index),
+                self._get_passes,
+                slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
             ),
         )
         returnValue(result)

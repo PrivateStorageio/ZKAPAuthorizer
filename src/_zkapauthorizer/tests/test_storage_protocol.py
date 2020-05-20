@@ -122,6 +122,9 @@ from ..storage_common import (
     get_implied_data_length,
     required_passes,
 )
+from .._storage_client import (
+    _get_encoded_passes,
+)
 from ..foolscap import (
     ShareStat,
 )
@@ -891,9 +894,11 @@ class ShareTests(TestCase):
         d = self.local_remote_server.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
-            self.client._get_encoded_passes(
-                slot_testv_and_readv_and_writev_message(storage_index),
-                1,
+            _get_encoded_passes(
+                self.pass_factory.get(
+                    slot_testv_and_readv_and_writev_message(storage_index),
+                    1,
+                ),
             ),
             # storage_index
             storage_index,
