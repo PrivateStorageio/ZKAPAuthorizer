@@ -67,7 +67,6 @@ from foolscap.referenceable import (
 )
 
 from challenge_bypass_ristretto import (
-    RandomToken,
     random_signing_key,
 )
 
@@ -79,9 +78,6 @@ from .common import (
     skipIf,
 )
 
-from .privacypass import (
-    make_passes,
-)
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -107,6 +103,9 @@ from .storage_common import (
     cleanup_storage_server,
     write_toy_shares,
     whitebox_write_sparse_share,
+    get_passes,
+    privacypass_passes,
+    pass_factory,
 )
 from .foolscap import (
     LocalRemote,
@@ -121,9 +120,6 @@ from ..storage_common import (
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
-)
-from ..model import (
-    Pass,
 )
 from ..foolscap import (
     ShareStat,
@@ -167,36 +163,12 @@ class RequiredPassesTests(TestCase):
         )
 
 
-def get_passes(message, count, signing_key):
-    """
-    :param unicode message: Request-binding message for PrivacyPass.
-
-    :param int count: The number of passes to get.
-
-    :param SigningKEy signing_key: The key to use to sign the passes.
-
-    :return list[Pass]: ``count`` new random passes signed with the given key
-        and bound to the given message.
-    """
-    return list(
-        Pass(*pass_.split(u" "))
-        for pass_
-        in make_passes(
-            signing_key,
-            message,
-            list(RandomToken.create() for n in range(count)),
-        )
-    )
-
-
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
 
-    :ivar int spent_passes: The number of passes which have been spent so far
-        in the course of a single test (in the case of Hypothesis, every
-        iteration of the test so far, probably; so make relative comparisons
-        instead of absolute ones).
+    :ivar pass_factory: An object which is responsible for creating passes
+        which are used by these tests.
     """
     pass_value = 128 * 1024
 
@@ -205,11 +177,8 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
-        self.spent_passes = 0
 
-        def counting_get_passes(message, count):
-            self.spent_passes += count
-            return get_passes(message, count, self.signing_key)
+        self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -220,7 +189,7 @@ class ShareTests(TestCase):
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
-            get_passes=counting_get_passes,
+            get_passes=self.pass_factory.get,
         )
 
     def test_get_version(self):
@@ -826,12 +795,12 @@ class ShareTests(TestCase):
             u"Server gave back read results when we asked for none.",
         )
         # Now we can read it back without spending any more passes.
-        before_spent_passes = self.spent_passes
+        before_passes = len(self.pass_factory.issued)
         assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
-        after_spent_passes = self.spent_passes
+        after_passes = len(self.pass_factory.issued)
         self.assertThat(
-            before_spent_passes,
-            Equals(after_spent_passes),
+            before_passes,
+            Equals(after_passes),
         )
 
     @given(

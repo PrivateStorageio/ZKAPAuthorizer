@@ -16,6 +16,10 @@
 ``allmydata.storage``-related helpers shared across the test suite.
 """
 
+from functools import (
+    partial,
+)
+
 from os import (
     SEEK_CUR,
 )
@@ -23,13 +27,32 @@ from struct import (
     pack,
 )
 
+from itertools import (
+    count,
+    islice,
+)
+
+import attr
+
 from twisted.python.filepath import (
     FilePath,
+)
+
+from challenge_bypass_ristretto import (
+    RandomToken,
 )
 
 from .strategies import (
     # Not really a strategy...
     bytes_for_share,
+)
+
+from .privacypass import (
+    make_passes,
+)
+
+from ..model import (
+    Pass,
 )
 
 # Hard-coded in Tahoe-LAFS
@@ -133,3 +156,85 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
                 in leases
             ),
         )
+
+
+def integer_passes():
+    """
+    :return: Return a function which can be used to get a number of passes.
+        The function accepts a unicode request-binding message and an integer
+        number of passes.  It returns a list of integers which serve as passes.
+        Successive calls to the function return unique pass values.
+    """
+    counter = count(0)
+    def get_passes(message, num_passes):
+        return list(islice(counter, num_passes))
+    return get_passes
+
+
+def get_passes(message, count, signing_key):
+    """
+    :param unicode message: Request-binding message for PrivacyPass.
+
+    :param int count: The number of passes to get.
+
+    :param SigningKEy signing_key: The key to use to sign the passes.
+
+    :return list[Pass]: ``count`` new random passes signed with the given key
+        and bound to the given message.
+    """
+    return list(
+        Pass(*pass_.split(u" "))
+        for pass_
+        in make_passes(
+            signing_key,
+            message,
+            list(RandomToken.create() for n in range(count)),
+        )
+    )
+
+
+def privacypass_passes(signing_key):
+    """
+    Get a PrivacyPass issuing function.
+
+    :param SigningKey signing_key: The key to use to issue passes.
+
+    :return: Return a function which can be used to get a number of passes.
+        The function accepts a unicode request-binding message and an integer
+        number of passes.  It returns a list of real pass values signed by the
+        given key.  Successive calls to the function return unique passes.
+    """
+    return partial(get_passes, signing_key=signing_key)
+
+
+def pass_factory(get_passes=None):
+    """
+    Get a new factory for passes.
+
+    :param (unicode -> int -> [pass]) get_passes: A function the factory can
+        use to get new passes.
+    """
+    if get_passes is None:
+        get_passes = integer_passes()
+    return _PassFactory(get_passes=get_passes)
+
+
+@attr.s
+class _PassFactory(object):
+    """
+    A stateful pass issuer.
+
+    :ivar (unicode -> int -> [bytes]) _get_passes: A function for getting
+        passes.
+
+    :ivar set[int] issued: All of the passes ever given out.
+
+    """
+    _get_passes = attr.ib()
+    issued = attr.ib(default=attr.Factory(set), init=False)
+
+    def get(self, message, num_passes):
+        passes = []
+        passes.extend(self._get_passes(message, num_passes))
+        self.issued.update(passes)
+        return passes
