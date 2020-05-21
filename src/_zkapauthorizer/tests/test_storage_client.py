@@ -16,11 +16,8 @@
 Tests for ``_zkapauthorizer._storage_client``.
 """
 
-import attr
-
-from itertools import (
-    count,
-    islice,
+from functools import (
+    partial,
 )
 
 from testtools import (
@@ -31,6 +28,10 @@ from testtools.matchers import (
     Is,
     Equals,
     AfterPreprocessing,
+    MatchesStructure,
+    HasLength,
+    MatchesAll,
+    AllMatch,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -49,6 +50,11 @@ from twisted.internet.defer import (
     fail,
 )
 
+from .matchers import (
+    even,
+    odd,
+)
+
 from ..api import (
     MorePassesRequired,
 )
@@ -60,30 +66,13 @@ from .._storage_server import (
     _ValidationResult,
 )
 
+from .storage_common import (
+    pass_factory,
+)
+
+
 def pass_counts():
     return integers(min_value=1, max_value=2 ** 8)
-
-
-def pass_factory():
-    return _PassFactory()
-
-@attr.s
-class _PassFactory(object):
-    """
-    A stateful pass issuer.
-
-    :ivar list spent: All of the passes ever issued.
-
-    :ivar _fountain: A counter for making each new pass issued unique.
-    """
-    spent = attr.ib(default=attr.Factory(list))
-
-    _fountain = attr.ib(default=attr.Factory(count))
-
-    def get(self, num_passes):
-        passes = list(islice(self._fountain, num_passes))
-        self.spent.extend(passes)
-        return passes
 
 
 class CallWithPassesTests(TestCase):
@@ -100,9 +89,9 @@ class CallWithPassesTests(TestCase):
         result = object()
         self.assertThat(
             call_with_passes(
-                lambda passes: succeed(result),
+                lambda group: succeed(result),
                 num_passes,
-                pass_factory().get,
+                partial(pass_factory().get, u"message"),
             ),
             succeeded(Is(result)),
         )
@@ -117,9 +106,9 @@ class CallWithPassesTests(TestCase):
         result = Exception()
         self.assertThat(
             call_with_passes(
-                lambda passes: fail(result),
+                lambda group: fail(result),
                 num_passes,
-                pass_factory().get,
+                partial(pass_factory().get, u"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -130,24 +119,68 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_passes(self, num_passes):
+    def test_passes_issued(self, num_passes):
         """
-        ``call_with_passes`` calls the given method with a list of passes
-        containing ``num_passes`` created by the function passed for
+        ``call_with_passes`` calls the given method with an ``IPassGroup``
+        provider containing ``num_passes`` created by the function passed for
         ``get_passes``.
         """
         passes = pass_factory()
 
         self.assertThat(
             call_with_passes(
-                lambda passes: succeed(passes),
+                lambda group: succeed(group.passes),
                 num_passes,
-                passes.get,
+                partial(passes.get, u"message"),
             ),
             succeeded(
                 Equals(
-                    passes.spent,
+                    sorted(passes.issued),
                 ),
+            ),
+        )
+
+    @given(pass_counts())
+    def test_passes_spent_on_success(self, num_passes):
+        """
+        ``call_with_passes`` marks the passes it uses as spent if the operation
+        succeeds.
+        """
+        passes = pass_factory()
+
+        self.assertThat(
+            call_with_passes(
+                lambda group: None,
+                num_passes,
+                partial(passes.get, u"message"),
+            ),
+            succeeded(Always()),
+        )
+        self.assertThat(
+            passes.issued,
+            Equals(passes.spent),
+        )
+
+    @given(pass_counts())
+    def test_passes_returned_on_failure(self, num_passes):
+        """
+        ``call_with_passes`` returns the passes it uses if the operation fails.
+        """
+        passes = pass_factory()
+
+        self.assertThat(
+            call_with_passes(
+                lambda group: fail(Exception("Anything")),
+                num_passes,
+                partial(passes.get, u"message"),
+            ),
+            failed(Always()),
+        )
+        self.assertThat(
+            passes,
+            MatchesStructure(
+                issued=Equals(set(passes.returned)),
+                spent=Equals(set()),
             ),
         )
 
@@ -160,7 +193,8 @@ class CallWithPassesTests(TestCase):
         """
         passes = pass_factory()
 
-        def reject_even_pass_values(passes):
+        def reject_even_pass_values(group):
+            passes = group.passes
             good_passes = list(idx for (idx, p) in enumerate(passes) if p % 2)
             bad_passes = list(idx for (idx, p) in enumerate(passes) if idx not in good_passes)
             if len(good_passes) < num_passes:
@@ -174,9 +208,25 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 reject_even_pass_values,
                 num_passes,
-                passes.get,
+                partial(passes.get, u"message"),
             ),
             succeeded(Always()),
+        )
+        self.assertThat(
+            passes,
+            MatchesStructure(
+                returned=HasLength(0),
+                in_use=HasLength(0),
+                invalid=MatchesAll(
+                    HasLength(num_passes),
+                    AllMatch(even()),
+                ),
+                spent=MatchesAll(
+                    HasLength(num_passes),
+                    AllMatch(odd()),
+                ),
+                issued=Equals(passes.spent | set(passes.invalid.keys())),
+            ),
         )
 
     @given(pass_counts())
@@ -188,7 +238,8 @@ class CallWithPassesTests(TestCase):
         """
         passes = pass_factory()
 
-        def reject_passes(passes):
+        def reject_passes(group):
+            passes = group.passes
             _ValidationResult(
                 valid=range(len(passes)),
                 signature_check_failed=[],
@@ -198,7 +249,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 reject_passes,
                 num_passes,
-                passes.get,
+                partial(passes.get, u"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -211,5 +262,15 @@ class CallWithPassesTests(TestCase):
                         ),
                     ),
                 ),
+            ),
+        )
+
+        # The passes in the group that was rejected are also returned for
+        # later use.
+        self.assertThat(
+            passes,
+            MatchesStructure(
+                spent=HasLength(0),
+                returned=HasLength(num_passes),
             ),
         )

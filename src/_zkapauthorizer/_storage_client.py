@@ -36,13 +36,12 @@ from zope.interface import (
 )
 
 from eliot.twisted import (
-    DeferredContext,
+    inline_callbacks,
 )
 
 from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
-    maybeDeferred,
 )
 from allmydata.interfaces import (
     IStorageServer,
@@ -65,6 +64,7 @@ from .storage_common import (
     get_required_new_passes_for_mutable_write,
 )
 
+
 class IncorrectStorageServerReference(Exception):
     """
     A Foolscap remote object which should reference a ZKAPAuthorizer storage
@@ -84,55 +84,90 @@ class IncorrectStorageServerReference(Exception):
         )
 
 
+def replace_invalid_passes_with_new_passes(passes, more_passes_required):
+    """
+    Replace all rejected passes in the given pass group with new ones.  Mark
+    any rejected passes as rejected.
+
+    :param IPassGroup passes: A group of passes, some of which may have been
+        rejected.
+
+    :param MorePassesRequired more_passes_required: An exception possibly
+        detailing the rejection of some passes from the group.
+
+    :return: ``None`` if no passes in the group were rejected and so there is
+        nothing to replace.  Otherwise, a new ``IPassGroup`` created from
+        ``passes`` but with rejected passes replaced with new ones.
+    """
+    num_failed = len(more_passes_required.signature_check_failed)
+    if num_failed == 0:
+        # If no signature checks failed then the call just didn't supply
+        # enough passes.  The exception tells us how many passes we should
+        # spend so we could try again with that number of passes but for
+        # now we'll just let the exception propagate.  The client should
+        # always figure out the number of passes right on the first try so
+        # this case is somewhat suspicious.  Err on the side of lack of
+        # service instead of burning extra passes.
+        #
+        # We *could* just `raise` here and only be called from an `except`
+        # suite... but let's not be so vulgar.
+        return None
+    SIGNATURE_CHECK_FAILED.log(count=num_failed)
+    rejected_passes, okay_passes = passes.split(more_passes_required.signature_check_failed)
+    rejected_passes.mark_invalid(u"signature check failed")
+    return okay_passes.expand(len(more_passes_required.signature_check_failed))
+
+
+@inline_callbacks
 def call_with_passes(method, num_passes, get_passes):
     """
     Call a method, passing the requested number of passes as the first
     argument, and try again if the call fails with an error related to some of
     the passes being rejected.
 
-    :param method: A callable which accepts a list of encoded passes as its
-        only argument and returns a ``Deferred``.  If the ``Deferred`` fires
-        with ``MorePassesRequired`` then the invalid passes will be discarded
-        and replacement passes will be requested for a new call of ``method``.
-        This will repeat until no passes remain, the method succeeds, or the
-        methods fails in a different way.
+    :param (IPassGroup -> Deferred) method: An operation to call with some passes.
+        If the returned ``Deferred`` fires with ``MorePassesRequired`` then
+        the invalid passes will be discarded and replacement passes will be
+        requested for a new call of ``method``.  This will repeat until no
+        passes remain, the method succeeds, or the methods fails in a
+        different way.
 
     :param int num_passes: The number of passes to pass to the call.
 
-    :param (unicode -> int -> [bytes]) get_passes: A function for getting
+    :param (int -> IPassGroup) get_passes: A function for getting
         passes.
 
-    :return: Whatever ``method`` returns.
+    :return: A ``Deferred`` that fires with whatever the ``Deferred`` returned
+        by ``method`` fires with (apart from ``MorePassesRequired`` failures
+        that trigger a retry).
     """
-    def get_more_passes(reason):
-        reason.trap(MorePassesRequired)
-        num_failed = len(reason.value.signature_check_failed)
-        if num_failed == 0:
-            # If no signature checks failed then the call just didn't supply
-            # enough passes.  The exception tells us how many passes we should
-            # spend so we could try again with that number of passes but for
-            # now we'll just let the exception propagate.  The client should
-            # always figure out the number of passes right on the first try so
-            # this case is somewhat suspicious.  Err on the side of lack of
-            # service instead of burning extra passes.
-            return reason
-        SIGNATURE_CHECK_FAILED.log(count=num_failed)
-        new_passes = get_passes(num_failed)
-        for idx, new_pass in zip(reason.value.signature_check_failed, new_passes):
-            passes[idx] = new_pass
-        return go(passes)
-
-    def go(passes):
-        # Capture the Eliot context for the errback.
-        d = DeferredContext(maybeDeferred(method, passes))
-        d.addErrback(get_more_passes)
-        # Return the underlying Deferred without finishing the action.
-        return d.result
-
-    with CALL_WITH_PASSES(count=num_passes).context():
+    with CALL_WITH_PASSES(count=num_passes):
         passes = get_passes(num_passes)
-        # Finish the Eliot action when this is done.
-        return DeferredContext(go(passes)).addActionFinish()
+        try:
+            # Try and repeat as necessary.
+            while True:
+                try:
+                    result = yield method(passes)
+                except MorePassesRequired as e:
+                    updated_passes = replace_invalid_passes_with_new_passes(
+                        passes,
+                        e,
+                    )
+                    if updated_passes is None:
+                        raise
+                    else:
+                        passes = updated_passes
+                else:
+                    # Commit the spend of the passes when the operation finally succeeds.
+                    passes.mark_spent()
+                    break
+        except:
+            # Something went wrong that we can't address with a retry.
+            passes.reset()
+            raise
+
+        # Give the operation's result to the caller.
+        returnValue(result)
 
 
 def with_rref(f):
@@ -149,16 +184,16 @@ def with_rref(f):
     return g
 
 
-def _get_encoded_passes(passes):
+def _get_encoded_passes(group):
     """
-    :param list[Pass] passes: A group of passes to encode.
+    :param IPassGroup group: A group of passes to encode.
 
     :return list[bytes]: The encoded form of the passes in the given group.
     """
     return list(
         t.pass_text.encode("ascii")
         for t
-        in passes
+        in group.passes
     )
 
 

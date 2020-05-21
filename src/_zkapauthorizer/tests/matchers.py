@@ -154,3 +154,23 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
             ),
         ),
     )
+
+
+def even():
+    """
+    Matches even integers.
+    """
+    return AfterPreprocessing(
+        lambda n: n % 2,
+        Equals(0),
+    )
+
+
+def odd():
+    """
+    Matches odd integers.
+    """
+    return AfterPreprocessing(
+        lambda n: n % 2,
+        Equals(1),
+    )
