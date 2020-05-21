@@ -145,6 +145,7 @@ class PassGroup(object):
         self._factory._reset(self.passes)
 
 
+@implementer(IPassFactory)
 @attr.s
 class SpendingController(object):
     """

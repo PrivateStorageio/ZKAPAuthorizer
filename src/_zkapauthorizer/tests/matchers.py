@@ -54,7 +54,7 @@ class Provides(object):
     """
     Match objects that provide all of a list of Zope Interface interfaces.
     """
-    interfaces = attr.ib()
+    interfaces = attr.ib(validator=attr.validators.instance_of(list))
 
     def match(self, obj):
         missing = set()

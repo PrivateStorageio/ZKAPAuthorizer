@@ -41,9 +41,6 @@ from testtools.twistedsupport import (
 from hypothesis import (
     given,
 )
-from hypothesis.strategies import (
-    integers,
-)
 
 from twisted.internet.defer import (
     succeed,
@@ -53,6 +50,10 @@ from twisted.internet.defer import (
 from .matchers import (
     even,
     odd,
+)
+
+from .strategies import (
+    pass_counts,
 )
 
 from ..api import (
@@ -69,10 +70,6 @@ from .._storage_server import (
 from .storage_common import (
     pass_factory,
 )
-
-
-def pass_counts():
-    return integers(min_value=1, max_value=2 ** 8)
 
 
 class CallWithPassesTests(TestCase):
