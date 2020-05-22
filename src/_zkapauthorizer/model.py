@@ -263,7 +263,7 @@ class VoucherStore(object):
         cursor.execute("BEGIN IMMEDIATE TRANSACTION")
         cursor.execute(
             """
-            SELECT ([text])
+            SELECT [text]
             FROM [tokens]
             WHERE [voucher] = ? AND [counter] = ?
             """,
