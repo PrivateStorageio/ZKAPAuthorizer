@@ -639,55 +639,6 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def extract_unblinded_tokens(self, cursor, count):
-        """
-        Remove and return some unblinded tokens.
-
-        :param int count: The maximum number of unblinded tokens to remove and
-            return.  If fewer than this are available, only as many as are
-            available are returned.
-
-        :return list[UnblindedTokens]: The removed unblinded tokens.
-        """
-        cursor.execute(
-            """
-            SELECT COUNT(token)
-            FROM [unblinded-tokens]
-            """,
-        )
-        [(existing_tokens,)] = cursor.fetchall()
-        if existing_tokens < count:
-            raise NotEnoughTokens()
-
-        cursor.execute(
-            """
-            INSERT INTO [extracting] SELECT [token] FROM [unblinded-tokens] LIMIT ?
-            """,
-            (count,),
-        )
-        cursor.execute(
-            """
-            DELETE FROM [unblinded-tokens] WHERE [token] IN [extracting]
-            """,
-        )
-        cursor.execute(
-            """
-            SELECT [token] FROM [extracting]
-            """,
-        )
-        texts = cursor.fetchall()
-        cursor.execute(
-            """
-            DELETE FROM [extracting]
-            """,
-        )
-        return list(
-            UnblindedToken(t)
-            for (t,)
-            in texts
-        )
-
-    @with_cursor
     def backup(self, cursor):
         """
         Read out all state necessary to recreate this database in the event it is
