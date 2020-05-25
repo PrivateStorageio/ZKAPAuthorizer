@@ -175,10 +175,10 @@ class ZKAPAuthorizer(object):
         redeemer = self._get_redeemer(node_config, announcement, reactor)
         store = self._get_store(node_config)
         # XXX Need to ensure one of these per store
-        controller = SpendingController(
-            store.extract_unblinded_tokens,
-            redeemer.tokens_to_passes,
-        )
+        controller = SpendingController.for_store(
+            tokens_to_passes=redeemer.tokens_to_passes,
+            store=store,
+       )
         get_passes = controller.get
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),

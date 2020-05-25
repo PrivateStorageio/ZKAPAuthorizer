@@ -37,7 +37,11 @@ from allmydata.storage.server import (
 
 from ..model import (
     VoucherStore,
+    open_and_initialize,
     memory_connect,
+)
+from ..controller import (
+    PaymentController,
 )
 
 class AnonymousStorageServer(Fixture):
@@ -81,4 +85,46 @@ class TemporaryVoucherStore(Fixture):
             self.config,
             self.get_now,
             memory_connect,
+        )
+
+
+@attr.s
+class ConfiglessMemoryVoucherStore(Fixture):
+    """
+    Create a ``VoucherStore`` backed by an in-memory database and with no
+    associated Tahoe-LAFS configuration or node.
+
+    This is like ``TemporaryVoucherStore`` but faster because it skips the
+    Tahoe-LAFS parts.
+    """
+    redeemer = attr.ib()
+    get_now = attr.ib()
+
+    def _setUp(self):
+        here = FilePath(u".")
+        self.store = VoucherStore(
+            pass_value=2 ** 15,
+            database_path=here,
+            now=self.get_now,
+            connection=open_and_initialize(here, memory_connect),
+        )
+
+    def redeem(self, voucher, num_passes):
+        """
+        Redeem a voucher for some passes.
+
+        :return: A ``Deferred`` that fires with the redemption result.
+        """
+        return PaymentController(
+            self.store,
+            self.redeemer,
+            # Have to pass it here or to redeem, doesn't matter which.
+            default_token_count=num_passes,
+            # No value in splitting it into smaller groups in this case.
+            # Doing so only complicates the test by imposing a different
+            # minimum token count requirement (can't have fewer tokens
+            # than groups).
+            num_redemption_groups=1,
+        ).redeem(
+            voucher,
         )

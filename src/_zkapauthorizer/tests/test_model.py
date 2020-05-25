@@ -28,6 +28,7 @@ from errno import (
     EACCES,
 )
 from datetime import (
+    datetime,
     timedelta,
 )
 
@@ -39,6 +40,8 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Always,
+    HasLength,
     AfterPreprocessing,
     MatchesStructure,
     MatchesAll,
@@ -46,15 +49,26 @@ from testtools.matchers import (
     Raises,
     IsInstance,
 )
+from testtools.twistedsupport import (
+    succeeded,
+)
 
 from fixtures import (
     TempDir,
 )
 
 from hypothesis import (
+    note,
     given,
+    assume,
 )
-
+from hypothesis.stateful import (
+    RuleBasedStateMachine,
+    rule,
+    precondition,
+    invariant,
+    run_state_machine_as_test
+)
 from hypothesis.strategies import (
     data,
     booleans,
@@ -63,6 +77,7 @@ from hypothesis.strategies import (
     datetimes,
     timedeltas,
     integers,
+    randoms,
 )
 
 from twisted.python.runtime import (
@@ -80,7 +95,9 @@ from ..model import (
     LeaseMaintenanceActivity,
     memory_connect,
 )
-
+from ..controller import (
+    DummyRedeemer,
+)
 from .strategies import (
     tahoe_configs,
     vouchers,
@@ -90,9 +107,11 @@ from .strategies import (
     unblinded_tokens,
     posix_safe_datetimes,
     dummy_ristretto_keys,
+    pass_counts,
 )
 from .fixtures import (
     TemporaryVoucherStore,
+    ConfiglessMemoryVoucherStore,
 )
 from .matchers import (
     raises,
@@ -314,7 +333,7 @@ class VoucherStoreTests(TestCase):
     def test_spend_order_equals_backup_order(self, get_config, voucher_value, public_key, now, data):
         """
         Unblinded tokens returned by ``VoucherStore.backup`` appear in the same
-        order as they are returned ``VoucherStore.extract_unblinded_tokens``.
+        order as they are returned ``VoucherStore.get_unblinded_tokens``.
         """
         backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
             get_config,
@@ -332,7 +351,7 @@ class VoucherStoreTests(TestCase):
     @given(tahoe_configs(), vouchers(), dummy_ristretto_keys(), datetimes(), data())
     def test_spend_order_equals_insert_order(self, get_config, voucher_value, public_key, now, data):
         """
-        Unblinded tokens returned by ``VoucherStore.extract_unblinded_tokens``
+        Unblinded tokens returned by ``VoucherStore.get_unblinded_tokens``
         appear in the same order as they were inserted.
         """
         backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
@@ -386,7 +405,7 @@ class VoucherStoreTests(TestCase):
             extracted_tokens.extend(
                 token.unblinded_token
                 for token
-                in store.extract_unblinded_tokens(to_spend)
+                in store.get_unblinded_tokens(to_spend)
             )
             tokens_remaining -= to_spend
 
@@ -396,6 +415,183 @@ class VoucherStoreTests(TestCase):
             list(token.unblinded_token for token in unblinded_tokens),
         )
 
+
+class UnblindedTokenStateMachine(RuleBasedStateMachine):
+    """
+    Transition rules for a state machine corresponding to the state of
+    unblinded tokens in a ``VoucherStore`` - usable, in-use, spent, invalid,
+    etc.
+    """
+    def __init__(self, case):
+        super(UnblindedTokenStateMachine, self).__init__()
+        self.case = case
+        self.redeemer = DummyRedeemer()
+        self.configless = ConfiglessMemoryVoucherStore(
+            self.redeemer,
+            # Time probably not actually relevant to this state machine.
+            datetime.now,
+        )
+        self.configless.setUp()
+
+        self.available = 0
+        self.using = []
+        self.spent = []
+        self.invalid = []
+
+    def teardown(self):
+        self.configless.cleanUp()
+
+    @rule(voucher=vouchers(), num_passes=pass_counts())
+    def redeem_voucher(self, voucher, num_passes):
+        """
+        A voucher can be redeemed, adding more unblinded tokens to the store.
+        """
+        try:
+            self.configless.store.get(voucher)
+        except KeyError:
+            pass
+        else:
+            # Cannot redeem a voucher more than once.  We redeemed this one
+            # already.
+            assume(False)
+
+        self.case.assertThat(
+            self.configless.redeem(voucher, num_passes),
+            succeeded(Always()),
+        )
+        self.available += num_passes
+
+    @rule(num_passes=pass_counts())
+    def get_passes(self, num_passes):
+        """
+        Some passes can be requested from the store.  The resulting passes are not
+        in use, spent, or invalid.
+        """
+        assume(num_passes <= self.available)
+        tokens = self.configless.store.get_unblinded_tokens(num_passes)
+        note("get_passes: {}".format(tokens))
+
+        # No tokens we are currently using may be returned again.  Nor may
+        # tokens which have reached a terminal state of spent or invalid.
+        unavailable = set(self.using) | set(self.spent) | set(self.invalid)
+
+        self.case.assertThat(
+            tokens,
+            MatchesAll(
+                HasLength(num_passes),
+                AfterPreprocessing(
+                    lambda t: set(t) & unavailable,
+                    Equals(set()),
+                ),
+            ),
+        )
+        self.using.extend(tokens)
+        self.available -= num_passes
+
+    @rule(excess_passes=pass_counts())
+    def not_enough_passes(self, excess_passes):
+        """
+        If an attempt is made to get more passes than are available,
+        ``get_unblinded_tokens`` raises ``NotEnoughTokens``.
+        """
+        self.case.assertThat(
+            lambda: self.configless.store.get_unblinded_tokens(
+                self.available + excess_passes,
+            ),
+            raises(NotEnoughTokens),
+        )
+
+    @precondition(lambda self: len(self.using) > 0)
+    @rule(random=randoms(), data=data())
+    def spend_passes(self, random, data):
+        """
+        Some in-use passes can be discarded.
+        """
+        self.using, to_spend = random_slice(self.using, random, data)
+        note("spend_passes: {}".format(to_spend))
+        self.configless.store.discard_unblinded_tokens(to_spend)
+
+    @precondition(lambda self: len(self.using) > 0)
+    @rule(random=randoms(), data=data())
+    def reset_passes(self, random, data):
+        """
+        Some in-use passes can be returned to not-in-use state.
+        """
+        self.using, to_reset = random_slice(self.using, random, data)
+        note("reset_passes: {}".format(to_reset))
+        self.configless.store.reset_unblinded_tokens(to_reset)
+        self.available += len(to_reset)
+
+    @precondition(lambda self: len(self.using) > 0)
+    @rule(random=randoms(), data=data())
+    def invalidate_passes(self, random, data):
+        """
+        Some in-use passes are unusable and should be set aside.
+        """
+        self.using, to_invalidate = random_slice(self.using, random, data)
+        note("invalidate_passes: {}".format(to_invalidate))
+        self.configless.store.invalidate_unblinded_tokens(
+            u"reason",
+            to_invalidate,
+        )
+        self.invalid.extend(to_invalidate)
+
+    @rule()
+    def discard_ephemeral_state(self):
+        """
+        Reset all state that cannot outlive a single process, simulating a
+        restart.
+
+        XXX We have to reach into the guts of ``VoucherStore`` to do this
+        because we're using an in-memory database.  We can't just open a new
+        ``VoucherStore``. :/ Perhaps we should use an on-disk database...  Or
+        maybe this is a good argument for using an explicitly attached
+        temporary database instead of the built-in ``temp`` database.
+        """
+        with self.configless.store._connection:
+            self.configless.store._connection.execute(
+                """
+                DELETE FROM [temp.in-use]
+                """,
+            )
+        self.available += len(self.using)
+        del self.using[:]
+
+    @invariant()
+    def report_state(self):
+        note("available={} using={} invalid={} spent={}".format(
+            self.available,
+            len(self.using),
+            len(self.invalid),
+            len(self.spent),
+        ))
+
+
+
+def random_slice(taken_from, random, data):
+    """
+    Divide ``taken_from`` into two pieces with elements randomly assigned to
+    one piece or the other.
+
+    :param list taken_from: A list of elements to divide.  This will be
+        mutated.
+
+    :param random: A ``random`` module-alike.
+
+    :param data: A Hypothesis data object for drawing values.
+
+    :return: A two-tuple of the two resulting lists.
+    """
+    count = data.draw(integers(min_value=1, max_value=len(taken_from)))
+    random.shuffle(taken_from)
+    remaining = taken_from[:-count]
+    sliced = taken_from[-count:]
+    return remaining, sliced
+
+
+class UnblindedTokenStateTests(TestCase):
+    def test_states(self):
+        run_state_machine_as_test(lambda: UnblindedTokenStateMachine(self))
 
 
 class LeaseMaintenanceTests(TestCase):
@@ -552,17 +748,11 @@ class UnblindedTokenStoreTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens, completed)
-        retrieved_tokens = store.extract_unblinded_tokens(len(random_tokens))
+        retrieved_tokens = store.get_unblinded_tokens(len(random_tokens))
 
         self.expectThat(
             set(unblinded_tokens),
             Equals(set(retrieved_tokens)),
-        )
-
-        # After extraction, the unblinded tokens are no longer available.
-        self.assertThat(
-            lambda: store.extract_unblinded_tokens(1),
-            raises(NotEnoughTokens),
         )
 
     @given(
@@ -698,7 +888,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_not_enough_unblinded_tokens(self, get_config, now, voucher_value, public_key, completed, num_tokens, extra, data):
         """
-        ``extract_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
+        ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
         greater than the number of unblinded tokens in the store.
         """
         random = data.draw(
@@ -722,12 +912,10 @@ class UnblindedTokenStoreTests(TestCase):
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed)
 
         self.assertThat(
-            lambda: store.extract_unblinded_tokens(num_tokens + extra),
+            lambda: store.get_unblinded_tokens(num_tokens + extra),
             raises(NotEnoughTokens),
         )
 
-
-    # TODO: Other error states and transient states
 
 
 def store_for_test(testcase, get_config, get_now):

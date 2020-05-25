@@ -21,9 +21,11 @@ from testtools import (
 )
 from testtools.matchers import (
     Always,
+    Equals,
     MatchesAll,
     MatchesStructure,
     HasLength,
+    AfterPreprocessing,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -32,9 +34,10 @@ from testtools.twistedsupport import (
 from hypothesis import (
     given,
 )
-
-from twisted.python.filepath import (
-    FilePath,
+from hypothesis.strategies import (
+    integers,
+    randoms,
+    data,
 )
 
 from .strategies import (
@@ -45,14 +48,11 @@ from .strategies import (
 from .matchers import (
     Provides,
 )
-from ..model import (
-    VoucherStore,
-    open_and_initialize,
-    memory_connect,
+from .fixtures import (
+    ConfiglessMemoryVoucherStore,
 )
 from ..controller import (
     DummyRedeemer,
-    PaymentController,
 )
 from ..spending import (
     IPassGroup,
@@ -69,35 +69,21 @@ class PassGroupTests(TestCase):
         ``IPassFactory.get`` returns an ``IPassGroup`` provider containing the
         requested number of passes.
         """
-        redeemer = DummyRedeemer()
-        here = FilePath(u".")
-        store = VoucherStore(
-            pass_value=2 ** 15,
-            database_path=here,
-            now=lambda: now,
-            connection=open_and_initialize(here, memory_connect),
+        configless = self.useFixture(
+            ConfiglessMemoryVoucherStore(
+                DummyRedeemer(),
+                lambda: now,
+            ),
         )
         # Make sure there are enough tokens for us to extract!
         self.assertThat(
-            PaymentController(
-                store,
-                redeemer,
-                # Have to pass it here or to redeem, doesn't matter which.
-                default_token_count=num_passes,
-                # No value in splitting it into smaller groups in this case.
-                # Doing so only complicates the test by imposing a different
-                # minimum token count requirement (can't have fewer tokens
-                # than groups).
-                num_redemption_groups=1,
-            ).redeem(
-                voucher,
-            ),
+            configless.redeem(voucher, num_passes),
             succeeded(Always()),
         )
 
-        pass_factory = SpendingController(
-            extract_unblinded_tokens=store.extract_unblinded_tokens,
-            tokens_to_passes=redeemer.tokens_to_passes,
+        pass_factory = SpendingController.for_store(
+            tokens_to_passes=configless.redeemer.tokens_to_passes,
+            store=configless.store,
         )
 
         group = pass_factory.get(u"message", num_passes)
@@ -109,4 +95,117 @@ class PassGroupTests(TestCase):
                     passes=HasLength(num_passes),
                 ),
             ),
+        )
+
+    def _test_token_group_operation(
+            self,
+            operation,
+            matches_tokens,
+            voucher,
+            num_passes,
+            now,
+            random,
+            data,
+    ):
+        configless = self.useFixture(
+            ConfiglessMemoryVoucherStore(
+                DummyRedeemer(),
+                lambda: now,
+            ),
+        )
+        # Make sure there are enough tokens for us to use!
+        self.assertThat(
+            configless.redeem(voucher, num_passes),
+            succeeded(Always()),
+        )
+
+        # Figure out some subset, maybe empty, of passes from the group that
+        # we will try to operate on.
+        group_size = data.draw(integers(min_value=0, max_value=num_passes))
+        indices = range(num_passes)
+        random.shuffle(indices)
+        spent_indices = indices[:group_size]
+
+        # Get some passes and perform the operation.
+        pass_factory = SpendingController.for_store(
+            tokens_to_passes=configless.redeemer.tokens_to_passes,
+            store=configless.store,
+        )
+        group = pass_factory.get(u"message", num_passes)
+        spent, rest = group.split(spent_indices)
+        operation(spent)
+
+        # Verify the expected outcome of the operation using the supplied
+        # matcher factory.
+        self.assertThat(
+            configless.store,
+            matches_tokens(num_passes, spent),
+        )
+
+    @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
+    def test_spent(self, voucher, num_passes, now, random, data):
+        """
+        Passes in a group can be marked as successfully spent to prevent them from
+        being re-used by a future ``get`` call.
+        """
+        def matches_tokens(num_passes, group):
+            return AfterPreprocessing(
+                # The use of `backup` here to check is questionable.  TODO:
+                # Straight-up query interface for tokens in different states.
+                lambda store: store.backup()[u"unblinded-tokens"],
+                HasLength(num_passes - len(group.passes)),
+            )
+        return self._test_token_group_operation(
+            lambda group: group.mark_spent(),
+            matches_tokens,
+            voucher,
+            num_passes,
+            now,
+            random,
+            data,
+        )
+
+    @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
+    def test_invalid(self, voucher, num_passes, now, random, data):
+        """
+        Passes in a group can be marked as invalid to prevent them from being
+        re-used by a future ``get`` call.
+        """
+        def matches_tokens(num_passes, group):
+            return AfterPreprocessing(
+                # The use of `backup` here to check is questionable.  TODO:
+                # Straight-up query interface for tokens in different states.
+                lambda store: store.backup()[u"unblinded-tokens"],
+                HasLength(num_passes - len(group.passes)),
+            )
+        return self._test_token_group_operation(
+            lambda group: group.mark_invalid(u"reason"),
+            matches_tokens,
+            voucher,
+            num_passes,
+            now,
+            random,
+            data,
+        )
+
+    @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
+    def test_reset(self, voucher, num_passes, now, random, data):
+        """
+        Passes in a group can be reset to allow them to be re-used by a future
+        ``get`` call.
+        """
+        def matches_tokens(num_passes, group):
+            return AfterPreprocessing(
+                # They've been reset so we should be able to re-get them.
+                lambda store: store.get_unblinded_tokens(len(group.passes)),
+                Equals(group.unblinded_tokens),
+            )
+        return self._test_token_group_operation(
+            lambda group: group.reset(),
+            matches_tokens,
+            voucher,
+            num_passes,
+            now,
+            random,
+            data,
         )

@@ -114,35 +114,51 @@ class PassGroup(object):
     """
     _message = attr.ib()
     _factory = attr.ib()
-    passes = attr.ib()
+    _tokens = attr.ib()
+
+    @property
+    def passes(self):
+        return list(
+            pass_
+            for (unblinded_token, pass_)
+            in self._tokens
+        )
+
+    @property
+    def unblinded_tokens(self):
+        return list(
+            unblinded_token
+            for (unblinded_token, pass_)
+            in self._tokens
+        )
 
     def split(self, select_indices):
         selected = []
         unselected = []
-        for idx, p in enumerate(self.passes):
+        for idx, t in enumerate(self._tokens):
             if idx in select_indices:
-                selected.append(p)
+                selected.append(t)
             else:
-                unselected.append(p)
+                unselected.append(t)
         return (
-            attr.evolve(self, passes=selected),
-            attr.evolve(self, passes=unselected),
+            attr.evolve(self, tokens=selected),
+            attr.evolve(self, tokens=unselected),
         )
 
     def expand(self, by_amount):
         return attr.evolve(
             self,
-            passes=self.passes + self._factory.get(self._message, by_amount).passes,
+            tokens=self._tokens + self._factory.get(self._message, by_amount)._tokens,
         )
 
     def mark_spent(self):
-        self._factory._mark_spent(self.passes)
+        self._factory._mark_spent(self.unblinded_tokens)
 
     def mark_invalid(self, reason):
-        self._factory._mark_invalid(reason, self.passes)
+        self._factory._mark_invalid(reason, self.unblinded_tokens)
 
     def reset(self):
-        self._factory._reset(self.passes)
+        self._factory._reset(self.unblinded_tokens)
 
 
 @implementer(IPassFactory)
@@ -152,26 +168,37 @@ class SpendingController(object):
     A ``SpendingController`` gives out ZKAPs and arranges for re-spend
     attempts when necessary.
     """
-    extract_unblinded_tokens = attr.ib()
+    get_unblinded_tokens = attr.ib()
+    discard_unblinded_tokens = attr.ib()
+    invalidate_unblinded_tokens = attr.ib()
+    reset_unblinded_tokens = attr.ib()
+
     tokens_to_passes = attr.ib()
 
+    @classmethod
+    def for_store(cls, tokens_to_passes, store):
+        return cls(
+            get_unblinded_tokens=store.get_unblinded_tokens,
+            discard_unblinded_tokens=store.discard_unblinded_tokens,
+            invalidate_unblinded_tokens=store.invalidate_unblinded_tokens,
+            reset_unblinded_tokens=store.reset_unblinded_tokens,
+            tokens_to_passes=tokens_to_passes,
+        )
+
     def get(self, message, num_passes):
-        unblinded_tokens = self.extract_unblinded_tokens(num_passes)
+        unblinded_tokens = self.get_unblinded_tokens(num_passes)
         passes = self.tokens_to_passes(message, unblinded_tokens)
         GET_PASSES.log(
             message=message,
             count=num_passes,
         )
-        return PassGroup(message, self, passes)
+        return PassGroup(message, self, zip(unblinded_tokens, passes))
 
-    def _mark_spent(self, group):
-        # TODO
-        pass
+    def _mark_spent(self, unblinded_tokens):
+        self.discard_unblinded_tokens(unblinded_tokens)
 
-    def _mark_invalid(self, reason, group):
-        # TODO
-        pass
+    def _mark_invalid(self, reason, unblinded_tokens):
+        self.invalidate_unblinded_tokens(reason, unblinded_tokens)
 
-    def _reset(self, group):
-        # TODO
-        pass
+    def _reset(self, unblinded_tokens):
+        self.reset_unblinded_tokens(unblinded_tokens)

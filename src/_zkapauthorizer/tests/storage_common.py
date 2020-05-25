@@ -186,7 +186,7 @@ def get_passes(message, count, signing_key):
 
     :param int count: The number of passes to get.
 
-    :param SigningKEy signing_key: The key to use to sign the passes.
+    :param SigningKey signing_key: The key to use to sign the passes.
 
     :return list[Pass]: ``count`` new random passes signed with the given key
         and bound to the given message.
@@ -268,7 +268,7 @@ class _PassFactory(object):
         passes.extend(self._get_passes(message, num_passes))
         self.issued.update(passes)
         self.in_use.update(passes)
-        return PassGroup(message, self, passes)
+        return PassGroup(message, self, zip(passes, passes))
 
     def _mark_spent(self, passes):
         for p in passes:
