@@ -148,18 +148,43 @@ def open_and_initialize(path, connect=None):
         schema_upgrades = list(get_schema_upgrades(actual_version))
         run_schema_upgrades(schema_upgrades, cursor)
 
-    conn.execute("""
-    -- It might already exist if there is still another connection to this
-    -- database.  It goes away once all connections have been closed, though.
-    CREATE TABLE IF NOT EXISTS [temp.in-use] (
-        [unblinded-token] text, -- The base64 encoded unblinded token.
-        [operation-id] text,    -- A unique identifier for a group of tokens in-use together.
+    # Create some tables that only exist (along with their contents) only for
+    # this connection.  These are outside of the schema because they are not
+    # persistent.  We can change them any time we like without worrying about
+    # upgrade logic because we re-create them on every connection.
+    conn.execute(
+        """
+        CREATE TEMPORARY TABLE [in-use] (
+            [unblinded-token] text, -- The base64 encoded unblinded token.
+            [operation-id] text,    -- A unique identifier for a group of tokens in-use together.
 
-        PRIMARY KEY([unblinded-token])
-        FOREIGN KEY([unblinded-token]) REFERENCES [unblinded-tokens]([token])
+            PRIMARY KEY([unblinded-token])
+            -- A foreign key on unblinded-token to [unblinded-tokens]([token])
+            -- would be alright - however SQLite3 foreign key constraints
+            -- can't cross databases (and temporary tables are considered to
+            -- be in a different database than normal tables).  ) """,
     )
-    """)
-
+    conn.execute(
+        """
+        CREATE TEMPORARY TABLE [to-discard] (
+            [unblinded-token] text
+        )
+        """,
+    )
+    conn.execute(
+        """
+        CREATE TEMPORARY TABLE [to-reset] (
+            [unblinded-token] text
+        )
+        """,
+    )
+    conn.execute(
+        """
+        CREATE TEMPORARY TABLE [extracting] (
+            [token] text
+        )
+        """,
+    )
     return conn
 
 
@@ -493,10 +518,10 @@ class VoucherStore(object):
         operation_id = unicode(uuid4())
         cursor.execute(
             """
-            INSERT INTO [temp.in-use]
+            INSERT INTO [in-use]
             SELECT [token], ?
             FROM [unblinded-tokens]
-            WHERE [token] NOT IN (SELECT [unblinded-token] FROM [temp.in-use])
+            WHERE [token] NOT IN (SELECT [unblinded-token] FROM [in-use])
             LIMIT ?
             """,
             (operation_id, count),
@@ -506,7 +531,7 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            SELECT [unblinded-token] FROM [temp.in-use] WHERE [operation-id] = ?
+            SELECT [unblinded-token] FROM [in-use] WHERE [operation-id] = ?
             """,
             (operation_id,),
         )
@@ -528,12 +553,6 @@ class VoucherStore(object):
 
         :return: ``None``
         """
-        cursor.execute(
-            """
-            CREATE TEMPORARY TABLE [to-discard] (
-              [unblinded-token] text
-            )
-        """)
         cursor.executemany(
             """
             INSERT INTO [to-discard] VALUES (?)
@@ -542,7 +561,7 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            DELETE FROM [temp.in-use]
+            DELETE FROM [in-use]
             WHERE [unblinded-token] IN (SELECT [unblinded-token] FROM [to-discard])
             """,
         )
@@ -554,7 +573,7 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            DROP TABLE [to-discard]
+            DELETE FROM [to-discard]
             """,
         )
 
@@ -583,7 +602,7 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            DELETE FROM [temp.in-use]
+            DELETE FROM [in-use]
             WHERE [unblinded-token] IN (SELECT [token] FROM [invalid-unblinded-tokens])
             """,
         )
@@ -601,13 +620,6 @@ class VoucherStore(object):
         This is useful if a spending operation has failed with a transient
         error.
         """
-        cursor.execute(
-            """
-            CREATE TEMPORARY TABLE [to-reset] (
-              [unblinded-token] text
-            )
-            """,
-        )
         cursor.executemany(
             """
             INSERT INTO [to-reset] VALUES (?)
@@ -616,13 +628,13 @@ class VoucherStore(object):
         )
         cursor.execute(
             """
-            DELETE FROM [temp.in-use]
+            DELETE FROM [in-use]
             WHERE [unblinded-token] IN (SELECT [unblinded-token] FROM [to-reset])
             """,
         )
         cursor.execute(
             """
-            DROP TABLE [to-reset]
+            DELETE FROM [to-reset]
             """,
         )
 
@@ -649,9 +661,7 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            CREATE TEMPORARY TABLE [extracting]
-            AS
-            SELECT [token] FROM [unblinded-tokens] LIMIT ?
+            INSERT INTO [extracting] SELECT [token] FROM [unblinded-tokens] LIMIT ?
             """,
             (count,),
         )
@@ -668,7 +678,7 @@ class VoucherStore(object):
         texts = cursor.fetchall()
         cursor.execute(
             """
-            DROP TABLE [extracting]
+            DELETE FROM [extracting]
             """,
         )
         return list(

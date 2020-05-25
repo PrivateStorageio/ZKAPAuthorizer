@@ -551,7 +551,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         with self.configless.store._connection:
             self.configless.store._connection.execute(
                 """
-                DELETE FROM [temp.in-use]
+                DELETE FROM [in-use]
                 """,
             )
         self.available += len(self.using)
