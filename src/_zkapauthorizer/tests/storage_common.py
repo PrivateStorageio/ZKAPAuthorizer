@@ -28,7 +28,6 @@ from struct import (
 )
 
 from itertools import (
-    count,
     islice,
 )
 
@@ -56,6 +55,7 @@ from .privacypass import (
 )
 
 from ..model import (
+    NotEnoughTokens,
     Pass,
 )
 
@@ -167,16 +167,19 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
         )
 
 
-def integer_passes():
+def integer_passes(limit):
     """
     :return: Return a function which can be used to get a number of passes.
         The function accepts a unicode request-binding message and an integer
         number of passes.  It returns a list of integers which serve as passes.
         Successive calls to the function return unique pass values.
     """
-    counter = count(0)
+    counter = iter(range(limit))
     def get_passes(message, num_passes):
-        return list(islice(counter, num_passes))
+        result = list(islice(counter, num_passes))
+        if len(result) < num_passes:
+            raise NotEnoughTokens()
+        return result
     return get_passes
 
 
@@ -216,15 +219,13 @@ def privacypass_passes(signing_key):
     return partial(get_passes, signing_key=signing_key)
 
 
-def pass_factory(get_passes=None):
+def pass_factory(get_passes):
     """
     Get a new factory for passes.
 
     :param (unicode -> int -> [pass]) get_passes: A function the factory can
         use to get new passes.
     """
-    if get_passes is None:
-        get_passes = integer_passes()
     return _PassFactory(get_passes=get_passes)
 
 

@@ -84,10 +84,9 @@ class IncorrectStorageServerReference(Exception):
         )
 
 
-def replace_invalid_passes_with_new_passes(passes, more_passes_required):
+def invalidate_rejected_passes(passes, more_passes_required):
     """
-    Replace all rejected passes in the given pass group with new ones.  Mark
-    any rejected passes as rejected.
+    Return a new ``IPassGroup`` with all rejected passes removed from it.
 
     :param IPassGroup passes: A group of passes, some of which may have been
         rejected.
@@ -115,7 +114,14 @@ def replace_invalid_passes_with_new_passes(passes, more_passes_required):
     SIGNATURE_CHECK_FAILED.log(count=num_failed)
     rejected_passes, okay_passes = passes.split(more_passes_required.signature_check_failed)
     rejected_passes.mark_invalid(u"signature check failed")
-    return okay_passes.expand(len(more_passes_required.signature_check_failed))
+
+    # It would be great to just expand okay_passes right here.  However, if
+    # that fails (eg because we don't have enough tokens remaining) then the
+    # caller will have a hard time figuring out which okay passes remain that
+    # it needs to reset. :/ So, instead, pass back the complete okay set.  The
+    # caller can figure out by how much to expand it by considering its size
+    # and the original number of passes it requested.
+    return okay_passes
 
 
 @inline_callbacks
@@ -142,28 +148,33 @@ def call_with_passes(method, num_passes, get_passes):
         that trigger a retry).
     """
     with CALL_WITH_PASSES(count=num_passes):
-        passes = get_passes(num_passes)
+        pass_group = get_passes(num_passes)
         try:
             # Try and repeat as necessary.
             while True:
                 try:
-                    result = yield method(passes)
+                    result = yield method(pass_group)
                 except MorePassesRequired as e:
-                    updated_passes = replace_invalid_passes_with_new_passes(
-                        passes,
+                    okay_pass_group = invalidate_rejected_passes(
+                        pass_group,
                         e,
                     )
-                    if updated_passes is None:
+                    if okay_pass_group is None:
                         raise
                     else:
-                        passes = updated_passes
+                        # Update the local in case we end up going to the
+                        # except suite below.
+                        pass_group = okay_pass_group
+                        # Add the necessary number of new passes.  This might
+                        # fail if we don't have enough tokens.
+                        pass_group = pass_group.expand(num_passes - len(pass_group.passes))
                 else:
                     # Commit the spend of the passes when the operation finally succeeds.
-                    passes.mark_spent()
+                    pass_group.mark_spent()
                     break
         except:
             # Something went wrong that we can't address with a retry.
-            passes.reset()
+            pass_group.reset()
             raise
 
         # Give the operation's result to the caller.

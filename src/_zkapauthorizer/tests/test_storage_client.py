@@ -16,6 +16,10 @@
 Tests for ``_zkapauthorizer._storage_client``.
 """
 
+from __future__ import (
+    division,
+)
+
 from functools import (
     partial,
 )
@@ -32,6 +36,7 @@ from testtools.matchers import (
     HasLength,
     MatchesAll,
     AllMatch,
+    IsInstance,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -59,7 +64,9 @@ from .strategies import (
 from ..api import (
     MorePassesRequired,
 )
-
+from ..model import (
+    NotEnoughTokens,
+)
 from .._storage_client import (
     call_with_passes,
 )
@@ -69,6 +76,7 @@ from .._storage_server import (
 
 from .storage_common import (
     pass_factory,
+    integer_passes,
 )
 
 
@@ -88,7 +96,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: succeed(result),
                 num_passes,
-                partial(pass_factory().get, u"message"),
+                partial(pass_factory(integer_passes(num_passes)).get, u"message"),
             ),
             succeeded(Is(result)),
         )
@@ -105,7 +113,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: fail(result),
                 num_passes,
-                partial(pass_factory().get, u"message"),
+                partial(pass_factory(integer_passes(num_passes)).get, u"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -122,7 +130,7 @@ class CallWithPassesTests(TestCase):
         provider containing ``num_passes`` created by the function passed for
         ``get_passes``.
         """
-        passes = pass_factory()
+        passes = pass_factory(integer_passes(num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -143,7 +151,7 @@ class CallWithPassesTests(TestCase):
         ``call_with_passes`` marks the passes it uses as spent if the operation
         succeeds.
         """
-        passes = pass_factory()
+        passes = pass_factory(integer_passes(num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -163,7 +171,7 @@ class CallWithPassesTests(TestCase):
         """
         ``call_with_passes`` returns the passes it uses if the operation fails.
         """
-        passes = pass_factory()
+        passes = pass_factory(integer_passes(num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -188,7 +196,7 @@ class CallWithPassesTests(TestCase):
         of passes, still of length ```num_passes``, but without the passes
         which were rejected on the first try.
         """
-        passes = pass_factory()
+        passes = pass_factory(integer_passes(num_passes * 2))
 
         def reject_even_pass_values(group):
             passes = group.passes
@@ -233,7 +241,7 @@ class CallWithPassesTests(TestCase):
         no passes have been marked as invalid.  This happens if all passes
         given were valid but too fewer were given.
         """
-        passes = pass_factory()
+        passes = pass_factory(integer_passes(num_passes))
 
         def reject_passes(group):
             passes = group.passes
@@ -269,5 +277,68 @@ class CallWithPassesTests(TestCase):
             MatchesStructure(
                 spent=HasLength(0),
                 returned=HasLength(num_passes),
+            ),
+        )
+
+    @given(pass_counts(), pass_counts())
+    def test_not_enough_tokens_for_retry(self, num_passes, extras):
+        """
+        When there are not enough tokens to successfully complete a retry with the
+        required number of passes, ``call_with_passes`` marks all passes
+        reported as invalid during its efforts as such and resets all other
+        passes it acquired.
+        """
+        passes = pass_factory(integer_passes(num_passes + extras))
+        rejected = []
+        accepted = []
+
+        def reject_half_passes(group):
+            num = len(group.passes)
+            # Floor division will always short-change valid here, even for a
+            # group size of 1.  Therefore there will always be some passes
+            # marked as invalid.
+            accept_indexes = range(num // 2)
+            reject_indexes = range(num // 2, num)
+            # Only keep this iteration's accepted passes.  We'll want to see
+            # that the final iteration's passes are all returned.  Passes from
+            # earlier iterations don't matter.
+            accepted[:] = list(group.passes[i] for i in accept_indexes)
+            # On the other hand, keep *all* rejected passes.  They should all
+            # be marked as invalid and we want to make sure that's the case,
+            # no matter which iteration rejected them.
+            rejected.extend(group.passes[i] for i in reject_indexes)
+            _ValidationResult(
+                valid=accept_indexes,
+                signature_check_failed=reject_indexes,
+            ).raise_for(num)
+
+        self.assertThat(
+            call_with_passes(
+                # Since half of every group is rejected, we'll eventually run
+                # out of passes no matter how many we start with.
+                reject_half_passes,
+                num_passes,
+                partial(passes.get, u"message"),
+            ),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(NotEnoughTokens),
+                ),
+            ),
+        )
+        self.assertThat(
+            passes,
+            MatchesStructure(
+                # Whatever is left in the group when we run out of tokens must
+                # be returned.
+                returned=Equals(accepted),
+                in_use=HasLength(0),
+                invalid=AfterPreprocessing(
+                    lambda invalid: invalid.keys(),
+                    Equals(rejected),
+                ),
+                spent=HasLength(0),
+                issued=Equals(set(accepted + rejected)),
             ),
         )
