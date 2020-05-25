@@ -17,9 +17,6 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from uuid import (
-    uuid4,
-)
 from functools import (
     wraps,
 )
@@ -154,18 +151,23 @@ def open_and_initialize(path, connect=None):
     # upgrade logic because we re-create them on every connection.
     conn.execute(
         """
+        -- Track tokens in use by the process holding this connection.
         CREATE TEMPORARY TABLE [in-use] (
             [unblinded-token] text, -- The base64 encoded unblinded token.
-            [operation-id] text,    -- A unique identifier for a group of tokens in-use together.
 
             PRIMARY KEY([unblinded-token])
             -- A foreign key on unblinded-token to [unblinded-tokens]([token])
             -- would be alright - however SQLite3 foreign key constraints
             -- can't cross databases (and temporary tables are considered to
-            -- be in a different database than normal tables).  ) """,
+            -- be in a different database than normal tables).
+        )
+        """,
     )
     conn.execute(
         """
+        -- Track tokens that we want to remove from the database.  Mainly just
+        -- works around the awkward DB-API interface for dealing with deleting
+        -- many rows.
         CREATE TEMPORARY TABLE [to-discard] (
             [unblinded-token] text
         )
@@ -173,15 +175,10 @@ def open_and_initialize(path, connect=None):
     )
     conn.execute(
         """
+        -- Track tokens that we want to remove from the [in-use] set.  Similar
+        -- to [to-discard].
         CREATE TEMPORARY TABLE [to-reset] (
             [unblinded-token] text
-        )
-        """,
-    )
-    conn.execute(
-        """
-        CREATE TEMPORARY TABLE [extracting] (
-            [token] text
         )
         """,
     )
@@ -515,27 +512,25 @@ class VoucherStore(object):
             # provoke undesirable behavior from the database.
             raise NotEnoughTokens()
 
-        operation_id = unicode(uuid4())
         cursor.execute(
             """
-            INSERT INTO [in-use]
-            SELECT [token], ?
+            SELECT [token]
             FROM [unblinded-tokens]
-            WHERE [token] NOT IN (SELECT [unblinded-token] FROM [in-use])
+            WHERE [token] NOT IN [in-use]
             LIMIT ?
             """,
-            (operation_id, count),
-        )
-        if cursor.rowcount < count:
-            raise NotEnoughTokens()
-
-        cursor.execute(
-            """
-            SELECT [unblinded-token] FROM [in-use] WHERE [operation-id] = ?
-            """,
-            (operation_id,),
+            (count,),
         )
         texts = cursor.fetchall()
+        if len(texts) < count:
+            raise NotEnoughTokens()
+
+        cursor.executemany(
+            """
+            INSERT INTO [in-use] VALUES (?)
+            """,
+            texts,
+        )
         return list(
             UnblindedToken(t)
             for (t,)
@@ -562,13 +557,13 @@ class VoucherStore(object):
         cursor.execute(
             """
             DELETE FROM [in-use]
-            WHERE [unblinded-token] IN (SELECT [unblinded-token] FROM [to-discard])
+            WHERE [unblinded-token] IN [to-discard]
             """,
         )
         cursor.execute(
             """
             DELETE FROM [unblinded-tokens]
-            WHERE [token] IN (SELECT [unblinded-token] FROM [to-discard])
+            WHERE [token] IN [to-discard]
             """,
         )
         cursor.execute(
@@ -629,7 +624,7 @@ class VoucherStore(object):
         cursor.execute(
             """
             DELETE FROM [in-use]
-            WHERE [unblinded-token] IN (SELECT [unblinded-token] FROM [to-reset])
+            WHERE [unblinded-token] IN [to-reset]
             """,
         )
         cursor.execute(
