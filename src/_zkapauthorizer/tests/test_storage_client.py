@@ -46,6 +46,9 @@ from testtools.twistedsupport import (
 from hypothesis import (
     given,
 )
+from hypothesis.strategies import (
+    sampled_from,
+)
 
 from twisted.internet.defer import (
     succeed,
@@ -55,6 +58,7 @@ from twisted.internet.defer import (
 from .matchers import (
     even,
     odd,
+    raises,
 )
 
 from .strategies import (
@@ -341,4 +345,87 @@ class CallWithPassesTests(TestCase):
                 spent=HasLength(0),
                 issued=Equals(set(accepted + rejected)),
             ),
+        )
+
+def reset(group):
+    group.reset()
+
+def spend(group):
+    group.mark_spent()
+
+def invalidate(group):
+    group.mark_invalid(u"reason")
+
+
+class PassFactoryTests(TestCase):
+    """
+    Tests for ``pass_factory``.
+
+    It is unfortunate that this isn't the same test suite as
+    ``test_spending.PassGroupTests``.
+    """
+    @given(pass_counts(), pass_counts())
+    def test_returned_passes_reused(self, num_passes_a, num_passes_b):
+        """
+        ``IPassGroup.reset`` makes passes available to be returned by
+        ``IPassGroup.get`` again.
+        """
+        message = u"message"
+        min_passes = min(num_passes_a, num_passes_b)
+        max_passes = max(num_passes_a, num_passes_b)
+
+        factory = pass_factory(integer_passes(max_passes))
+        group_a = factory.get(message, num_passes_a)
+        group_a.reset()
+
+        group_b = factory.get(message, num_passes_b)
+        self.assertThat(
+            group_a.passes[:min_passes],
+            Equals(group_b.passes[:min_passes]),
+        )
+
+    def _test_disallowed_transition(self, num_passes, setup_op, invalid_op):
+        message = u"message"
+        factory = pass_factory(integer_passes(num_passes))
+        group = factory.get(message, num_passes)
+        setup_op(group)
+        self.assertThat(
+            lambda: invalid_op(group),
+            raises(ValueError),
+        )
+
+    @given(pass_counts(), sampled_from([reset, spend, invalidate]))
+    def test_not_spendable(self, num_passes, setup_op):
+        """
+        ``PassGroup.mark_spent`` raises ``ValueError`` if any passes in the group
+        are in a state other than in-use.
+        """
+        self._test_disallowed_transition(
+            num_passes,
+            setup_op,
+            spend,
+        )
+
+    @given(pass_counts(), sampled_from([reset, spend, invalidate]))
+    def test_not_resetable(self, num_passes, setup_op):
+        """
+        ``PassGroup.reset`` raises ``ValueError`` if any passes in the group are
+        in a state other than in-use.
+        """
+        self._test_disallowed_transition(
+            num_passes,
+            setup_op,
+            reset,
+        )
+
+    @given(pass_counts(), sampled_from([reset, spend, invalidate]))
+    def test_not_invalidateable(self, num_passes, setup_op):
+        """
+        ``PassGroup.mark_invalid`` raises ``ValueError`` if any passes in the
+        group are in a state other than in-use.
+        """
+        self._test_disallowed_transition(
+            num_passes,
+            setup_op,
+            invalidate,
         )
