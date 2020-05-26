@@ -1,4 +1,5 @@
-#! /usr/bin/env bash
+#! /usr/bin/env nix-shell
+#! nix-shell -i bash -p "python.withPackages (ps: [ ps.coverage ])"
 set -x
 find ./result-doc/share/doc
 cp ./result-doc/share/doc/*/.coverage.* ./
