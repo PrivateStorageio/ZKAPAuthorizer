@@ -184,11 +184,10 @@ class ZKAPAuthorizer(object):
             tokens_to_passes=redeemer.tokens_to_passes,
             store=store,
        )
-        get_passes = controller.get
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),
             get_rref,
-            get_passes,
+            controller.get,
         )
 
 
