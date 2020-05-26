@@ -59,7 +59,7 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
-        python -m coverage run --dry-run --debug=config -m twisted.trial _zkapauthorizer
+        python -m coverage run --debug=config -m twisted.trial _zkapauthorizer
 
     - name: "Convert Coverage"
       run: |

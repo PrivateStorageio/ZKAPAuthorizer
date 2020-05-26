@@ -125,7 +125,7 @@ jobs:
             #
             # Also limit the number of concurrent jobs because of resource
             # constraints on CircleCI. :/
-            nix-build --cores 1 --max-jobs 1 --arg trialArgs '["--dry-run"]' --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            nix-build --cores 1 --max-jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - save_cache:
           name: "Cache Nix Store Paths"
