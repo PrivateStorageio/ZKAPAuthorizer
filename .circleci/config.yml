@@ -127,16 +127,6 @@ jobs:
             # constraints on CircleCI. :/
             nix-build --cores 1 --max-jobs 1 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
-      - run:
-          name: "Cache codecov"
-          command: |
-            # Build codecov and any dependencies here, before we save the
-            # cache, so that they make it in to the cache too.  Turns out
-            # there is a python-cryptography dependency here that is expensive
-            # to build that doesn't get built earlier.  This saves us a couple
-            # minutes.
-            nix-build --expr '(import <nixpkgs> { }).python.withPackages (ps: [ ps.codecov ])'
-
       - save_cache:
           name: "Cache Nix Store Paths"
           key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
