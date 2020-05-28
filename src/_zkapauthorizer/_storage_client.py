@@ -276,7 +276,6 @@ class ZKAPAuthorizerStorageClient(object):
             allocated_size,
             canary,
     ):
-        message = allocate_buckets_message(storage_index)
         num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
         return call_with_passes(
             lambda passes: rref.callRemote(
@@ -290,7 +289,7 @@ class ZKAPAuthorizerStorageClient(object):
                 canary,
             ),
             num_passes,
-            partial(self._get_passes, message.encode("utf-8")),
+            partial(self._get_passes, allocate_buckets_message(storage_index).encode("utf-8")),
         )
 
     @with_rref
