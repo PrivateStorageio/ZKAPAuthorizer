@@ -590,6 +590,9 @@ def random_slice(taken_from, random, data):
 
 
 class UnblindedTokenStateTests(TestCase):
+    """
+    Glue ``UnblindedTokenStateTests`` into our test runner.
+    """
     def test_states(self):
         run_state_machine_as_test(lambda: UnblindedTokenStateMachine(self))
 
