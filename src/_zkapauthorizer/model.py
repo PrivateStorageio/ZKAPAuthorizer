@@ -185,7 +185,6 @@ def open_and_initialize(path, connect=None):
     return conn
 
 
-
 def with_cursor(f):
     @wraps(f)
     def with_cursor(self, *a, **kw):
