@@ -227,11 +227,11 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar _get_passes: A two-argument callable which retrieves some passes
-        which can be used to authorize an operation.  The first argument is a
-        bytes (valid utf-8) message binding the passes to the request for
-        which they will be used.  The second is an integer giving the number
-        of passes to request.
+    :ivar (bytes -> int -> IPassGroup) _get_passes: A callable to use to
+        retrieve passes which can be used to authorize an operation.  The
+        first argument is utf-8 encoded message binding the passes to the
+        request for which they will be used.  The second gives the number of
+        passes to request.
     """
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
