@@ -195,7 +195,7 @@ def with_rref(f):
     return g
 
 
-def _get_encoded_passes(group):
+def _encode_passes(group):
     """
     :param IPassGroup group: A group of passes to encode.
 
@@ -281,7 +281,7 @@ class ZKAPAuthorizerStorageClient(object):
         return call_with_passes(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
-                _get_encoded_passes(passes),
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -323,7 +323,7 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "add_lease",
-                _get_encoded_passes(passes),
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -351,7 +351,7 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "renew_lease",
-                _get_encoded_passes(passes),
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
             ),
@@ -422,7 +422,7 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "slot_testv_and_readv_and_writev",
-                _get_encoded_passes(passes),
+                _encode_passes(passes),
                 storage_index,
                 secrets,
                 tw_vectors,
