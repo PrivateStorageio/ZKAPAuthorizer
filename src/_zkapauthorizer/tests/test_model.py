@@ -567,7 +567,6 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         ))
 
 
-
 def random_slice(taken_from, random, data):
     """
     Divide ``taken_from`` into two pieces with elements randomly assigned to
