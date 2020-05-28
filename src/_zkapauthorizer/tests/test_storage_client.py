@@ -200,6 +200,8 @@ class CallWithPassesTests(TestCase):
         of passes, still of length ```num_passes``, but without the passes
         which were rejected on the first try.
         """
+        # Half of the passes are going to be rejected so make twice as many as
+        # the operation uses available.
         passes = pass_factory(integer_passes(num_passes * 2))
 
         def reject_even_pass_values(group):
