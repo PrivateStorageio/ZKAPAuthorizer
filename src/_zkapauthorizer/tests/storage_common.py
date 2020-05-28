@@ -169,10 +169,10 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
 
 def integer_passes(limit):
     """
-    :return: Return a function which can be used to get a number of passes.
-        The function accepts a unicode request-binding message and an integer
-        number of passes.  It returns a list of integers which serve as passes.
-        Successive calls to the function return unique pass values.
+    :return: A function which can be used to get a number of passes.  The
+        function accepts a unicode request-binding message and an integer
+        number of passes.  It returns a list of integers which serve as
+        passes.  Successive calls to the function return unique pass values.
     """
     counter = iter(range(limit))
     def get_passes(message, num_passes):
