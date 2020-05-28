@@ -174,12 +174,6 @@ class ZKAPAuthorizer(object):
         from twisted.internet import reactor
         redeemer = self._get_redeemer(node_config, announcement, reactor)
         store = self._get_store(node_config)
-
-        # Unlike our handling of the store, we make no effort to ensure there
-        # is only ever one SpendingController per database.
-        # SpendingController has no instance state so we can perfectly safely
-        # use several of them, pointing at the same underlying data set,
-        # concurrently without causing problems.
         controller = SpendingController.for_store(
             tokens_to_passes=redeemer.tokens_to_passes,
             store=store,
