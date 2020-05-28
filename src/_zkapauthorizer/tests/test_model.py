@@ -333,7 +333,7 @@ class VoucherStoreTests(TestCase):
     def test_spend_order_equals_backup_order(self, get_config, voucher_value, public_key, now, data):
         """
         Unblinded tokens returned by ``VoucherStore.backup`` appear in the same
-        order as they are returned ``VoucherStore.get_unblinded_tokens``.
+        order as they are returned by ``VoucherStore.get_unblinded_tokens``.
         """
         backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
             get_config,
