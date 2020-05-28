@@ -186,6 +186,12 @@ def open_and_initialize(path, connect=None):
 
 
 def with_cursor(f):
+    """
+    Decorate a function so it is automatically passed a cursor with an active
+    transaction as the first positional argument.  If the function returns
+    normally then the transaction will be committed.  Otherwise, the
+    transaction will be rolled back.
+    """
     @wraps(f)
     def with_cursor(self, *a, **kw):
         with self._connection:
