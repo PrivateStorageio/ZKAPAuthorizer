@@ -884,35 +884,24 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
         dummy_ristretto_keys(),
         booleans(),
-        integers(min_value=1, max_value=100),
         integers(min_value=1),
         data(),
     )
-    def test_not_enough_unblinded_tokens(self, get_config, now, voucher_value, public_key, completed, num_tokens, extra, data):
+    def test_not_enough_unblinded_tokens(self, get_config, now, voucher_value, public_key, completed, extra, data):
         """
         ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
         greater than the number of unblinded tokens in the store.
         """
-        random = data.draw(
-            lists(
-                random_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
-        unblinded = data.draw(
-            lists(
-                unblinded_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
+        random, unblinded = paired_tokens(data)
+        num_tokens = len(random)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed)
-
+        store.insert_unblinded_tokens_for_voucher(
+            voucher_value,
+            public_key,
+            unblinded,
+            completed,
+        )
         self.assertThat(
             lambda: store.get_unblinded_tokens(num_tokens + extra),
             raises(NotEnoughTokens),
