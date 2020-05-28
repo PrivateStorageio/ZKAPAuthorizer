@@ -387,6 +387,19 @@ class PassFactoryTests(TestCase):
         )
 
     def _test_disallowed_transition(self, num_passes, setup_op, invalid_op):
+        """
+        Assert that after some setup operation completes, another operation raises
+        ``ValueError``.
+
+        :param int num_passes: The number of passes to make available from the
+            factory.
+
+        :param (IPassGroup -> None) setup_op: Some initial operation to
+            perform with the pass group.
+
+        :param (IPassGroup -> None) invalid_op: Some follow-up operation to
+            perform with the pass group and to assert raises an exception.
+        """
         message = u"message"
         factory = pass_factory(integer_passes(num_passes))
         group = factory.get(message, num_passes)
