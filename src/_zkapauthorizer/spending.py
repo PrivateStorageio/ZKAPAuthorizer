@@ -26,6 +26,9 @@ import attr
 
 from .eliot import (
     GET_PASSES,
+    SPENT_PASSES,
+    INVALID_PASSES,
+    RESET_PASSES,
 )
 
 class IPassGroup(Interface):
@@ -195,10 +198,20 @@ class SpendingController(object):
         return PassGroup(message, self, zip(unblinded_tokens, passes))
 
     def _mark_spent(self, unblinded_tokens):
+        SPENT_PASSES.log(
+            count=len(unblinded_tokens),
+        )
         self.discard_unblinded_tokens(unblinded_tokens)
 
     def _mark_invalid(self, reason, unblinded_tokens):
+        INVALID_PASSES.log(
+            reason=reason,
+            count=len(unblinded_tokens),
+        )
         self.invalidate_unblinded_tokens(reason, unblinded_tokens)
 
     def _reset(self, unblinded_tokens):
+        RESET_PASSES.log(
+            count=len(unblinded_tokens),
+        )
         self.reset_unblinded_tokens(unblinded_tokens)

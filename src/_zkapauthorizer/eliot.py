@@ -32,6 +32,12 @@ PRIVACYPASS_MESSAGE = Field(
     u"The PrivacyPass request-binding data associated with a pass.",
 )
 
+INVALID_REASON = Field(
+    u"reason",
+    unicode,
+    u"The reason given by the server for rejecting a pass as invalid.",
+)
+
 PASS_COUNT = Field(
     u"count",
     int,
@@ -41,7 +47,25 @@ PASS_COUNT = Field(
 GET_PASSES = MessageType(
     u"zkapauthorizer:get-passes",
     [PRIVACYPASS_MESSAGE, PASS_COUNT],
-    u"Passes are being spent.",
+    u"An attempt to spend passes is beginning.",
+)
+
+SPENT_PASSES = MessageType(
+    u"zkapauthorizer:spent-passes",
+    [PASS_COUNT],
+    u"An attempt to spend passes has succeeded.",
+)
+
+INVALID_PASSES = MessageType(
+    u"zkapauthorizer:invalid-passes",
+    [INVALID_REASON, PASS_COUNT],
+    u"An attempt to spend passes has found some to be invalid.",
+)
+
+RESET_PASSES = MessageType(
+    u"zkapauthorizer:reset-passes",
+    [PRIVACYPASS_MESSAGE, PASS_COUNT],
+    u"Some passes involved in a failed spending attempt have not definitely been spent and are being returned for future use.",
 )
 
 SIGNATURE_CHECK_FAILED = MessageType(
