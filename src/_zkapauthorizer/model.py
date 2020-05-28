@@ -144,14 +144,60 @@ def open_and_initialize(path, connect=None):
         actual_version = get_schema_version(cursor)
         schema_upgrades = list(get_schema_upgrades(actual_version))
         run_schema_upgrades(schema_upgrades, cursor)
+
+    # Create some tables that only exist (along with their contents) for
+    # this connection.  These are outside of the schema because they are not
+    # persistent.  We can change them any time we like without worrying about
+    # upgrade logic because we re-create them on every connection.
+    conn.execute(
+        """
+        -- Track tokens in use by the process holding this connection.
+        CREATE TEMPORARY TABLE [in-use] (
+            [unblinded-token] text, -- The base64 encoded unblinded token.
+
+            PRIMARY KEY([unblinded-token])
+            -- A foreign key on unblinded-token to [unblinded-tokens]([token])
+            -- would be alright - however SQLite3 foreign key constraints
+            -- can't cross databases (and temporary tables are considered to
+            -- be in a different database than normal tables).
+        )
+        """,
+    )
+    conn.execute(
+        """
+        -- Track tokens that we want to remove from the database.  Mainly just
+        -- works around the awkward DB-API interface for dealing with deleting
+        -- many rows.
+        CREATE TEMPORARY TABLE [to-discard] (
+            [unblinded-token] text
+        )
+        """,
+    )
+    conn.execute(
+        """
+        -- Track tokens that we want to remove from the [in-use] set.  Similar
+        -- to [to-discard].
+        CREATE TEMPORARY TABLE [to-reset] (
+            [unblinded-token] text
+        )
+        """,
+    )
     return conn
 
 
 def with_cursor(f):
+    """
+    Decorate a function so it is automatically passed a cursor with an active
+    transaction as the first positional argument.  If the function returns
+    normally then the transaction will be committed.  Otherwise, the
+    transaction will be rolled back.
+    """
     @wraps(f)
     def with_cursor(self, *a, **kw):
         with self._connection:
-            return f(self, self._connection.cursor(), *a, **kw)
+            cursor = self._connection.cursor()
+            cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+            return f(self, cursor, *a, **kw)
     return with_cursor
 
 
@@ -160,6 +206,11 @@ def memory_connect(path, *a, **kw):
     Always connect to an in-memory SQLite3 database.
     """
     return _connect(":memory:", *a, **kw)
+
+
+# The largest integer SQLite3 can represent in an integer column.  Larger than
+# this an the representation loses precision as a floating point.
+_SQLITE3_INTEGER_MAX = 2 ** 63 - 1
 
 
 @attr.s(frozen=True)
@@ -260,10 +311,9 @@ class VoucherStore(object):
         if not isinstance(now, datetime):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
-        cursor.execute("BEGIN IMMEDIATE TRANSACTION")
         cursor.execute(
             """
-            SELECT ([text])
+            SELECT [text]
             FROM [tokens]
             WHERE [voucher] = ? AND [counter] = ?
             """,
@@ -306,7 +356,6 @@ class VoucherStore(object):
                     in tokens
                 ),
             )
-        cursor.connection.commit()
         return tokens
 
     @with_cursor
@@ -446,56 +495,147 @@ class VoucherStore(object):
                     ),
                 )
 
-
     @with_cursor
-    def extract_unblinded_tokens(self, cursor, count):
+    def get_unblinded_tokens(self, cursor, count):
         """
-        Remove and return some unblinded tokens.
+        Get some unblinded tokens.
 
-        :param int count: The maximum number of unblinded tokens to remove and
-            return.  If fewer than this are available, only as many as are
-            available are returned.
+        These tokens are not removed from the store but they will not be
+        returned from a future call to ``get_unblinded_tokens`` *on this
+        ``VoucherStore`` instance* unless ``reset_unblinded_tokens`` is used
+        to reset their state.
+
+        If the underlying storage is access via another ``VoucherStore``
+        instance then the behavior of this method will be as if all tokens
+        which have not had their state changed to invalid or spent have been
+        reset.
 
         :return list[UnblindedTokens]: The removed unblinded tokens.
         """
-        cursor.execute(
-            """
-            SELECT COUNT(token)
-            FROM [unblinded-tokens]
-            """,
-        )
-        [(existing_tokens,)] = cursor.fetchall()
-        if existing_tokens < count:
+        if count > _SQLITE3_INTEGER_MAX:
+            # An unreasonable number of tokens and also large enough to
+            # provoke undesirable behavior from the database.
             raise NotEnoughTokens()
 
         cursor.execute(
             """
-            CREATE TEMPORARY TABLE [extracting]
-            AS
-            SELECT [token] FROM [unblinded-tokens] LIMIT ?
+            SELECT [token]
+            FROM [unblinded-tokens]
+            WHERE [token] NOT IN [in-use]
+            LIMIT ?
             """,
             (count,),
         )
-        cursor.execute(
-            """
-            DELETE FROM [unblinded-tokens] WHERE [token] IN [extracting]
-            """,
-        )
-        cursor.execute(
-            """
-            SELECT [token] FROM [extracting]
-            """,
-        )
         texts = cursor.fetchall()
-        cursor.execute(
+        if len(texts) < count:
+            raise NotEnoughTokens()
+
+        cursor.executemany(
             """
-            DROP TABLE [extracting]
+            INSERT INTO [in-use] VALUES (?)
             """,
+            texts,
         )
         return list(
             UnblindedToken(t)
             for (t,)
             in texts
+        )
+
+    @with_cursor
+    def discard_unblinded_tokens(self, cursor, unblinded_tokens):
+        """
+        Get rid of some unblinded tokens.  The tokens will be completely removed
+        from the system.  This is useful when the tokens have been
+        successfully spent.
+
+        :param list[UnblindedToken] unblinded_tokens: The tokens to discard.
+
+        :return: ``None``
+        """
+        cursor.executemany(
+            """
+            INSERT INTO [to-discard] VALUES (?)
+            """,
+            list((token.unblinded_token,) for token in unblinded_tokens),
+        )
+        cursor.execute(
+            """
+            DELETE FROM [in-use]
+            WHERE [unblinded-token] IN [to-discard]
+            """,
+        )
+        cursor.execute(
+            """
+            DELETE FROM [unblinded-tokens]
+            WHERE [token] IN [to-discard]
+            """,
+        )
+        cursor.execute(
+            """
+            DELETE FROM [to-discard]
+            """,
+        )
+
+    @with_cursor
+    def invalidate_unblinded_tokens(self, cursor, reason, unblinded_tokens):
+        """
+        Mark some unblinded tokens as invalid and unusable.  Some record of the
+        tokens may be retained for future inspection.  These tokens will not
+        be returned by any future ``get_unblinded_tokens`` call.  This is
+        useful when an attempt to spend a token has met with rejection by the
+        validator.
+
+        :param list[UnblindedToken] unblinded_tokens: The tokens to mark.
+
+        :return: ``None``
+        """
+        cursor.executemany(
+            """
+            INSERT INTO [invalid-unblinded-tokens] VALUES (?, ?)
+            """,
+            list(
+                (token.unblinded_token, reason)
+                for token
+                in unblinded_tokens
+            ),
+        )
+        cursor.execute(
+            """
+            DELETE FROM [in-use]
+            WHERE [unblinded-token] IN (SELECT [token] FROM [invalid-unblinded-tokens])
+            """,
+        )
+        cursor.execute(
+            """
+            DELETE FROM [unblinded-tokens]
+            WHERE [token] IN (SELECT [token] FROM [invalid-unblinded-tokens])
+            """,
+        )
+
+    @with_cursor
+    def reset_unblinded_tokens(self, cursor, unblinded_tokens):
+        """
+        Make some unblinded tokens available to be retrieved from the store again.
+        This is useful if a spending operation has failed with a transient
+        error.
+        """
+        cursor.executemany(
+            """
+            INSERT INTO [to-reset] VALUES (?)
+            """,
+            list((token.unblinded_token,) for token in unblinded_tokens),
+        )
+        cursor.execute(
+            """
+            DELETE FROM [in-use]
+            WHERE [unblinded-token] IN [to-reset]
+            """,
+        )
+        cursor.execute(
+            """
+            DELETE FROM [to-reset]
+            """,
         )
 
     @with_cursor

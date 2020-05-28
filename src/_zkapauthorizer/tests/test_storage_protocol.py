@@ -27,6 +27,7 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Always,
     Equals,
     HasLength,
     IsInstance,
@@ -67,7 +68,6 @@ from foolscap.referenceable import (
 )
 
 from challenge_bypass_ristretto import (
-    RandomToken,
     random_signing_key,
 )
 
@@ -79,9 +79,6 @@ from .common import (
     skipIf,
 )
 
-from .privacypass import (
-    make_passes,
-)
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -107,6 +104,9 @@ from .storage_common import (
     cleanup_storage_server,
     write_toy_shares,
     whitebox_write_sparse_share,
+    get_passes,
+    privacypass_passes,
+    pass_factory,
 )
 from .foolscap import (
     LocalRemote,
@@ -122,8 +122,8 @@ from ..storage_common import (
     get_implied_data_length,
     required_passes,
 )
-from ..model import (
-    Pass,
+from .._storage_client import (
+    _encode_passes,
 )
 from ..foolscap import (
     ShareStat,
@@ -167,36 +167,12 @@ class RequiredPassesTests(TestCase):
         )
 
 
-def get_passes(message, count, signing_key):
-    """
-    :param unicode message: Request-binding message for PrivacyPass.
-
-    :param int count: The number of passes to get.
-
-    :param SigningKEy signing_key: The key to use to sign the passes.
-
-    :return list[Pass]: ``count`` new random passes signed with the given key
-        and bound to the given message.
-    """
-    return list(
-        Pass(*pass_.split(u" "))
-        for pass_
-        in make_passes(
-            signing_key,
-            message,
-            list(RandomToken.create() for n in range(count)),
-        )
-    )
-
-
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
 
-    :ivar int spent_passes: The number of passes which have been spent so far
-        in the course of a single test (in the case of Hypothesis, every
-        iteration of the test so far, probably; so make relative comparisons
-        instead of absolute ones).
+    :ivar pass_factory: An object which is responsible for creating passes
+        which are used by these tests.
     """
     pass_value = 128 * 1024
 
@@ -205,11 +181,8 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
-        self.spent_passes = 0
 
-        def counting_get_passes(message, count):
-            self.spent_passes += count
-            return get_passes(message, count, self.signing_key)
+        self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -220,7 +193,7 @@ class ShareTests(TestCase):
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
-            get_passes=counting_get_passes,
+            get_passes=self.pass_factory.get,
         )
 
     def test_get_version(self):
@@ -411,12 +384,13 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.add_lease(
                 storage_index,
                 renew_lease_secret,
                 cancel_secret,
             ),
+            succeeded(Always()),
         )
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
@@ -453,11 +427,12 @@ class ShareTests(TestCase):
         )
 
         now += 100000
-        extract_result(
+        self.assertThat(
             self.client.renew_lease(
                 storage_index,
                 renew_secret,
             ),
+            succeeded(Always()),
         )
 
         [lease] = self.anonymous_storage_server.get_leases(storage_index)
@@ -495,9 +470,6 @@ class ShareTests(TestCase):
         finally:
             patch.cleanUp()
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=size,
@@ -505,8 +477,8 @@ class ShareTests(TestCase):
             ),
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
     @given(
@@ -722,9 +694,6 @@ class ShareTests(TestCase):
             u"Server rejected a write to a new mutable slot",
         )
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=get_implied_data_length(
@@ -737,8 +706,8 @@ class ShareTests(TestCase):
             in test_and_write_vectors_for_shares.items()
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
 
@@ -772,13 +741,14 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.advise_corrupt_share(
                 b"immutable",
                 storage_index,
                 sharenum,
                 b"the bits look bad",
             ),
+            succeeded(Always()),
         )
         self.assertThat(
             FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
@@ -826,12 +796,12 @@ class ShareTests(TestCase):
             u"Server gave back read results when we asked for none.",
         )
         # Now we can read it back without spending any more passes.
-        before_spent_passes = self.spent_passes
+        before_passes = len(self.pass_factory.issued)
         assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
-        after_spent_passes = self.spent_passes
+        after_passes = len(self.pass_factory.issued)
         self.assertThat(
-            before_spent_passes,
-            Equals(after_spent_passes),
+            before_passes,
+            Equals(after_passes),
         )
 
     @given(
@@ -924,9 +894,11 @@ class ShareTests(TestCase):
         d = self.local_remote_server.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
-            self.client._get_encoded_passes(
-                slot_testv_and_readv_and_writev_message(storage_index),
-                1,
+            _encode_passes(
+                self.pass_factory.get(
+                    slot_testv_and_readv_and_writev_message(storage_index),
+                    1,
+                ),
             ),
             # storage_index
             storage_index,

@@ -104,7 +104,7 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
-from .._plugin import (
+from ..spending import (
     GET_PASSES,
 )
 
@@ -415,7 +415,7 @@ class ClientPluginTests(TestCase):
         size=sizes(),
     )
     @capture_logging(lambda self, logger: logger.validate())
-    def test_unblinded_tokens_extracted(
+    def test_unblinded_tokens_spent(
             self,
             logger,
             get_config,
@@ -430,7 +430,7 @@ class ClientPluginTests(TestCase):
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
-        extracts unblinded tokens from the plugin database.
+        spends unblinded tokens from the plugin database.
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
@@ -476,7 +476,7 @@ class ClientPluginTests(TestCase):
 
         # There should be no unblinded tokens left to extract.
         self.assertThat(
-            lambda: store.extract_unblinded_tokens(1),
+            lambda: store.get_unblinded_tokens(1),
             raises(NotEnoughTokens),
         )
 

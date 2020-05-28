@@ -36,13 +36,12 @@ from zope.interface import (
 )
 
 from eliot.twisted import (
-    DeferredContext,
+    inline_callbacks,
 )
 
 from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
-    maybeDeferred,
 )
 from allmydata.interfaces import (
     IStorageServer,
@@ -65,6 +64,7 @@ from .storage_common import (
     get_required_new_passes_for_mutable_write,
 )
 
+
 class IncorrectStorageServerReference(Exception):
     """
     A Foolscap remote object which should reference a ZKAPAuthorizer storage
@@ -84,55 +84,101 @@ class IncorrectStorageServerReference(Exception):
         )
 
 
+def invalidate_rejected_passes(passes, more_passes_required):
+    """
+    Return a new ``IPassGroup`` with all rejected passes removed from it.
+
+    :param IPassGroup passes: A group of passes, some of which may have been
+        rejected.
+
+    :param MorePassesRequired more_passes_required: An exception possibly
+        detailing the rejection of some passes from the group.
+
+    :return: ``None`` if no passes in the group were rejected and so there is
+        nothing to replace.  Otherwise, a new ``IPassGroup`` created from
+        ``passes`` but with rejected passes replaced with new ones.
+    """
+    num_failed = len(more_passes_required.signature_check_failed)
+    if num_failed == 0:
+        # If no signature checks failed then the call just didn't supply
+        # enough passes.  The exception tells us how many passes we should
+        # spend so we could try again with that number of passes but for
+        # now we'll just let the exception propagate.  The client should
+        # always figure out the number of passes right on the first try so
+        # this case is somewhat suspicious.  Err on the side of lack of
+        # service instead of burning extra passes.
+        #
+        # We *could* just `raise` here and only be called from an `except`
+        # suite... but let's not be so vulgar.
+        return None
+    SIGNATURE_CHECK_FAILED.log(count=num_failed)
+    rejected_passes, okay_passes = passes.split(more_passes_required.signature_check_failed)
+    rejected_passes.mark_invalid(u"signature check failed")
+
+    # It would be great to just expand okay_passes right here.  However, if
+    # that fails (eg because we don't have enough tokens remaining) then the
+    # caller will have a hard time figuring out which okay passes remain that
+    # it needs to reset. :/ So, instead, pass back the complete okay set.  The
+    # caller can figure out by how much to expand it by considering its size
+    # and the original number of passes it requested.
+    return okay_passes
+
+
+@inline_callbacks
 def call_with_passes(method, num_passes, get_passes):
     """
     Call a method, passing the requested number of passes as the first
     argument, and try again if the call fails with an error related to some of
     the passes being rejected.
 
-    :param method: A callable which accepts a list of encoded passes as its
-        only argument and returns a ``Deferred``.  If the ``Deferred`` fires
-        with ``MorePassesRequired`` then the invalid passes will be discarded
-        and replacement passes will be requested for a new call of ``method``.
-        This will repeat until no passes remain, the method succeeds, or the
-        methods fails in a different way.
+    :param (IPassGroup -> Deferred) method: An operation to call with some passes.
+        If the returned ``Deferred`` fires with ``MorePassesRequired`` then
+        the invalid passes will be discarded and replacement passes will be
+        requested for a new call of ``method``.  This will repeat until no
+        passes remain, the method succeeds, or the methods fails in a
+        different way.
 
     :param int num_passes: The number of passes to pass to the call.
 
-    :param (unicode -> int -> [bytes]) get_passes: A function for getting
+    :param (int -> IPassGroup) get_passes: A function for getting
         passes.
 
-    :return: Whatever ``method`` returns.
+    :return: A ``Deferred`` that fires with whatever the ``Deferred`` returned
+        by ``method`` fires with (apart from ``MorePassesRequired`` failures
+        that trigger a retry).
     """
-    def get_more_passes(reason):
-        reason.trap(MorePassesRequired)
-        num_failed = len(reason.value.signature_check_failed)
-        if num_failed == 0:
-            # If no signature checks failed then the call just didn't supply
-            # enough passes.  The exception tells us how many passes we should
-            # spend so we could try again with that number of passes but for
-            # now we'll just let the exception propagate.  The client should
-            # always figure out the number of passes right on the first try so
-            # this case is somewhat suspicious.  Err on the side of lack of
-            # service instead of burning extra passes.
-            return reason
-        SIGNATURE_CHECK_FAILED.log(count=num_failed)
-        new_passes = get_passes(num_failed)
-        for idx, new_pass in zip(reason.value.signature_check_failed, new_passes):
-            passes[idx] = new_pass
-        return go(passes)
+    with CALL_WITH_PASSES(count=num_passes):
+        pass_group = get_passes(num_passes)
+        try:
+            # Try and repeat as necessary.
+            while True:
+                try:
+                    result = yield method(pass_group)
+                except MorePassesRequired as e:
+                    okay_pass_group = invalidate_rejected_passes(
+                        pass_group,
+                        e,
+                    )
+                    if okay_pass_group is None:
+                        raise
+                    else:
+                        # Update the local in case we end up going to the
+                        # except suite below.
+                        pass_group = okay_pass_group
+                        # Add the necessary number of new passes.  This might
+                        # fail if we don't have enough tokens.
+                        pass_group = pass_group.expand(num_passes - len(pass_group.passes))
+                else:
+                    # Commit the spend of the passes when the operation finally succeeds.
+                    pass_group.mark_spent()
+                    break
+        except:
+            # Something went wrong that we can't address with a retry.
+            pass_group.reset()
+            raise
 
-    def go(passes):
-        # Capture the Eliot context for the errback.
-        d = DeferredContext(maybeDeferred(method, passes))
-        d.addErrback(get_more_passes)
-        # Return the underlying Deferred without finishing the action.
-        return d.result
-
-    with CALL_WITH_PASSES(count=num_passes).context():
-        passes = get_passes(num_passes)
-        # Finish the Eliot action when this is done.
-        return DeferredContext(go(passes)).addActionFinish()
+        # Give the operation's result to the caller.
+        returnValue(result)
 
 
 def with_rref(f):
@@ -147,6 +193,19 @@ def with_rref(f):
     def g(self, *args, **kwargs):
         return f(self, self._rref(), *args, **kwargs)
     return g
+
+
+def _encode_passes(group):
+    """
+    :param IPassGroup group: A group of passes to encode.
+
+    :return list[bytes]: The encoded form of the passes in the given group.
+    """
+    return list(
+        t.pass_text.encode("ascii")
+        for t
+        in group.passes
+    )
 
 
 @implementer(IStorageServer)
@@ -168,11 +227,11 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar _get_passes: A two-argument callable which retrieves some passes
-        which can be used to authorize an operation.  The first argument is a
-        bytes (valid utf-8) message binding the passes to the request for
-        which they will be used.  The second is an integer giving the number
-        of passes to request.
+    :ivar (bytes -> int -> IPassGroup) _get_passes: A callable to use to
+        retrieve passes which can be used to authorize an operation.  The
+        first argument is utf-8 encoded message binding the passes to the
+        request for which they will be used.  The second gives the number of
+        passes to request.
     """
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
@@ -200,20 +259,6 @@ class ZKAPAuthorizerStorageClient(object):
             )
         return rref
 
-    def _get_encoded_passes(self, message, count):
-        """
-        :param unicode message: The message to which to bind the passes.
-
-        :return: A list of passes from ``_get_passes`` encoded into their
-            ``bytes`` representation.
-        """
-        assert isinstance(message, unicode)
-        return list(
-            t.pass_text.encode("ascii")
-            for t
-            in self._get_passes(message.encode("utf-8"), count)
-        )
-
     @with_rref
     def get_version(self, rref):
         return rref.callRemote(
@@ -231,12 +276,11 @@ class ZKAPAuthorizerStorageClient(object):
             allocated_size,
             canary,
     ):
-        message = allocate_buckets_message(storage_index)
         num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
         return call_with_passes(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
-                passes,
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -245,7 +289,7 @@ class ZKAPAuthorizerStorageClient(object):
                 canary,
             ),
             num_passes,
-            partial(self._get_encoded_passes, message),
+            partial(self._get_passes, allocate_buckets_message(storage_index).encode("utf-8")),
         )
 
     @with_rref
@@ -278,13 +322,13 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "add_lease",
-                passes,
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
             ),
             num_passes,
-            partial(self._get_encoded_passes, add_lease_message(storage_index)),
+            partial(self._get_passes, add_lease_message(storage_index).encode("utf-8")),
         )
         returnValue(result)
 
@@ -306,12 +350,12 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "renew_lease",
-                passes,
+                _encode_passes(passes),
                 storage_index,
                 renew_secret,
             ),
             num_passes,
-            partial(self._get_encoded_passes, renew_lease_message(storage_index)),
+            partial(self._get_passes, renew_lease_message(storage_index).encode("utf-8")),
         )
         returnValue(result)
 
@@ -377,7 +421,7 @@ class ZKAPAuthorizerStorageClient(object):
         result = yield call_with_passes(
             lambda passes: rref.callRemote(
                 "slot_testv_and_readv_and_writev",
-                passes,
+                _encode_passes(passes),
                 storage_index,
                 secrets,
                 tw_vectors,
@@ -385,8 +429,8 @@ class ZKAPAuthorizerStorageClient(object):
             ),
             num_passes,
             partial(
-                self._get_encoded_passes,
-                slot_testv_and_readv_and_writev_message(storage_index),
+                self._get_passes,
+                slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
             ),
         )
         returnValue(result)

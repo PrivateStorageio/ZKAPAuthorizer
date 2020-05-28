@@ -813,3 +813,12 @@ def node_hierarchies():
     ).filter(
         storage_indexes_are_distinct,
     )
+
+
+def pass_counts():
+    """
+    Build integers usable as a number of passes to work on.  There is always
+    at least one pass in a group and there are never "too many", whatever that
+    means.
+    """
+    return integers(min_value=1, max_value=2 ** 8)
