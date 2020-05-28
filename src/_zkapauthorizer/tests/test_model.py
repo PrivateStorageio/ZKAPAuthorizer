@@ -919,7 +919,6 @@ class UnblindedTokenStoreTests(TestCase):
         )
 
 
-
 def store_for_test(testcase, get_config, get_now):
     """
     Create a ``VoucherStore`` in a temporary directory associated with the
