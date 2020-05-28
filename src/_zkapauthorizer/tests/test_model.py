@@ -465,7 +465,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     def get_passes(self, num_passes):
         """
         Some passes can be requested from the store.  The resulting passes are not
-        in use, spent, or invalid.
+        spent, invalid, or already in-use.
         """
         assume(num_passes <= self.available)
         tokens = self.configless.store.get_unblinded_tokens(num_passes)
