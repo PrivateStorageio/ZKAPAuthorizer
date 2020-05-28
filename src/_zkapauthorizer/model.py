@@ -145,7 +145,7 @@ def open_and_initialize(path, connect=None):
         schema_upgrades = list(get_schema_upgrades(actual_version))
         run_schema_upgrades(schema_upgrades, cursor)
 
-    # Create some tables that only exist (along with their contents) only for
+    # Create some tables that only exist (along with their contents) for
     # this connection.  These are outside of the schema because they are not
     # persistent.  We can change them any time we like without worrying about
     # upgrade logic because we re-create them on every connection.
