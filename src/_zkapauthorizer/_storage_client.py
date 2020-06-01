@@ -40,7 +40,6 @@ from eliot.twisted import (
 )
 
 from twisted.internet.defer import (
-    inlineCallbacks,
     returnValue,
 )
 from allmydata.interfaces import (
@@ -303,7 +302,7 @@ class ZKAPAuthorizerStorageClient(object):
             storage_index,
         )
 
-    @inlineCallbacks
+    @inline_callbacks
     @with_rref
     def add_lease(
             self,
@@ -332,7 +331,7 @@ class ZKAPAuthorizerStorageClient(object):
         )
         returnValue(result)
 
-    @inlineCallbacks
+    @inline_callbacks
     @with_rref
     def renew_lease(
             self,
@@ -383,7 +382,7 @@ class ZKAPAuthorizerStorageClient(object):
             reason,
         )
 
-    @inlineCallbacks
+    @inline_callbacks
     @with_rref
     def slot_testv_and_readv_and_writev(
             self,
