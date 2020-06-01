@@ -64,7 +64,7 @@ INVALID_PASSES = MessageType(
 
 RESET_PASSES = MessageType(
     u"zkapauthorizer:reset-passes",
-    [PRIVACYPASS_MESSAGE, PASS_COUNT],
+    [PASS_COUNT],
     u"Some passes involved in a failed spending attempt have not definitely been spent and are being returned for future use.",
 )
 
