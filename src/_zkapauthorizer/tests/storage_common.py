@@ -272,6 +272,9 @@ class _PassFactory(object):
         return PassGroup(message, self, zip(passes, passes))
 
     def _clear(self):
+        """
+        Forget about all passes: returned, in use, spent, invalid, issued.
+        """
         del self.returned[:]
         self.in_use.clear()
         self.invalid.clear()
