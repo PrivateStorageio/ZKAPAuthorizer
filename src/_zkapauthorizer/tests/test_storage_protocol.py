@@ -418,14 +418,14 @@ class ShareTests(TestCase):
         # the total number of passes issued during the test.
         anticipated_passes = required_passes(
             self.pass_value,
-            [size * len(all_sharenums)],
+            [size] * len(all_sharenums),
         )
 
         # The number of passes that will *actually* need to be spent depends
         # on the size and number of shares that really need to be allocated.
         expected_spent_passes = required_passes(
             self.pass_value,
-            [size * len(all_sharenums - existing_sharenums)],
+            [size] * len(all_sharenums - existing_sharenums),
         )
 
         # The number of passes returned is just the difference between those
