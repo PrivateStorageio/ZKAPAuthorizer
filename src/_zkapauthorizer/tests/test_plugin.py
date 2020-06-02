@@ -47,6 +47,8 @@ from testtools.matchers import (
     HasLength,
     AllMatch,
     ContainsDict,
+    MatchesStructure,
+    IsInstance,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -120,10 +122,6 @@ from ..controller import (
     PaymentController,
     DummyRedeemer,
 )
-from ..storage_common import (
-    required_passes,
-    allocate_buckets_message,
-)
 from .._storage_client import (
     IncorrectStorageServerReference,
 )
@@ -144,6 +142,7 @@ from .strategies import (
     lease_cancel_secrets,
     sharenum_sets,
     sizes,
+    pass_counts,
 )
 from .matchers import (
     Provides,
@@ -171,6 +170,53 @@ def get_rref(interface=None):
     return LocalRemote(DummyReferenceable(interface))
 
 
+
+class GetRRefTests(TestCase):
+    """
+    Tests for ``get_rref``.
+    """
+    def test_localremote(self):
+        """
+        ``get_rref`` returns an instance of ``LocalRemote``.
+        """
+        rref = get_rref()
+        self.assertThat(
+            rref,
+            IsInstance(LocalRemote),
+        )
+
+    def test_remote_interface(self):
+        """
+        ``get_rref`` returns an object which declares a remote interface matching
+        the one given.
+        """
+        rref = get_rref()
+        self.assertThat(
+            rref,
+            AfterPreprocessing(
+                lambda ref: ref.tracker,
+                MatchesStructure(
+                    interfaceName=Equals(RIPrivacyPassAuthorizedStorageServer.__remote_name__),
+                ),
+            ),
+        )
+
+    def test_default_remote_interface(self):
+        """
+        ``get_rref`` returns an object which declares a
+        ``RIPrivacyPassAuthorizedStorageServer`` as the remote interface if no
+        other interface is given.
+        """
+        rref = get_rref(RIStorageServer)
+        self.assertThat(
+            rref,
+            AfterPreprocessing(
+                lambda ref: ref.tracker,
+                MatchesStructure(
+                    interfaceName=Equals(RIStorageServer.__remote_name__),
+                ),
+            ),
+        )
 
 
 class PluginTests(TestCase):
@@ -408,11 +454,7 @@ class ClientPluginTests(TestCase):
         now=datetimes(),
         announcement=announcements(),
         voucher=vouchers(),
-        storage_index=storage_indexes(),
-        renew_secret=lease_renew_secrets(),
-        cancel_secret=lease_cancel_secrets(),
-        sharenums=sharenum_sets(),
-        size=sizes(),
+        num_passes=pass_counts(),
     )
     @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
@@ -422,11 +464,7 @@ class ClientPluginTests(TestCase):
             now,
             announcement,
             voucher,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            size,
+            num_passes,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
@@ -439,16 +477,12 @@ class ClientPluginTests(TestCase):
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        # Give it enough for the allocate_buckets call below.
-        expected_pass_cost = required_passes(store.pass_value, [size] * len(sharenums))
-        # And few enough redemption groups given the number of tokens.
-        num_redemption_groups = expected_pass_cost
 
         controller = PaymentController(
             store,
             DummyRedeemer(),
-            default_token_count=expected_pass_cost,
-            num_redemption_groups=num_redemption_groups,
+            default_token_count=num_passes,
+            num_redemption_groups=1,
         )
         # Get a token inserted into the store.
         redeeming = controller.redeem(voucher)
@@ -463,20 +497,17 @@ class ClientPluginTests(TestCase):
             get_rref,
         )
 
-        # For now, merely making the call spends the passes - regardless of
-        # the ultimate success or failure of the operation.
-        storage_client.allocate_buckets(
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            size,
-            LocalReferenceable(None),
-        )
+        # None of the remote methods are implemented by our fake server and I
+        # would like to continue to avoid to have a real server in these
+        # tests, at least until creating a real server doesn't involve so much
+        # complex setup.  So avoid using any of the client APIs that make a
+        # remote call ... which is all of them.
+        pass_group = storage_client._get_passes(u"request binding message", num_passes)
+        pass_group.mark_spent()
 
         # There should be no unblinded tokens left to extract.
         self.assertThat(
-            lambda: store.get_unblinded_tokens(1),
+            lambda: storage_client._get_passes(u"request binding message", 1),
             raises(NotEnoughTokens),
         )
 
@@ -489,8 +520,8 @@ class ClientPluginTests(TestCase):
                     AfterPreprocessing(
                         lambda logged_message: logged_message.message,
                         ContainsDict({
-                            u"message": Equals(allocate_buckets_message(storage_index)),
-                            u"count": Equals(expected_pass_cost),
+                            u"message": Equals(u"request binding message"),
+                            u"count": Equals(num_passes),
                         }),
                     ),
                 ),

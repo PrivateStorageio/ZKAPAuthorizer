@@ -230,6 +230,27 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+
+        # Note: The *allocate_buckets* protocol allows for some shares to
+        # already exist on the server.  When this is the case, the cost of the
+        # operation is based only on the buckets which are really allocated
+        # here.  It's not clear if we can allow the client to supply the
+        # reduced number of passes in the call but we can be sure to only mark
+        # as spent enough passes to cover the allocated buckets.  The return
+        # value of the method will tell the client what the true cost was and
+        # they can update their books in the same way.
+        #
+        # "Spending" isn't implemented yet so there is no code here to deal
+        # with this fact (though the client does do the necessary bookkeeping
+        # already).  See
+        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/41.
+        #
+        # Note: The downside of this scheme is that the client has revealed
+        # some tokens to us.  If we act in bad faith we can use this
+        # information to correlate this operation with a future operation
+        # where they are re-spent.  We don't do this but it would be better if
+        # we fixed the protocol so it's not even possible.  Probably should
+        # file a ticket for this.
         check_pass_quantity_for_write(
             self._pass_value,
             validation,

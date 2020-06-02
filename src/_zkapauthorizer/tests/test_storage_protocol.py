@@ -32,6 +32,7 @@ from testtools.matchers import (
     HasLength,
     IsInstance,
     AfterPreprocessing,
+    MatchesStructure,
     raises,
 )
 from testtools.twistedsupport import (
@@ -352,6 +353,98 @@ class ShareTests(TestCase):
                     sharenum,
                 ),
             )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        existing_sharenums=sharenum_sets(),
+        additional_sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_shares_already_exist(
+            self,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            additional_sharenums,
+            size,
+    ):
+        """
+        When the remote *allocate_buckets* implementation reports that shares
+        already exist, passes are not spent for those shares.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Oops our pass factory, too. :(
+        self.pass_factory._clear()
+
+        # A helper that only varies on sharenums.
+        def allocate_buckets(sharenums):
+            return self.client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
+            )
+
+        # Create some shares to alter the behavior of the next
+        # allocate_buckets.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            size,
+            canary=self.canary,
+        )
+
+        # Do a partial repeat of the operation.  Shuffle around
+        # the shares in some random-ish way.  If there is partial overlap
+        # there should be partial spending.
+        all_sharenums = existing_sharenums | additional_sharenums
+        self.assertThat(
+            allocate_buckets(all_sharenums),
+            succeeded(Always()),
+        )
+
+        # This is what the client should try to spend.  This should also match
+        # the total number of passes issued during the test.
+        anticipated_passes = required_passes(
+            self.pass_value,
+            [size] * len(all_sharenums),
+        )
+
+        # The number of passes that will *actually* need to be spent depends
+        # on the size and number of shares that really need to be allocated.
+        expected_spent_passes = required_passes(
+            self.pass_value,
+            [size] * len(all_sharenums - existing_sharenums),
+        )
+
+        # The number of passes returned is just the difference between those
+        # two.
+        expected_returned_passes = anticipated_passes - expected_spent_passes
+
+        # Only enough passes for the not-already-uploaded sharenums should
+        # have been spent.
+        self.assertThat(
+            self.pass_factory,
+            MatchesStructure(
+                issued=HasLength(anticipated_passes),
+                spent=HasLength(expected_spent_passes),
+                returned=HasLength(expected_returned_passes),
+
+                in_use=HasLength(0),
+                invalid=HasLength(0),
+            ),
+        )
 
     @given(
         storage_index=storage_indexes(),
