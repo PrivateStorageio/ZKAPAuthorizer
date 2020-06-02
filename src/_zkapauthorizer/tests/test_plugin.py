@@ -47,6 +47,8 @@ from testtools.matchers import (
     HasLength,
     AllMatch,
     ContainsDict,
+    MatchesStructure,
+    IsInstance,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -168,6 +170,53 @@ def get_rref(interface=None):
     return LocalRemote(DummyReferenceable(interface))
 
 
+
+class GetRRefTests(TestCase):
+    """
+    Tests for ``get_rref``.
+    """
+    def test_localremote(self):
+        """
+        ``get_rref`` returns an instance of ``LocalRemote``.
+        """
+        rref = get_rref()
+        self.assertThat(
+            rref,
+            IsInstance(LocalRemote),
+        )
+
+    def test_remote_interface(self):
+        """
+        ``get_rref`` returns an object which declares a remote interface matching
+        the one given.
+        """
+        rref = get_rref()
+        self.assertThat(
+            rref,
+            AfterPreprocessing(
+                lambda ref: ref.tracker,
+                MatchesStructure(
+                    interfaceName=Equals(RIPrivacyPassAuthorizedStorageServer.__remote_name__),
+                ),
+            ),
+        )
+
+    def test_default_remote_interface(self):
+        """
+        ``get_rref`` returns an object which declares a
+        ``RIPrivacyPassAuthorizedStorageServer`` as the remote interface if no
+        other interface is given.
+        """
+        rref = get_rref(RIStorageServer)
+        self.assertThat(
+            rref,
+            AfterPreprocessing(
+                lambda ref: ref.tracker,
+                MatchesStructure(
+                    interfaceName=Equals(RIStorageServer.__remote_name__),
+                ),
+            ),
+        )
 
 
 class PluginTests(TestCase):
