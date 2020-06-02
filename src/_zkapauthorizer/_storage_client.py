@@ -124,7 +124,7 @@ def invalidate_rejected_passes(passes, more_passes_required):
 
 
 @inline_callbacks
-def call_with_passes(method, num_passes, get_passes):
+def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_success):
     """
     Call a method, passing the requested number of passes as the first
     argument, and try again if the call fails with an error related to some of
@@ -141,6 +141,16 @@ def call_with_passes(method, num_passes, get_passes):
 
     :param (int -> IPassGroup) get_passes: A function for getting
         passes.
+
+    :param (object -> IPassGroup -> None) on_success: A function to call when
+        ``method`` succeeds.  The first argument is the result of ``method``.
+        The second argument is the ``IPassGroup`` used with the successful
+        call.  The intended purpose of this hook is to mark as spent passes in
+        the group which the method has spent.  This is useful if the result of
+        ``method`` can be used to determine the operation had a lower cost
+        than the worst-case expected from its inputs.
+
+        Spent passes should be marked as spent.  All others should be reset.
 
     :return: A ``Deferred`` that fires with whatever the ``Deferred`` returned
         by ``method`` fires with (apart from ``MorePassesRequired`` failures
@@ -168,8 +178,7 @@ def call_with_passes(method, num_passes, get_passes):
                         # fail if we don't have enough tokens.
                         pass_group = pass_group.expand(num_passes - len(pass_group.passes))
                 else:
-                    # Commit the spend of the passes when the operation finally succeeds.
-                    pass_group.mark_spent()
+                    on_success(result, pass_group)
                     break
         except:
             # Something went wrong that we can't address with a retry.
@@ -178,6 +187,22 @@ def call_with_passes(method, num_passes, get_passes):
 
         # Give the operation's result to the caller.
         returnValue(result)
+
+
+def call_with_passes(method, num_passes, get_passes):
+    """
+    Similar to ``call_with_passes_with_manual_spend`` but automatically spend
+    all passes associated with a successful call of ``method``.
+
+    For parameter documentation, see ``call_with_passes_with_manual_spend``.
+    """
+    return call_with_passes_with_manual_spend(
+        method,
+        num_passes,
+        get_passes,
+        # Commit the spend of the passes when the operation finally succeeds.
+        lambda result, pass_group: pass_group.mark_spent(),
+    )
 
 
 def with_rref(f):
@@ -264,6 +289,40 @@ class ZKAPAuthorizerStorageClient(object):
             "get_version",
         )
 
+    def _spend_for_allocate_buckets(
+            self,
+            allocated_size,
+            result,
+            pass_group,
+    ):
+        """
+        Spend some subset of a pass group based on the results of an
+        *allocate_buckets* call.
+
+        :param int allocate_buckets: The size of the shares that may have been
+            allocated.
+
+        :param ({int}, {int: IBucketWriter}) result: The result of the remote
+            *allocate_buckets* call.
+
+        :param IPassGroup pass_group: The passes which were used with the
+            remote call.  A prefix of the passes in this group will be spent
+            based on the buckets which ``result`` indicates were actually
+            allocated.
+        """
+        alreadygot, bucketwriters = result
+        if alreadygot:
+            # Some passes don't need to be spent because the server already
+            # has some of the share data.
+            actual_size = allocated_size * len(bucketwriters)
+            actual_passes = required_passes(
+                self._pass_value,
+                [actual_size],
+            )
+            to_spend, to_reset = pass_group.split(range(actual_passes))
+            to_spend.mark_spent()
+            to_reset.reset()
+
     @with_rref
     def allocate_buckets(
             self,
@@ -276,7 +335,7 @@ class ZKAPAuthorizerStorageClient(object):
             canary,
     ):
         num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
-        return call_with_passes(
+        return call_with_passes_with_manual_spend(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
                 _encode_passes(passes),
@@ -289,6 +348,7 @@ class ZKAPAuthorizerStorageClient(object):
             ),
             num_passes,
             partial(self._get_passes, allocate_buckets_message(storage_index).encode("utf-8")),
+            partial(self._spend_for_allocate_buckets, allocated_size),
         )
 
     @with_rref
