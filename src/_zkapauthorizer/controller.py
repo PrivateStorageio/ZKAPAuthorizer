@@ -101,7 +101,7 @@ from .model import (
     Error as model_Error,
 )
 
-RETRY_INTERVAL = timedelta(seconds=0)
+RETRY_INTERVAL = timedelta(milliseconds=1)
 
 class AlreadySpent(Exception):
     """
