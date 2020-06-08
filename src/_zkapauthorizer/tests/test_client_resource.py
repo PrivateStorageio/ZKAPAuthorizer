@@ -523,7 +523,9 @@ class UnblindedTokenTests(TestCase):
             return d
 
         def use_a_token():
-            root.store.extract_unblinded_tokens(1)
+            root.store.discard_unblinded_tokens(
+                root.store.get_unblinded_tokens(1),
+            )
 
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join(b"tahoe"), b"tub.port")

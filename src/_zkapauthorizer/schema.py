@@ -156,4 +156,15 @@ _UPGRADES = {
         ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer NOT NULL DEFAULT 32768
         """,
     ],
+
+    4: [
+        """
+        CREATE TABLE [invalid-unblinded-tokens] (
+            [token] text,  -- The base64 encoded unblinded token.
+            [reason] text, -- The reason given for it being considered invalid.
+
+            PRIMARY KEY([token])
+        )
+        """,
+    ],
 }

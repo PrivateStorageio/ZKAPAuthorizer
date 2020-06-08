@@ -57,6 +57,12 @@ def _configure_hypothesis():
     settings.register_profile(
         "big",
         max_examples=10000,
+        # The only rule-based state machine we have now is quite simple and
+        # can probably be completely explored in about 5 steps.  Give it some
+        # headroom beyond that in case I'm wrong but don't let it run to the
+        # full 50 because, combined with searching for 10000 successful
+        # examples this makes the stateful test take *ages* to complete.
+        stateful_step_count=15,
         **base
     )
 

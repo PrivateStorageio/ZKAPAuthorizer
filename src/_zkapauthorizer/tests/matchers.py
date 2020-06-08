@@ -54,7 +54,7 @@ class Provides(object):
     """
     Match objects that provide all of a list of Zope Interface interfaces.
     """
-    interfaces = attr.ib()
+    interfaces = attr.ib(validator=attr.validators.instance_of(list))
 
     def match(self, obj):
         missing = set()
@@ -153,4 +153,24 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
                 GreaterThan(now + min_lease_remaining),
             ),
         ),
+    )
+
+
+def even():
+    """
+    Matches even integers.
+    """
+    return AfterPreprocessing(
+        lambda n: n % 2,
+        Equals(0),
+    )
+
+
+def odd():
+    """
+    Matches odd integers.
+    """
+    return AfterPreprocessing(
+        lambda n: n % 2,
+        Equals(1),
     )

@@ -30,6 +30,26 @@ from .validators import (
     greater_than,
 )
 
+@attr.s(frozen=True)
+class MorePassesRequired(Exception):
+    """
+    Storage operations fail with ``MorePassesRequired`` when they are not
+    accompanied by a sufficient number of valid passes.
+
+    :ivar int valid_count: The number of valid passes presented in the
+        operation.
+
+    ivar int required_count: The number of valid passes which must be
+        presented for the operation to be authorized.
+
+    :ivar list[int] signature_check_failed: Indices into the supplied list of
+        passes indicating passes which failed the signature check.
+    """
+    valid_count = attr.ib()
+    required_count = attr.ib()
+    signature_check_failed = attr.ib(converter=frozenset)
+
+
 def _message_maker(label):
     def make_message(storage_index):
         return u"{label} {storage_index}".format(

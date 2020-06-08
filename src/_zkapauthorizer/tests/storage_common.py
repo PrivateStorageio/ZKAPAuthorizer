@@ -16,6 +16,10 @@
 ``allmydata.storage``-related helpers shared across the test suite.
 """
 
+from functools import (
+    partial,
+)
+
 from os import (
     SEEK_CUR,
 )
@@ -23,13 +27,41 @@ from struct import (
     pack,
 )
 
+from itertools import (
+    islice,
+)
+
+import attr
+
+from zope.interface import (
+    implementer,
+)
+
 from twisted.python.filepath import (
     FilePath,
+)
+
+from challenge_bypass_ristretto import (
+    RandomToken,
 )
 
 from .strategies import (
     # Not really a strategy...
     bytes_for_share,
+)
+
+from .privacypass import (
+    make_passes,
+)
+
+from ..model import (
+    NotEnoughTokens,
+    Pass,
+)
+
+from ..spending import (
+    IPassFactory,
+    PassGroup,
 )
 
 # Hard-coded in Tahoe-LAFS
@@ -133,3 +165,139 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
                 in leases
             ),
         )
+
+
+def integer_passes(limit):
+    """
+    :return: A function which can be used to get a number of passes.  The
+        function accepts a unicode request-binding message and an integer
+        number of passes.  It returns a list of integers which serve as
+        passes.  Successive calls to the function return unique pass values.
+    """
+    counter = iter(range(limit))
+    def get_passes(message, num_passes):
+        result = list(islice(counter, num_passes))
+        if len(result) < num_passes:
+            raise NotEnoughTokens()
+        return result
+    return get_passes
+
+
+def get_passes(message, count, signing_key):
+    """
+    :param unicode message: Request-binding message for PrivacyPass.
+
+    :param int count: The number of passes to get.
+
+    :param SigningKey signing_key: The key to use to sign the passes.
+
+    :return list[Pass]: ``count`` new random passes signed with the given key
+        and bound to the given message.
+    """
+    return list(
+        Pass(*pass_.split(u" "))
+        for pass_
+        in make_passes(
+            signing_key,
+            message,
+            list(RandomToken.create() for n in range(count)),
+        )
+    )
+
+
+def privacypass_passes(signing_key):
+    """
+    Get a PrivacyPass issuing function.
+
+    :param SigningKey signing_key: The key to use to issue passes.
+
+    :return: Return a function which can be used to get a number of passes.
+        The function accepts a unicode request-binding message and an integer
+        number of passes.  It returns a list of real pass values signed by the
+        given key.  Successive calls to the function return unique passes.
+    """
+    return partial(get_passes, signing_key=signing_key)
+
+
+def pass_factory(get_passes):
+    """
+    Get a new factory for passes.
+
+    :param (unicode -> int -> [pass]) get_passes: A function the factory can
+        use to get new passes.
+    """
+    return _PassFactory(get_passes=get_passes)
+
+
+@implementer(IPassFactory)
+@attr.s
+class _PassFactory(object):
+    """
+    A stateful pass issuer.
+
+    :ivar (unicode -> int -> [bytes]) _get_passes: A function for getting
+        passes.
+
+    :ivar set[int] in_use: All of the passes given out without a confirmed
+        terminal state.
+
+    :ivar dict[int, unicode] invalid: All of the passes given out and returned
+        using ``IPassGroup.invalid`` mapped to the reason given.
+
+    :ivar set[int] spent: All of the passes given out and returned via
+        ``IPassGroup.mark_spent``.
+
+    :ivar set[int] issued: All of the passes ever given out.
+
+    :ivar list[int] returned: A list of passes which were given out but then
+        returned via ``IPassGroup.reset``.
+    """
+    _get_passes = attr.ib()
+
+    returned = attr.ib(default=attr.Factory(list), init=False)
+    in_use = attr.ib(default=attr.Factory(set), init=False)
+    invalid = attr.ib(default=attr.Factory(dict), init=False)
+    spent = attr.ib(default=attr.Factory(set), init=False)
+    issued = attr.ib(default=attr.Factory(set), init=False)
+
+    def get(self, message, num_passes):
+        passes = []
+        if self.returned:
+            passes.extend(self.returned[:num_passes])
+            del self.returned[:num_passes]
+            num_passes -= len(passes)
+        passes.extend(self._get_passes(message, num_passes))
+        self.issued.update(passes)
+        self.in_use.update(passes)
+        return PassGroup(message, self, zip(passes, passes))
+
+    def _clear(self):
+        """
+        Forget about all passes: returned, in use, spent, invalid, issued.
+        """
+        del self.returned[:]
+        self.in_use.clear()
+        self.invalid.clear()
+        self.spent.clear()
+        self.issued.clear()
+
+    def _mark_spent(self, passes):
+        for p in passes:
+            if p not in self.in_use:
+                raise ValueError("Pass {} cannot be spent, it is not in use.".format(p))
+        self.spent.update(passes)
+        self.in_use.difference_update(passes)
+
+    def _mark_invalid(self, reason, passes):
+        for p in passes:
+            if p not in self.in_use:
+                raise ValueError("Pass {} cannot be invalid, it is not in use.".format(p))
+        self.invalid.update(dict.fromkeys(passes, reason))
+        self.in_use.difference_update(passes)
+
+    def _reset(self, passes):
+        for p in passes:
+            if p not in self.in_use:
+                raise ValueError("Pass {} cannot be reset, it is not in use.".format(p))
+        self.returned.extend(passes)
+        self.in_use.difference_update(passes)

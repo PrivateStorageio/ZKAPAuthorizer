@@ -45,11 +45,6 @@ from twisted.internet.defer import (
     succeed,
 )
 
-from eliot import (
-    MessageType,
-    Field,
-)
-
 from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
@@ -83,6 +78,10 @@ from .storage_common import (
 from .controller import (
     get_redeemer,
 )
+from .spending import (
+    SpendingController,
+)
+
 from .lease_maintenance import (
     SERVICE_NAME,
     lease_maintenance_service,
@@ -90,24 +89,6 @@ from .lease_maintenance import (
 )
 
 _log = Logger()
-
-PRIVACYPASS_MESSAGE = Field(
-    u"message",
-    unicode,
-    u"The PrivacyPass request-binding data associated with a pass.",
-)
-
-PASS_COUNT = Field(
-    u"count",
-    int,
-    u"A number of passes.",
-)
-
-GET_PASSES = MessageType(
-    u"zkapauthorizer:get-passes",
-    [PRIVACYPASS_MESSAGE, PASS_COUNT],
-    u"Passes are being spent.",
-)
 
 @implementer(IAnnounceableStorageServer)
 @attr.s
@@ -192,20 +173,15 @@ class ZKAPAuthorizer(object):
         """
         from twisted.internet import reactor
         redeemer = self._get_redeemer(node_config, announcement, reactor)
-        extract_unblinded_tokens = self._get_store(node_config).extract_unblinded_tokens
-        def get_passes(message, count):
-            unblinded_tokens = extract_unblinded_tokens(count)
-            passes = redeemer.tokens_to_passes(message, unblinded_tokens)
-            GET_PASSES.log(
-                message=message,
-                count=count,
-            )
-            return passes
-
+        store = self._get_store(node_config)
+        controller = SpendingController.for_store(
+            tokens_to_passes=redeemer.tokens_to_passes,
+            store=store,
+       )
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),
             get_rref,
-            get_passes,
+            controller.get,
         )
 
 

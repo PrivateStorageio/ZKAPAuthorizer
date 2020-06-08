@@ -27,10 +27,12 @@ from testtools import (
     TestCase,
 )
 from testtools.matchers import (
+    Always,
     Equals,
     HasLength,
     IsInstance,
     AfterPreprocessing,
+    MatchesStructure,
     raises,
 )
 from testtools.twistedsupport import (
@@ -52,6 +54,7 @@ from hypothesis.strategies import (
     lists,
     tuples,
     integers,
+    data as data_strategy,
 )
 
 from twisted.python.runtime import (
@@ -66,7 +69,6 @@ from foolscap.referenceable import (
 )
 
 from challenge_bypass_ristretto import (
-    RandomToken,
     random_signing_key,
 )
 
@@ -78,9 +80,6 @@ from .common import (
     skipIf,
 )
 
-from .privacypass import (
-    make_passes,
-)
 from .strategies import (
     storage_indexes,
     lease_renew_secrets,
@@ -106,21 +105,26 @@ from .storage_common import (
     cleanup_storage_server,
     write_toy_shares,
     whitebox_write_sparse_share,
+    get_passes,
+    privacypass_passes,
+    pass_factory,
 )
 from .foolscap import (
     LocalRemote,
 )
 from ..api import (
+    MorePassesRequired,
     ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
 )
 from ..storage_common import (
     slot_testv_and_readv_and_writev_message,
+    allocate_buckets_message,
     get_implied_data_length,
     required_passes,
 )
-from ..model import (
-    Pass,
+from .._storage_client import (
+    _encode_passes,
 )
 from ..foolscap import (
     ShareStat,
@@ -168,10 +172,8 @@ class ShareTests(TestCase):
     """
     Tests for interaction with shares.
 
-    :ivar int spent_passes: The number of passes which have been spent so far
-        in the course of a single test (in the case of Hypothesis, every
-        iteration of the test so far, probably; so make relative comparisons
-        instead of absolute ones).
+    :ivar pass_factory: An object which is responsible for creating passes
+        which are used by these tests.
     """
     pass_value = 128 * 1024
 
@@ -180,19 +182,9 @@ class ShareTests(TestCase):
         self.canary = LocalReferenceable(None)
         self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
-        self.spent_passes = 0
 
-        def get_passes(message, count):
-            self.spent_passes += count
-            return list(
-                Pass(*pass_.split(u" "))
-                for pass_
-                in make_passes(
-                    self.signing_key,
-                    message,
-                    list(RandomToken.create() for n in range(count)),
-                )
-            )
+        self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
+
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
@@ -202,7 +194,7 @@ class ShareTests(TestCase):
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
-            get_passes=get_passes,
+            get_passes=self.pass_factory.get,
         )
 
     def test_get_version(self):
@@ -213,6 +205,95 @@ class ShareTests(TestCase):
         self.assertThat(
             self.client.get_version(),
             succeeded(matches_version_dictionary()),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
+        data=data_strategy(),
+    )
+    def test_rejected_passes_reported(self, storage_index, renew_secret, cancel_secret, sharenums, size, data):
+        """
+        Any passes rejected by the storage server are reported with a
+        ``MorePassesRequired`` exception sent to the client.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        num_passes = required_passes(self.pass_value, [size] * len(sharenums))
+
+        # Pick some passes to mess with.
+        bad_pass_indexes = data.draw(
+            lists(
+                integers(
+                    min_value=0,
+                    max_value=num_passes - 1,
+                ),
+                min_size=1,
+                max_size=num_passes,
+                unique=True,
+            ),
+        )
+
+        # Make some passes with a key untrusted by the server.
+        bad_passes = get_passes(
+            allocate_buckets_message(storage_index),
+            len(bad_pass_indexes),
+            random_signing_key(),
+        )
+
+        # Make some passes with a key trusted by the server.
+        good_passes = get_passes(
+            allocate_buckets_message(storage_index),
+            num_passes - len(bad_passes),
+            self.signing_key,
+        )
+
+        all_passes = []
+        for i in range(num_passes):
+            if i in bad_pass_indexes:
+                all_passes.append(bad_passes.pop())
+            else:
+                all_passes.append(good_passes.pop())
+
+        # Sanity checks
+        self.assertThat(bad_passes, Equals([]))
+        self.assertThat(good_passes, Equals([]))
+        self.assertThat(all_passes, HasLength(num_passes))
+
+        self.assertThat(
+            # Bypass the client handling of MorePassesRequired so we can see
+            # it.
+            self.local_remote_server.callRemote(
+                "allocate_buckets",
+                list(
+                    pass_.pass_text.encode("ascii")
+                    for pass_
+                    in all_passes
+                ),
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
+            ),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        MorePassesRequired(
+                            valid_count=num_passes - len(bad_pass_indexes),
+                            required_count=num_passes,
+                            signature_check_failed=bad_pass_indexes,
+                        ),
+                    ),
+                ),
+            ),
         )
 
     @given(
@@ -275,6 +356,98 @@ class ShareTests(TestCase):
 
     @given(
         storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        existing_sharenums=sharenum_sets(),
+        additional_sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_shares_already_exist(
+            self,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            additional_sharenums,
+            size,
+    ):
+        """
+        When the remote *allocate_buckets* implementation reports that shares
+        already exist, passes are not spent for those shares.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Oops our pass factory, too. :(
+        self.pass_factory._clear()
+
+        # A helper that only varies on sharenums.
+        def allocate_buckets(sharenums):
+            return self.client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
+            )
+
+        # Create some shares to alter the behavior of the next
+        # allocate_buckets.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            size,
+            canary=self.canary,
+        )
+
+        # Do a partial repeat of the operation.  Shuffle around
+        # the shares in some random-ish way.  If there is partial overlap
+        # there should be partial spending.
+        all_sharenums = existing_sharenums | additional_sharenums
+        self.assertThat(
+            allocate_buckets(all_sharenums),
+            succeeded(Always()),
+        )
+
+        # This is what the client should try to spend.  This should also match
+        # the total number of passes issued during the test.
+        anticipated_passes = required_passes(
+            self.pass_value,
+            [size] * len(all_sharenums),
+        )
+
+        # The number of passes that will *actually* need to be spent depends
+        # on the size and number of shares that really need to be allocated.
+        expected_spent_passes = required_passes(
+            self.pass_value,
+            [size] * len(all_sharenums - existing_sharenums),
+        )
+
+        # The number of passes returned is just the difference between those
+        # two.
+        expected_returned_passes = anticipated_passes - expected_spent_passes
+
+        # Only enough passes for the not-already-uploaded sharenums should
+        # have been spent.
+        self.assertThat(
+            self.pass_factory,
+            MatchesStructure(
+                issued=HasLength(anticipated_passes),
+                spent=HasLength(expected_spent_passes),
+                returned=HasLength(expected_returned_passes),
+
+                in_use=HasLength(0),
+                invalid=HasLength(0),
+            ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
         renew_secrets=tuples(lease_renew_secrets(), lease_renew_secrets()),
         cancel_secret=lease_cancel_secrets(),
         sharenums=sharenum_sets(),
@@ -304,12 +477,13 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.add_lease(
                 storage_index,
                 renew_lease_secret,
                 cancel_secret,
             ),
+            succeeded(Always()),
         )
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
@@ -346,11 +520,12 @@ class ShareTests(TestCase):
         )
 
         now += 100000
-        extract_result(
+        self.assertThat(
             self.client.renew_lease(
                 storage_index,
                 renew_secret,
             ),
+            succeeded(Always()),
         )
 
         [lease] = self.anonymous_storage_server.get_leases(storage_index)
@@ -388,9 +563,6 @@ class ShareTests(TestCase):
         finally:
             patch.cleanUp()
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=size,
@@ -398,8 +570,8 @@ class ShareTests(TestCase):
             ),
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
     @given(
@@ -615,9 +787,6 @@ class ShareTests(TestCase):
             u"Server rejected a write to a new mutable slot",
         )
 
-        stats = extract_result(
-            self.client.stat_shares([storage_index]),
-        )
         expected = [{
             sharenum: ShareStat(
                 size=get_implied_data_length(
@@ -630,8 +799,8 @@ class ShareTests(TestCase):
             in test_and_write_vectors_for_shares.items()
         }]
         self.assertThat(
-            stats,
-            Equals(expected),
+            self.client.stat_shares([storage_index]),
+            succeeded(Equals(expected)),
         )
 
 
@@ -665,13 +834,14 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
-        extract_result(
+        self.assertThat(
             self.client.advise_corrupt_share(
                 b"immutable",
                 storage_index,
                 sharenum,
                 b"the bits look bad",
             ),
+            succeeded(Always()),
         )
         self.assertThat(
             FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
@@ -719,12 +889,12 @@ class ShareTests(TestCase):
             u"Server gave back read results when we asked for none.",
         )
         # Now we can read it back without spending any more passes.
-        before_spent_passes = self.spent_passes
+        before_passes = len(self.pass_factory.issued)
         assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
-        after_spent_passes = self.spent_passes
+        after_passes = len(self.pass_factory.issued)
         self.assertThat(
-            before_spent_passes,
-            Equals(after_spent_passes),
+            before_passes,
+            Equals(after_passes),
         )
 
     @given(
@@ -814,12 +984,14 @@ class ShareTests(TestCase):
         # The nice Python API doesn't let you do this so we drop down to
         # the layer below.  We also use positional arguments because they
         # transit the network differently from keyword arguments.  Yay.
-        d = self.client._rref.callRemote(
+        d = self.local_remote_server.callRemote(
             "slot_testv_and_readv_and_writev",
             # passes
-            self.client._get_encoded_passes(
-                slot_testv_and_readv_and_writev_message(storage_index),
-                1,
+            _encode_passes(
+                self.pass_factory.get(
+                    slot_testv_and_readv_and_writev_message(storage_index),
+                    1,
+                ),
             ),
             # storage_index
             storage_index,
