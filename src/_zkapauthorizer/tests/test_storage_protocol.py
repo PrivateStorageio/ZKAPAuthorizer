@@ -313,6 +313,9 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
+        # Oops our pass factory, too. :(
+        self.pass_factory._clear()
+
         alreadygot, allocated = extract_result(
             self.client.allocate_buckets(
                 storage_index,
@@ -353,6 +356,25 @@ class ShareTests(TestCase):
                     sharenum,
                 ),
             )
+
+        # Enough passes for all the sharenums should have been spent.
+        anticipated_passes = required_passes(
+            self.pass_value,
+            [size] * len(sharenums),
+        )
+
+        self.assertThat(
+            self.pass_factory,
+            MatchesStructure(
+                issued=HasLength(anticipated_passes),
+                spent=HasLength(anticipated_passes),
+
+                returned=HasLength(0),
+                in_use=HasLength(0),
+                invalid=HasLength(0),
+            ),
+        )
+
 
     @given(
         storage_index=storage_indexes(),

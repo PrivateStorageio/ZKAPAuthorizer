@@ -311,17 +311,16 @@ class ZKAPAuthorizerStorageClient(object):
             allocated.
         """
         alreadygot, bucketwriters = result
-        if alreadygot:
-            # Passes only need to be spent for buckets that are being
-            # allocated.  Someone already paid for any shares the server
-            # already has.
-            actual_passes = required_passes(
-                self._pass_value,
-                [allocated_size] * len(bucketwriters),
-            )
-            to_spend, to_reset = pass_group.split(range(actual_passes))
-            to_spend.mark_spent()
-            to_reset.reset()
+        # Passes only need to be spent for buckets that are being
+        # allocated.  Someone already paid for any shares the server
+        # already has.
+        actual_passes = required_passes(
+            self._pass_value,
+            [allocated_size] * len(bucketwriters),
+        )
+        to_spend, to_reset = pass_group.split(range(actual_passes))
+        to_spend.mark_spent()
+        to_reset.reset()
 
     @with_rref
     def allocate_buckets(
