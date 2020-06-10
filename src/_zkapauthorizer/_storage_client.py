@@ -185,8 +185,8 @@ def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_succes
             pass_group.reset()
             raise
 
-        # Give the operation's result to the caller.
-        returnValue(result)
+    # Give the operation's result to the caller.
+    returnValue(result)
 
 
 def call_with_passes(method, num_passes, get_passes):
