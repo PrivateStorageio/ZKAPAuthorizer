@@ -362,6 +362,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         with start_action(
                 action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
                 storage_index=b2a(storage_index),
+                path=storage_index_to_dir(storage_index),
         ):
             result = self._slot_testv_and_readv_and_writev(
                 passes,
