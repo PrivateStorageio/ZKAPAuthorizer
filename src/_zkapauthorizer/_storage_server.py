@@ -76,11 +76,18 @@ from challenge_bypass_ristretto import (
     SigningKey,
 )
 
+from twisted.internet.defer import (
+    Deferred,
+)
 from twisted.python.reflect import (
     namedAny,
 )
 from twisted.internet.interfaces import (
     IReactorTime,
+)
+
+from eliot import (
+    start_action,
 )
 
 from .foolscap import (
@@ -318,9 +325,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         return self._original.remote_advise_corrupt_share(*a, **kw)
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
-        return dict(
-            get_share_sizes(self._original, storage_index_or_slot, sharenums)
-        )
+        with start_action(
+                action_type=u"zkapauthorizer:storage-server:remote:share-sizes",
+                storage_index_or_slot=storage_index_or_slot,
+        ):
+            return dict(
+                get_share_sizes(self._original, storage_index_or_slot, sharenums)
+            )
 
     def remote_stat_shares(self, storage_indexes_or_slots):
         return list(
@@ -345,6 +356,29 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             data in already-allocated storage.  These cases may not be the
             same from the perspective of pass validation.
         """
+        with start_action(
+                action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
+                storage_index=storage_index,
+        ):
+            result = self._slot_testv_and_readv_and_writev(
+                passes,
+                storage_index,
+                secrets,
+                tw_vectors,
+                r_vector,
+            )
+            if isinstance(result, Deferred):
+                raise TypeError("_slot_testv_and_readv_and_writev returned Deferred")
+            return result
+
+    def _slot_testv_and_readv_and_writev(
+            self,
+            passes,
+            storage_index,
+            secrets,
+            tw_vectors,
+            r_vector,
+    ):
         # Only writes to shares without an active lease will result in a lease
         # renewal.
         renew_leases = False
