@@ -30,6 +30,10 @@ from .validators import (
     greater_than,
 )
 
+from .eliot import (
+    MUTABLE_PASSES_REQUIRED,
+)
+
 @attr.s(frozen=True)
 class MorePassesRequired(Exception):
     """
@@ -180,8 +184,9 @@ def get_implied_data_length(data_vector, new_length):
 def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vectors):
     """
     :param int pass_value: The value of a single pass in byte-months.
+
+    :param current_sizes:
     """
-    # print("get_required_new_passes_for_mutable_write({}, {})".format(current_sizes, summarize(tw_vectors)))
     current_passes = required_passes(
         pass_value,
         current_sizes.values(),
@@ -204,16 +209,23 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     )
     required_new_passes = new_passes - current_passes
 
-    # print("Current sizes: {}".format(current_sizes))
-    # print("Current passes: {}".format(current_passes))
-    # print("New sizes: {}".format(new_sizes))
-    # print("New passes: {}".format(new_passes))
+    MUTABLE_PASSES_REQUIRED.log(
+        current_sizes=current_sizes,
+        tw_vectors_summary=summarize(tw_vectors),
+        current_passes=current_passes,
+        new_sizes=new_sizes,
+        new_passes=new_passes,
+    )
     return required_new_passes
 
 def summarize(tw_vectors):
     return {
         sharenum: (
-            test_vector,
+            list(
+                (offset, length, operator, len(specimen))
+                for (offset, length, operator, specimen)
+                in test_vector
+            ),
             list(
                 (offset, len(data))
                 for (offset, data)
