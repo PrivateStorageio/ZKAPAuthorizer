@@ -70,6 +70,9 @@ from allmydata.interfaces import (
 from allmydata.storage.common import (
     storage_index_to_dir,
 )
+from allmydata.util.base32 import (
+    b2a,
+)
 from challenge_bypass_ristretto import (
     TokenPreimage,
     VerificationSignature,
@@ -358,7 +361,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         with start_action(
                 action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
-                storage_index=storage_index,
+                storage_index=b2a(storage_index),
         ):
             result = self._slot_testv_and_readv_and_writev(
                 passes,
