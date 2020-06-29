@@ -168,6 +168,18 @@ class RequiredPassesTests(TestCase):
         )
 
 
+def is_successful_write():
+    """
+    Match the successful result of a ``slot_testv_and_readv_and_writev`` call.
+    """
+    return succeeded(
+        AfterPreprocessing(
+            lambda result: result[0],
+            Equals(True),
+        ),
+    )
+
+
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -946,24 +958,21 @@ class ShareTests(TestCase):
             )
 
         def write():
-            return extract_result(
-                self.client.slot_testv_and_readv_and_writev(
-                    storage_index,
-                    secrets=secrets,
-                    tw_vectors={
-                        k: v.for_call()
-                        for (k, v)
-                        in test_and_write_vectors_for_shares.items()
-                    },
-                    r_vector=[],
-                ),
+            return self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v)
+                    in test_and_write_vectors_for_shares.items()
+                },
+                r_vector=[],
             )
 
         # Perform an initial write so there is something to rewrite.
-        wrote, read = write()
         self.assertThat(
-            wrote,
-            Equals(True),
+            write(),
+            is_successful_write(),
             u"Server rejected a write to a new mutable slot",
         )
 
@@ -971,10 +980,9 @@ class ShareTests(TestCase):
         leases_before = leases()
 
         # Now perform the rewrite.
-        wrote, read = write()
         self.assertThat(
-            wrote,
-            Equals(True),
+            write(),
+            is_successful_write(),
             u"Server rejected rewrite of an existing mutable slot",
         )
 
