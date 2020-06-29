@@ -80,3 +80,33 @@ CALL_WITH_PASSES = ActionType(
     [],
     u"A storage operation is being started which may spend some passes.",
 )
+
+CURRENT_SIZES = Field(
+    u"current_sizes",
+    dict,
+    u"A dictionary mapping the numbers of existing shares to their existing sizes.",
+)
+
+TW_VECTORS_SUMMARY = Field(
+    u"tw_vectors_summary",
+    dict,
+    u"A dictionary mapping share numbers from tw_vectors to test and write vector summaries.",
+)
+
+NEW_SIZES = Field(
+    u"new_sizes",
+    dict,
+    u"A dictionary like that of CURRENT_SIZES but for the sizes computed for the shares after applying tw_vectors.",
+)
+
+NEW_PASSES = Field(
+    u"new_passes",
+    int,
+    u"The number of passes computed as being required for the change in size.",
+)
+
+MUTABLE_PASSES_REQUIRED = MessageType(
+    u"zkapauthorizer:storage:mutable-passes-required",
+    [CURRENT_SIZES, TW_VECTORS_SUMMARY, NEW_SIZES, NEW_PASSES],
+    u"Some number of passes has been computed as the cost of updating a mutable.",
+)
