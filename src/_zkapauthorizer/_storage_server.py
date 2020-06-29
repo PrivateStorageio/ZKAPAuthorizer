@@ -575,7 +575,25 @@ def get_all_share_numbers(storage_server, storage_index):
 
 def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
     """
-    Get the sizes of the given share numbers for the given storage index *or*
+    Get sizes of the given share numbers for the given storage index *or*
+    slot.
+
+    :see: ``get_share_stats``
+
+    :return: A generator of tuples of (int, int) where the first element is a
+        share number and the second element is the data size for that share
+        number.
+    """
+    return (
+        (sharenum, stat.size)
+        for (sharenum, stat)
+        in get_share_stats(storage_server, storage_index_or_slot, sharenums)
+    )
+
+
+def get_share_stats(storage_server, storage_index_or_slot, sharenums):
+    """
+    Get the stats for the given share numbers for the given storage index *or*
     slot.
 
     :param allmydata.storage.server.StorageServer storage_server: The storage
@@ -589,16 +607,16 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
         included in the result.  Or, ``None`` to get sizes for all shares
         which exist.
 
-    :return: A generator of tuples of (int, int) where the first element is a
-        share number and the second element is the data size for that share
-        number.
+    :return: A generator of tuples of (int, ShareStat) where the first element
+        is a share number and the second element gives stats about that share.
     """
     stat = None
     for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
         if stat is None:
             stat = get_stat(sharepath)
         if sharenums is None or sharenum in sharenums:
-            yield sharenum, stat(storage_server, storage_index_or_slot, sharepath).size
+            info = stat(storage_server, storage_index_or_slot, sharepath)
+            yield sharenum, info
 
 
 def get_storage_index_share_size(sharepath):
