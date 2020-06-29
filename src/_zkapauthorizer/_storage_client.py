@@ -30,6 +30,9 @@ from functools import (
 )
 
 import attr
+from attr.validators import (
+    provides,
+)
 
 from zope.interface import (
     implementer,
@@ -39,6 +42,12 @@ from eliot.twisted import (
     inline_callbacks,
 )
 
+from twisted.internet.interfaces import (
+    IReactorTime,
+)
+from twisted.python.reflect import (
+    namedAny,
+)
 from twisted.internet.defer import (
     returnValue,
 )
@@ -263,6 +272,10 @@ class ZKAPAuthorizerStorageClient(object):
     _pass_value = pass_value_attribute()
     _get_rref = attr.ib()
     _get_passes = attr.ib()
+    _clock = attr.ib(
+        validator=provides(IReactorTime),
+        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
+    )
 
     def _rref(self):
         rref = self._get_rref()
@@ -464,11 +477,20 @@ class ZKAPAuthorizerStorageClient(object):
             # on the storage server that will give us a really good estimate
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
-            current_sizes = yield rref.callRemote(
-                "share_sizes",
-                storage_index,
-                set(tw_vectors),
+            [stats] = yield rref.callRemote(
+                "stat_shares",
+                [storage_index],
             )
+            # Filter down to only the shares that have an active lease.  If
+            # we're going to write to any other shares we will have to pay to
+            # renew their leases.
+            now = self._clock.seconds()
+            current_sizes = {
+                sharenum: stat.size
+                for (sharenum, stat)
+                in stats.items()
+                if stat.lease_expiration > now
+            }
             # Determine the cost of the new storage for the operation.
             num_passes = get_required_new_passes_for_mutable_write(
                 self._pass_value,
