@@ -33,6 +33,7 @@ from functools import (
 )
 from json import (
     dumps,
+    loads,
 )
 from datetime import (
     timedelta,
@@ -75,7 +76,7 @@ from twisted.web.client import (
     Agent,
 )
 from treq import (
-    json_content,
+    content,
 )
 from treq.client import (
     HTTPClient,
@@ -102,6 +103,15 @@ from .model import (
 )
 
 RETRY_INTERVAL = timedelta(milliseconds=1)
+
+@attr.s
+class UnexpectedResponse(Exception):
+    """
+    The issuer responded in an unexpected and unhandled way.
+    """
+    code = attr.ib()
+    body = attr.ib()
+
 
 class AlreadySpent(Exception):
     """
@@ -524,11 +534,12 @@ class RistrettoRedeemer(object):
             }),
             headers={b"content-type": b"application/json"},
         )
+        response_body = yield content(response)
+
         try:
-            result = yield json_content(response)
+            result = loads(response_body)
         except ValueError:
-            self._log.failure("Parsing redeem response failed", response=response)
-            raise
+            raise UnexpectedResponse(response.code, response_body)
 
         success = result.get(u"success", False)
         if not success:
@@ -933,8 +944,8 @@ class PaymentController(object):
             self._unpaid[voucher] = self.store.now()
         else:
             self._log.error(
-                "Redeeming random tokens for a voucher ({voucher}) failed: {reason}",
-                reason=reason,
+                "Redeeming random tokens for a voucher ({voucher}) failed: {reason!r}",
+                reason=reason.value,
                 voucher=voucher,
             )
             self._error[voucher] = model_Error(
