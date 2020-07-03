@@ -50,7 +50,6 @@ from testtools.matchers import (
     HasLength,
     AfterPreprocessing,
     MatchesStructure,
-    ContainsDict,
 )
 from testtools.twistedsupport import (
     succeeded,
