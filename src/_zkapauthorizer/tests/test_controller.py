@@ -50,6 +50,7 @@ from testtools.matchers import (
     HasLength,
     AfterPreprocessing,
     MatchesStructure,
+    ContainsDict,
 )
 from testtools.twistedsupport import (
     succeeded,
@@ -86,6 +87,7 @@ from twisted.web.http_headers import (
 from twisted.web.http import (
     UNSUPPORTED_MEDIA_TYPE,
     BAD_REQUEST,
+    INTERNAL_SERVER_ERROR,
 )
 from treq.testing import (
     StubTreq,
@@ -111,6 +113,7 @@ from ..controller import (
     IndexedRedeemer,
     RecordingRedeemer,
     PaymentController,
+    UnexpectedResponse,
     AlreadySpent,
     Unpaid,
     token_count_for_group,
@@ -622,6 +625,39 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_non_json_response(self, voucher, counter, num_tokens):
+        """
+        If the issuer responds with something that isn't JSON then the response is
+        logged and the ``Deferred`` fires with a ``Failure`` wrapping
+        ``UnexpectedResponse``.
+        """
+        issuer = UnexpectedResponseRedemption()
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
+
+        d = redeemer.redeemWithCounter(
+            voucher,
+            counter,
+            random_tokens,
+        )
+
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        UnexpectedResponse(
+                            INTERNAL_SERVER_ERROR,
+                            b"Sorry, this server does not behave well.",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
     def test_redemption_denied_alreadyspent(self, voucher, counter, extra_tokens):
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
@@ -825,6 +861,16 @@ class _StubAgent(object):
 
 def stub_agent():
     return _StubAgent()
+
+
+class UnexpectedResponseRedemption(Resource):
+    """
+    An ``UnexpectedResponseRedemption`` simulates the Ristretto redemption
+    server but always returns a non-JSON error response.
+    """
+    def render_POST(self, request):
+        request.setResponseCode(INTERNAL_SERVER_ERROR)
+        return b"Sorry, this server does not behave well."
 
 
 class AlreadySpentRedemption(Resource):

@@ -103,6 +103,15 @@ from .model import (
 
 RETRY_INTERVAL = timedelta(milliseconds=1)
 
+@attr.s
+class UnexpectedResponse(Exception):
+    """
+    The issuer responded in an unexpected and unhandled way.
+    """
+    code = attr.ib()
+    body = attr.ib()
+
+
 class AlreadySpent(Exception):
     """
     An attempt was made to redeem a voucher which has already been redeemed.
