@@ -33,6 +33,7 @@ from functools import (
 )
 from json import (
     dumps,
+    loads,
 )
 from datetime import (
     timedelta,
@@ -75,7 +76,7 @@ from twisted.web.client import (
     Agent,
 )
 from treq import (
-    json_content,
+    content,
 )
 from treq.client import (
     HTTPClient,
@@ -533,11 +534,12 @@ class RistrettoRedeemer(object):
             }),
             headers={b"content-type": b"application/json"},
         )
+        response_body = yield content(response)
+
         try:
-            result = yield json_content(response)
+            result = loads(response_body)
         except ValueError:
-            self._log.failure("Parsing redeem response failed", response=response)
-            raise
+            raise UnexpectedResponse(response.code, response_body)
 
         success = result.get(u"success", False)
         if not success:
