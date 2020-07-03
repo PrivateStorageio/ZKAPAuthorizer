@@ -944,8 +944,8 @@ class PaymentController(object):
             self._unpaid[voucher] = self.store.now()
         else:
             self._log.error(
-                "Redeeming random tokens for a voucher ({voucher}) failed: {reason}",
-                reason=reason,
+                "Redeeming random tokens for a voucher ({voucher}) failed: {reason!r}",
+                reason=reason.value,
                 voucher=voucher,
             )
             self._error[voucher] = model_Error(
