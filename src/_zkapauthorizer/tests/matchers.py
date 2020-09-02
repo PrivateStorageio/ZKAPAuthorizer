@@ -38,11 +38,19 @@ from testtools.matchers import (
     Always,
     MatchesAll,
     MatchesAny,
+    MatchesStructure,
     GreaterThan,
     LessThan,
     Equals,
     AfterPreprocessing,
     AllMatch,
+)
+from testtools.twistedsupport import (
+    succeeded,
+)
+
+from treq import (
+    content,
 )
 
 from ._exception import (
@@ -173,4 +181,29 @@ def odd():
     return AfterPreprocessing(
         lambda n: n % 2,
         Equals(1),
+    )
+
+
+def matches_response(code_matcher=Always(), headers_matcher=Always(), body_matcher=Always()):
+    """
+    Match a Treq response object with certain code and body.
+
+    :param Matcher code_matcher: A matcher to apply to the response code.
+
+    :param Matcher headers_matcher: A matcher to apply to the response headers
+        (a ``twisted.web.http_headers.Headers`` instance).
+
+    :param Matcher body_matcher: A matcher to apply to the response body.
+
+    :return: A matcher.
+    """
+    return MatchesAll(
+        MatchesStructure(
+            code=code_matcher,
+            headers=headers_matcher,
+        ),
+        AfterPreprocessing(
+            lambda response: content(response),
+            succeeded(body_matcher),
+        ),
     )
