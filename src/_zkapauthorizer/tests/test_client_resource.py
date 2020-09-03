@@ -32,7 +32,6 @@ from datetime import (
 )
 from json import (
     dumps,
-    loads,
 )
 from io import (
     BytesIO,
@@ -83,6 +82,7 @@ from hypothesis.strategies import (
     one_of,
     just,
     fixed_dictionaries,
+    sampled_from,
     lists,
     integers,
     binary,
@@ -90,6 +90,9 @@ from hypothesis.strategies import (
     datetimes,
 )
 
+from twisted.python.filepath import (
+    FilePath,
+)
 from twisted.internet.defer import (
     Deferred,
     maybeDeferred,
@@ -100,8 +103,12 @@ from twisted.internet.task import (
 )
 from twisted.web.http import (
     OK,
+    UNAUTHORIZED,
     NOT_FOUND,
     BAD_REQUEST,
+)
+from twisted.web.http_headers import (
+    Headers,
 )
 from twisted.web.resource import (
     IResource,
@@ -148,9 +155,15 @@ from .strategies import (
     unblinded_tokens,
     vouchers,
     requests,
+    request_paths,
+    api_auth_tokens,
 )
 from .matchers import (
     Provides,
+    matches_response,
+)
+from .json import (
+    loads,
 )
 
 # A small number of tokens to work with in the tests.
@@ -168,7 +181,6 @@ def uncooperator(started=True):
     )
 
 
-
 def is_not_json(bytestring):
     """
     :param bytes bytestring: A candidate byte string to inspect.
@@ -180,6 +192,7 @@ def is_not_json(bytestring):
     except:
         return True
     return False
+
 
 def not_vouchers():
     """
@@ -198,6 +211,7 @@ def not_vouchers():
             lambda voucher: u"/" + voucher[1:],
         ),
     )
+
 
 def is_urlsafe_base64(text):
     """
@@ -255,11 +269,98 @@ def root_from_config(config, now):
     )
 
 
+def authorized_request(api_auth_token, agent, method, uri, data=None):
+    """
+    Issue a request with the required token-based authorization header value.
+
+    :param bytes api_auth_token: The API authorization token to include.
+
+    :param IAgent agent: The agent to use to issue the request.
+
+    :param bytes method: The HTTP method for the request.
+
+    :param bytes uri: The URI for the request.
+
+    :param BytesIO|None data: If not ``None``, the request body.
+
+    :return: A ``Deferred`` like the one returned by ``IAgent.request``.
+    """
+    if data is None:
+        bodyProducer = None
+    else:
+        bodyProducer = FileBodyProducer(data, cooperator=uncooperator())
+    return agent.request(
+        method,
+        uri,
+        headers=Headers({
+            "authorization": ["tahoe-lafs {}".format(api_auth_token)],
+        }),
+        bodyProducer=bodyProducer,
+    )
+
+
+def get_config_with_api_token(tempdir, get_config, api_auth_token):
+    """
+    Get a ``_Config`` object.
+
+    :param TempDir tempdir: A temporary directory in which to create the
+        Tahoe-LAFS node associated with the configuration.
+
+    :param (bytes -> bytes -> _Config) get_config: A function which takes a
+        node directory and a Foolscap "portnum" filename and returns the
+        configuration object.
+
+    :param bytes api_auth_token: The HTTP API authorization token to write to
+        the node directory.
+    """
+    FilePath(tempdir.join(b"tahoe", b"private")).makedirs()
+    config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+    config.write_private_config(b"api_auth_token", api_auth_token)
+    return config
+
+
 class ResourceTests(TestCase):
     """
     General tests for the resources exposed by the plugin.
     """
-    @given(tahoe_configs(), requests(just([u"unblinded-token"]) | just([u"voucher"])))
+    @given(
+        tahoe_configs(),
+        request_paths(),
+    )
+    def test_unauthorized(self, get_config, path):
+        """
+        A request for any resource without the required authorization token
+        receives a 401 response.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        requesting = agent.request(
+            b"GET",
+            b"http://127.0.0.1/" + b"/".join(path),
+        )
+        responses = []
+        requesting.addCallback(responses.append)
+        self.assertThat(
+            requesting,
+            succeeded(Always()),
+        )
+        [response] = responses
+
+        self.assertThat(
+            response.code,
+            Equals(UNAUTHORIZED),
+        )
+
+    @given(
+        tahoe_configs(),
+        requests(sampled_from([
+            [b"unblinded-token"],
+            [b"voucher"],
+            [b"version"],
+        ])),
+    )
     def test_reachable(self, get_config, request):
         """
         A resource is reachable at a child of the resource returned by
@@ -273,25 +374,39 @@ class ResourceTests(TestCase):
             Provides([IResource]),
         )
 
-    @given(tahoe_configs())
-    def test_version(self, get_config):
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_version(self, get_config, api_auth_token):
         """
         The ZKAPAuthorizer package version is available in a JSON response to a
         **GET** to ``/version``.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/version",
         )
-        requesting.addCallback(readBody)
-        requesting.addCallback(loads)
         self.assertThat(
             requesting,
-            succeeded(Equals({"version": zkapauthorizer_version})),
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(OK),
+                    body_matcher=AfterPreprocessing(
+                        loads,
+                        Equals({"version": zkapauthorizer_version}),
+                    ),
+                ),
+            ),
         )
 
 
@@ -322,33 +437,35 @@ class UnblindedTokenTests(TestCase):
 
     @given(
         tahoe_configs(),
+        api_auth_tokens(),
         vouchers(),
         lists(unblinded_tokens(), unique=True, min_size=1, max_size=1000),
     )
-    def test_post(self, get_config, voucher, unblinded_tokens):
+    def test_post(self, get_config, api_auth_token, voucher, unblinded_tokens):
         """
         When the unblinded token collection receives a **POST**, the unblinded
         tokens in the request body are inserted into the system and an OK
         response is generated.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-        root = root_from_config(config, datetime.now)
-
-
-        agent = RequestTraversalAgent(root)
-        producer = FileBodyProducer(
-            BytesIO(dumps({u"unblinded-tokens": list(
-                token.unblinded_token
-                for token
-                in unblinded_tokens
-            )})),
-            cooperator=uncooperator(),
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
         )
-        requesting = agent.request(
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        data = BytesIO(dumps({u"unblinded-tokens": list(
+            token.unblinded_token
+            for token
+            in unblinded_tokens
+        )}))
+
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"POST",
             b"http://127.0.0.1/unblinded-token",
-            bodyProducer=producer,
+            data=data,
         )
         self.assertThat(
             requesting,
@@ -370,18 +487,22 @@ class UnblindedTokenTests(TestCase):
 
     @given(
         tahoe_configs(),
+        api_auth_tokens(),
         vouchers(),
         maybe_extra_tokens(),
     )
-    def test_get(self, get_config, voucher, extra_tokens):
+    def test_get(self, get_config, api_auth_token, voucher, extra_tokens):
         """
         When the unblinded token collection receives a **GET**, the response is
         the total number of unblinded tokens in the system, the unblinded
         tokens themselves, and information about tokens spent on recent lease
         maintenance activity.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         if extra_tokens is None:
             num_tokens = 0
@@ -396,7 +517,9 @@ class UnblindedTokenTests(TestCase):
             )
 
         agent = RequestTraversalAgent(root)
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/unblinded-token",
         )
@@ -409,15 +532,24 @@ class UnblindedTokenTests(TestCase):
             succeeded_with_unblinded_tokens(num_tokens, num_tokens),
         )
 
-    @given(tahoe_configs(), vouchers(), maybe_extra_tokens(), integers(min_value=0))
-    def test_get_limit(self, get_config, voucher, extra_tokens, limit):
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        vouchers(),
+        maybe_extra_tokens(),
+        integers(min_value=0),
+    )
+    def test_get_limit(self, get_config, api_auth_token, voucher, extra_tokens, limit):
         """
         When the unblinded token collection receives a **GET** with a **limit**
         query argument, it returns no more unblinded tokens than indicated by
         the limit.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
 
         if extra_tokens is None:
@@ -433,7 +565,9 @@ class UnblindedTokenTests(TestCase):
             )
 
         agent = RequestTraversalAgent(root)
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/unblinded-token?limit={}".format(limit),
         )
@@ -449,15 +583,24 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), vouchers(), maybe_extra_tokens(), text(max_size=64))
-    def test_get_position(self, get_config, voucher, extra_tokens, position):
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        vouchers(),
+        maybe_extra_tokens(),
+        text(max_size=64),
+    )
+    def test_get_position(self, get_config, api_auth_token, voucher, extra_tokens, position):
         """
         When the unblinded token collection receives a **GET** with a **position**
         query argument, it returns all unblinded tokens which sort greater
         than the position and no others.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
 
         if extra_tokens is None:
@@ -473,7 +616,9 @@ class UnblindedTokenTests(TestCase):
             )
 
         agent = RequestTraversalAgent(root)
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/unblinded-token?position={}".format(
                 quote(position.encode("utf-8"), safe=b""),
@@ -497,8 +642,13 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), vouchers(), integers(min_value=0, max_value=100))
-    def test_get_order_matches_use_order(self, get_config, voucher, extra_tokens):
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        vouchers(),
+        integers(min_value=0, max_value=100),
+    )
+    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, extra_tokens):
         """
         The first unblinded token returned in a response to a **GET** request is
         the first token to be used to authorize a storage request.
@@ -512,7 +662,9 @@ class UnblindedTokenTests(TestCase):
             return new_d
 
         def get_tokens():
-            d = agent.request(
+            d = authorized_request(
+                api_auth_token,
+                agent,
                 b"GET",
                 b"http://127.0.0.1/unblinded-token",
             )
@@ -527,8 +679,11 @@ class UnblindedTokenTests(TestCase):
                 root.store.get_unblinded_tokens(1),
             )
 
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
 
         num_tokens = root.controller.num_redemption_groups + extra_tokens
@@ -558,6 +713,7 @@ class UnblindedTokenTests(TestCase):
 
     @given(
         tahoe_configs(),
+        api_auth_tokens(),
         lists(
             lists(
                 integers(min_value=0, max_value=2 ** 63 - 1),
@@ -566,13 +722,16 @@ class UnblindedTokenTests(TestCase):
         ),
         datetimes(),
     )
-    def test_latest_lease_maintenance_spending(self, get_config, size_observations, now):
+    def test_latest_lease_maintenance_spending(self, get_config, api_auth_token, size_observations, now):
         """
         The most recently completed record of lease maintenance spending activity
         is reported in the response to a **GET** request.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, lambda: now)
 
         # Put some activity into it.
@@ -584,7 +743,9 @@ class UnblindedTokenTests(TestCase):
         activity.finish()
 
         agent = RequestTraversalAgent(root)
-        d = agent.request(
+        d = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/unblinded-token",
         )
@@ -699,25 +860,27 @@ class VoucherTests(TestCase):
         self.useFixture(CaptureTwistedLogs())
 
 
-    @given(tahoe_configs(), vouchers())
-    def test_put_voucher(self, get_config, voucher):
+    @given(tahoe_configs(), api_auth_tokens(), vouchers())
+    def test_put_voucher(self, get_config, api_auth_token, voucher):
         """
         When a voucher is ``PUT`` to ``VoucherCollection`` it is passed in to the
         redemption model object for handling and an ``OK`` response is
         returned.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        producer = FileBodyProducer(
-            BytesIO(dumps({u"voucher": voucher})),
-            cooperator=uncooperator(),
-        )
-        requesting = agent.request(
+        data = BytesIO(dumps({u"voucher": voucher}))
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            bodyProducer=producer,
+            data=data,
         )
         self.addDetail(
             u"requesting result",
@@ -730,25 +893,26 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), invalid_bodies())
-    def test_put_invalid_body(self, get_config, body):
+    @given(tahoe_configs(), api_auth_tokens(), invalid_bodies())
+    def test_put_invalid_body(self, get_config, api_auth_token, body):
         """
         If the body of a ``PUT`` to ``VoucherCollection`` does not consist of an
         object with a single *voucher* property then the response is *BAD
         REQUEST*.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        producer = FileBodyProducer(
-            BytesIO(body),
-            cooperator=uncooperator(),
-        )
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            bodyProducer=producer,
+            data=BytesIO(body),
         )
         self.addDetail(
             u"requesting result",
@@ -761,14 +925,17 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), not_vouchers())
-    def test_get_invalid_voucher(self, get_config, not_voucher):
+    @given(tahoe_configs(), api_auth_tokens(), not_vouchers())
+    def test_get_invalid_voucher(self, get_config, api_auth_token, not_voucher):
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
         child of ``VoucherCollection`` the response is **BAD REQUEST**.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         url = u"http://127.0.0.1/voucher/{}".format(
@@ -777,7 +944,9 @@ class VoucherTests(TestCase):
                 safe=b"",
             ).decode("utf-8"),
         ).encode("ascii")
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             url,
         )
@@ -789,18 +958,23 @@ class VoucherTests(TestCase):
         )
 
 
-    @given(tahoe_configs(), vouchers())
-    def test_get_unknown_voucher(self, get_config, voucher):
+    @given(tahoe_configs(), api_auth_tokens(), vouchers())
+    def test_get_unknown_voucher(self, get_config, api_auth_token, voucher):
         """
         When a voucher is requested with a ``GET`` to a child of
         ``VoucherCollection`` the response is **NOT FOUND** if the voucher
         hasn't previously been submitted with a ``PUT``.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        requesting = agent.request(
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             u"http://127.0.0.1/voucher/{}".format(voucher).encode("ascii"),
         )
@@ -811,8 +985,13 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_nonredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_redeeming(self, get_config, now, voucher):
+    @given(
+        tahoe_configs(client_nonredeemer_configurations()),
+        api_auth_tokens(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_get_known_voucher_redeeming(self, get_config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -821,6 +1000,7 @@ class VoucherTests(TestCase):
         """
         return self._test_get_known_voucher(
             get_config,
+            api_auth_token,
             now,
             voucher,
             MatchesStructure(
@@ -834,8 +1014,13 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_dummyredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_redeemed(self, get_config, now, voucher):
+    @given(
+        tahoe_configs(client_dummyredeemer_configurations()),
+        api_auth_tokens(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_get_known_voucher_redeemed(self, get_config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -844,6 +1029,7 @@ class VoucherTests(TestCase):
         """
         return self._test_get_known_voucher(
             get_config,
+            api_auth_token,
             now,
             voucher,
             MatchesStructure(
@@ -858,8 +1044,13 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_doublespendredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_doublespend(self, get_config, now, voucher):
+    @given(
+        tahoe_configs(client_doublespendredeemer_configurations()),
+        api_auth_tokens(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_get_known_voucher_doublespend(self, get_config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -869,6 +1060,7 @@ class VoucherTests(TestCase):
         """
         return self._test_get_known_voucher(
             get_config,
+            api_auth_token,
             now,
             voucher,
             MatchesStructure(
@@ -881,8 +1073,13 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_unpaidredeemer_configurations()), datetimes(), vouchers())
-    def test_get_known_voucher_unpaid(self, get_config, now, voucher):
+    @given(
+        tahoe_configs(client_unpaidredeemer_configurations()),
+        api_auth_tokens(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_get_known_voucher_unpaid(self, get_config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -892,6 +1089,7 @@ class VoucherTests(TestCase):
         """
         return self._test_get_known_voucher(
             get_config,
+            api_auth_token,
             now,
             voucher,
             MatchesStructure(
@@ -904,8 +1102,13 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)), datetimes(), vouchers())
-    def test_get_known_voucher_error(self, get_config, now, voucher):
+    @given(
+        tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)),
+        api_auth_tokens(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_get_known_voucher_error(self, get_config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -915,6 +1118,7 @@ class VoucherTests(TestCase):
         """
         return self._test_get_known_voucher(
             get_config,
+            api_auth_token,
             now,
             voucher,
             MatchesStructure(
@@ -928,7 +1132,7 @@ class VoucherTests(TestCase):
             ),
         )
 
-    def _test_get_known_voucher(self, get_config, now, voucher, voucher_matcher):
+    def _test_get_known_voucher(self, get_config, api_auth_token, now, voucher, voucher_matcher):
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
@@ -936,19 +1140,19 @@ class VoucherTests(TestCase):
         :param voucher_matcher: A matcher which matches the voucher expected
             to be returned by the ``GET``.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, lambda: now)
         agent = RequestTraversalAgent(root)
-
-        producer = FileBodyProducer(
-            BytesIO(dumps({u"voucher": voucher})),
-            cooperator=uncooperator(),
-        )
-        putting = agent.request(
+        putting = authorized_request(
+            api_auth_token,
+            agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            bodyProducer=producer,
+            data=BytesIO(dumps({u"voucher": voucher})),
         )
         self.assertThat(
             putting,
@@ -957,7 +1161,9 @@ class VoucherTests(TestCase):
             ),
         )
 
-        getting = agent.request(
+        getting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             u"http://127.0.0.1/voucher/{}".format(
                 quote(
@@ -984,14 +1190,20 @@ class VoucherTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), lists(vouchers(), unique=True))
-    def test_list_vouchers(self, get_config, now, vouchers):
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        datetimes(),
+        lists(vouchers(), unique=True),
+    )
+    def test_list_vouchers(self, get_config, api_auth_token, now, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
         """
         return self._test_list_vouchers(
             get_config,
+            api_auth_token,
             now,
             vouchers,
             Equals({
@@ -1014,16 +1226,18 @@ class VoucherTests(TestCase):
 
     @given(
         tahoe_configs(client_unpaidredeemer_configurations()),
+        api_auth_tokens(),
         datetimes(),
         lists(vouchers(), unique=True),
     )
-    def test_list_vouchers_transient_states(self, get_config, now, vouchers):
+    def test_list_vouchers_transient_states(self, get_config, api_auth_token, now, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
         """
         return self._test_list_vouchers(
             get_config,
+            api_auth_token,
             now,
             vouchers,
             Equals({
@@ -1042,27 +1256,29 @@ class VoucherTests(TestCase):
             }),
         )
 
-    def _test_list_vouchers(self, get_config, now, vouchers, match_response_object):
-        # Hypothesis causes our test case instances to be re-used many times
-        # between setUp and tearDown.  Avoid re-using the same temporary
-        # directory for every Hypothesis iteration because this test leaves
-        # state behind that invalidates future iterations.
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+    def _test_list_vouchers(self, get_config, api_auth_token, now, vouchers, match_response_object):
+        config = get_config_with_api_token(
+            # Hypothesis causes our test case instances to be re-used many
+            # times between setUp and tearDown.  Avoid re-using the same
+            # temporary directory for every Hypothesis iteration because this
+            # test leaves state behind that invalidates future iterations.
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, lambda: now)
         agent = RequestTraversalAgent(root)
 
         note("{} vouchers".format(len(vouchers)))
 
         for voucher in vouchers:
-            producer = FileBodyProducer(
-                BytesIO(dumps({u"voucher": voucher})),
-                cooperator=uncooperator(),
-            )
-            putting = agent.request(
+            data = BytesIO(dumps({u"voucher": voucher}))
+            putting = authorized_request(
+                api_auth_token,
+                agent,
                 b"PUT",
                 b"http://127.0.0.1/voucher",
-                bodyProducer=producer,
+                data=data,
             )
             self.assertThat(
                 putting,
@@ -1071,7 +1287,9 @@ class VoucherTests(TestCase):
                 ),
             )
 
-        getting = agent.request(
+        getting = authorized_request(
+            api_auth_token,
+            agent,
             b"GET",
             b"http://127.0.0.1/voucher",
         )

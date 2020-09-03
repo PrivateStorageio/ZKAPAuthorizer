@@ -60,6 +60,10 @@ from .controller import (
     get_redeemer,
 )
 
+from .private import (
+    create_private_tree,
+)
+
 # The number of tokens to submit with a voucher redemption.
 NUM_TOKENS = 2 ** 15
 
@@ -102,9 +106,26 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
     if default_token_count is None:
         default_token_count = NUM_TOKENS
     controller = PaymentController(store, redeemer, default_token_count)
-    root = Resource()
+    root = create_private_tree(
+        lambda: node_config.get_private_config(b"api_auth_token"),
+        authorizationless_resource_tree(store, controller),
+    )
     root.store = store
     root.controller = controller
+    return root
+
+
+def authorizationless_resource_tree(store, controller):
+    """
+    Create the full ZKAPAuthorizer client plugin resource hierarchy with no
+    authorization applied.
+
+    :param VoucherStore store: The store to use.
+    :param PaymentController controller: The payment controller to use.
+
+    :return IResource: The root of the resource hierarchy.
+    """
+    root = Resource()
     root.putChild(
         b"voucher",
         _VoucherCollection(

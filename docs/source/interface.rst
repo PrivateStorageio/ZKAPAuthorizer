@@ -7,6 +7,18 @@ Client
 When enabled in a Tahoe-LAFS client node,
 ZKAPAuthorizer publishes an HTTP-based interface inside the main Tahoe-LAFS web interface.
 
+All endpoints in the interface require an authorization token.
+Without the token,
+requests will receive an HTTP UNAUTHORIZED (401) response.
+
+To be authorized to access the resources at the endpoints,
+requests must include the correct secret token in the value for **Authorization** in the request header.
+For example, if the secret token is ``ABCDEF``::
+
+  Authorization: tahoe-lafs ABCDEF
+
+The correct value for the token can be read from the Tahoe-LAFS node's ``private/api_auth_token`` file.
+
 ``GET /storage-plugins/privatestorageio-zkapauthz-v1/version``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
