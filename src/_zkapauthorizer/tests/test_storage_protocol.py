@@ -168,6 +168,18 @@ class RequiredPassesTests(TestCase):
         )
 
 
+def is_successful_write():
+    """
+    Match the successful result of a ``slot_testv_and_readv_and_writev`` call.
+    """
+    return succeeded(
+        AfterPreprocessing(
+            lambda result: result[0],
+            Equals(True),
+        ),
+    )
+
+
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -946,24 +958,21 @@ class ShareTests(TestCase):
             )
 
         def write():
-            return extract_result(
-                self.client.slot_testv_and_readv_and_writev(
-                    storage_index,
-                    secrets=secrets,
-                    tw_vectors={
-                        k: v.for_call()
-                        for (k, v)
-                        in test_and_write_vectors_for_shares.items()
-                    },
-                    r_vector=[],
-                ),
+            return self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v)
+                    in test_and_write_vectors_for_shares.items()
+                },
+                r_vector=[],
             )
 
         # Perform an initial write so there is something to rewrite.
-        wrote, read = write()
         self.assertThat(
-            wrote,
-            Equals(True),
+            write(),
+            is_successful_write(),
             u"Server rejected a write to a new mutable slot",
         )
 
@@ -971,10 +980,9 @@ class ShareTests(TestCase):
         leases_before = leases()
 
         # Now perform the rewrite.
-        wrote, read = write()
         self.assertThat(
-            wrote,
-            Equals(True),
+            write(),
+            is_successful_write(),
             u"Server rejected rewrite of an existing mutable slot",
         )
 
@@ -982,6 +990,87 @@ class ShareTests(TestCase):
         self.assertThat(
             leases(),
             Equals(leases_before),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        sharenum=sharenums(),
+        size=sizes(),
+        clock=clocks(),
+        write_enabler=write_enabler_secrets(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_rewrite_renews_expired_lease(
+            self,
+            storage_index,
+            clock,
+            sharenum,
+            size,
+            write_enabler,
+            renew_secret,
+            cancel_secret,
+            test_and_write_vectors_for_shares,
+    ):
+        """
+        When mutable share data with an expired lease is rewritten using
+        *slot_testv_and_readv_and_writev* a new lease is paid for and granted.
+        """
+        # Hypothesis causes our storage server to be used many times.  Clean
+        # up between iterations.
+        cleanup_storage_server(self.anonymous_storage_server)
+
+        # Make the client and server use our clock.
+        self.server._clock = clock
+        self.client._clock = clock
+
+        secrets = (write_enabler, renew_secret, cancel_secret)
+
+        def write():
+            return self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v)
+                    in test_and_write_vectors_for_shares.items()
+                },
+                r_vector=[],
+            )
+
+        # anonymous_storage_server uses time.time() to assign leases,
+        # unfortunately.
+        patch = MonkeyPatch("time.time", clock.seconds)
+        try:
+            patch.setUp()
+
+            # Create a share we can toy with.
+            self.assertThat(write(), is_successful_write())
+
+            # Advance time by more than a lease period so the lease is no
+            # longer valid.
+            clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
+
+            self.assertThat(write(), is_successful_write())
+        finally:
+            patch.cleanUp()
+
+        # Not only should the write above succeed but the lease should now be
+        # marked as expiring one additional lease period into the future.
+        self.assertThat(
+            self.server.remote_stat_shares([storage_index]),
+            Equals([{
+                num: ShareStat(
+                    size=get_implied_data_length(
+                        test_and_write_vectors_for_shares[num].write_vector,
+                        test_and_write_vectors_for_shares[num].new_length,
+                    ),
+                    lease_expiration=int(clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
+                )
+                for num
+                in test_and_write_vectors_for_shares
+            }]),
         )
 
     @given(
