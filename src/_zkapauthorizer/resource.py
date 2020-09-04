@@ -144,7 +144,17 @@ def authorizationless_resource_tree(store, controller):
         b"version",
         _ProjectVersion(),
     )
+    root.putChild(
+        b"calculate-price",
+        _CalculatePrice(),
+    )
     return root
+
+
+class _CalculatePrice(Resource):
+    """
+    This resource exposes a storage price calculator.
+    """
 
 
 def application_json(request):

@@ -106,6 +106,8 @@ from twisted.web.http import (
     UNAUTHORIZED,
     NOT_FOUND,
     BAD_REQUEST,
+    NOT_ALLOWED,
+    NOT_IMPLEMENTED,
 )
 from twisted.web.http_headers import (
     Headers,
@@ -1305,6 +1307,43 @@ class VoucherTests(TestCase):
                             match_response_object,
                         ),
                     ),
+                ),
+            ),
+        )
+
+
+class CalculatePriceTests(TestCase):
+    """
+    Tests relating to ``/calculate-price`` as implemented by the
+    ``_zkapauthorizer.resource`` module.
+    """
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        sampled_from([b"GET", b"PUT", b"PATCH", b"OPTIONS", b"FOO"]),
+    )
+    def test_wrong_method(self, get_config, api_auth_token, method):
+        """
+        When approached with a method other than **POST** the response code is
+        METHOD NOT ALLOWED.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        self.assertThat(
+            authorized_request(
+                api_auth_token,
+                agent,
+                method,
+                b"http://127.0.0.1/calculate-price",
+            ),
+            succeeded(
+                matches_response(
+                    code_matcher=MatchesAny(Equals(NOT_ALLOWED), Equals(NOT_IMPLEMENTED)),
                 ),
             ),
         )
