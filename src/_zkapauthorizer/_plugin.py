@@ -141,7 +141,7 @@ class ZKAPAuthorizer(object):
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         kwargs = configuration.copy()
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
-        pass_value = kwargs.pop(u"pass-value", BYTES_PER_PASS)
+        pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
         signing_key = SigningKey.decode_base64(
             FilePath(
                 kwargs.pop(u"ristretto-signing-key-path"),
