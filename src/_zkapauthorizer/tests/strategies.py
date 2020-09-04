@@ -216,10 +216,19 @@ def server_configurations(signing_key_path):
     :param unicode signing_key_path: A value to insert for the
         **ristretto-signing-key-path** item.
     """
-    return just({
-        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-        u"ristretto-signing-key-path": signing_key_path.path,
-    })
+    return one_of(
+        fixed_dictionaries({
+            u"pass-value":
+            # The configuration is ini so everything is always a byte string!
+            integers(min_value=1).map(bytes),
+        }),
+        just({}),
+    ).map(
+        lambda config: config.update({
+            u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+            u"ristretto-signing-key-path": signing_key_path.path,
+        }) or config,
+    )
 
 
 def client_ristrettoredeemer_configurations():
