@@ -12,6 +12,10 @@ jobs:
           - "2.7"
 
     steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: "0"
+
       # Get tags not fetched by the checkout action, needed for auto-versioning.
     - name: "Finish checkout"
       run: |
