@@ -137,7 +137,7 @@ The response is **OK** with ``application/json`` content-type response body like
 
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
 
-``GET /storage-plugins/privatestorageio/zkapauthz-v1/unblinded-token``
+``GET /storage-plugins/privatestorageio-zkapauthz-v1/unblinded-token``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve unused unblinded tokens present in the node's database.
@@ -165,7 +165,7 @@ If it has run,
  * ``when``: associated with an ISO8601 datetime string giving the approximate time the process ran
  * ``count``: associated with a number giving the number of passes which would need to be spent to renew leases on all stored objects seen during the lease maintenance activity
 
-``POST /storage-plugins/privatestorageio/zkapauthz-v1/unblinded-token``
+``POST /storage-plugins/privatestorageio-zkapauthz-v1/unblinded-token``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to insert new unblinded tokens into the node's database.
