@@ -88,6 +88,9 @@ from hypothesis.strategies import (
     binary,
     text,
     datetimes,
+    builds,
+    tuples,
+    dictionaries,
 )
 
 from twisted.python.filepath import (
@@ -106,7 +109,6 @@ from twisted.web.http import (
     UNAUTHORIZED,
     NOT_FOUND,
     BAD_REQUEST,
-    NOT_ALLOWED,
     NOT_IMPLEMENTED,
 )
 from twisted.web.http_headers import (
@@ -145,6 +147,8 @@ from ..resource import (
 
 from ..storage_common import (
     required_passes,
+    get_configured_pass_value,
+    get_configured_lease_duration,
 )
 
 from .strategies import (
@@ -163,6 +167,7 @@ from .strategies import (
 from .matchers import (
     Provides,
     matches_response,
+    between,
 )
 from .json import (
     loads,
@@ -271,7 +276,7 @@ def root_from_config(config, now):
     )
 
 
-def authorized_request(api_auth_token, agent, method, uri, data=None):
+def authorized_request(api_auth_token, agent, method, uri, headers=None, data=None):
     """
     Issue a request with the required token-based authorization header value.
 
@@ -283,6 +288,10 @@ def authorized_request(api_auth_token, agent, method, uri, data=None):
 
     :param bytes uri: The URI for the request.
 
+    :param ({bytes: [bytes]})|None headers: If not ``None``, extra request
+        headers to include.  The **Authorization** header will be overwritten
+        if it is present.
+
     :param BytesIO|None data: If not ``None``, the request body.
 
     :return: A ``Deferred`` like the one returned by ``IAgent.request``.
@@ -291,12 +300,18 @@ def authorized_request(api_auth_token, agent, method, uri, data=None):
         bodyProducer = None
     else:
         bodyProducer = FileBodyProducer(data, cooperator=uncooperator())
+    if headers is None:
+        headers = Headers()
+    else:
+        headers = Headers(headers)
+    headers.setRawHeaders(
+        u"authorization",
+        [b"tahoe-lafs {}".format(api_auth_token)],
+    )
     return agent.request(
         method,
         uri,
-        headers=Headers({
-            "authorization": ["tahoe-lafs {}".format(api_auth_token)],
-        }),
+        headers=headers,
         bodyProducer=bodyProducer,
     )
 
@@ -1312,20 +1327,153 @@ class VoucherTests(TestCase):
         )
 
 
+def mime_types(blacklist=None):
+    """
+    Build MIME types as b"major/minor" byte strings.
+
+    :param set|None blacklist: If not ``None``, MIME types to exclude from the
+        result.
+    """
+    if blacklist is None:
+        blacklist = set()
+    return tuples(
+        text(),
+        text(),
+    ).map(
+        b"/".join,
+    ).filter(
+        lambda content_type: content_type not in blacklist,
+    )
+
+
+@attr.s
+class Request(object):
+    """
+    Represent some of the parameters of an HTTP request.
+    """
+    method = attr.ib()
+    headers = attr.ib()
+    data = attr.ib()
+
+
+def bad_calculate_price_requests():
+    """
+    Build Request instances describing requests which are not allowed at the
+    ``/calculate-price`` endpoint.
+    """
+    good_methods = just(b"POST")
+    bad_methods = sampled_from([
+        b"GET",
+        b"HEAD",
+        b"PUT",
+        b"PATCH",
+        b"OPTIONS",
+        b"FOO",
+    ])
+
+    good_headers = just({b"content-type": [b"application/json"]})
+    bad_headers = fixed_dictionaries({
+        b"content-type": mime_types(
+            blacklist={b"application/json"},
+        ).map(
+            lambda content_type: [content_type],
+        ),
+    })
+
+    good_version = just(1)
+    bad_version = one_of(
+        text(),
+        lists(integers()),
+        integers(max_value=0),
+        integers(min_value=2),
+    )
+
+    good_sizes = lists(integers(min_value=0))
+    bad_sizes = one_of(
+        integers(),
+        text(),
+        lists(text(), min_size=1),
+        dictionaries(text(), text()),
+        lists(integers(max_value=-1), min_size=1),
+    )
+
+    good_data = fixed_dictionaries({
+        u"version": good_version,
+        u"sizes": good_sizes,
+    }).map(dumps)
+
+    bad_data_version = fixed_dictionaries({
+        u"version": bad_version,
+        u"sizes": good_sizes,
+    }).map(dumps)
+
+    bad_data_sizes = fixed_dictionaries({
+        u"version": good_version,
+        u"sizes": bad_sizes,
+    }).map(dumps)
+
+    bad_data_other = dictionaries(
+        text(),
+        integers(),
+    ).map(dumps)
+
+    bad_data_junk = binary()
+
+    good_fields = {
+        "method": good_methods,
+        "headers": good_headers,
+        "data": good_data,
+    }
+
+    bad_choices = [
+        ("method", bad_methods),
+        ("headers", bad_headers),
+        ("data", bad_data_version),
+        ("data", bad_data_sizes),
+        ("data", bad_data_other),
+        ("data", bad_data_junk),
+    ]
+
+    def merge(fields, key, value):
+        fields = fields.copy()
+        fields[key] = value
+        return fields
+
+    return sampled_from(
+        bad_choices,
+    ).flatmap(
+        lambda bad_choice: builds(
+            Request,
+            **merge(good_fields, *bad_choice)
+        ),
+    )
+
+
 class CalculatePriceTests(TestCase):
     """
     Tests relating to ``/calculate-price`` as implemented by the
     ``_zkapauthorizer.resource`` module.
     """
+    url = b"http://127.0.0.1/calculate-price"
+
     @given(
         tahoe_configs(),
         api_auth_tokens(),
-        sampled_from([b"GET", b"PUT", b"PATCH", b"OPTIONS", b"FOO"]),
+        bad_calculate_price_requests(),
     )
-    def test_wrong_method(self, get_config, api_auth_token, method):
+    def test_bad_request(self, get_config, api_auth_token, bad_request):
         """
-        When approached with a method other than **POST** the response code is
-        METHOD NOT ALLOWED.
+        When approached with:
+
+          * a method other than POST
+          * a content-type other than **application/json**
+          * a request body which is not valid JSON
+          * a JSON request body without version and sizes properties
+          * a JSON request body without a version of 1
+          * a JSON request body with other properties
+          * or a JSON request body with sizes other than a list of integers
+
+        response code is not in the 200 range.
         """
         config = get_config_with_api_token(
             self.useFixture(TempDir()),
@@ -1338,12 +1486,70 @@ class CalculatePriceTests(TestCase):
             authorized_request(
                 api_auth_token,
                 agent,
-                method,
-                b"http://127.0.0.1/calculate-price",
+                bad_request.method,
+                self.url,
+                headers=bad_request.headers,
+                data=BytesIO(bad_request.data),
             ),
             succeeded(
                 matches_response(
-                    code_matcher=MatchesAny(Equals(NOT_ALLOWED), Equals(NOT_IMPLEMENTED)),
+                    code_matcher=MatchesAny(
+                        # It is fine to signal client errors
+                        between(400, 499),
+                        # It is fine to say we didn't implement the request
+                        # method (I guess - Twisted Web sort of forces it on
+                        # us, I'd rather have NOT ALLOWED for this case
+                        # instead...).  We don't want INTERNAL SERVER ERROR
+                        # though.
+                        Equals(NOT_IMPLEMENTED),
+                    ),
+                ),
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        lists(integers(min_value=0)),
+    )
+    def test_calculated_price(self, get_config, api_auth_token, sizes):
+        """
+        A well-formed request returns the price in ZKAPs as an integer and the
+        storage period (the minimum allowed) that they pay for.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+
+        expected_price = required_passes(
+            get_configured_pass_value(config),
+            sizes,
+        )
+
+        self.assertThat(
+            authorized_request(
+                api_auth_token,
+                agent,
+                b"POST",
+                self.url,
+                headers={b"content-type": [b"application/json"]},
+                data=BytesIO(dumps({u"version": 1, u"sizes": sizes})),
+            ),
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(OK),
+                    headers_matcher=application_json(),
+                    body_matcher=AfterPreprocessing(
+                        loads,
+                        Equals({
+                            u"price": expected_price,
+                            u"period": get_configured_lease_duration(config),
+                        }),
+                    ),
                 ),
             ),
         )

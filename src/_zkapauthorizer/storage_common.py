@@ -88,6 +88,18 @@ def get_configured_pass_value(node_config):
         default=BYTES_PER_PASS,
     ))
 
+
+def get_configured_lease_duration(node_config):
+    """
+    Just kidding.  Lease duration is hard-coded.
+
+    :return int: The number of seconds after which a newly acquired lease will
+        be valid.
+    """
+    # See lots of places in Tahoe-LAFS, eg src/allmydata/storage/server.py
+    return 31 * 24 * 60 * 60
+
+
 def required_passes(bytes_per_pass, share_sizes):
     """
     Calculate the number of passes that are required to store ``stored_bytes``

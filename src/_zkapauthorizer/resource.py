@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2019 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,6 +40,10 @@ from twisted.logger import (
 )
 from twisted.web.http import (
     BAD_REQUEST,
+    NOT_ALLOWED,
+)
+from twisted.web.server import (
+    NOT_DONE_YET,
 )
 from twisted.web.resource import (
     IResource,
@@ -53,6 +58,12 @@ from . import (
 
 from ._base64 import (
     urlsafe_b64decode,
+)
+
+from .storage_common import (
+    required_passes,
+    get_configured_pass_value,
+    get_configured_lease_duration,
 )
 
 from .controller import (
@@ -108,20 +119,27 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
     controller = PaymentController(store, redeemer, default_token_count)
     root = create_private_tree(
         lambda: node_config.get_private_config(b"api_auth_token"),
-        authorizationless_resource_tree(store, controller),
+        authorizationless_resource_tree(
+            store,
+            controller,
+            get_configured_pass_value(node_config),
+            get_configured_lease_duration(node_config),
+        ),
     )
     root.store = store
     root.controller = controller
     return root
 
 
-def authorizationless_resource_tree(store, controller):
+def authorizationless_resource_tree(store, controller, pass_value, lease_duration):
     """
     Create the full ZKAPAuthorizer client plugin resource hierarchy with no
     authorization applied.
 
     :param VoucherStore store: The store to use.
     :param PaymentController controller: The payment controller to use.
+    :param int pass_value: The bytes component of the bytes×time value of a single pass.
+    :param int lease_duration: The number of seconds a lease will be valid.
 
     :return IResource: The root of the resource hierarchy.
     """
@@ -146,7 +164,7 @@ def authorizationless_resource_tree(store, controller):
     )
     root.putChild(
         b"calculate-price",
-        _CalculatePrice(),
+        _CalculatePrice(pass_value, lease_duration),
     )
     return root
 
@@ -155,6 +173,86 @@ class _CalculatePrice(Resource):
     """
     This resource exposes a storage price calculator.
     """
+    allowedMethods = [b"POST"]
+
+    render_HEAD = render_GET = None
+
+    def __init__(self, pass_value, lease_period):
+        """
+        :param pass_value: See ``authorizationless_resource_tree``
+        :param lease_period: See ``authorizationless_resource_tree``
+        """
+        self._pass_value = pass_value
+        self._lease_period = lease_period
+        Resource.__init__(self)
+
+    def render_POST(self, request):
+        """
+        Calculate the price in ZKAPs to store or continue storing files specified
+        sizes.
+        """
+        if wrong_content_type(request, u"application/json"):
+            return NOT_DONE_YET
+
+        application_json(request)
+        payload = request.content.read()
+        try:
+            body_object = loads(payload)
+        except ValueError:
+            request.setResponseCode(BAD_REQUEST)
+            return dumps({
+                "error": "could not parse request body",
+            })
+
+        try:
+            version = body_object[u"version"]
+            sizes = body_object[u"sizes"]
+        except (TypeError, KeyError):
+            request.setResponseCode(BAD_REQUEST)
+            return dumps({
+                "error": "could not read `version` and `sizes` properties",
+            })
+
+        if version != 1:
+            request.setResponseCode(BAD_REQUEST)
+            return dumps({
+                "error": "did not find required version number 1 in request",
+            })
+
+        if not isinstance(sizes, list) or not all(isinstance(size, (int, long)) and size >= 0 for size in sizes):
+            request.setResponseCode(BAD_REQUEST)
+            return dumps({
+                "error": "did not find required positive integer sizes list in request",
+            })
+
+        application_json(request)
+        return dumps({
+            u"price": required_passes(self._pass_value, sizes),
+            u"period": self._lease_period,
+        })
+
+
+def wrong_content_type(request, required_type):
+    """
+    Check the content-type of a request and respond if it is incorrect.
+
+    :param request: The request object to check.
+
+    :param unicode required_type: The required content-type (eg
+        ``u"application/json"``).
+
+    :return bool: ``True`` if the content-type is wrong and an error response
+        has been generated.  ``False`` otherwise.
+    """
+    actual_type = request.requestHeaders.getRawHeaders(
+        u"content-type",
+        [None],
+    )[0]
+    if actual_type != required_type:
+        request.setResponseCode(NOT_ALLOWED)
+        request.finish()
+        return True
+    return False
 
 
 def application_json(request):
