@@ -102,8 +102,8 @@ def get_configured_lease_duration(node_config):
 
 def required_passes(bytes_per_pass, share_sizes):
     """
-    Calculate the number of passes that are required to store ``stored_bytes``
-    for one lease period.
+    Calculate the number of passes that are required to store shares of the
+    given sizes for one lease period.
 
     :param int bytes_per_pass: The number of bytes the storage of which for
         one lease period one pass covers.
