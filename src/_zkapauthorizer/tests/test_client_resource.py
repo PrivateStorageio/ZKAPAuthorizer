@@ -145,6 +145,10 @@ from ..resource import (
     from_configuration,
 )
 
+from ..pricecalculator import (
+    PriceCalculator,
+)
+
 from ..storage_common import (
     required_passes,
     get_configured_pass_value,
@@ -163,6 +167,7 @@ from .strategies import (
     requests,
     request_paths,
     api_auth_tokens,
+    share_parameters,
 )
 from .matchers import (
     Provides,
@@ -1508,15 +1513,25 @@ class CalculatePriceTests(TestCase):
         )
 
     @given(
-        tahoe_configs(),
+        # Make the share encoding parameters easily accessible without going
+        # through the Tahoe-LAFS configuration.
+        share_parameters().flatmap(
+            lambda params: tuples(
+                just(params),
+                tahoe_configs(shares=just(params)),
+            ),
+        ),
         api_auth_tokens(),
         lists(integers(min_value=0)),
     )
-    def test_calculated_price(self, get_config, api_auth_token, sizes):
+    def test_calculated_price(self, encoding_params_and_get_config, api_auth_token, sizes):
         """
         A well-formed request returns the price in ZKAPs as an integer and the
         storage period (the minimum allowed) that they pay for.
         """
+        encoding_params, get_config = encoding_params_and_get_config
+        shares_needed, shares_happy, shares_total = encoding_params
+
         config = get_config_with_api_token(
             self.useFixture(TempDir()),
             get_config,
@@ -1525,10 +1540,11 @@ class CalculatePriceTests(TestCase):
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
 
-        expected_price = required_passes(
-            get_configured_pass_value(config),
-            sizes,
-        )
+        expected_price = PriceCalculator(
+            shares_needed=shares_needed,
+            shares_total=shares_total,
+            pass_value=get_configured_pass_value(config),
+        ).calculate(sizes)
 
         self.assertThat(
             authorized_request(

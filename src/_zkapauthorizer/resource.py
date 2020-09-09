@@ -61,9 +61,14 @@ from ._base64 import (
 )
 
 from .storage_common import (
-    required_passes,
+    get_configured_shares_needed,
+    get_configured_shares_total,
     get_configured_pass_value,
     get_configured_lease_duration,
+)
+
+from .pricecalculator import (
+    PriceCalculator,
 )
 
 from .controller import (
@@ -117,13 +122,23 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
     if default_token_count is None:
         default_token_count = NUM_TOKENS
     controller = PaymentController(store, redeemer, default_token_count)
+
+    calculator = PriceCalculator(
+        get_configured_shares_needed(node_config),
+        get_configured_shares_total(node_config),
+        get_configured_pass_value(node_config),
+    )
+    calculate_price = _CalculatePrice(
+        calculator,
+        get_configured_lease_duration(node_config),
+    )
+
     root = create_private_tree(
         lambda: node_config.get_private_config(b"api_auth_token"),
         authorizationless_resource_tree(
             store,
             controller,
-            get_configured_pass_value(node_config),
-            get_configured_lease_duration(node_config),
+            calculate_price,
         ),
     )
     root.store = store
@@ -131,15 +146,19 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
     return root
 
 
-def authorizationless_resource_tree(store, controller, pass_value, lease_duration):
+def authorizationless_resource_tree(
+        store,
+        controller,
+        calculate_price,
+):
     """
     Create the full ZKAPAuthorizer client plugin resource hierarchy with no
     authorization applied.
 
     :param VoucherStore store: The store to use.
     :param PaymentController controller: The payment controller to use.
-    :param int pass_value: The bytes component of the bytes×time value of a single pass.
-    :param int lease_duration: The number of seconds a lease will be valid.
+
+    :param IResource calculate_price: The resource for the price calculation endpoint.
 
     :return IResource: The root of the resource hierarchy.
     """
@@ -164,7 +183,7 @@ def authorizationless_resource_tree(store, controller, pass_value, lease_duratio
     )
     root.putChild(
         b"calculate-price",
-        _CalculatePrice(pass_value, lease_duration),
+        calculate_price,
     )
     return root
 
@@ -177,12 +196,14 @@ class _CalculatePrice(Resource):
 
     render_HEAD = render_GET = None
 
-    def __init__(self, pass_value, lease_period):
+    def __init__(self, price_calculator, lease_period):
         """
-        :param pass_value: See ``authorizationless_resource_tree``
+        :param _PriceCalculator price_calculator: The object which can actually
+            calculate storage prices.
+
         :param lease_period: See ``authorizationless_resource_tree``
         """
-        self._pass_value = pass_value
+        self._price_calculator = price_calculator
         self._lease_period = lease_period
         Resource.__init__(self)
 
@@ -219,15 +240,22 @@ class _CalculatePrice(Resource):
                 "error": "did not find required version number 1 in request",
             })
 
-        if not isinstance(sizes, list) or not all(isinstance(size, (int, long)) and size >= 0 for size in sizes):
+        if (not isinstance(sizes, list) or
+            not all(
+                isinstance(size, (int, long)) and size >= 0
+                for size
+                in sizes
+        )):
             request.setResponseCode(BAD_REQUEST)
             return dumps({
                 "error": "did not find required positive integer sizes list in request",
             })
 
         application_json(request)
+
+        price = self._price_calculator.calculate(sizes)
         return dumps({
-            u"price": required_passes(self._pass_value, sizes),
+            u"price": price,
             u"period": self._lease_period,
         })
 
