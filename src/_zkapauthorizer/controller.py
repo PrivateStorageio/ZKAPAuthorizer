@@ -458,7 +458,9 @@ class IssuerConfigurationMismatch(Exception):
     ZKAPs will not be usable and new ones must be obtained.
     """
     def __str__(self):
-        return "Announced issuer ({}) disagrees with configured issuer ({}).".format(self.args)
+        return "Announced issuer ({}) disagrees with configured issuer ({}).".format(
+            *self.args
+        )
 
 
 @implementer(IRedeemer)
