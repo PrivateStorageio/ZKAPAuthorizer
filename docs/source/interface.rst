@@ -137,7 +137,7 @@ The response is **OK** with ``application/json`` content-type response body like
 
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
 
-``GET /storage-plugins/privatestorageio/zkapauthz-v1/unblinded-token``
+``GET /storage-plugins/privatestorageio-zkapauthz-v1/unblinded-token``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve unused unblinded tokens present in the node's database.
@@ -165,7 +165,7 @@ If it has run,
  * ``when``: associated with an ISO8601 datetime string giving the approximate time the process ran
  * ``count``: associated with a number giving the number of passes which would need to be spent to renew leases on all stored objects seen during the lease maintenance activity
 
-``POST /storage-plugins/privatestorageio/zkapauthz-v1/unblinded-token``
+``POST /storage-plugins/privatestorageio-zkapauthz-v1/unblinded-token``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to insert new unblinded tokens into the node's database.
@@ -180,3 +180,34 @@ The request body must be ``application/json`` encoded and contain an object like
 The response is **OK** with ``application/json`` content-type response body like::
 
   { }
+
+``POST /storage-plugins/privatestorageio-zkapauthz-v1/calculate-price``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This endpoint allows an agent to calculate the number of ZKAPs it will cost to store a collection of files of specified sizes.
+This is intended as the basis for tools which aid in user understanding of the cost of their actions.
+
+The request body must be ``application/json`` encoded and contain an object like::
+
+  { "version": 1
+  , "sizes: [ <integer>, ... ]
+  }
+
+The ``version`` property must currently be **1**.
+The ``sizes`` property is a list of integers giving file sizes in bytes.
+
+The response is **OK** with ``application/json`` content-type response body like::
+
+  { "price": <integer>, "period": <integer> }
+
+The ``price`` property gives the number of ZKAPs which would have to be spent to store files of the given sizes.
+The ``period`` property gives the number of seconds those files would be stored by spending that number of ZKAPs.
+
+The price obtained this way is valid in two scenarios.
+First,
+the case where none of the files have been uploaded yet.
+In this case uploading the files and storing them for **period** seconds will cost **price** ZKAPs.
+Second,
+the case where the files have already been uploaded but their leases need to be renewed.
+In this case, renewing the leases so they last until **period** seconds after the current time will cost **price** ZKAPs.
+Note that in this case any lease time currently remaining on any files has no bearing on the calculated price.

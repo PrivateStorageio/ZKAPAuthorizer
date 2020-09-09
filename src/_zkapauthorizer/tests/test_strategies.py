@@ -34,6 +34,8 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     data,
+    one_of,
+    just,
 )
 
 from allmydata.client import (
@@ -42,6 +44,7 @@ from allmydata.client import (
 
 from .strategies import (
     tahoe_config_texts,
+    share_parameters,
 )
 
 class TahoeConfigsTests(TestCase):
@@ -54,7 +57,15 @@ class TahoeConfigsTests(TestCase):
         Configurations built by the strategy can be parsed.
         """
         tempdir = self.useFixture(TempDir())
-        config_text = data.draw(tahoe_config_texts({}))
+        config_text = data.draw(
+            tahoe_config_texts(
+                storage_client_plugins={},
+                shares=one_of(
+                    just((None, None, None)),
+                    share_parameters(),
+                ),
+            ),
+        )
         note(config_text)
         config_from_string(
             tempdir.join(b"tahoe.ini"),

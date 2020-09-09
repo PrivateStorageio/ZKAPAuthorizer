@@ -122,10 +122,36 @@ def _config_string_from_sections(divided_sections):
     ))
 
 
-def tahoe_config_texts(storage_client_plugins):
+def tahoe_config_texts(storage_client_plugins, shares):
     """
     Build the text of complete Tahoe-LAFS configurations for a node.
+
+    :param storage_client_plugins: A dictionary with storage client plugin
+        names as keys.
+
+    :param shares: A strategy to build erasure encoding parameters.  These are
+        built as a three-tuple giving (needed, total, happy).  Each element
+        may be an integer or None to leave it unconfigured (and rely on the
+        default).
     """
+    def merge_shares(shares, the_rest):
+        for (k, v) in zip(("needed", "happy", "total"), shares):
+            if v is not None:
+                the_rest["shares." + k] = u"{}".format(v)
+        return the_rest
+
+    client_section = builds(
+        merge_shares,
+        shares,
+        fixed_dictionaries(
+            {
+                "storage.plugins": just(
+                    u",".join(storage_client_plugins.keys()),
+                ),
+            },
+        ),
+    )
+
     return builds(
         lambda *sections: _config_string_from_sections(
             sections,
@@ -144,26 +170,23 @@ def tahoe_config_texts(storage_client_plugins):
                         "nickname": node_nicknames(),
                     },
                 ),
-                "client": fixed_dictionaries(
-                    {
-                        "storage.plugins": just(
-                            u",".join(storage_client_plugins.keys()),
-                        ),
-                    },
-                ),
+                "client": client_section,
             },
         ),
     )
 
 
-def minimal_tahoe_configs(storage_client_plugins=None):
+def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, None))):
     """
     Build complete Tahoe-LAFS configurations for a node.
+
+    :param shares: See ``tahoe_config_texts``.
     """
     if storage_client_plugins is None:
         storage_client_plugins = {}
     return tahoe_config_texts(
         storage_client_plugins,
+        shares,
     ).map(
         lambda config_text: lambda basedir, portnumfile: config_from_string(
             basedir,
@@ -287,14 +310,33 @@ def client_errorredeemer_configurations(details):
     })
 
 
-def tahoe_configs(zkapauthz_v1_configuration=client_dummyredeemer_configurations()):
+def tahoe_configs(
+        zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+        shares=just((None, None, None)),
+):
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
     client plugin section.
+
+    :param shares: See ``tahoe_config_texts``.
     """
     return minimal_tahoe_configs({
         u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
-    })
+    }, shares)
+
+
+def share_parameters():
+    """
+    Build three-tuples of integers giving usable k, happy, N parameters to
+    Tahoe-LAFS' erasure encoding process.
+    """
+    return lists(
+        integers(min_value=1, max_value=255),
+        min_size=3,
+        max_size=3,
+    ).map(
+        sorted,
+    )
 
 
 def vouchers():

@@ -34,6 +34,10 @@ from .eliot import (
     MUTABLE_PASSES_REQUIRED,
 )
 
+from pyutil.mathutil import (
+    div_ceil,
+)
+
 @attr.s(frozen=True)
 class MorePassesRequired(Exception):
     """
@@ -73,6 +77,34 @@ slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_
 # submitted.
 BYTES_PER_PASS = 1024 * 1024
 
+def get_configured_shares_needed(node_config):
+    """
+    Determine the configured-specified value of "needed" shares (``k``).
+
+    If no value is explicitly configured, the Tahoe-LAFS default (as best as
+    we know it) is returned.
+    """
+    return int(node_config.get_config(
+        section=u"client",
+        option=u"shares.needed",
+        default=3,
+    ))
+
+
+def get_configured_shares_total(node_config):
+    """
+    Determine the configured-specified value of "total" shares (``N``).
+
+    If no value is explicitly configured, the Tahoe-LAFS default (as best as
+    we know it) is returned.
+    """
+    return int(node_config.get_config(
+        section=u"client",
+        option=u"shares.total",
+        default=10,
+    ))
+
+
 def get_configured_pass_value(node_config):
     """
     Determine the configuration-specified value of a single ZKAP.
@@ -88,10 +120,22 @@ def get_configured_pass_value(node_config):
         default=BYTES_PER_PASS,
     ))
 
+
+def get_configured_lease_duration(node_config):
+    """
+    Just kidding.  Lease duration is hard-coded.
+
+    :return int: The number of seconds after which a newly acquired lease will
+        be valid.
+    """
+    # See lots of places in Tahoe-LAFS, eg src/allmydata/storage/server.py
+    return 31 * 24 * 60 * 60
+
+
 def required_passes(bytes_per_pass, share_sizes):
     """
-    Calculate the number of passes that are required to store ``stored_bytes``
-    for one lease period.
+    Calculate the number of passes that are required to store shares of the
+    given sizes for one lease period.
 
     :param int bytes_per_pass: The number of bytes the storage of which for
         one lease period one pass covers.
@@ -112,6 +156,23 @@ def required_passes(bytes_per_pass, share_sizes):
 
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
     return result
+
+
+def share_size_for_data(shares_needed, datasize):
+    """
+    Calculate the size of a single erasure encoding share for data of the
+    given size and with the given level of redundancy.
+
+    :param int shares_needed: The number of shares (``k``) from the erasure
+        encoding process which are required to reconstruct original data of
+        the indicated size.
+
+    :param int datasize: The size of the data to consider, in bytes.
+
+    :return int: The size of a single erasure encoding share for the given
+        inputs.
+    """
+    return div_ceil(datasize, shares_needed)
 
 
 def has_writes(tw_vectors):
