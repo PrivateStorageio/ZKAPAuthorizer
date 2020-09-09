@@ -40,7 +40,6 @@ from twisted.logger import (
 )
 from twisted.web.http import (
     BAD_REQUEST,
-    NOT_ALLOWED,
 )
 from twisted.web.server import (
     NOT_DONE_YET,
@@ -277,7 +276,7 @@ def wrong_content_type(request, required_type):
         [None],
     )[0]
     if actual_type != required_type:
-        request.setResponseCode(NOT_ALLOWED)
+        request.setResponseCode(BAD_REQUEST)
         request.finish()
         return True
     return False
