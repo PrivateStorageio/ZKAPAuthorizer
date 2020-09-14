@@ -102,7 +102,7 @@ from .model import (
     Error as model_Error,
 )
 
-RETRY_INTERVAL = timedelta(milliseconds=1)
+RETRY_INTERVAL = timedelta(milliseconds=1000)
 
 @attr.s
 class UnexpectedResponse(Exception):
