@@ -31,6 +31,7 @@ from foolscap.api import (
     DictOf,
     ListOf,
     Copyable,
+    RemoteCopy,
 )
 from foolscap.remoteinterface import (
     RemoteMethodSchema,
@@ -44,7 +45,7 @@ from allmydata.interfaces import (
 )
 
 @attr.s
-class ShareStat(Copyable):
+class ShareStat(Copyable, RemoteCopy):
     """
     Represent some metadata about a share.
 
@@ -53,8 +54,16 @@ class ShareStat(Copyable):
     :ivar int lease_expiration: The POSIX timestamp of the time at which the
         lease on this share expires, or None if there is no lease.
     """
-    size = attr.ib()
-    lease_expiration = attr.ib()
+    typeToCopy = copytype = "ShareStat"
+
+    # To be a RemoteCopy it must be possible to instantiate this with no
+    # arguments. :/ So supply defaults for these attributes.
+    size = attr.ib(default=0)
+    lease_expiration = attr.ib(default=0)
+
+    # The RemoteCopy interface
+    def setCopyableState(self, state):
+        self.__dict__ = state
 
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
