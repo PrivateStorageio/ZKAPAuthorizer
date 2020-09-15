@@ -185,7 +185,7 @@ class ZKAPAuthorizer(object):
         )
 
 
-    def get_client_resource(self, node_config, default_token_count=None):
+    def get_client_resource(self, node_config, default_token_count=None, reactor=None):
         """
         Get an ``IZKAPRoot`` for the given node configuration.
 
@@ -197,12 +197,14 @@ class ZKAPAuthorizer(object):
             This is only used if a number of tokens isn't specified at the
             point of redemption.
         """
-        from twisted.internet import reactor
+        if reactor is None:
+            from twisted.internet import reactor
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
             redeemer=self._get_redeemer(node_config, None, reactor),
             default_token_count=default_token_count,
+            clock=reactor,
         )
 
 

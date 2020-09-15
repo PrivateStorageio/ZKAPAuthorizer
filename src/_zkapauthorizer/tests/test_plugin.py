@@ -99,6 +99,9 @@ from twisted.plugin import (
 from twisted.test.proto_helpers import (
     StringTransport,
 )
+from twisted.internet.task import (
+    Clock,
+)
 from twisted.web.resource import (
     IResource,
 )
@@ -483,6 +486,7 @@ class ClientPluginTests(TestCase):
             DummyRedeemer(),
             default_token_count=num_passes,
             num_redemption_groups=1,
+            clock=Clock(),
         )
         # Get a token inserted into the store.
         redeeming = controller.redeem(voucher)
@@ -543,7 +547,11 @@ class ClientResourceTests(TestCase):
         nodedir = tempdir.join(b"node")
         config = get_config(nodedir, b"tub.port")
         self.assertThat(
-            storage_server.get_client_resource(config, default_token_count=10),
+            storage_server.get_client_resource(
+                config,
+                default_token_count=10,
+                reactor=Clock(),
+            ),
             Provides([IResource]),
         )
 

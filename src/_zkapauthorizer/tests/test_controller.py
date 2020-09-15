@@ -73,6 +73,9 @@ from twisted.python.url import (
 from twisted.internet.defer import (
     fail,
 )
+from twisted.internet.task import (
+    Clock,
+)
 from twisted.web.iweb import (
     IAgent,
 )
@@ -228,6 +231,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(),
             default_token_count=100,
+            clock=Clock(),
         )
 
         self.assertThat(
@@ -263,6 +267,7 @@ class PaymentControllerTests(TestCase):
             store,
             NonRedeemer(),
             default_token_count=100,
+            clock=Clock(),
         )
         self.assertThat(
             controller.redeem(voucher),
@@ -299,6 +304,7 @@ class PaymentControllerTests(TestCase):
             # Require more success than we're going to get so it doesn't
             # finish.
             num_redemption_groups=counter,
+            clock=Clock(),
         )
 
         self.assertThat(
@@ -353,6 +359,7 @@ class PaymentControllerTests(TestCase):
                 ),
                 default_token_count=num_tokens,
                 num_redemption_groups=num_redemption_groups,
+                clock=Clock(),
             )
             self.assertThat(
                 controller.redeem(voucher),
@@ -378,6 +385,7 @@ class PaymentControllerTests(TestCase):
                 # The number of redemption groups must not change for
                 # redemption of a particular voucher.
                 num_redemption_groups=num_redemption_groups,
+                clock=Clock(),
             )
 
         first_try()
@@ -412,6 +420,7 @@ class PaymentControllerTests(TestCase):
             redeemer,
             default_token_count=num_tokens,
             num_redemption_groups=num_redemption_groups,
+            clock=Clock(),
         )
         self.assertThat(
             controller.redeem(voucher),
@@ -435,6 +444,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
+            clock=Clock(),
         )
         self.assertThat(
             controller.redeem(voucher),
@@ -462,6 +472,7 @@ class PaymentControllerTests(TestCase):
             store,
             DoubleSpendRedeemer(),
             default_token_count=100,
+            clock=Clock(),
         )
         self.assertThat(
             controller.redeem(voucher),
@@ -491,6 +502,7 @@ class PaymentControllerTests(TestCase):
             store,
             UnpaidRedeemer(),
             default_token_count=100,
+            clock=Clock(),
         )
         self.assertThat(
             unpaid_controller.redeem(voucher),
@@ -510,6 +522,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(),
             default_token_count=100,
+            clock=Clock(),
         )
 
         self.assertThat(

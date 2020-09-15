@@ -712,6 +712,9 @@ class PaymentController(object):
         TODO: Retrieve this value from the PaymentServer or from the
         ZKAPAuthorizer configuration instead of just hard-coding a duplicate
         value in this implementation.
+
+    :ivar IReactorTime _clock: The reactor to use for scheduling redemption
+        retries.
     """
     _log = Logger()
 
@@ -721,9 +724,7 @@ class PaymentController(object):
 
     num_redemption_groups = attr.ib(default=16)
 
-    _clock = attr.ib(
-        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
-    )
+    _clock = attr.ib(default=None)
 
     _error = attr.ib(default=attr.Factory(dict))
     _unpaid = attr.ib(default=attr.Factory(dict))
@@ -735,6 +736,9 @@ class PaymentController(object):
 
         This is an initialization-time hook called by attrs.
         """
+        if self._clock is None:
+            self._clock = namedAny("twisted.internet.reactor")
+
         self._check_pending_vouchers()
         # Also start a time-based polling loop to retry redemption of vouchers
         # in retryable error states.
