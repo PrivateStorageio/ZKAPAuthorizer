@@ -91,7 +91,13 @@ class IZKAPRoot(IResource):
     controller = Attribute("The ``PaymentController`` used by this resource tree.")
 
 
-def from_configuration(node_config, store, redeemer=None, default_token_count=None):
+def from_configuration(
+        node_config,
+        store,
+        redeemer=None,
+        default_token_count=None,
+        clock=None,
+):
     """
     Instantiate the plugin root resource using data from its configuration
     section, **storageclient.plugins.privatestorageio-zkapauthz-v1**, in the
@@ -108,6 +114,10 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
     :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
         sensible one is constructed.
 
+    :param default_token_count: See ``PaymentController.default_token_count``.
+
+    :param clock: See ``PaymentController._clock``.
+
     :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
@@ -120,7 +130,12 @@ def from_configuration(node_config, store, redeemer=None, default_token_count=No
         )
     if default_token_count is None:
         default_token_count = NUM_TOKENS
-    controller = PaymentController(store, redeemer, default_token_count)
+    controller = PaymentController(
+        store,
+        redeemer,
+        default_token_count,
+        clock=clock,
+    )
 
     calculator = PriceCalculator(
         get_configured_shares_needed(node_config),

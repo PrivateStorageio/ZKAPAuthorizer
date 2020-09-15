@@ -103,6 +103,7 @@ from twisted.internet.defer import (
 )
 from twisted.internet.task import (
     Cooperator,
+    Clock,
 )
 from twisted.web.http import (
     OK,
@@ -278,6 +279,7 @@ def root_from_config(config, now):
             memory_connect,
         ),
         default_token_count=NUM_TOKENS,
+        clock=Clock(),
     )
 
 

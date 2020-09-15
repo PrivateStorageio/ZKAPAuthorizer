@@ -27,11 +27,19 @@ from zope.interface import (
 import attr
 
 from twisted.internet.defer import (
-    execute,
+    succeed,
+    fail,
 )
 
 from foolscap.api import (
     RemoteInterface,
+    Referenceable,
+    Copyable,
+    Any,
+)
+from foolscap.copyable import (
+    ICopyable,
+    CopyableSlicer,
 )
 
 from allmydata.interfaces import (
@@ -41,6 +49,11 @@ from allmydata.interfaces import (
 class RIStub(RemoteInterface):
     pass
 
+
+class RIEcho(RemoteInterface):
+    def echo(argument=Any()):
+        return Any()
+
 @implementer(RIStorageServer)
 class StubStorageServer(object):
     pass
@@ -48,6 +61,18 @@ class StubStorageServer(object):
 
 def get_anonymous_storage_server():
     return StubStorageServer()
+
+
+class BrokenCopyable(Copyable):
+    """
+    I don't have a ``typeToCopy`` so I can't be serialized.
+    """
+
+
+@implementer(RIEcho)
+class Echoer(Referenceable):
+    def remote_echo(self, argument):
+        return argument
 
 
 @attr.s
@@ -103,18 +128,37 @@ class LocalRemote(object):
         """
         Call the given method on the wrapped object, passing the given arguments.
 
-        Arguments are checked for conformance to the remote interface but the
-        return value is not (because I don't know how -exarkun).
+        Arguments and return are checked for conformance to the remote
+        interface but they are not actually serialized.
 
         :return Deferred: The result of the call on the wrapped object.
         """
-        schema = self._referenceable.getInterface()[methname]
-        if self.check_args:
-            schema.checkAllArgs(args, kwargs, inbound=False)
-        # TODO: Figure out how to call checkResults on the result.
-        return execute(
-            self._referenceable.doRemoteCall,
-            methname,
-            args,
-            kwargs,
-        )
+        try:
+            schema = self._referenceable.getInterface()[methname]
+            if self.check_args:
+                schema.checkAllArgs(args, kwargs, inbound=True)
+            _check_copyables(list(args) + kwargs.values())
+            result = self._referenceable.doRemoteCall(
+                methname,
+                args,
+                kwargs,
+            )
+            schema.checkResults(result, inbound=False)
+            _check_copyables([result])
+            return succeed(result)
+        except:
+            return fail()
+
+
+def _check_copyables(copyables):
+    """
+    Check each object to see if it is a copyable and if it is make sure it can
+    be sliced.
+    """
+    for obj in copyables:
+        if ICopyable.providedBy(obj):
+            list(CopyableSlicer(obj).slice(False, None))
+        elif isinstance(obj, dict):
+            _check_copyables(obj.values())
+        elif isinstance(obj, list):
+            _check_copyables(obj)
