@@ -14,17 +14,6 @@ self: super: {
       # cuts of incompatibilities between libraries with no maintained Python
       # 2 support.
       typing = python-self.callPackage ./typing.nix { };
-
-      # tahoe-lafs in nixpkgs is packaged as an application!  so we have to
-      # re-package it ourselves as a library.
-      tahoe-lafs = python-self.callPackage ./tahoe-lafs.nix { };
-
-      # we depend on the challenge-bypass-ristretto python package, a set of
-      # bindings to the challenge-bypass-ristretto Rust crate.
-      challenge-bypass-ristretto = python-self.callPackage ./python-challenge-bypass-ristretto.nix { };
-
-      # And add ourselves to the collection too.
-      zkapauthorizer = python-self.callPackage ./zkapauthorizer.nix { };
     };
   };
 }
