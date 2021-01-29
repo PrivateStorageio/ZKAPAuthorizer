@@ -130,6 +130,8 @@ jobs:
             # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
             # says "Medium: 4 vCPUs, 8GB RAM".
             venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
+          environment:
+            ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests:
     docker:
