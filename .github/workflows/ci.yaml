@@ -43,13 +43,9 @@ jobs:
       run: |
         python -m pip install -v wheel coverage
 
-    - name: "Install Test Dependencies"
+    - name: "Install ZKAPAuthorizer and dependencies"
       run: |
-        python -m pip install -v -r test-requirements.txt
-
-    - name: "Install ZKAPAuthorizer"
-      run: |
-        python -m pip install -v ./
+        python -m pip install -v ./[test]
 
     - name: "Dump Python Environment"
       run: |
