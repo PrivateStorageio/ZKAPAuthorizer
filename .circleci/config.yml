@@ -234,4 +234,3 @@ workflows:
             xcode-version:
             - "12.3.0"
             - "11.7.0"
-            - "10.3.0"
