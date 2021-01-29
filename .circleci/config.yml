@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-version: 2
+version: 2.1
 
 aliases:
   - &PREPARE_VIRTUALENV
@@ -48,6 +48,10 @@ jobs:
           destination: "docs"
 
   macos-tests:
+    parameters:
+      py-version:
+        type: "string"
+
     macos:
       xcode: "12.3.0"
 
@@ -65,24 +69,27 @@ jobs:
       - run:
           name: "Get Pip"
           command: |
-            # The CircleCI macOS environment has curl and Python 2.7 but does
-            # not have pip.  So, for starters, use curl and Python 2.7 to get
-            # pip.
-            curl https://bootstrap.pypa.io/2.7/get-pip.py -o get-pip.py
-            python2 get-pip.py
+            # The CircleCI macOS environment has curl and Python but does not
+            # have pip.  So, for starters, use curl and Python to get pip.
+            if [ "<< parameters.py-version >>" == "2.7" ]; then
+              curl https://bootstrap.pypa.io/2.7/get-pip.py -o get-pip.py
+            else
+              curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+            fi
+            python<< parameters.py-version >> get-pip.py
 
       - run:
           name: "Create Virtualenv"
           command: |
-            # Now the CircleCI macOS Python 2 environment has some Python
-            # libraries in it which conflict with ZKAPAuthorizer's
-            # requirements.  So install virtualenv and use it to create an
-            # environment for ZKAPAuthorizer so it can have all its own
-            # versions of its dependencies.
-            /Users/distiller/Library/Python/2.7/bin/pip install virtualenv
+            # The CircleCI macOS Python environment has some Python libraries
+            # in it which conflict with ZKAPAuthorizer's requirements.  So
+            # install virtualenv and use it to create an environment for
+            # ZKAPAuthorizer so it can have all its own versions of its
+            # dependencies.
+            python<< parameters.py-version >> -m pip install virtualenv
 
             # Make sure virtualenv creates a Python 2 environment!
-            virtualenv --python=python2 venv
+            virtualenv --python=python<< parameters.py-version >> venv
 
             # Get the newest pip we can because who knows what came along with
             # that virtualenv.
@@ -213,4 +220,8 @@ workflows:
     jobs:
       # - "documentation"
       # - "linux-tests"
-      - "macos-tests"
+      - "macos-tests":
+          matrix:
+            parameters:
+              py-version:
+                - "2.7"
