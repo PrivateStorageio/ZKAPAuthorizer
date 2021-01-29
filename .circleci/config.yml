@@ -226,8 +226,8 @@ workflows:
   version: 2
   everything:
     jobs:
-    # - "documentation"
-    # - "linux-tests"
+    - "documentation"
+    - "linux-tests"
     - "macos-tests":
         matrix:
           parameters:
