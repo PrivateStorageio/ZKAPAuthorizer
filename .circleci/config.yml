@@ -121,7 +121,7 @@ jobs:
           name: "Test"
           command: |
             # And finally we can run the tests.
-            venv/bin/python -m twisted.trial _zkapauthorizer
+            venv/bin/python -m twisted.trial --rterrors _zkapauthorizer
 
   linux-tests:
     docker:
