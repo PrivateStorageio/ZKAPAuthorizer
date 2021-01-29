@@ -235,5 +235,6 @@ workflows:
             - "2.7"
 
             xcode-version:
+            # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
             - "12.3.0"
             - "11.7.0"
