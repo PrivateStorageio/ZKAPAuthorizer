@@ -51,9 +51,11 @@ jobs:
     parameters:
       py-version:
         type: "string"
+      xcode-version:
+        type: "string"
 
     macos:
-      xcode: "12.3.0"
+      xcode: << parameters.xcode-version >>
 
     steps:
       - "checkout"
@@ -218,10 +220,15 @@ workflows:
   version: 2
   everything:
     jobs:
-      # - "documentation"
-      # - "linux-tests"
-      - "macos-tests":
-          matrix:
-            parameters:
-              py-version:
-                - "2.7"
+    # - "documentation"
+    # - "linux-tests"
+    - "macos-tests":
+        matrix:
+          parameters:
+            py-version:
+            - "2.7"
+
+            xcode-version:
+            - "12.3.0"
+            - "11.7.0"
+            - "10.3.0"
