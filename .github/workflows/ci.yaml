@@ -41,7 +41,7 @@ jobs:
 
     - name: "Install CI Dependencies"
       run: |
-        python -m pip install -v wheel coverage
+        python -m pip install -v wheel
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
