@@ -93,7 +93,7 @@ jobs:
 
             # Get the newest pip we can because who knows what came along with
             # that virtualenv.
-            venv/bin/pip install --upgrade pip
+            venv/bin/pip install --find-links file://${PWD}/wheelhouse --upgrade pip
 
       - run:
           name: "Populate Wheelhouse"
