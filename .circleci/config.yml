@@ -122,6 +122,9 @@ jobs:
       - run:
           name: "Test"
           command: |
+            # The test suite might leak file descriptors.  macOS defaults to a
+            # limit of 256.  This should be fixed, but not now ...
+            ulimit -Sn 1024
             # And finally we can run the tests.
             venv/bin/python -m twisted.trial --rterrors _zkapauthorizer
 
