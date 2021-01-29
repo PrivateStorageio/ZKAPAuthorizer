@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-version: 2
+version: 2.1
 
 aliases:
   - &PREPARE_VIRTUALENV
@@ -47,7 +47,93 @@ jobs:
           path: "docs/build"
           destination: "docs"
 
-  tests:
+  macos-tests:
+    parameters:
+      py-version:
+        type: "string"
+      xcode-version:
+        type: "string"
+
+    macos:
+      xcode: << parameters.xcode-version >>
+
+    steps:
+      - "checkout"
+
+      - restore_cache:
+          keys:
+          # when setup.cfg changes, use increasingly general patterns to
+          # restore cache
+          - pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}
+          - pip-packages-v1-{{ .Branch }}-
+          - pip-packages-v1-
+
+      - run:
+          name: "Get Pip"
+          command: |
+            # The CircleCI macOS environment has curl and Python but does not
+            # have pip.  So, for starters, use curl and Python to get pip.
+            if [ "<< parameters.py-version >>" == "2.7" ]; then
+              curl https://bootstrap.pypa.io/2.7/get-pip.py -o get-pip.py
+            else
+              curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+            fi
+            python<< parameters.py-version >> get-pip.py
+
+      - run:
+          name: "Create Virtualenv"
+          command: |
+            # The CircleCI macOS Python environment has some Python libraries
+            # in it which conflict with ZKAPAuthorizer's requirements.  So
+            # install virtualenv and use it to create an environment for
+            # ZKAPAuthorizer so it can have all its own versions of its
+            # dependencies.
+            python<< parameters.py-version >> -m pip install virtualenv
+
+            # Make sure virtualenv creates a Python 2 environment!
+            virtualenv --python=python<< parameters.py-version >> venv
+
+            # Get the newest pip we can because who knows what came along with
+            # that virtualenv.
+            venv/bin/pip install --find-links file://${PWD}/wheelhouse --upgrade pip
+
+      - run:
+          name: "Populate Wheelhouse"
+          command: |
+            # Get wheels for all the Python packages we depend on - either
+            # directly via the ZKAPAuthorizer distutils configuration *or*
+            # because some other tool depends on it.  For example, pip has a
+            # bunch of dependencies it is nice to have around, and using the
+            # wheels depends on the wheel package.
+            venv/bin/pip wheel --wheel-dir wheelhouse pip wheel .[test]
+
+      - save_cache:
+          paths:
+          - "wheelhouse"
+          key: pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}
+
+      - run:
+          name: "Install"
+          command: |
+            # Now we can install ZKAPAuthorizer and its dependencies and test
+            # dependencies into the environment.
+            venv/bin/pip install --no-index --find-links file://${PWD}/wheelhouse .[test]
+
+      - run:
+          name: "Test"
+          command: |
+            # The test suite might leak file descriptors.  macOS defaults to a
+            # limit of 256.  This should be fixed, but not now ...
+            ulimit -Sn 1024
+            # And finally we can run the tests.  We'll run them with 4 jobs
+            # because the resource class documented at
+            # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
+            # says "Medium: 4 vCPUs, 8GB RAM".
+            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
+          environment:
+            ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
+
+  linux-tests:
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixorg/nix:circleci"
@@ -142,5 +228,15 @@ workflows:
   version: 2
   everything:
     jobs:
-      - "documentation"
-      - "tests"
+    - "documentation"
+    - "linux-tests"
+    - "macos-tests":
+        matrix:
+          parameters:
+            py-version:
+            - "2.7"
+
+            xcode-version:
+            # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
+            - "12.3.0"
+            - "11.7.0"

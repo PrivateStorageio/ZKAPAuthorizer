@@ -40,7 +40,7 @@ from sqlite3 import (
 import attr
 
 from aniso8601 import (
-    parse_datetime,
+    parse_datetime as _parse_datetime,
 )
 from twisted.logger import (
     Logger,
@@ -70,6 +70,18 @@ from .schema import (
     get_schema_upgrades,
     run_schema_upgrades,
 )
+
+
+def parse_datetime(s, **kw):
+    """
+    Like ``aniso8601.parse_datetime`` but accept unicode as well.
+    """
+    if isinstance(s, unicode):
+        s = s.encode("utf-8")
+    assert isinstance(s, bytes)
+    if "delimiter" in kw and isinstance(kw["delimiter"], unicode):
+        kw["delimiter"] = kw["delimiter"].encode("utf-8")
+    return _parse_datetime(s, **kw)
 
 
 class ILeaseMaintenanceObserver(Interface):
