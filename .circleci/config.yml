@@ -125,8 +125,11 @@ jobs:
             # The test suite might leak file descriptors.  macOS defaults to a
             # limit of 256.  This should be fixed, but not now ...
             ulimit -Sn 1024
-            # And finally we can run the tests.
-            venv/bin/python -m twisted.trial --rterrors _zkapauthorizer
+            # And finally we can run the tests.  We'll run them with 4 jobs
+            # because the resource class documented at
+            # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
+            # says "Medium: 4 vCPUs, 8GB RAM".
+            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
 
   linux-tests:
     docker:
