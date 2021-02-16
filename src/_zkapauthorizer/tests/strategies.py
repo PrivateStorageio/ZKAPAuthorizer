@@ -181,18 +181,15 @@ def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, 
     Build complete Tahoe-LAFS configurations for a node.
 
     :param shares: See ``tahoe_config_texts``.
+
+    :return SearchStrategy[unicode]: A strategy that builds unicode strings
+        which are Tahoe-LAFS configuration file contents.
     """
     if storage_client_plugins is None:
         storage_client_plugins = {}
     return tahoe_config_texts(
         storage_client_plugins,
         shares,
-    ).map(
-        lambda config_text: lambda basedir, portnumfile: config_from_string(
-            basedir,
-            portnumfile,
-            config_text.encode("utf-8"),
-        ),
     )
 
 
@@ -310,7 +307,7 @@ def client_errorredeemer_configurations(details):
     })
 
 
-def tahoe_configs(
+def direct_tahoe_configs(
         zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
         shares=just((None, None, None)),
 ):
@@ -319,10 +316,51 @@ def tahoe_configs(
     client plugin section.
 
     :param shares: See ``tahoe_config_texts``.
+
+    :return SearchStrategy[_Config]: A strategy that builds Tahoe config
+        objects.
     """
-    return minimal_tahoe_configs({
+    config_texts = minimal_tahoe_configs({
         u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
     }, shares)
+    return config_texts.map(
+        lambda config_text: config_from_string(
+            u"/dev/null/illegal",
+            u"",
+            config_text.encode("utf-8"),
+        ),
+    )
+
+
+def tahoe_configs(
+        zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+        shares=just((None, None, None)),
+):
+    """
+    Build complete Tahoe-LAFS configurations including the zkapauthorizer
+    client plugin section.
+
+    You probably want ``direct_tahoe_configs``.
+
+    :param shares: See ``tahoe_config_texts``.
+
+    :return SearchStrategy[str -> str -> _Config]: A strategy that builds
+        two-argument functions that return a config object.  The two arguments
+        are the ``basedir`` and ``portnumfile`` arguments to Tahoe's
+        ``config_from_string.``
+    """
+    def path_setter(config):
+        def set_paths(basedir, portnumfile):
+            config._basedir = basedir.decode("ascii")
+            config.portnum_fname = portnumfile
+            return config
+        return set_paths
+    return direct_tahoe_configs(
+        zkapauthz_v1_configuration,
+        shares,
+    ).map(
+        path_setter,
+    )
 
 
 def share_parameters():
