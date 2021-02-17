@@ -83,6 +83,7 @@ from allmydata.interfaces import (
     RIStorageServer,
 )
 from allmydata.client import (
+    config_from_string,
     create_client_from_config,
 )
 
@@ -375,15 +376,16 @@ class ClientPluginTests(TestCase):
 
 
     @given(tahoe_configs_with_mismatched_issuer, announcements())
-    def test_mismatched_ristretto_issuer(self, get_config, announcement):
+    def test_mismatched_ristretto_issuer(self, config_text, announcement):
         """
         ``get_storage_client`` raises an exception when called with an
         announcement and local configuration which specify different issuers.
         """
         tempdir = self.useFixture(TempDir())
-        node_config = get_config(
+        node_config = config_from_string(
             tempdir.join(b"node"),
             b"tub.port",
+            config_text.encode("utf-8"),
         )
         config_text = BytesIO()
         node_config.config.write(config_text)
