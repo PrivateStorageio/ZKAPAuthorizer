@@ -384,7 +384,7 @@ class GetTokenCountTests(TestCase):
                 u"default-token-count": u"{}".format(expected_count)
             }
 
-        config_text = _config_string_from_sections([{
+        config_text = config_string_from_sections([{
             u"storageclient.plugins." + plugin_name: token_config,
         }])
         node_config = config_from_string(
