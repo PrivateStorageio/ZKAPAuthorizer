@@ -84,6 +84,10 @@ from ..model import (
     Redeemed,
 )
 
+from ..configutil import (
+    config_string_from_sections,
+)
+
 # Sizes informed by
 # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
 
@@ -95,32 +99,6 @@ _TOKEN_LENGTH = 96
 _UNBLINDED_TOKEN_LENGTH = 96
 # The length of a `VerificationSignature`, in bytes.
 _VERIFICATION_SIGNATURE_LENGTH = 64
-
-def _merge_dictionaries(dictionaries):
-    result = {}
-    for d in dictionaries:
-        result.update(d)
-    return result
-
-
-def _tahoe_config_quote(text):
-    return text.replace(u"%", u"%%")
-
-
-def _config_string_from_sections(divided_sections):
-    sections = _merge_dictionaries(divided_sections)
-    return u"".join(list(
-        u"[{name}]\n{items}\n".format(
-            name=name,
-            items=u"\n".join(
-                u"{key} = {value}".format(key=key, value=_tahoe_config_quote(value))
-                for (key, value)
-                in contents.items()
-            )
-        )
-        for (name, contents) in sections.items()
-    ))
-
 
 def tahoe_config_texts(storage_client_plugins, shares):
     """
@@ -153,7 +131,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
     )
 
     return builds(
-        lambda *sections: _config_string_from_sections(
+        lambda *sections: config_string_from_sections(
             sections,
         ),
         fixed_dictionaries(
@@ -270,12 +248,21 @@ def client_dummyredeemer_configurations():
     })
 
 
-def client_doublespendredeemer_configurations():
+def token_counts():
+    """
+    Build integers that are plausible as a number of tokens to receive in
+    exchange for a voucher.
+    """
+    return integers(min_value=16, max_value=2 ** 16)
+
+
+def client_doublespendredeemer_configurations(default_token_counts=token_counts()):
     """
     Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
     """
-    return just({
-        u"redeemer": u"double-spend",
+    return fixed_dictionaries({
+        u"redeemer": just(u"double-spend"),
+        u"default-token-count": default_token_counts.map(str),
     })
 
 

@@ -91,11 +91,33 @@ class IZKAPRoot(IResource):
     controller = Attribute("The ``PaymentController`` used by this resource tree.")
 
 
+def get_token_count(
+        plugin_name,
+        node_config,
+):
+    """
+    Retrieve the configured voucher value, in number of tokens, from the given
+    configuration.
+
+    :param unicode plugin_name: The plugin name to use to choose a
+        configuration section.
+
+    :param _Config node_config: See ``from_configuration``.
+
+    :param int default: The value to return if none is configured.
+    """
+    section_name = u"storageclient.plugins.{}".format(plugin_name)
+    return int(node_config.get_config(
+        section=section_name,
+        option=u"default-token-count",
+        default=NUM_TOKENS,
+    ))
+
+
 def from_configuration(
         node_config,
         store,
         redeemer=None,
-        default_token_count=None,
         clock=None,
 ):
     """
@@ -114,22 +136,23 @@ def from_configuration(
     :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
         sensible one is constructed.
 
-    :param default_token_count: See ``PaymentController.default_token_count``.
-
     :param clock: See ``PaymentController._clock``.
 
     :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
+    plugin_name = u"privatestorageio-zkapauthz-v1"
     if redeemer is None:
         redeemer = get_redeemer(
-            u"privatestorageio-zkapauthz-v1",
+            plugin_name,
             node_config,
             None,
             None,
         )
-    if default_token_count is None:
-        default_token_count = NUM_TOKENS
+    default_token_count = get_token_count(
+        plugin_name,
+        node_config,
+    )
     controller = PaymentController(
         store,
         redeemer,

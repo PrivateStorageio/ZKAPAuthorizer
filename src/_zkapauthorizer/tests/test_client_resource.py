@@ -80,6 +80,7 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     one_of,
+    none,
     just,
     fixed_dictionaries,
     sampled_from,
@@ -128,6 +129,10 @@ from treq.testing import (
     RequestTraversalAgent,
 )
 
+from allmydata.client import (
+    config_from_string,
+)
+
 from .. import (
     __version__ as zkapauthorizer_version,
 )
@@ -143,11 +148,16 @@ from ..model import (
     memory_connect,
 )
 from ..resource import (
+    NUM_TOKENS,
     from_configuration,
+    get_token_count,
 )
 
 from ..pricecalculator import (
     PriceCalculator,
+)
+from ..configutil import (
+    config_string_from_sections,
 )
 
 from ..storage_common import (
@@ -157,6 +167,7 @@ from ..storage_common import (
 )
 
 from .strategies import (
+    direct_tahoe_configs,
     tahoe_configs,
     client_unpaidredeemer_configurations,
     client_doublespendredeemer_configurations,
@@ -178,9 +189,6 @@ from .matchers import (
 from .json import (
     loads,
 )
-
-# A small number of tokens to work with in the tests.
-NUM_TOKENS = 100
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
@@ -278,7 +286,6 @@ def root_from_config(config, now):
             now,
             memory_connect,
         ),
-        default_token_count=NUM_TOKENS,
         clock=Clock(),
     )
 
@@ -337,10 +344,58 @@ def get_config_with_api_token(tempdir, get_config, api_auth_token):
     :param bytes api_auth_token: The HTTP API authorization token to write to
         the node directory.
     """
-    FilePath(tempdir.join(b"tahoe", b"private")).makedirs()
-    config = get_config(tempdir.join(b"tahoe"), b"tub.port")
-    config.write_private_config(b"api_auth_token", api_auth_token)
+    basedir = tempdir.join(b"tahoe")
+    config = get_config(basedir, b"tub.port")
+    add_api_token_to_config(
+        basedir,
+        config,
+        api_auth_token,
+    )
     return config
+
+
+def add_api_token_to_config(basedir, config, api_auth_token):
+    """
+    Create a private directory beneath the given base directory, point the
+    given config at it, and write the given API auth token to it.
+    """
+    FilePath(basedir).child(b"private").makedirs()
+    config._basedir = basedir
+    config.write_private_config(b"api_auth_token", api_auth_token)
+
+
+class GetTokenCountTests(TestCase):
+    """
+    Tests for ``get_token_count``.
+    """
+    @given(one_of(none(), integers(min_value=16)))
+    def test_get_token_count(self, token_count):
+        """
+        ``get_token_count`` returns the integer value of the
+        ``default-token-count`` item from the given configuration object.
+        """
+        plugin_name = u"hello-world"
+        if token_count is None:
+            expected_count = NUM_TOKENS
+            token_config = {}
+        else:
+            expected_count = token_count
+            token_config = {
+                u"default-token-count": u"{}".format(expected_count)
+            }
+
+        config_text = _config_string_from_sections([{
+            u"storageclient.plugins." + plugin_name: token_config,
+        }])
+        node_config = config_from_string(
+            self.useFixture(TempDir()).join(b"tahoe"),
+            u"tub.port",
+            config_text.encode("utf-8"),
+        )
+        self.assertThat(
+            get_token_count(plugin_name, node_config),
+            Equals(expected_count),
+        )
 
 
 class ResourceTests(TestCase):
@@ -1010,26 +1065,27 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(client_nonredeemer_configurations()),
+        direct_tahoe_configs(client_nonredeemer_configurations()),
         api_auth_tokens(),
         datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_redeeming(self, get_config, api_auth_token, now, voucher):
+    def test_get_known_voucher_redeeming(self, config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
         those relevant to a voucher which is actively being redeemed, about
         the voucher are included in a json-encoded response body.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
-            get_config,
+            config,
             api_auth_token,
             now,
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
-                expected_tokens=Equals(NUM_TOKENS),
+                expected_tokens=Equals(count),
                 created=Equals(now),
                 state=Equals(Redeeming(
                     started=now,
@@ -1039,42 +1095,43 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(client_dummyredeemer_configurations()),
+        direct_tahoe_configs(client_dummyredeemer_configurations()),
         api_auth_tokens(),
         datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_redeemed(self, get_config, api_auth_token, now, voucher):
+    def test_get_known_voucher_redeemed(self, config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
         those relevant to a voucher which has been redeemed, about the voucher
         are included in a json-encoded response body.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
-            get_config,
+            config,
             api_auth_token,
             now,
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
-                expected_tokens=Equals(NUM_TOKENS),
+                expected_tokens=Equals(count),
                 created=Equals(now),
                 state=Equals(Redeemed(
                     finished=now,
-                    token_count=NUM_TOKENS,
+                    token_count=count,
                     public_key=None,
                 )),
             ),
         )
 
     @given(
-        tahoe_configs(client_doublespendredeemer_configurations()),
+        direct_tahoe_configs(client_doublespendredeemer_configurations()),
         api_auth_tokens(),
         datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_doublespend(self, get_config, api_auth_token, now, voucher):
+    def test_get_known_voucher_doublespend(self, config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1082,14 +1139,15 @@ class VoucherTests(TestCase):
         already redeemed, about the voucher are included in a json-encoded
         response body.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
-            get_config,
+            config,
             api_auth_token,
             now,
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
-                expected_tokens=Equals(NUM_TOKENS),
+                expected_tokens=Equals(count),
                 created=Equals(now),
                 state=Equals(DoubleSpend(
                     finished=now,
@@ -1098,12 +1156,12 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(client_unpaidredeemer_configurations()),
+        direct_tahoe_configs(client_unpaidredeemer_configurations()),
         api_auth_tokens(),
         datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_unpaid(self, get_config, api_auth_token, now, voucher):
+    def test_get_known_voucher_unpaid(self, config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1111,14 +1169,15 @@ class VoucherTests(TestCase):
         not been paid for yet, about the voucher are included in a
         json-encoded response body.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
-            get_config,
+            config,
             api_auth_token,
             now,
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
-                expected_tokens=Equals(NUM_TOKENS),
+                expected_tokens=Equals(count),
                 created=Equals(now),
                 state=Equals(Unpaid(
                     finished=now,
@@ -1127,12 +1186,12 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)),
+        direct_tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)),
         api_auth_tokens(),
         datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_error(self, get_config, api_auth_token, now, voucher):
+    def test_get_known_voucher_error(self, config, api_auth_token, now, voucher):
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1140,14 +1199,15 @@ class VoucherTests(TestCase):
         kind of transient conditions, about the voucher are included in a
         json-encoded response body.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
-            get_config,
+            config,
             api_auth_token,
             now,
             voucher,
             MatchesStructure(
                 number=Equals(voucher),
-                expected_tokens=Equals(NUM_TOKENS),
+                expected_tokens=Equals(count),
                 created=Equals(now),
                 state=Equals(Error(
                     finished=now,
@@ -1156,7 +1216,7 @@ class VoucherTests(TestCase):
             ),
         )
 
-    def _test_get_known_voucher(self, get_config, api_auth_token, now, voucher, voucher_matcher):
+    def _test_get_known_voucher(self, config, api_auth_token, now, voucher, voucher_matcher):
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
@@ -1164,9 +1224,9 @@ class VoucherTests(TestCase):
         :param voucher_matcher: A matcher which matches the voucher expected
             to be returned by the ``GET``.
         """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
+        add_api_token_to_config(
+            self.useFixture(TempDir()).join(b"tahoe"),
+            config,
             api_auth_token,
         )
         root = root_from_config(config, lambda: now)
@@ -1215,18 +1275,19 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(),
+        direct_tahoe_configs(),
         api_auth_tokens(),
         datetimes(),
         lists(vouchers(), unique=True),
     )
-    def test_list_vouchers(self, get_config, api_auth_token, now, vouchers):
+    def test_list_vouchers(self, config, api_auth_token, now, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_list_vouchers(
-            get_config,
+            config,
             api_auth_token,
             now,
             vouchers,
@@ -1234,11 +1295,11 @@ class VoucherTests(TestCase):
                 u"vouchers": list(
                     Voucher(
                         number=voucher,
-                        expected_tokens=NUM_TOKENS,
+                        expected_tokens=count,
                         created=now,
                         state=Redeemed(
                             finished=now,
-                            token_count=NUM_TOKENS,
+                            token_count=count,
                             public_key=None,
                         ),
                     ).marshal()
@@ -1249,18 +1310,19 @@ class VoucherTests(TestCase):
         )
 
     @given(
-        tahoe_configs(client_unpaidredeemer_configurations()),
+        direct_tahoe_configs(client_unpaidredeemer_configurations()),
         api_auth_tokens(),
         datetimes(),
         lists(vouchers(), unique=True),
     )
-    def test_list_vouchers_transient_states(self, get_config, api_auth_token, now, vouchers):
+    def test_list_vouchers_transient_states(self, config, api_auth_token, now, vouchers):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
         """
+        count = get_token_count("privatestorageio-zkapauthz-v1", config)
         return self._test_list_vouchers(
-            get_config,
+            config,
             api_auth_token,
             now,
             vouchers,
@@ -1268,7 +1330,7 @@ class VoucherTests(TestCase):
                 u"vouchers": list(
                     Voucher(
                         number=voucher,
-                        expected_tokens=NUM_TOKENS,
+                        expected_tokens=count,
                         created=now,
                         state=Unpaid(
                             finished=now,
@@ -1280,14 +1342,14 @@ class VoucherTests(TestCase):
             }),
         )
 
-    def _test_list_vouchers(self, get_config, api_auth_token, now, vouchers, match_response_object):
-        config = get_config_with_api_token(
+    def _test_list_vouchers(self, config, api_auth_token, now, vouchers, match_response_object):
+        add_api_token_to_config(
             # Hypothesis causes our test case instances to be re-used many
             # times between setUp and tearDown.  Avoid re-using the same
             # temporary directory for every Hypothesis iteration because this
             # test leaves state behind that invalidates future iterations.
-            self.useFixture(TempDir()),
-            get_config,
+            self.useFixture(TempDir()).join(b"tahoe"),
+            config,
             api_auth_token,
         )
         root = root_from_config(config, lambda: now)
