@@ -236,6 +236,7 @@ def client_ristrettoredeemer_configurations():
     return just({
         u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
         u"redeemer": u"ristretto",
+        u"default-token-count": u"32",
     })
 
 
@@ -245,6 +246,7 @@ def client_dummyredeemer_configurations():
     """
     return just({
         u"redeemer": u"dummy",
+        u"default-token-count": u"32",
     })
 
 
@@ -272,6 +274,7 @@ def client_unpaidredeemer_configurations():
     """
     return just({
         u"redeemer": u"unpaid",
+        u"default-token-count": u"32",
     })
 
 
@@ -281,6 +284,7 @@ def client_nonredeemer_configurations():
     """
     return just({
         u"redeemer": u"non",
+        u"default-token-count": u"32",
     })
 
 
@@ -291,6 +295,7 @@ def client_errorredeemer_configurations(details):
     return just({
         u"redeemer": u"error",
         u"details": details,
+        u"default-token-count": u"32",
     })
 
 
