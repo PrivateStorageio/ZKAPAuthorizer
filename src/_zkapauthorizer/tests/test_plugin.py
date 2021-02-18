@@ -551,7 +551,6 @@ class ClientResourceTests(TestCase):
         self.assertThat(
             storage_server.get_client_resource(
                 config,
-                default_token_count=10,
                 reactor=Clock(),
             ),
             Provides([IResource]),

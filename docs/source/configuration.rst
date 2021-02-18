@@ -42,6 +42,13 @@ The client can also be configured with the value of a single pass::
 
 The value given here must agree with the value servers use in their configuration or the storage service will be unusable.
 
+The client can also be configured with the number of passes to expect in exchange for one voucher::
+
+  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  default-token-count = 32768
+
+The value given here must agree with the value the issuer uses in its configuration or redemption may fail.
+
 Server
 ------
 
