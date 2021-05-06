@@ -145,7 +145,7 @@ class ZKAPAuthorizer(object):
         signing_key = SigningKey.decode_base64(
             FilePath(
                 kwargs.pop(u"ristretto-signing-key-path"),
-            ).getContent(),
+            ).getContent().strip(),
         )
         announcement = {
             u"ristretto-issuer-root-url": root_url,
