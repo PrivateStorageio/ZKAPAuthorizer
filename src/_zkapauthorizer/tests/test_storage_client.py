@@ -341,8 +341,8 @@ class CallWithPassesTests(TestCase):
                 returned=Equals(accepted),
                 in_use=HasLength(0),
                 invalid=AfterPreprocessing(
-                    lambda invalid: invalid.keys(),
-                    Equals(rejected),
+                    lambda invalid: set(invalid.keys()),
+                    Equals(set(rejected)),
                 ),
                 spent=HasLength(0),
                 issued=Equals(set(accepted + rejected)),
