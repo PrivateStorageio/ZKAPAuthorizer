@@ -140,13 +140,14 @@ jobs:
       - image: "nixorg/nix:circleci"
 
     environment:
-      # Specify a revision of NixOS/nixpkgs to run against.  This essentially
-      # pins the majority of the software involved in the build.  This
-      # revision is selected arbitrarily.  It's somewhat current as of the
-      # time of this comment.  We can bump it to a newer version when that
-      # makes sense.  Meanwhile, the platform won't shift around beneath us
-      # unexpectedly.
-      NIXPKGS_REV: "8bf142e001b6876b021c8ee90c2c7cec385fe8e9"
+      # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
+      # essentially pins the majority of the software involved in the build.
+      # This revision is selected arbitrarily (it's just new enough to define
+      # all of the PrivateStorage stuff that ZKAPAuthorizer depends on).  It's
+      # somewhat current as of the time of this comment.  We can bump it to a
+      # newer version when that makes sense.  Meanwhile, the platform won't
+      # shift around beneath us unexpectedly.
+      NIXPKGS_REV: "64312fec143e4a0153acdc4d03619e01992ec574"
 
     steps:
       - run:
@@ -157,7 +158,7 @@ jobs:
           # the `BASE_ENV` feature as we do here.
           name: "Setup NIX_PATH Environment Variable"
           command: |
-            echo "export NIX_PATH=nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
+            echo "export NIX_PATH=nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
 
       - "checkout"
 
