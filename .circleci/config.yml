@@ -74,7 +74,8 @@ jobs:
             # The CircleCI macOS environment has curl and Python but does not
             # have pip.  So, for starters, use curl and Python to get pip.
             if [ "<< parameters.py-version >>" == "2.7" ]; then
-              curl https://bootstrap.pypa.io/2.7/get-pip.py -o get-pip.py
+
+              curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
             else
               curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
             fi
