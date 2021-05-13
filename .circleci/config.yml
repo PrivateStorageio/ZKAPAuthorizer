@@ -149,7 +149,7 @@ jobs:
       # somewhat current as of the time of this comment.  We can bump it to a
       # newer version when that makes sense.  Meanwhile, the platform won't
       # shift around beneath us unexpectedly.
-      NIXPKGS_REV: "64312fec143e4a0153acdc4d03619e01992ec574"
+      NIXPKGS_REV: "730129887a84a8f84f3b78ffac7add72aeb551b6"
 
     steps:
       - run:
