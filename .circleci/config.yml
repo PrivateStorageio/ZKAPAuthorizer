@@ -139,6 +139,8 @@ jobs:
       # Run in a highly Nix-capable environment.
       - image: "nixorg/nix:circleci"
 
+    resource_class: "xlarge"
+
     environment:
       # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
       # essentially pins the majority of the software involved in the build.
@@ -200,11 +202,7 @@ jobs:
       - run:
           name: "Build challenge-bypass-ristretto"
           command: |
-            # Pre-build this because doing so is somewhat memory intensive and
-            # we want to turn off concurrency for this part.  We want to be
-            # able to leave concurrency on for the rest of the build, though,
-            # where it doesn't cause problems and speeds things up.
-            nix-build --cores 1 --max-jobs 1 \
+            nix-build --cores 4 --max-jobs 4 \
               --arg callPackage '(import <nixpkgs> { }).callPackage' \
               ./python-challenge-bypass-ristretto.nix
 
@@ -221,7 +219,7 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            nix-build --cores 8 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
 
       - save_cache:
           name: "Cache Nix Store Paths"
