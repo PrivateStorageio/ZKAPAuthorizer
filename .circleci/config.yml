@@ -206,6 +206,12 @@ jobs:
               --arg callPackage '(import <nixpkgs> { }).callPackage' \
               ./python-challenge-bypass-ristretto.nix
 
+      - save_cache:
+          name: "Cache Nix Store Paths"
+          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+          paths:
+            - "/nix"
+
       - run:
           name: "Run Test Suite"
           command: |
@@ -220,12 +226,6 @@ jobs:
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
             nix-build --cores 8 --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
-
-      - save_cache:
-          name: "Cache Nix Store Paths"
-          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
-          paths:
-            - "/nix"
 
       - run:
           name: "Report Coverage"
