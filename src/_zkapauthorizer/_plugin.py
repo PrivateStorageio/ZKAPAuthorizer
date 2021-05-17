@@ -307,4 +307,4 @@ def load_signing_key(path):
     :return challenge_bypass_ristretto.SigningKey: An object representing the
         key read.
     """
-    return SigningKey.decode_base64(path.getContent())
+    return SigningKey.decode_base64(path.getContent().strip())
