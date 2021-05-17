@@ -74,7 +74,8 @@ jobs:
             # The CircleCI macOS environment has curl and Python but does not
             # have pip.  So, for starters, use curl and Python to get pip.
             if [ "<< parameters.py-version >>" == "2.7" ]; then
-              curl https://bootstrap.pypa.io/2.7/get-pip.py -o get-pip.py
+
+              curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
             else
               curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
             fi
@@ -139,13 +140,14 @@ jobs:
       - image: "nixorg/nix:circleci"
 
     environment:
-      # Specify a revision of NixOS/nixpkgs to run against.  This essentially
-      # pins the majority of the software involved in the build.  This
-      # revision is selected arbitrarily.  It's somewhat current as of the
-      # time of this comment.  We can bump it to a newer version when that
-      # makes sense.  Meanwhile, the platform won't shift around beneath us
-      # unexpectedly.
-      NIXPKGS_REV: "8bf142e001b6876b021c8ee90c2c7cec385fe8e9"
+      # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
+      # essentially pins the majority of the software involved in the build.
+      # This revision is selected arbitrarily (it's just new enough to define
+      # all of the PrivateStorage stuff that ZKAPAuthorizer depends on).  It's
+      # somewhat current as of the time of this comment.  We can bump it to a
+      # newer version when that makes sense.  Meanwhile, the platform won't
+      # shift around beneath us unexpectedly.
+      NIXPKGS_REV: "730129887a84a8f84f3b78ffac7add72aeb551b6"
 
     steps:
       - run:
@@ -156,7 +158,7 @@ jobs:
           # the `BASE_ENV` feature as we do here.
           name: "Setup NIX_PATH Environment Variable"
           command: |
-            echo "export NIX_PATH=nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
+            echo "export NIX_PATH=nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
 
       - "checkout"
 
@@ -192,7 +194,8 @@ jobs:
             # If nixpkgs changes then potentially a lot of cached packages for
             # the base system will be invalidated so we may as well drop them
             # and make a new cache with the new packages.
-            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-ourdeps
+            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-
             - zkapauthorizer-nix-store-v4-
 
       - run:
@@ -205,6 +208,13 @@ jobs:
             nix-build --cores 1 --max-jobs 1 \
               --arg callPackage '(import <nixpkgs> { }).callPackage' \
               ./python-challenge-bypass-ristretto.nix
+
+      - save_cache:
+          name: "Cache Nix Store Paths"
+          when: "always"
+          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+          paths:
+            - "/nix"
 
       - run:
           name: "Run Test Suite"
@@ -219,11 +229,15 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build --argstr hypothesisProfile ci --arg collectCoverage true --attr doc
+            nix-build \
+              --argstr hypothesisProfile ci \
+              --arg collectCoverage true \
+              --attr doc
 
       - save_cache:
           name: "Cache Nix Store Paths"
-          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
+          when: "always"
+          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-ourdeps
           paths:
             - "/nix"
 

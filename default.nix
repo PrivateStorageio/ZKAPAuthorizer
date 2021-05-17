@@ -8,11 +8,7 @@
 let
   pkgs' = pkgs.extend (import ./overlays.nix);
   callPackage = pkgs'.python27Packages.callPackage;
-  tahoe-lafs' = (
-    if tahoe-lafs != null
-    then tahoe-lafs
-    else callPackage ./tahoe-lafs.nix { }
-  );
+  tahoe-lafs' = if tahoe-lafs == null then pkgs.python2Packages.tahoe-lafs-1_14 else tahoe-lafs;
 in
 callPackage ./zkapauthorizer.nix {
   challenge-bypass-ristretto = callPackage ./python-challenge-bypass-ristretto.nix { };
