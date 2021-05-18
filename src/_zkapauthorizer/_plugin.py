@@ -142,10 +142,10 @@ class ZKAPAuthorizer(object):
         kwargs = configuration.copy()
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
         pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
-        signing_key = SigningKey.decode_base64(
+        signing_key = load_signing_key(
             FilePath(
                 kwargs.pop(u"ristretto-signing-key-path"),
-            ).getContent(),
+            ),
         )
         announcement = {
             u"ristretto-issuer-root-url": root_url,
@@ -288,3 +288,23 @@ def get_root_nodes(client_node, node_config):
         return []
     else:
         return [client_node.create_node_from_uri(rootcap)]
+
+
+def load_signing_key(path):
+    """
+    Read a serialized Ristretto signing key from the given path and return it
+    as a ``challenge_bypass_ristretto.SigningKey``.
+
+    Unlike ``challenge_bypass_ristretto.SigningKey.decode_base64`` this
+    function will clean up any whitespace around the key.
+
+    :param FilePath path: The path from which to read the key.
+
+    :raise challenge_bypass_ristretto.DecodeException: If
+        ``SigningKey.decode_base64`` raises this exception it will be passed
+        through.
+
+    :return challenge_bypass_ristretto.SigningKey: An object representing the
+        key read.
+    """
+    return SigningKey.decode_base64(path.getContent().strip())

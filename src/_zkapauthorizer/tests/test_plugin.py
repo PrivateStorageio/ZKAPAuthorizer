@@ -110,6 +110,10 @@ from twisted.plugins.zkapauthorizer import (
     storage_server,
 )
 
+from challenge_bypass_ristretto import (
+    SigningKey,
+)
+
 from ..spending import (
     GET_PASSES,
 )
@@ -134,6 +138,10 @@ from ..lease_maintenance import (
     SERVICE_NAME,
 )
 
+from .._plugin import (
+    load_signing_key,
+)
+
 from .strategies import (
     minimal_tahoe_configs,
     tahoe_configs,
@@ -147,6 +155,7 @@ from .strategies import (
     sharenum_sets,
     sizes,
     pass_counts,
+    ristretto_signing_keys,
 )
 from .matchers import (
     Provides,
@@ -662,3 +671,22 @@ class LeaseMaintenanceServiceTests(TestCase):
         been written to the client's configuration directory.
         """
         return self._created_test(get_config, servers_yaml, rootcap=False)
+
+
+class LoadSigningKeyTests(TestCase):
+    """
+    Tests for ``load_signing_key``.
+    """
+    @given(ristretto_signing_keys())
+    def test_valid(self, key_bytes):
+        """
+        A base64-encoded byte string representing a valid Ristretto signing key
+        can be loaded from a file into a ``SigningKey`` object using
+        ``load_signing_key``.
+
+        :param bytes key: A base64-encoded Ristretto signing key.
+        """
+        p = FilePath(self.useFixture(TempDir()).join(b"key"))
+        p.setContent(key_bytes)
+        key = load_signing_key(p)
+        self.assertThat(key, IsInstance(SigningKey))

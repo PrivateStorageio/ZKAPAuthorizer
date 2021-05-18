@@ -35,6 +35,7 @@ from zope.interface import (
 
 from hypothesis.strategies import (
     one_of,
+    sampled_from,
     just,
     none,
     binary,
@@ -915,3 +916,33 @@ def api_auth_tokens():
     authorization tokens.
     """
     return binary(min_size=32, max_size=32).map(b64encode)
+
+
+def ristretto_signing_keys():
+    """
+    Build byte strings holding base64-encoded Ristretto signing keys, perhaps
+    with leading or trailing whitespace.
+    """
+    keys = sampled_from([
+        # A few legit keys
+        b"mkQf85V2vyLQRUYuqRb+Ke6K+M9pOtXm4MslsuCdBgg=",
+        b"6f93OIdZHHAmSIaRXDSIU1UcN+sbDAh41TRPb5DhrgI=",
+        b"k58h8yPT18epw+EKMJhwHFfoM6r3TIExKm4efQHNBgM=",
+        b"rbaAlWZ3NCnl5oZ9meviGfpLbyJpgpuiuFOX0rLnNwQ=",
+    ])
+    whitespace = sampled_from([
+        # maybe no whitespace at all
+        b""
+        # or maybe some
+        b" ",
+        b"\t",
+        b"\n",
+        b"\r\n",
+    ])
+
+    return builds(
+        lambda leading, key, trailing: leading + key + trailing,
+        whitespace,
+        keys,
+        whitespace,
+    )
