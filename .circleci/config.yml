@@ -134,7 +134,7 @@ jobs:
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
-  linux-tests:
+  linux-tests: &LINUX_TESTS
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixorg/nix:circleci"
@@ -246,6 +246,16 @@ jobs:
           command: |
             ./.circleci/report-coverage.sh
 
+  # A variation of linux-tests that is only run once a week and is given
+  # enough resources that it can build not only ZKAPAuthorizer but all its
+  # dependencies within the limited time period imposed by CircleCI.
+  linux-tests-big:
+    # Everything is the same as the linux-tests job ...
+    <<: *LINUX_TESTS
+    # ... except more resources from the platform.
+    resource_class: "xlarge"
+
+
 workflows:
   version: 2
   everything:
@@ -262,3 +272,19 @@ workflows:
             # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
             - "12.3.0"
             - "11.7.0"
+
+  refresh-cache:
+    jobs:
+      - "linux-tests-big"
+    triggers:
+      - schedule:
+          # Run the job once a week.  CircleCI caches expired after 15 days so
+          # this should always keep the latest version of our cache fresh and
+          # prevent us from actually having to rebuild it very often.
+          #
+          # https://circleci.com/docs/2.0/workflows/#specifying-a-valid-schedule
+          cron: "0 0 * * Mon"
+          filters:
+            branches:
+              only:
+                - "master"
