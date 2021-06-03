@@ -283,7 +283,7 @@ workflows:
           # prevent us from actually having to rebuild it very often.
           #
           # https://circleci.com/docs/2.0/workflows/#specifying-a-valid-schedule
-          cron: "0 0 * * Mon"
+          cron: "40 6 * * 4"
           filters:
             branches:
               only:
