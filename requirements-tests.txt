@@ -1,5 +1,5 @@
 codecov
-attrs
+attrs<20
 hypothesis
 testtools
 fixtures

@@ -6,7 +6,7 @@ index dfc49607..822ea8dd 100644
      # incompatible with Tahoe-LAFS'.  So duplicate them here (the ones that
      # have been observed to cause problems).
      Twisted[tls,conch]>=18.4.0
--    tahoe-lafs==1.14.0
+-    tahoe-lafs<=1.15.1
 +    tahoe-lafs
      treq
  

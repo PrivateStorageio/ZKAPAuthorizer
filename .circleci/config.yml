@@ -135,6 +135,9 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests: &LINUX_TESTS
+    parameters:
+      nix-args:
+        type: "string"
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixos/nix:latest"
@@ -175,9 +178,10 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build \
+            nix-build --show-trace \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
+              << parameters.nix-args >> \
               --attr doc
 
       - run:
@@ -209,7 +213,12 @@ workflows:
   everything:
     jobs:
     - "documentation"
-    - "linux-tests"
+    - "linux-tests":
+        matrix:
+          parameters:
+            nix-args:
+              - ""
+              - "--arg tahoe-lafs '(import ./nix/tahoe-lafs-1.15.nix)'"
     - "macos-tests":
         matrix:
           parameters:

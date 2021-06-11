@@ -3,12 +3,12 @@
 , collectCoverage ? false
 , testSuite ? null
 , trialArgs ? null
-, tahoe-lafs ? null
+, tahoe-lafs ? ({pythonPackages}: pythonPackages.tahoe-lafs-1_14)
 }:
 let
   pkgs' = pkgs.extend (import ./overlays.nix);
   callPackage = pkgs'.python27Packages.callPackage;
-  tahoe-lafs' = if tahoe-lafs == null then pkgs.python2Packages.tahoe-lafs-1_14 else tahoe-lafs;
+  tahoe-lafs' = callPackage tahoe-lafs {};
 in
 callPackage ./zkapauthorizer.nix {
   challenge-bypass-ristretto = callPackage ./python-challenge-bypass-ristretto.nix { };
