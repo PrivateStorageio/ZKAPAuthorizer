@@ -137,7 +137,7 @@ jobs:
   linux-tests: &LINUX_TESTS
     docker:
       # Run in a highly Nix-capable environment.
-      - image: "nixorg/nix:circleci"
+      - image: "nixos/nix:latest"
 
     environment:
       # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
@@ -148,18 +148,9 @@ jobs:
       # newer version when that makes sense.  Meanwhile, the platform won't
       # shift around beneath us unexpectedly.
       NIXPKGS_REV: "730129887a84a8f84f3b78ffac7add72aeb551b6"
+      NIX_PATH: nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz
 
     steps:
-      - run:
-          # Get NIX_PATH set for the rest of the job so that the revision of
-          # nixpkgs we selected will be used everywhere Nix pulls in software.
-          # There is no way to set an environment variable containing the
-          # value of another environment variable on CircleCI except to use
-          # the `BASE_ENV` feature as we do here.
-          name: "Setup NIX_PATH Environment Variable"
-          command: |
-            echo "export NIX_PATH=nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
-
       - "checkout"
 
       - "run":
