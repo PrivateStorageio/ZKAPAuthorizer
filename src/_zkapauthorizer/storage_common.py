@@ -38,7 +38,7 @@ from pyutil.mathutil import (
     div_ceil,
 )
 
-@attr.s(frozen=True)
+@attr.s(frozen=True, str=True)
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -50,11 +50,11 @@ class MorePassesRequired(Exception):
     ivar int required_count: The number of valid passes which must be
         presented for the operation to be authorized.
 
-    :ivar list[int] signature_check_failed: Indices into the supplied list of
+    :ivar set[int] signature_check_failed: Indices into the supplied list of
         passes indicating passes which failed the signature check.
     """
-    valid_count = attr.ib()
-    required_count = attr.ib()
+    valid_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    required_count = attr.ib(validator=attr.validators.instance_of((int, long)))
     signature_check_failed = attr.ib(converter=frozenset)
 
 
