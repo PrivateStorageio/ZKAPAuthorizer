@@ -135,11 +135,15 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests: &LINUX_TESTS
+    resource_class: "xlarge"
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixorg/nix:circleci"
 
     environment:
+      # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
+      CACHIX_NAME: "privatestorage-opensource"
+
       # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
       # essentially pins the majority of the software involved in the build.
       # This revision is selected arbitrarily (it's just new enough to define
@@ -147,74 +151,16 @@ jobs:
       # somewhat current as of the time of this comment.  We can bump it to a
       # newer version when that makes sense.  Meanwhile, the platform won't
       # shift around beneath us unexpectedly.
-      NIXPKGS_REV: "730129887a84a8f84f3b78ffac7add72aeb551b6"
+      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz"
 
     steps:
       - run:
-          # Get NIX_PATH set for the rest of the job so that the revision of
-          # nixpkgs we selected will be used everywhere Nix pulls in software.
-          # There is no way to set an environment variable containing the
-          # value of another environment variable on CircleCI except to use
-          # the `BASE_ENV` feature as we do here.
-          name: "Setup NIX_PATH Environment Variable"
+          name: "Set up Cachix"
           command: |
-            echo "export NIX_PATH=nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/$NIXPKGS_REV.tar.gz" >> $BASH_ENV
+            nix-env -iA nixpkgs.cachix
+            cachix use "${CACHIX_NAME}"
 
       - "checkout"
-
-      - "run":
-          # CircleCI won't let us interpolate NIXPKGS_REV into a cache key.
-          # Only CircleCI's own environment variables or variables set via the
-          # web interface in a "context" can be interpolated into cache keys.
-          # However, we can interpolate the checksum of a file...  Since we
-          # don't care about the exact revision, we just care that a new
-          # revision gives us a new string, we can write the revision to a
-          # file and then put the checksum of that file into the cache key.
-          # This way, we don't have to maintain the nixpkgs revision in two
-          # places and risk having them desynchronize.
-          name: "Prepare For Cache Key"
-          command: |
-            echo "${NIXPKGS_REV}" > nixpkgs.rev
-
-      - restore_cache:
-          # Get all of Nix's state relating to the particular revision of
-          # nixpkgs we're using.  It will always be the same.  CircleCI
-          # artifacts and nixpkgs store objects are probably mostly hosted in
-          # the same place (S3) so there's not a lot of difference for
-          # anything that's pre-built.  For anything we end up building
-          # ourselves, though, this saves us all of the build time (less the
-          # download time).
-          #
-          # Read about caching dependencies: https://circleci.com/docs/2.0/caching/
-          name: "Restore Nix Store Paths"
-          keys:
-            # Construct cache keys that allow sharing as long as nixpkgs
-            # revision is unchanged.
-            #
-            # If nixpkgs changes then potentially a lot of cached packages for
-            # the base system will be invalidated so we may as well drop them
-            # and make a new cache with the new packages.
-            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-ourdeps
-            - zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-
-            - zkapauthorizer-nix-store-v4-
-
-      - run:
-          name: "Build challenge-bypass-ristretto"
-          command: |
-            # Pre-build this because doing so is somewhat memory intensive and
-            # we want to turn off concurrency for this part.  We want to be
-            # able to leave concurrency on for the rest of the build, though,
-            # where it doesn't cause problems and speeds things up.
-            nix-build --cores 1 --max-jobs 1 \
-              --arg callPackage '(import <nixpkgs> { }).callPackage' \
-              ./python-challenge-bypass-ristretto.nix
-
-      - save_cache:
-          name: "Cache Nix Store Paths"
-          when: "always"
-          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}
-          paths:
-            - "/nix"
 
       - run:
           name: "Run Test Suite"
@@ -232,29 +178,13 @@ jobs:
             nix-build \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --attr doc
-
-      - save_cache:
-          name: "Cache Nix Store Paths"
-          when: "always"
-          key: zkapauthorizer-nix-store-v4-{{ checksum "nixpkgs.rev" }}-ourdeps
-          paths:
-            - "/nix"
+              --attr doc |
+              cachix push "${CACHIX_NAME}"
 
       - run:
           name: "Report Coverage"
           command: |
             ./.circleci/report-coverage.sh
-
-  # A variation of linux-tests that is only run once a week and is given
-  # enough resources that it can build not only ZKAPAuthorizer but all its
-  # dependencies within the limited time period imposed by CircleCI.
-  linux-tests-big:
-    # Everything is the same as the linux-tests job ...
-    <<: *LINUX_TESTS
-    # ... except more resources from the platform.
-    resource_class: "xlarge"
-
 
 workflows:
   version: 2
@@ -272,19 +202,3 @@ workflows:
             # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
             - "12.3.0"
             - "11.7.0"
-
-  refresh-cache:
-    jobs:
-      - "linux-tests-big"
-    triggers:
-      - schedule:
-          # Run the job once a week.  CircleCI caches expired after 15 days so
-          # this should always keep the latest version of our cache fresh and
-          # prevent us from actually having to rebuild it very often.
-          #
-          # https://circleci.com/docs/2.0/workflows/#specifying-a-valid-schedule
-          cron: "40 6 * * 4"
-          filters:
-            branches:
-              only:
-                - "master"
