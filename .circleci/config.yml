@@ -148,7 +148,7 @@ jobs:
     steps:
       - run:
           environment:
-            NIX_PATH: "nixpkgs=https://nixos.org/channels/nixos-21.05-small"
+            NIX_PATH: "nixpkgs=https://github.com/nixos/nixpkgs/archive/7e9b0dff974c89e070da1ad85713ff3c20b0ca97.tar.gz"
           name: "Set up Cachix"
           command: |
             nix-env -iA nixpkgs.cachix
