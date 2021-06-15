@@ -157,7 +157,7 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
-            nix-env -iA nixpkgs.cachix
+            nix-env -iA nixpkgs.cachix nixpkgs.bash
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
 
