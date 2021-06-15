@@ -181,19 +181,23 @@ jobs:
               --attr doc
 
       - run:
-          name: Early return if this build is from a forked PR
-          command: |
-            if [ -n "$CIRCLE_PR_NUMBER" ]; then
-              echo "Nothing to do for forked PRs, so marking this step successful"
-              circleci step halt
-            fi
-            
-      - run:
           name: "Push to Cachix"
           when: "always"
           command: |
-            # https://docs.cachix.org/continuous-integration-setup/circleci.html
-            bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
+            # Cribbed from
+            # https://circleci.com/blog/managing-secrets-when-you-have-pull-requests-from-outside-contributors/
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              # I'm sure you're thinking "CIRCLE_PR_NUMBER must just be the
+              # number of the PR being built".  Sorry, dear reader, you have
+              # guessed poorly.  It is also conditionally set based on whether
+              # this is a PR from a fork or not.
+              #
+              # https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables
+              echo "Skipping Cachix push for forked PR."
+            else
+              # https://docs.cachix.org/continuous-integration-setup/circleci.html
+              bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
+            fi
 
       - run:
           name: "Report Coverage"
