@@ -159,6 +159,7 @@ jobs:
           command: |
             nix-env -iA nixpkgs.cachix
             cachix use "${CACHIX_NAME}"
+            nix path-info --all > /tmp/store-path-pre-build
 
       - "checkout"
 
@@ -178,8 +179,14 @@ jobs:
             nix-build \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --attr doc |
-              cachix push "${CACHIX_NAME}"
+              --attr doc
+
+      - run:
+          name: "Push to Cachix"
+          when: "always"
+          command: |
+            # https://docs.cachix.org/continuous-integration-setup/circleci.html
+            bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
 
       - run:
           name: "Report Coverage"
