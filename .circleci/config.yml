@@ -149,7 +149,7 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
-            nix-env -iA cachix
+            nix-env -iA nixpkgs.cachix
             cachix use "${CACHIX_NAME}"
 
       - "checkout"
