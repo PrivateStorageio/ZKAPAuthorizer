@@ -138,7 +138,7 @@ jobs:
     resource_class: "xlarge"
     docker:
       # Run in a highly Nix-capable environment.
-      - image: "nixorg/nix:circleci"
+      - image: "nixos/nix:latest"
 
     environment:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
@@ -149,8 +149,7 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
-            nix-channel --add https://nixos.org/channels/nixos-21.05 2105-small
-            nix-env -f '<2105-small>' -iA cachix
+            nix-env -iA cachix
             cachix use "${CACHIX_NAME}"
 
       - "checkout"
