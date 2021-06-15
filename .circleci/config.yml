@@ -150,7 +150,7 @@ jobs:
           name: "Set up Cachix"
           command: |
             nix-channel --add https://nixos.org/channels/nixos-21.05 2105-small
-            nix-env -f '<2105-small>' -i cachix
+            nix-env -f '<2105-small>' -iA cachix
             cachix use "${CACHIX_NAME}"
 
       - "checkout"
