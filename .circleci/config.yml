@@ -144,6 +144,14 @@ jobs:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
 
+      # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
+      # essentially pins the majority of the software involved in the build.
+      # This revision is selected arbitrarily (it's just new enough to define
+      # all of the PrivateStorage stuff that ZKAPAuthorizer depends on).  It's
+      # somewhat current as of the time of this comment.  We can bump it to a
+      # newer version when that makes sense.  Meanwhile, the platform won't
+      # shift around beneath us unexpectedly.
+      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz"
 
     steps:
       - run:
@@ -155,16 +163,6 @@ jobs:
       - "checkout"
 
       - run:
-          environment:
-            # Specify a revision of PrivateStorageio/nixpkgs to run against.
-            # This essentially pins the majority of the software involved in
-            # the build.  This revision is selected arbitrarily (it's just new
-            # enough to define all of the PrivateStorage stuff that
-            # ZKAPAuthorizer depends on).  It's somewhat current as of the
-            # time of this comment.  We can bump it to a newer version when
-            # that makes sense.  Meanwhile, the platform won't shift around
-            # beneath us unexpectedly.
-            NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz"
           name: "Run Test Suite"
           command: |
             # Building the package has, as a side effect, running the test
