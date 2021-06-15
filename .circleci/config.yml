@@ -135,7 +135,6 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests: &LINUX_TESTS
-    resource_class: "xlarge"
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixos/nix:latest"
