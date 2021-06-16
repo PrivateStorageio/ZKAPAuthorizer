@@ -33,6 +33,8 @@ from testtools import (
 )
 from testtools.matchers import (
     Equals,
+    AfterPreprocessing,
+    MatchesAll,
 )
 from hypothesis import (
     given,
@@ -156,6 +158,36 @@ class ValidationResultTests(TestCase):
                 ),
             ),
         )
+
+    def test_raise_for(self):
+        """
+        ``_ValidationResult.raise_for`` raises ``MorePassesRequired`` populated
+        with details of the validation and how it fell short of what was
+        required.
+        """
+        good = [0, 1, 2, 3]
+        badsig = [4]
+        required = 10
+        result = _ValidationResult(good, badsig)
+        try:
+            result.raise_for(required)
+        except MorePassesRequired as exc:
+            self.assertThat(
+                exc,
+                MatchesAll(
+                    Equals(
+                        MorePassesRequired(
+                            len(good),
+                            required,
+                            set(badsig),
+                        ),
+                    ),
+                    AfterPreprocessing(
+                        str,
+                        Equals("MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset([4]))"),
+                    ),
+                ),
+            )
 
 
 class PassValidationTests(TestCase):
