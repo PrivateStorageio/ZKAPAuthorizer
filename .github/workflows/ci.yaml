@@ -1,7 +1,6 @@
 name: "ci"
 
-on:
-  - "push"
+on: []
 
 jobs:
   unit-tests:
