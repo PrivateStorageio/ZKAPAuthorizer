@@ -230,27 +230,59 @@ def server_configurations(signing_key_path):
     )
 
 
+def zkapauthz_configuration(
+    extra_configurations,
+    allowed_public_keys=sets(dummy_ristretto_keys(), min_size=1, max_size=5),
+):
+    """
+    Build ZKAPAuthorizer client plugin configuration dictionaries.
+
+    :param extra_configurations: A strategy to build any of the optional /
+        alternative sections of the configuration.
+
+    :param allowed_public_keys: A strategy to build sets of allowed public
+        keys for the configuration.
+
+    :return: A strategy that builds the basic, required part of the client
+        plugin configuration plus an extra values built by
+        ``extra_configurations``.
+    """
+
+    def merge(extra_configuration, allowed_public_keys):
+        config = {
+            u"default-token-count": u"32",
+        }
+        config.update(extra_configuration)
+        return config
+
+    return builds(
+        merge,
+        extra_configurations,
+        allowed_public_keys,
+    )
+
+
 def client_ristrettoredeemer_configurations():
     """
     Build Ristretto-using configuration values for the client-side plugin.
     """
-    return just({
+    return zkapauthz_configuration(just({
         u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
         u"redeemer": u"ristretto",
-        u"default-token-count": u"32",
-    })
+    }))
 
 
 def client_dummyredeemer_configurations():
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
-    return dummy_ristretto_keys().map(
+    return zkapauthz_configuration(
+        dummy_ristretto_keys().map(
         lambda key: {
             u"redeemer": u"dummy",
             u"issuer-public-key": key,
-            u"default-token-count": u"32",
-        })
+        }),
+    )
 
 
 def token_counts():
@@ -265,41 +297,37 @@ def client_doublespendredeemer_configurations(default_token_counts=token_counts(
     """
     Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
     """
-    return fixed_dictionaries({
-        u"redeemer": just(u"double-spend"),
-        u"default-token-count": default_token_counts.map(str),
-    })
+    return zkapauthz_configuration(just({
+        u"redeemer": u"double-spend",
+    }))
 
 
 def client_unpaidredeemer_configurations():
     """
     Build UnpaidRedeemer-using configuration values for the client-side plugin.
     """
-    return just({
+    return zkapauthz_configuration(just({
         u"redeemer": u"unpaid",
-        u"default-token-count": u"32",
-    })
+    }))
 
 
 def client_nonredeemer_configurations():
     """
     Build NonRedeemer-using configuration values for the client-side plugin.
     """
-    return just({
+    return zkapauthz_configuration(just({
         u"redeemer": u"non",
-        u"default-token-count": u"32",
-    })
+    }))
 
 
 def client_errorredeemer_configurations(details):
     """
     Build ErrorRedeemer-using configuration values for the client-side plugin.
     """
-    return just({
+    return zkapauthz_configuration(just({
         u"redeemer": u"error",
         u"details": details,
-        u"default-token-count": u"32",
-    })
+    }))
 
 
 def direct_tahoe_configs(
