@@ -95,9 +95,6 @@ from ..model import (
     LeaseMaintenanceActivity,
     memory_connect,
 )
-from ..controller import (
-    DummyRedeemer,
-)
 from .strategies import (
     tahoe_configs,
     vouchers,

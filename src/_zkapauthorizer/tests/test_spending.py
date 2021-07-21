@@ -51,9 +51,6 @@ from .matchers import (
 from .fixtures import (
     ConfiglessMemoryVoucherStore,
 )
-from ..controller import (
-    DummyRedeemer,
-)
 from ..spending import (
     IPassGroup,
     SpendingController,
