@@ -132,6 +132,13 @@ def get_configured_lease_duration(node_config):
     return 31 * 24 * 60 * 60
 
 
+def get_configured_allowed_public_keys(node_config):
+    """
+    Read the set of allowed issuer public keys from the given configuration.
+    """
+    return set()
+
+
 def required_passes(bytes_per_pass, share_sizes):
     """
     Calculate the number of passes that are required to store shares of the

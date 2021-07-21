@@ -231,6 +231,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
+            allowed_public_keys={public_key},
             clock=Clock(),
         )
 
@@ -267,6 +268,7 @@ class PaymentControllerTests(TestCase):
             store,
             NonRedeemer(),
             default_token_count=100,
+            allowed_public_keys=set(),
             clock=Clock(),
         )
         self.assertThat(
@@ -304,6 +306,7 @@ class PaymentControllerTests(TestCase):
             # Require more success than we're going to get so it doesn't
             # finish.
             num_redemption_groups=counter,
+            allowed_public_keys={public_key},
             clock=Clock(),
         )
 
@@ -360,6 +363,7 @@ class PaymentControllerTests(TestCase):
                 ),
                 default_token_count=num_tokens,
                 num_redemption_groups=num_redemption_groups,
+                allowed_public_keys={public_key},
                 clock=Clock(),
             )
             self.assertThat(
@@ -386,6 +390,7 @@ class PaymentControllerTests(TestCase):
                 # The number of redemption groups must not change for
                 # redemption of a particular voucher.
                 num_redemption_groups=num_redemption_groups,
+                allowed_public_keys={public_key},
                 clock=Clock(),
             )
 
@@ -421,6 +426,7 @@ class PaymentControllerTests(TestCase):
             redeemer,
             default_token_count=num_tokens,
             num_redemption_groups=num_redemption_groups,
+            allowed_public_keys=set(),
             clock=Clock(),
         )
         self.assertThat(
@@ -445,6 +451,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
+            allowed_public_keys={public_key},
             clock=Clock(),
         )
         self.assertThat(
@@ -473,6 +480,7 @@ class PaymentControllerTests(TestCase):
             store,
             DoubleSpendRedeemer(),
             default_token_count=100,
+            allowed_public_keys=set(),
             clock=Clock(),
         )
         self.assertThat(
@@ -503,6 +511,7 @@ class PaymentControllerTests(TestCase):
             store,
             UnpaidRedeemer(),
             default_token_count=100,
+            allowed_public_keys=set(),
             clock=Clock(),
         )
         self.assertThat(
@@ -523,6 +532,7 @@ class PaymentControllerTests(TestCase):
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
+            allowed_public_keys={public_key},
             clock=Clock(),
         )
 
@@ -553,6 +563,7 @@ class PaymentControllerTests(TestCase):
             store,
             UnpaidRedeemer(),
             default_token_count=100,
+            allowed_public_keys=set(),
             clock=clock,
         )
         self.assertThat(

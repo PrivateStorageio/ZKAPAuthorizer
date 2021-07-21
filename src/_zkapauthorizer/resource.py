@@ -64,6 +64,7 @@ from .storage_common import (
     get_configured_shares_total,
     get_configured_pass_value,
     get_configured_lease_duration,
+    get_configured_allowed_public_keys,
 )
 
 from .pricecalculator import (
@@ -157,6 +158,7 @@ def from_configuration(
         store,
         redeemer,
         default_token_count,
+        allowed_public_keys=get_configured_allowed_public_keys(node_config),
         clock=clock,
     )
 
