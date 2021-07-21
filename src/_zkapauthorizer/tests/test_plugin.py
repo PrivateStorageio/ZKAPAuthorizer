@@ -156,6 +156,7 @@ from .strategies import (
     sizes,
     pass_counts,
     ristretto_signing_keys,
+    dummy_ristretto_keys,
 )
 from .matchers import (
     Provides,
@@ -469,6 +470,7 @@ class ClientPluginTests(TestCase):
         announcement=announcements(),
         voucher=vouchers(),
         num_passes=pass_counts(),
+        public_key=dummy_ristretto_keys(),
     )
     @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
@@ -479,6 +481,7 @@ class ClientPluginTests(TestCase):
             announcement,
             voucher,
             num_passes,
+            public_key,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
@@ -494,7 +497,7 @@ class ClientPluginTests(TestCase):
 
         controller = PaymentController(
             store,
-            DummyRedeemer(),
+            DummyRedeemer(public_key),
             default_token_count=num_passes,
             num_redemption_groups=1,
             clock=Clock(),
