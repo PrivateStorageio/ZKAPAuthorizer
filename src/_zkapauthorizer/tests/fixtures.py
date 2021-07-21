@@ -20,6 +20,10 @@ from __future__ import (
     absolute_import,
 )
 
+from base64 import (
+    b64encode,
+)
+
 import attr
 
 from fixtures import (
@@ -43,6 +47,7 @@ from ..model import (
     memory_connect,
 )
 from ..controller import (
+    DummyRedeemer,
     PaymentController,
 )
 
@@ -99,8 +104,12 @@ class ConfiglessMemoryVoucherStore(Fixture):
     This is like ``TemporaryVoucherStore`` but faster because it skips the
     Tahoe-LAFS parts.
     """
-    redeemer = attr.ib()
     get_now = attr.ib()
+    _public_key = attr.ib(default=b64encode(b"A" * 32).decode("utf-8"))
+    redeemer = attr.ib(default=None, init=False)
+
+    def __attrs_post_init__(self):
+        self.redeemer = DummyRedeemer(self._public_key)
 
     def _setUp(self):
         here = FilePath(u".")

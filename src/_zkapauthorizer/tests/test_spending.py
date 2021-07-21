@@ -71,7 +71,6 @@ class PassGroupTests(TestCase):
         """
         configless = self.useFixture(
             ConfiglessMemoryVoucherStore(
-                DummyRedeemer(),
                 lambda: now,
             ),
         )
@@ -109,7 +108,6 @@ class PassGroupTests(TestCase):
     ):
         configless = self.useFixture(
             ConfiglessMemoryVoucherStore(
-                DummyRedeemer(),
                 lambda: now,
             ),
         )
