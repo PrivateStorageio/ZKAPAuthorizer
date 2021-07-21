@@ -230,9 +230,16 @@ def server_configurations(signing_key_path):
     )
 
 
+def dummy_ristretto_keys_sets():
+    """
+    Build small sets of "dummy" Ristretto keys.  See ``dummy_ristretto_keys``.
+    """
+    return sets(dummy_ristretto_keys(), min_size=1, max_size=5)
+
+
 def zkapauthz_configuration(
     extra_configurations,
-    allowed_public_keys=sets(dummy_ristretto_keys(), min_size=1, max_size=5),
+    allowed_public_keys=dummy_ristretto_keys_sets(),
 ):
     """
     Build ZKAPAuthorizer client plugin configuration dictionaries.
@@ -251,6 +258,7 @@ def zkapauthz_configuration(
     def merge(extra_configuration, allowed_public_keys):
         config = {
             u"default-token-count": u"32",
+            u"allowed-public-keys": u",".join(allowed_public_keys),
         }
         config.update(extra_configuration)
         return config
@@ -276,13 +284,17 @@ def client_dummyredeemer_configurations():
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(
-        dummy_ristretto_keys().map(
-        lambda key: {
-            u"redeemer": u"dummy",
-            u"issuer-public-key": key,
-        }),
-    )
+    def share_a_key(allowed_keys):
+        return zkapauthz_configuration(
+            just({
+                u"redeemer": u"dummy",
+                # Pick out one of the allowed public keys so that the dummy
+                # appears to produce usable tokens.
+                u"issuer-public-key": next(iter(allowed_keys)),
+            }),
+            allowed_public_keys=just(allowed_keys),
+        )
+    return dummy_ristretto_keys_sets().flatmap(share_a_key)
 
 
 def token_counts():

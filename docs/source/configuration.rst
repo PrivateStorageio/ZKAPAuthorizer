@@ -52,6 +52,20 @@ The client can also be configured with the number of passes to expect in exchang
 
 The value given here must agree with the value the issuer uses in its configuration or redemption may fail.
 
+allowed-public-keys
+~~~~~~~~~~~~~~~~~~~
+
+Regardless of which redeemer is selected,
+the client must also be configured with the public part of the issuer key pair which it will allow to sign tokens::
+
+  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  allowed-public-keys = AAAA...,BBBB...,CCCC...
+
+The ``allowed-public-keys`` value is a comma-separated list of encoded public keys.
+When tokens are received from an issuer during redemption,
+these are the only public keys which will satisfy the redeemer and cause the tokens to be made available to the client to be spent.
+Tokens received with any other public key will be sequestered and will *not* be spent until some further action is taken.
+
 Server
 ------
 

@@ -164,6 +164,7 @@ from ..storage_common import (
     required_passes,
     get_configured_pass_value,
     get_configured_lease_duration,
+    get_configured_allowed_public_keys,
 )
 
 from .strategies import (
@@ -388,6 +389,30 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     FilePath(basedir).child(b"private").makedirs()
     config._basedir = basedir
     config.write_private_config(b"api_auth_token", api_auth_token)
+
+
+class FromConfigurationTests(TestCase):
+    """
+    Tests for ``from_configuration``.
+    """
+    @given(tahoe_configs())
+    def test_allowed_public_keys(self, get_config):
+        """
+        The controller created by ``from_configuration`` is configured to allow
+        the public keys found in the configuration.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        allowed_public_keys = get_configured_allowed_public_keys(config)
+
+        # root_from_config is just an easier way to call from_configuration
+        root = root_from_config(config, datetime.now)
+        self.assertThat(
+            root.controller,
+            MatchesStructure(
+                allowed_public_keys=Equals(allowed_public_keys),
+            ),
+        )
 
 
 class GetTokenCountTests(TestCase):
