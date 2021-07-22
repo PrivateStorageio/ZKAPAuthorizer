@@ -559,6 +559,23 @@ class VoucherStore(object):
         )
 
     @with_cursor
+    def count_unblinded_tokens(self, cursor):
+        """
+        Return the largest number of unblinded tokens that can be requested from
+        ``get_unblinded_tokens`` without causing it to raise
+        ``NotEnoughTokens``.
+        """
+        cursor.execute(
+            """
+            SELECT count(1)
+            FROM   [unblinded-tokens]
+            WHERE  [token] NOT IN [in-use]
+            """,
+        )
+        (count,) = cursor.fetchone()
+        return count
+
+    @with_cursor
     def discard_unblinded_tokens(self, cursor, unblinded_tokens):
         """
         Get rid of some unblinded tokens.  The tokens will be completely removed

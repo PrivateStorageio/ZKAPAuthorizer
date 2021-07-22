@@ -739,13 +739,25 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, completed, data):
         """
-        Unblinded tokens that are added to the store can later be retrieved.
+        Unblinded tokens that are added to the store can later be retrieved and counted.
         """
         random_tokens, unblinded_tokens = paired_tokens(data)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens, completed)
+
+        # All the tokens just inserted should be counted.
+        self.expectThat(
+            store.count_unblinded_tokens(),
+            Equals(len(unblinded_tokens)),
+        )
         retrieved_tokens = store.get_unblinded_tokens(len(random_tokens))
+
+        # All the tokens just extracted should not be counted.
+        self.expectThat(
+            store.count_unblinded_tokens(),
+            Equals(0),
+        )
 
         self.expectThat(
             set(unblinded_tokens),
