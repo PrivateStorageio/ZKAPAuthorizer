@@ -776,9 +776,10 @@ class UnblindedTokenTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
         vouchers(),
-        integers(min_value=0, max_value=100),
+        integers(min_value=1, max_value=16),
+        integers(min_value=1, max_value=128),
     )
-    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, extra_tokens):
+    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, num_redemption_groups, extra_tokens):
         """
         The first unblinded token returned in a response to a **GET** request is
         the first token to be used to authorize a storage request.
@@ -816,6 +817,7 @@ class UnblindedTokenTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
 
+        root.controller.num_redemption_groups = num_redemption_groups
         num_tokens = root.controller.num_redemption_groups + extra_tokens
 
         # Put in a number of tokens with which to test.
