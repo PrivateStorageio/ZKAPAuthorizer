@@ -128,6 +128,8 @@ _UPGRADES = {
 
     1: [
         """
+        -- Incorrectly track a single public-key for all.  Later version of
+        -- the schema moves this elsewhere.
         ALTER TABLE [vouchers] ADD COLUMN [public-key] text
         """,
     ],
@@ -170,10 +172,6 @@ _UPGRADES = {
 
     5: [
         """
-        ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
-        """,
-
-        """
         -- Create a table where rows represent a single group of unblinded
         -- tokens all redeemed together.  Some number of these rows represent
         -- a complete redemption of a voucher.
@@ -186,13 +184,20 @@ _UPGRADES = {
 
             -- A flag indicating whether these tokens can be spent or if
             -- they're being held for further inspection.
-            [spendable] integer
+            [spendable] integer,
+
+            -- The public key seen when redeeming this group.
+            [public-key] text
         )
         """,
 
         """
-        INSERT INTO [redemption-groups] ([voucher], [spendable])
-            SELECT DISTINCT([number]), 1 FROM [vouchers] WHERE [state] = "redeemed"
+        INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable])
+            SELECT DISTINCT([number]), [public-key], 1 FROM [vouchers] WHERE [state] = "redeemed"
+        """,
+
+        """
+        ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
         """,
 
         """

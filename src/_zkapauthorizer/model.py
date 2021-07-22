@@ -456,9 +456,9 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            INSERT INTO [redemption-groups] ([voucher], [spendable]) VALUES (?, ?)
+            INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
             """,
-            (voucher, spendable),
+            (voucher, public_key, spendable),
         )
         group_id = cursor.lastrowid
 
@@ -469,7 +469,6 @@ class VoucherStore(object):
               , [token-count] = COALESCE([token-count], 0) + ?
               , [sequestered-count] = COALESCE([sequestered-count], 0) + ?
               , [finished] = ?
-              , [public-key] = ?
               , [counter] = [counter] + 1
             WHERE [number] = ?
             """,
@@ -478,7 +477,6 @@ class VoucherStore(object):
                 token_count_increase,
                 sequestered_count_increase,
                 self.now(),
-                public_key,
                 voucher,
             ),
         )
@@ -978,13 +976,9 @@ class Redeemed(object):
     :ivar datetime finished: The time when the redemption finished.
 
     :ivar int token_count: The number of tokens the voucher was redeemed for.
-
-    :ivar unicode public_key: The public part of the key used to sign the
-        tokens for this voucher.
     """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
-    public_key = attr.ib(validator=attr.validators.optional(attr.validators.instance_of(unicode)))
 
     def should_start_redemption(self):
         return False
@@ -994,7 +988,6 @@ class Redeemed(object):
             u"name": u"redeemed",
             u"finished": self.finished.isoformat(),
             u"token-count": self.token_count,
-            u"public-key": self.public_key,
         }
 
 
@@ -1117,7 +1110,6 @@ class Voucher(object):
                 return Redeemed(
                     parse_datetime(row[0], delimiter=u" "),
                     row[1],
-                    row[2],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
 
@@ -1161,7 +1153,6 @@ class Voucher(object):
             state = Redeemed(
                 finished=parse_datetime(state_json[u"finished"]),
                 token_count=state_json[u"token-count"],
-                public_key=state_json[u"public-key"],
             )
         elif state_name == u"unpaid":
             state = Unpaid(

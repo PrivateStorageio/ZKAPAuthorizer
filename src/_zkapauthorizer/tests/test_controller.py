@@ -138,7 +138,6 @@ from .strategies import (
     voucher_counters,
     redemption_group_counts,
     dummy_ristretto_keys,
-    token_counts,
     clocks,
 )
 from .matchers import (
@@ -407,7 +406,6 @@ class PaymentControllerTests(TestCase):
                 model_Redeemed(
                     finished=now,
                     token_count=num_tokens,
-                    public_key=public_key,
                 ),
             ),
         )
@@ -468,7 +466,6 @@ class PaymentControllerTests(TestCase):
             Equals(model_Redeemed(
                 finished=now,
                 token_count=100,
-                public_key=public_key,
             )),
         )
 
@@ -708,7 +705,6 @@ class PaymentControllerTests(TestCase):
                     model_Redeemed(
                         finished=datetime_now(),
                         token_count=allowed_token_count,
-                        public_key=all_public_keys[-1],
                     ),
                 ),
             ),

@@ -1161,7 +1161,6 @@ class VoucherTests(TestCase):
         are included in a json-encoded response body.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
-        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1174,7 +1173,6 @@ class VoucherTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=count,
-                    public_key=public_key,
                 )),
             ),
         )
@@ -1340,7 +1338,6 @@ class VoucherTests(TestCase):
         vouchers.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
-        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1355,7 +1352,6 @@ class VoucherTests(TestCase):
                         state=Redeemed(
                             finished=now,
                             token_count=count,
-                            public_key=public_key,
                         ),
                     ).marshal()
                     for voucher
