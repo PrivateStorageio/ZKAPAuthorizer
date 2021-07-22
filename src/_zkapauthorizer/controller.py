@@ -950,6 +950,7 @@ class PaymentController(object):
             result.public_key,
             result.unblinded_tokens,
             completed=(counter + 1 == self.num_redemption_groups),
+            spendable=result.public_key in self.allowed_public_keys,
         )
         return True
 

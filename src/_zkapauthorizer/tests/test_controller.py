@@ -66,6 +66,7 @@ from hypothesis.strategies import (
     datetimes,
     lists,
     sampled_from,
+    randoms,
 )
 from twisted.python.url import (
     URL,
@@ -137,6 +138,7 @@ from .strategies import (
     voucher_counters,
     redemption_group_counts,
     dummy_ristretto_keys,
+    token_counts,
     clocks,
 )
 from .matchers import (
@@ -146,6 +148,7 @@ from .matchers import (
 )
 from .fixtures import (
     TemporaryVoucherStore,
+    ConfiglessMemoryVoucherStore,
 )
 
 
@@ -595,6 +598,153 @@ class PaymentControllerTests(TestCase):
                     finished=Equals(datetime_now()),
                 ),
             ),
+        )
+
+    @given(
+        # Get a random object so we can shuffle allowed and disallowed keys
+        # together in an unpredictable but Hypothesis-deterministicway.
+        randoms(),
+        # Control time just to control it.  Nothing particularly interesting
+        # relating to time happens in this test.
+        clocks(),
+        # Build a voucher number to use with the attempted redemption.
+        vouchers(),
+        # Build a number of redemption groups.
+        integers(min_value=1, max_value=16).flatmap(
+            # Build a number of groups to have an allowed key
+            lambda num_groups: integers(min_value=0, max_value=num_groups).flatmap(
+                # Build distinct public keys
+                lambda num_allowed_key_groups: lists(
+                    dummy_ristretto_keys(),
+                    min_size=num_groups,
+                    max_size=num_groups,
+                    unique=True,
+                ).map(
+                    # Split the keys into allowed and disallowed groups
+                    lambda public_keys: (public_keys[:num_allowed_key_groups], public_keys[num_allowed_key_groups:]),
+                ),
+            ),
+        ),
+        # Build a number of extra tokens to request beyond the minimum number
+        # required by the number of redemption groups we have.
+        integers(min_value=0, max_value=32),
+    )
+    def test_sequester_tokens_for_untrusted_key(self, random, clock, voucher, public_keys, extra_token_count):
+        """
+        All unblinded tokens which are returned from the redemption process
+        associated with a public key that the controller has not been
+        configured to trust are not made available to be spent.  The
+        corresponding voucher still reaches the redeemed state but with the
+        number of sequestered tokens subtracted from its ``token_count``.
+        """
+        # The controller will be configured to allow one group of keys but not
+        # the other.
+        allowed_public_keys, disallowed_public_keys = public_keys
+        all_public_keys = allowed_public_keys + disallowed_public_keys
+
+        # Compute the total number of tokens we'll request, spread across all
+        # redemption groups.
+        token_count = len(all_public_keys) + extra_token_count
+
+        # Mix them up so they're not always presented to the controller in the
+        # same order - and in particular so they're not always presented such
+        # that all allowed keys come before all disallowed keys.
+        random.shuffle(all_public_keys)
+
+        # Redeem the voucher in enough groups so that each key can be
+        # presented once.
+        num_redemption_groups = len(all_public_keys)
+
+        datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
+        store = self.useFixture(ConfiglessMemoryVoucherStore(datetime_now)).store
+
+        redeemers = list(
+            DummyRedeemer(public_key)
+            for public_key
+            in all_public_keys
+        )
+
+        controller = PaymentController(
+            store,
+            IndexedRedeemer(redeemers),
+            default_token_count=token_count,
+            num_redemption_groups=num_redemption_groups,
+            allowed_public_keys=set(allowed_public_keys),
+            clock=clock,
+        )
+
+        # Even with disallowed public keys, the *redemption* is considered
+        # successful.
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+
+        def count_in_group(public_keys, key_group):
+            return sum((
+                token_count_for_group(num_redemption_groups, token_count, n)
+                for n, public_key
+                in enumerate(public_keys)
+                if public_key in key_group
+            ), 0)
+
+        allowed_token_count = count_in_group(all_public_keys, allowed_public_keys)
+        disallowed_token_count = count_in_group(all_public_keys, disallowed_public_keys)
+
+        # As a sanity check: allowed + disallowed should equal total or we've
+        # screwed up the test logic.
+        self.assertThat(
+            allowed_token_count + disallowed_token_count,
+            Equals(token_count),
+        )
+
+        # The counts on the voucher object should reflect what was allowed and
+        # what was disallowed.
+        self.expectThat(
+            store.get(voucher),
+            MatchesStructure(
+                expected_tokens=Equals(token_count),
+                state=Equals(
+                    model_Redeemed(
+                        finished=datetime_now(),
+                        token_count=allowed_token_count,
+                        public_key=all_public_keys[-1],
+                    ),
+                ),
+            ),
+        )
+
+        # Also the actual number of tokens available should agree.
+        self.expectThat(
+            store.count_unblinded_tokens(),
+            Equals(allowed_token_count),
+        )
+
+        # And finally only tokens from the groups using an allowed key should
+        # be made available to be spent.
+        voucher_obj = store.get(voucher)
+        allowed_tokens = list(
+            unblinded_token
+            for counter, redeemer in enumerate(redeemers)
+            if redeemer._public_key in allowed_public_keys
+            for unblinded_token
+            in redeemer.redeemWithCounter(
+                voucher_obj,
+                counter,
+                redeemer.random_tokens_for_voucher(
+                    voucher_obj,
+                    counter,
+                    token_count_for_group(
+                        num_redemption_groups,
+                        token_count,
+                        counter,
+                    ),
+                ),
+            ).result.unblinded_tokens
+        )
+        self.expectThat(
+            store.get_unblinded_tokens(store.count_unblinded_tokens()),
+            Equals(allowed_tokens),
         )
 
 

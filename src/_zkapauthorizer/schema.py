@@ -167,4 +167,10 @@ _UPGRADES = {
         )
         """,
     ],
+
+    5: [
+        """
+        ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
+        """,
+    ],
 }

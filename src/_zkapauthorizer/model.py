@@ -419,7 +419,7 @@ class VoucherStore(object):
         self._insert_unblinded_tokens(cursor, unblinded_tokens)
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed, spendable):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -435,17 +435,28 @@ class VoucherStore(object):
 
         :param bool completed: ``True`` if redemption of this voucher is now
             complete, ``False`` otherwise.
+
+        :param bool spendable: ``True`` if it should be possible to spend the
+            inserted tokens, ``False`` otherwise.
         """
         if  completed:
             voucher_state = u"redeemed"
         else:
             voucher_state = u"pending"
 
+        if spendable:
+            token_count_increase = len(unblinded_tokens)
+            sequestered_count_increase = 0
+        else:
+            token_count_increase = 0
+            sequestered_count_increase = len(unblinded_tokens)
+
         cursor.execute(
             """
             UPDATE [vouchers]
             SET [state] = ?
               , [token-count] = COALESCE([token-count], 0) + ?
+              , [sequestered-count] = COALESCE([sequestered-count], 0) + ?
               , [finished] = ?
               , [public-key] = ?
               , [counter] = [counter] + 1
@@ -453,7 +464,8 @@ class VoucherStore(object):
             """,
             (
                 voucher_state,
-                len(unblinded_tokens),
+                token_count_increase,
+                sequestered_count_increase,
                 self.now(),
                 public_key,
                 voucher,
@@ -461,14 +473,16 @@ class VoucherStore(object):
         )
         if cursor.rowcount == 0:
             raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
-        self._insert_unblinded_tokens(
-            cursor,
-            list(
-                t.unblinded_token
-                for t
-                in unblinded_tokens
-            ),
-        )
+
+        if spendable:
+            self._insert_unblinded_tokens(
+                cursor,
+                list(
+                    t.unblinded_token
+                    for t
+                    in unblinded_tokens
+                ),
+            )
 
     @with_cursor
     def mark_voucher_double_spent(self, cursor, voucher):
