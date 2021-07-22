@@ -245,10 +245,12 @@ def client_dummyredeemer_configurations():
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
-    return just({
-        u"redeemer": u"dummy",
-        u"default-token-count": u"32",
-    })
+    return dummy_ristretto_keys().map(
+        lambda key: {
+            u"redeemer": u"dummy",
+            u"issuer-public-key": key,
+            u"default-token-count": u"32",
+        })
 
 
 def token_counts():

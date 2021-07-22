@@ -220,8 +220,8 @@ class PaymentControllerTests(TestCase):
     """
     Tests for ``PaymentController``.
     """
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_should_not_redeem(self, get_config, now, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers(), dummy_ristretto_keys())
+    def test_should_not_redeem(self, get_config, now, voucher, public_key):
         """
         ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
         a state when redemption should not be started.
@@ -229,7 +229,7 @@ class PaymentControllerTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
-            DummyRedeemer(),
+            DummyRedeemer(public_key),
             default_token_count=100,
             clock=Clock(),
         )
@@ -280,8 +280,8 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending(counter=0)),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters())
-    def test_redeeming(self, get_config, now, voucher, num_successes):
+    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), dummy_ristretto_keys())
+    def test_redeeming(self, get_config, now, voucher, num_successes, public_key):
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
         working on redeeming it with a counter value that reflects the number
@@ -292,7 +292,7 @@ class PaymentControllerTests(TestCase):
         # that.
         counter = num_successes + 1
         redeemer = IndexedRedeemer(
-            [DummyRedeemer()] * num_successes +
+            [DummyRedeemer(public_key)] * num_successes +
             [NonRedeemer()],
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
@@ -327,8 +327,9 @@ class PaymentControllerTests(TestCase):
         vouchers(),
         voucher_counters(),
         voucher_counters().map(lambda v: v + 1),
+        dummy_ristretto_keys(),
     )
-    def test_restart_redeeming(self, get_config, now, voucher, before_restart, after_restart):
+    def test_restart_redeeming(self, get_config, now, voucher, before_restart, after_restart, public_key):
         """
         If some redemption groups for a voucher have succeeded but the process is
         interrupted, redemption begins at the first incomplete redemption
@@ -354,7 +355,7 @@ class PaymentControllerTests(TestCase):
                 store,
                 # It will let `before_restart` attempts succeed before hanging.
                 IndexedRedeemer(
-                    [DummyRedeemer()] * before_restart +
+                    [DummyRedeemer(public_key)] * before_restart +
                     [NonRedeemer()] * after_restart,
                 ),
                 default_token_count=num_tokens,
@@ -375,7 +376,7 @@ class PaymentControllerTests(TestCase):
                 # not succeed or did not get started on the first try.
                 IndexedRedeemer(
                     [NonRedeemer()] * before_restart +
-                    [DummyRedeemer()] * after_restart,
+                    [DummyRedeemer(public_key)] * after_restart,
                 ),
                 # The default token count for this new controller doesn't
                 # matter.  The redemption attempt already started with some
@@ -398,7 +399,7 @@ class PaymentControllerTests(TestCase):
                 model_Redeemed(
                     finished=now,
                     token_count=num_tokens,
-                    public_key=None,
+                    public_key=public_key,
                 ),
             ),
         )
@@ -489,8 +490,8 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
-    def test_redeem_pending_on_startup(self, get_config, now, voucher):
+    @given(tahoe_configs(), datetimes(), vouchers(), dummy_ristretto_keys())
+    def test_redeem_pending_on_startup(self, get_config, now, voucher, public_key):
         """
         When ``PaymentController`` is created, any vouchers in the store in the
         pending state are redeemed.
@@ -520,7 +521,7 @@ class PaymentControllerTests(TestCase):
         # `__init__` side-effect. :/
         success_controller = PaymentController(
             store,
-            DummyRedeemer(),
+            DummyRedeemer(public_key),
             default_token_count=100,
             clock=Clock(),
         )

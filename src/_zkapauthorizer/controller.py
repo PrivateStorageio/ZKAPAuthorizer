@@ -372,12 +372,25 @@ class DummyRedeemer(object):
     A ``DummyRedeemer`` pretends to redeem vouchers for ZKAPs.  Instead of
     really redeeming them, it makes up some fake ZKAPs and pretends those are
     the result.
+
+    :ivar unicode _public_key: The base64-encoded public key to return with
+        all successful redemption results.  As with the tokens returned by
+        this redeemer, chances are this is not actually a valid public key.
+        Its corresponding private key certainly has not been used to sign
+        anything.
     """
-    _public_key = attr.ib(default=None)
+    _public_key = attr.ib(
+        validator=attr.validators.instance_of(unicode),
+    )
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
-        return cls()
+        return cls(
+            node_config.get_config(
+                section=section_name,
+                option=u"issuer-public-key",
+            ).decode(u"utf-8"),
+        )
 
     def random_tokens_for_voucher(self, voucher, counter, count):
         """

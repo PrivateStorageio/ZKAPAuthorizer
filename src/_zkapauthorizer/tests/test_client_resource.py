@@ -192,6 +192,32 @@ from .json import (
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
+def get_dummyredeemer_public_key(plugin_name, node_config):
+    """
+    Get the issuer public key a ``DummyRedeemer`` has been configured with.
+
+    :param unicode plugin_name: The plugin name to use to choose a
+        configuration section.
+
+    :param _Config node_config: See ``from_configuration``.
+    """
+    section_name = u"storageclient.plugins.{}".format(plugin_name)
+    redeemer_kind = node_config.get_config(
+        section=section_name,
+        option=u"redeemer",
+    )
+    if redeemer_kind != "dummy":
+        raise ValueError(
+            "Cannot read dummy redeemer public key from configuration for {!r} redeemer.".format(
+                redeemer_kind,
+            ),
+        )
+    return node_config.get_config(
+        section=section_name,
+        option=u"issuer-public-key",
+    ).decode("utf-8")
+
+
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
     return Cooperator(
@@ -1108,6 +1134,7 @@ class VoucherTests(TestCase):
         are included in a json-encoded response body.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1120,7 +1147,7 @@ class VoucherTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=count,
-                    public_key=None,
+                    public_key=public_key,
                 )),
             ),
         )
@@ -1286,6 +1313,7 @@ class VoucherTests(TestCase):
         vouchers.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1300,7 +1328,7 @@ class VoucherTests(TestCase):
                         state=Redeemed(
                             finished=now,
                             token_count=count,
-                            public_key=None,
+                            public_key=public_key,
                         ),
                     ).marshal()
                     for voucher

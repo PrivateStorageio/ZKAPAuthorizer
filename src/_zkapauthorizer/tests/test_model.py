@@ -95,9 +95,6 @@ from ..model import (
     LeaseMaintenanceActivity,
     memory_connect,
 )
-from ..controller import (
-    DummyRedeemer,
-)
 from .strategies import (
     tahoe_configs,
     vouchers,
@@ -425,9 +422,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     def __init__(self, case):
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
-        self.redeemer = DummyRedeemer()
         self.configless = ConfiglessMemoryVoucherStore(
-            self.redeemer,
             # Time probably not actually relevant to this state machine.
             datetime.now,
         )

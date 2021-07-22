@@ -51,9 +51,6 @@ from .matchers import (
 from .fixtures import (
     ConfiglessMemoryVoucherStore,
 )
-from ..controller import (
-    DummyRedeemer,
-)
 from ..spending import (
     IPassGroup,
     SpendingController,
@@ -71,7 +68,6 @@ class PassGroupTests(TestCase):
         """
         configless = self.useFixture(
             ConfiglessMemoryVoucherStore(
-                DummyRedeemer(),
                 lambda: now,
             ),
         )
@@ -109,7 +105,6 @@ class PassGroupTests(TestCase):
     ):
         configless = self.useFixture(
             ConfiglessMemoryVoucherStore(
-                DummyRedeemer(),
                 lambda: now,
             ),
         )

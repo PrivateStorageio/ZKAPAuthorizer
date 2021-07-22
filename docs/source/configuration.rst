@@ -22,8 +22,11 @@ For example::
 
   [storageclient.plugins.privatestorageio-zkapauthz-v1]
   redeemer = dummy
+  issuer-public-key = YXNkYXNkYXNkYXNkYXNkCg==
 
-A value of ``ristretto`` causes the client to speak Ristretto-flavored PrivacyPass to an issuer server.
+The value of the ``issuer-public-key`` item is included as-is as the public key in the successful redemption response.
+
+A ``redeemer`` value of ``ristretto`` causes the client to speak Ristretto-flavored PrivacyPass to an issuer server.
 In this case, the ``ristretto-issuer-root-url`` item is also required.
 
 For example::
