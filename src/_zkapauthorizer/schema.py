@@ -172,5 +172,31 @@ _UPGRADES = {
         """
         ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
         """,
+
+        """
+        -- Create a table where rows represent a single group of unblinded
+        -- tokens all redeemed together.  Some number of these rows represent
+        -- a complete redemption of a voucher.
+        CREATE TABLE [redemption-groups] (
+            -- A unique identifier for this redemption group.
+            [rowid] INTEGER PRIMARY KEY,
+
+            -- The text representation of the voucher this group is associated with.
+            [voucher] text,
+
+            -- A flag indicating whether these tokens can be spent or if
+            -- they're being held for further inspection.
+            [spendable] integer
+        )
+        """,
+
+        """
+        INSERT INTO [redemption-groups] ([voucher], [spendable])
+            SELECT DISTINCT([number]), 1 FROM [vouchers] WHERE [state] = "redeemed"
+        """,
+
+        """
+        ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 0
+        """,
     ],
 }

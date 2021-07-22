@@ -385,7 +385,7 @@ class _UnblindedTokenCollection(Resource):
         """
         application_json(request)
         unblinded_tokens = load(request.content)[u"unblinded-tokens"]
-        self._store.insert_unblinded_tokens(unblinded_tokens)
+        self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
         return dumps({})
 
 

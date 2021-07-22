@@ -393,30 +393,33 @@ class VoucherStore(object):
             in refs
         )
 
-    def _insert_unblinded_tokens(self, cursor, unblinded_tokens):
+    def _insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
         """
         Helper function to really insert unblinded tokens into the database.
         """
         cursor.executemany(
             """
-            INSERT INTO [unblinded-tokens] VALUES (?)
+            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
             """,
             list(
-                (token,)
+                (token, group_id)
                 for token
                 in unblinded_tokens
             ),
         )
 
     @with_cursor
-    def insert_unblinded_tokens(self, cursor, unblinded_tokens):
+    def insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
         """
         Store some unblinded tokens, for example as part of a backup-restore
         process.
 
         :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+
+        :param int group_id: The unique identifier of the redemption group to
+            which these tokens belong.
         """
-        self._insert_unblinded_tokens(cursor, unblinded_tokens)
+        self._insert_unblinded_tokens(cursor, unblinded_tokens, group_id)
 
     @with_cursor
     def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed, spendable):
@@ -453,6 +456,14 @@ class VoucherStore(object):
 
         cursor.execute(
             """
+            INSERT INTO [redemption-groups] ([voucher], [spendable]) VALUES (?, ?)
+            """,
+            (voucher, spendable),
+        )
+        group_id = cursor.lastrowid
+
+        cursor.execute(
+            """
             UPDATE [vouchers]
             SET [state] = ?
               , [token-count] = COALESCE([token-count], 0) + ?
@@ -474,15 +485,15 @@ class VoucherStore(object):
         if cursor.rowcount == 0:
             raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
 
-        if spendable:
-            self._insert_unblinded_tokens(
-                cursor,
-                list(
-                    t.unblinded_token
-                    for t
-                    in unblinded_tokens
-                ),
-            )
+        self._insert_unblinded_tokens(
+            cursor,
+            list(
+                t.unblinded_token
+                for t
+                in unblinded_tokens
+            ),
+            group_id,
+        )
 
     @with_cursor
     def mark_voucher_double_spent(self, cursor, voucher):
@@ -549,9 +560,11 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            SELECT [token]
-            FROM [unblinded-tokens]
-            WHERE [token] NOT IN [in-use]
+            SELECT T.[token]
+            FROM   [unblinded-tokens] AS T, [redemption-groups] AS G
+            WHERE  T.[redemption-group] = G.[rowid]
+            AND    G.[spendable] = 1
+            AND    T.[token] NOT IN [in-use]
             LIMIT ?
             """,
             (count,),
@@ -582,8 +595,10 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT count(1)
-            FROM   [unblinded-tokens]
-            WHERE  [token] NOT IN [in-use]
+            FROM   [unblinded-tokens] AS T, [redemption-groups] AS G
+            WHERE  T.[redemption-group] = G.[rowid]
+            AND    G.[spendable] = 1
+            AND    T.[token] NOT IN [in-use]
             """,
         )
         (count,) = cursor.fetchone()
@@ -693,7 +708,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [token] FROM [unblinded-tokens]
+            SELECT [token] FROM [unblinded-tokens] ORDER BY [rowid]
             """,
         )
         tokens = cursor.fetchall()
