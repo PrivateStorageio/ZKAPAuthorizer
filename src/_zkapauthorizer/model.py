@@ -522,6 +522,10 @@ class VoucherStore(object):
         which have not had their state changed to invalid or spent have been
         reset.
 
+        :raise NotEnoughTokens: If there are fewer than the requested number
+            of tokens available to be spent.  In this case, all tokens remain
+            available to future calls and do not need to be reset.
+
         :return list[UnblindedTokens]: The removed unblinded tokens.
         """
         if count > _SQLITE3_INTEGER_MAX:
