@@ -208,6 +208,17 @@ _UPGRADES = {
         """,
 
         """
+        -- Give each unblinded token a reference to the [redemption-groups]
+        -- table identifying the group that token arrived with.  This lets us
+        -- act collectively on tokens from these groups and identify tokens
+        -- which are spendable.
+        --
+        -- The default value is provided for rows that
+        -- existed prior to this upgrade which had no group association.  For
+        -- unblinded tokens to exist at all there must be at least one voucher
+        -- in the vouchers table.  [redemption-groups] will therefore have at
+        -- least one row added to it (by the statement a few lines above).
+        -- Note that SQLite3 rowid numbering begins at 1.
         ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 1
         """,
     ],
