@@ -762,6 +762,7 @@ class UnblindedTokenTests(TestCase):
             requesting,
             succeeded_with_unblinded_tokens_with_matcher(
                 num_tokens,
+                Equals(num_tokens),
                 AllMatch(
                     MatchesAll(
                         GreaterThan(position),
@@ -896,6 +897,7 @@ class UnblindedTokenTests(TestCase):
 
 def succeeded_with_unblinded_tokens_with_matcher(
         all_token_count,
+        match_spendable_token_count,
         match_unblinded_tokens,
         match_lease_maint_spending,
 ):
@@ -920,6 +922,7 @@ def succeeded_with_unblinded_tokens_with_matcher(
                 succeeded(
                     ContainsDict({
                         u"total": Equals(all_token_count),
+                        u"spendable": match_spendable_token_count,
                         u"unblinded-tokens": match_unblinded_tokens,
                         u"lease-maintenance-spending": match_lease_maint_spending,
                     }),
@@ -941,11 +944,12 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
     """
     return succeeded_with_unblinded_tokens_with_matcher(
         all_token_count,
-        MatchesAll(
+        match_spendable_token_count=Equals(all_token_count),
+        match_unblinded_tokens=MatchesAll(
             HasLength(returned_token_count),
             AllMatch(IsInstance(unicode)),
         ),
-        matches_lease_maintenance_spending(),
+        match_lease_maint_spending=matches_lease_maintenance_spending(),
     )
 
 def matches_lease_maintenance_spending():

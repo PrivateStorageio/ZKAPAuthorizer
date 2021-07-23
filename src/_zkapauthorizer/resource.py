@@ -370,6 +370,7 @@ class _UnblindedTokenCollection(Resource):
 
         return dumps({
             u"total": len(unblinded_tokens),
+            u"spendable": self._store.count_unblinded_tokens(),
             u"unblinded-tokens": list(islice((
                 token
                 for token
