@@ -462,6 +462,13 @@ class VoucherStore(object):
         )
         group_id = cursor.lastrowid
 
+        self._log.info(
+            "Recording {count} {unspendable}spendable unblinded tokens from public key {public_key}.",
+            count=len(unblinded_tokens),
+            unspendable="" if spendable else "un",
+            public_key=public_key,
+        )
+
         cursor.execute(
             """
             UPDATE [vouchers]
