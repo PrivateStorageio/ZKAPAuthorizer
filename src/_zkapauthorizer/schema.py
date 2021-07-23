@@ -208,7 +208,7 @@ _UPGRADES = {
         """,
 
         """
-        ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 0
+        ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 1
         """,
     ],
 }
