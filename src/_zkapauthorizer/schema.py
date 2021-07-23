@@ -192,11 +192,18 @@ _UPGRADES = {
         """,
 
         """
+        -- Create one redemption group for every existing, redeemed voucher.
+        -- These tokens were probably *not* all redeemed in one group but
+        -- we've only preserved one public key for them so we can't do much
+        -- better than this.
         INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable])
             SELECT DISTINCT([number]), [public-key], 1 FROM [vouchers] WHERE [state] = "redeemed"
         """,
 
         """
+        -- Give each voucher a count of "sequestered" tokens.  Currently,
+        -- these are unspendable tokens that were issued using a disallowed
+        -- public key.
         ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
         """,
 
