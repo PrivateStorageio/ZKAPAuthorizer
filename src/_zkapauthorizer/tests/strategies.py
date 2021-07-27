@@ -698,7 +698,7 @@ def shares():
     )
 
 
-def data_vectors():
+def slot_data_vectors():
     """
     Build Tahoe-LAFS data vectors.
     """
@@ -717,7 +717,7 @@ def data_vectors():
     )
 
 
-def test_vectors():
+def slot_test_vectors():
     """
     Build Tahoe-LAFS test vectors.
     """
@@ -748,14 +748,14 @@ class TestAndWriteVectors(object):
         return (self.test_vector, self.write_vector, self.new_length)
 
 
-def test_and_write_vectors():
+def slot_test_and_write_vectors():
     """
     Build Tahoe-LAFS test and write vectors for a single share.
     """
     return builds(
         TestAndWriteVectors,
-        test_vectors(),
-        data_vectors(),
+        slot_test_vectors(),
+        slot_data_vectors(),
         one_of(
             just(None),
             sizes(),
@@ -763,13 +763,13 @@ def test_and_write_vectors():
     )
 
 
-def test_and_write_vectors_for_shares():
+def slot_test_and_write_vectors_for_shares():
     """
     Build Tahoe-LAFS test and write vectors for a number of shares.
     """
     return dictionaries(
         sharenums(),
-        test_and_write_vectors(),
+        slot_test_and_write_vectors(),
         # An empty dictionary wouldn't make much sense.  And it provokes a
         # NameError from Tahoe, storage/server.py:479, `new_length` referenced
         # before assignment.
