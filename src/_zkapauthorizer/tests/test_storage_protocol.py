@@ -89,7 +89,7 @@ from .strategies import (
     sharenums,
     sharenum_sets,
     sizes,
-    test_and_write_vectors_for_shares,
+    slot_test_and_write_vectors_for_shares,
     clocks,
     # Not really a strategy...
     bytes_for_share,
@@ -783,7 +783,7 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
         clock=clocks(),
     )
     def test_stat_shares_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares, clock):
@@ -889,7 +889,7 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
@@ -938,7 +938,7 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_rewrite_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
@@ -1000,7 +1000,7 @@ class ShareTests(TestCase):
         write_enabler=write_enabler_secrets(),
         renew_secret=lease_renew_secrets(),
         cancel_secret=lease_cancel_secrets(),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_rewrite_renews_expired_lease(
             self,
@@ -1080,7 +1080,7 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_client_cannot_control_lease_behavior(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """

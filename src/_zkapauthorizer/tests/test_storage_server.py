@@ -80,7 +80,7 @@ from .strategies import (
     write_enabler_secrets,
     lease_renew_secrets,
     lease_cancel_secrets,
-    test_and_write_vectors_for_shares,
+    slot_test_and_write_vectors_for_shares,
 )
 from .fixtures import (
     AnonymousStorageServer,
@@ -414,7 +414,7 @@ class PassValidationTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_extend_mutable_with_write_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
         """
@@ -581,7 +581,7 @@ class PassValidationTests(TestCase):
             lease_cancel_secrets(),
         ),
         sharenums=one_of(just(None), sharenum_sets()),
-        test_and_write_vectors_for_shares=test_and_write_vectors_for_shares(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_share_sizes(self, slot, secrets, sharenums, test_and_write_vectors_for_shares):
         """
