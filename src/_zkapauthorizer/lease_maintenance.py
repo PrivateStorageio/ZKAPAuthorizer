@@ -49,7 +49,6 @@ from twisted.python.log import (
 )
 
 from allmydata.interfaces import (
-    IDirectoryNode,
     IFilesystemNode,
 )
 from allmydata.util.hashutil import (
@@ -92,17 +91,22 @@ def visit_storage_indexes(root_nodes, visit):
                 node,
             ))
 
-    stack = root_nodes[:]
-    while stack:
-        elem = stack.pop()
-        visit(elem.get_storage_index())
-        if IDirectoryNode.providedBy(elem):
-            children = yield elem.list()
-            # Produce consistent results by forcing some consistent ordering
-            # here.  This will sort by name.
-            stable_children = sorted(children.items())
-            for (name, (child_node, child_metadata)) in stable_children:
-                stack.append(child_node)
+    class Renewer(object):
+        def set_monitor(self, monitor):
+            self.monitor = monitor
+
+        def add_node(self, node, childpath):
+            visit(node.get_storage_index())
+
+        def enter_directory(self, parent, children):
+            pass
+
+        def finish(self):
+            pass
+
+    for root_node in root_nodes:
+        monitor = root_node.deep_traverse(Renewer)
+        yield monitor.when_done()
 
 
 def iter_storage_indexes(visit_assets):

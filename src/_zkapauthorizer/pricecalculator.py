@@ -28,11 +28,13 @@ calculator).
 """
 
 import attr
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from .storage_common import (
     required_passes,
     share_size_for_data,
 )
+
 
 @attr.s
 class PriceCalculator(object):
@@ -71,3 +73,36 @@ class PriceCalculator(object):
         )
         price = sum(all_required_passes, 0)
         return price
+
+    def _calculate_for_size(self, size):
+        share_size = share_size_for_data(self._shares_needed, size)
+        passes = required_passes(self._pass_value, [share_size] * self._shares_total)
+        return passes
+
+    @inlineCallbacks
+    def calculate_from_node(self, root_node):
+        @attr.s
+        class Sizer(object):
+            total = attr.ib(init=False, default=0)
+
+            def set_monitor(iself, monitor):
+                iself.monitor = monitor
+
+            @inlineCallbacks
+            def add_node(iself, node, childpath):
+                if node.get_storate_index() is None:
+                    return
+                size = yield node.get_current_size()
+                price = self._calculate_for_size(size)
+                iself.total += price
+
+            def enter_directory(iself, parent, children):
+                pass
+
+            def finish(iself):
+                pass
+
+        sizer = Sizer()
+        monitor = root_node.deep_traverse(Sizer)
+        yield monitor.when_done()
+        returnValue(sizer.total)

@@ -40,6 +40,7 @@ from twisted.logger import (
 )
 from twisted.web.http import (
     BAD_REQUEST,
+    INTERNAL_SERVER_ERROR,
 )
 from twisted.web.server import (
     NOT_DONE_YET,
@@ -261,6 +262,29 @@ class _CalculatePrice(Resource):
             return dumps({
                 "error": "could not parse request body",
             })
+
+        try:
+            version = body_object[u"version"]
+        except KeyError:
+            pass
+        else:
+            if version == 2:
+                root_node = body_object[u"root_node"]
+                application_json(request)
+
+                price = self._price_calculator.calculate_from_node(root_node).addCallback(
+                    lambda price: dumps({
+                        u"price": price,
+                        u"period": self._lease_period,
+                    })
+                ).addCallback(
+                    request.write
+                ).addErrback(
+                    lambda ignored: request.setResponseCode(INTERNAL_SERVER_ERROR)
+                ).addCallback(
+                    lambda ignored: request.finish()
+                )
+                return NOT_DONE_YET
 
         try:
             version = body_object[u"version"]
