@@ -263,13 +263,25 @@ def _create_maintenance_service(reactor, node_config, client_node):
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
-        partial(get_root_nodes, client_node, node_config),
-        client_node.get_storage_broker(),
-        client_node._secret_holder,
-        # Make this configuration
-        timedelta(days=3),
-        store.start_lease_maintenance,
-        get_now,
+        get_root_nodes=partial(get_root_nodes, client_node, node_config),
+        storage_broker=client_node.get_storage_broker(),
+        secret_holder=client_node._secret_holder,
+        # The greater the min lease remaining time, the more of each lease
+        # period is "wasted" by renewing the lease before it has expired.  The
+        # premise of ZKAPAuthorizer's use of leases is that if they expire,
+        # the storage server is free to reclaim the storage by forgetting
+        # about the share.  However, since we do not know of any
+        # ZKAPAuthorizer-enabled storage grids which will garbage collect
+        # shares when leases expire, we have no reason not to use a zero
+        # duration here - for now.
+        #
+        # In the long run, storage servers must run with garbage collection
+        # enabled.  Ideally, before that happens, we will have a system that
+        # doesn't involve trading of wasted lease time against reliability of
+        # leases being renewed before the shares are garbage collected.
+        min_lease_remaining=timedelta(seconds=0),
+        progress=store.start_lease_maintenance,
+        get_now=get_now,
     )
     last_run_path = FilePath(node_config.get_private_path(b"last-lease-maintenance-run"))
     # Create the service to periodically run the lease maintenance operation.
