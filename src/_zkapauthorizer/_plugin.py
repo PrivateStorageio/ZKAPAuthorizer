@@ -263,13 +263,13 @@ def _create_maintenance_service(reactor, node_config, client_node):
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
-        partial(get_root_nodes, client_node, node_config),
-        client_node.get_storage_broker(),
-        client_node._secret_holder,
+        get_root_nodes=partial(get_root_nodes, client_node, node_config),
+        storage_broker=client_node.get_storage_broker(),
+        secret_holder=client_node._secret_holder,
         # Make this configuration
-        timedelta(days=3),
-        store.start_lease_maintenance,
-        get_now,
+        min_lease_remaining=timedelta(days=3),
+        progress=store.start_lease_maintenance,
+        get_now=get_now,
     )
     last_run_path = FilePath(node_config.get_private_path(b"last-lease-maintenance-run"))
     # Create the service to periodically run the lease maintenance operation.
