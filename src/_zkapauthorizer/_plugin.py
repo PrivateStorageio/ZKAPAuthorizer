@@ -267,7 +267,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         storage_broker=client_node.get_storage_broker(),
         secret_holder=client_node._secret_holder,
         # Make this configuration
-        min_lease_remaining=timedelta(days=3),
+        min_lease_remaining=timedelta(seconds=0),
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
