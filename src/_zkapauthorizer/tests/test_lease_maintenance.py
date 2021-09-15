@@ -186,7 +186,7 @@ def create_shares(storage_server, storage_index, size, lease_expiration):
     :return: ``None``
     """
     if storage_index in storage_server.buckets:
-        raise SharesAlready(
+        raise SharesAlreadyExist(
             "Cannot create shares for storage index where they already exist.",
         )
     storage_server.buckets[storage_index] = ShareStat(
