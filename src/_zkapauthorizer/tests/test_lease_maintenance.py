@@ -166,6 +166,35 @@ class DummyStorageServer(object):
         )
 
 
+class SharesAlreadyExist(Exception):
+    pass
+
+
+def create_shares(storage_server, storage_index, size, lease_expiration):
+    """
+    Initialize a storage index ("bucket") with some shares.
+
+    :param DummyServer storage_server: The server to populate with shares.
+    :param bytes storage_index: The storage index of the shares.
+    :param int size: The application data size of the shares.
+    :param int lease_expiration: The expiration time for the lease to attach
+        to the shares.
+
+    :raise SharesAlreadyExist: If there are already shares at the given
+        storage index.
+
+    :return: ``None``
+    """
+    if storage_index in storage_server.buckets:
+        raise SharesAlready(
+            "Cannot create shares for storage index where they already exist.",
+        )
+    storage_server.buckets[storage_index] = ShareStat(
+        size=size,
+        lease_expiration=lease_expiration,
+    )
+
+
 def lease_seeds():
     return binary(
         min_size=20,
@@ -439,7 +468,7 @@ class RenewLeasesTests(TestCase):
     """
     Tests for ``renew_leases``.
     """
-    @given(storage_brokers(clocks()), lists(leaf_nodes()))
+    @given(storage_brokers(clocks()), lists(leaf_nodes(), unique=True))
     def test_renewed(self, storage_broker, nodes):
         """
         ``renew_leases`` renews the leases of shares on all storage servers which
@@ -450,6 +479,22 @@ class RenewLeasesTests(TestCase):
         convergence_secret = b"\1" * CRYPTO_VAL_SIZE
         secret_holder = SecretHolder(lease_secret, convergence_secret)
         min_lease_remaining = timedelta(days=3)
+
+        # Make sure that the storage brokers have shares at the storage
+        # indexes we're going to operate on.
+        for storage_server in storage_broker.get_connected_servers():
+            for node in nodes:
+                try:
+                    create_shares(
+                        storage_server.get_storage_server(),
+                        node.get_storage_index(),
+                        size=123,
+                        lease_expiration=int(storage_broker.clock.seconds()),
+                    )
+                except SharesAlreadyExist:
+                    # If Hypothesis already put some shares in this storage
+                    # index, that's okay too.
+                    pass
 
         def get_now():
             return datetime.utcfromtimestamp(
