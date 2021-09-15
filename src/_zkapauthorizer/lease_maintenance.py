@@ -55,6 +55,8 @@ from allmydata.interfaces import (
 from allmydata.util.hashutil import (
     file_renewal_secret_hash,
     bucket_renewal_secret_hash,
+    file_cancel_secret_hash,
+    bucket_cancel_secret_hash,
 )
 
 from .controller import (
@@ -165,6 +167,7 @@ def renew_leases(
     storage_indexes = yield iter_storage_indexes(visit_assets)
 
     renewal_secret = secret_holder.get_renewal_secret()
+    cancel_secret = secret_holder.get_cancel_secret()
     servers = list(
         server.get_storage_server()
         for server
@@ -176,6 +179,7 @@ def renew_leases(
         yield renew_leases_on_server(
             min_lease_remaining,
             renewal_secret,
+            cancel_secret,
             storage_indexes,
             server,
             activity,
@@ -189,6 +193,7 @@ def renew_leases(
 def renew_leases_on_server(
         min_lease_remaining,
         renewal_secret,
+        cancel_secret,
         storage_indexes,
         server,
         activity,
@@ -202,8 +207,9 @@ def renew_leases_on_server(
     :param timedelta min_lease_remaining: The minimum amount of time remaining
         to allow on a lease without renewing it.
 
-    :param renewal_secret: A seed for the renewal secret hash calculation for
-        any leases which need to be renewed.
+    :param renewal_secret: See ``renew_lease``.
+
+    :param cancel_secret: See ``renew_lease``.
 
     :param list[bytes] storage_indexes: The storage indexes to check.
 
@@ -230,14 +236,17 @@ def renew_leases_on_server(
         # All shares have the same lease information.
         stat = stat_dict.popitem()[1]
         if needs_lease_renew(min_lease_remaining, stat, now):
-            yield renew_lease(renewal_secret, storage_index, server)
+            yield renew_lease(renewal_secret, cancel_secret, storage_index, server)
 
 
-def renew_lease(renewal_secret, storage_index, server):
+def renew_lease(renewal_secret, cancel_secret, storage_index, server):
     """
     Renew the lease on the shares in one storage index on one server.
 
     :param renewal_secret: A seed for the renewal secret hash calculation for
+        any leases which need to be renewed.
+
+    :param cancel_secret: A seed for the cancel secret hash calculation for
         any leases which need to be renewed.
 
     :param bytes storage_index: The storage index to operate on.
@@ -254,9 +263,19 @@ def renew_lease(renewal_secret, storage_index, server):
         ),
         server.get_lease_seed(),
     )
-    return server.renew_lease(
+    cancel_secret = bucket_cancel_secret_hash(
+        file_cancel_secret_hash(
+            cancel_secret,
+            storage_index,
+        ),
+        server.get_lease_seed(),
+    )
+    # Use add_lease to add a new lease *or* renew an existing one with a
+    # matching renew secret.
+    return server.add_lease(
         storage_index,
         renew_secret,
+        cancel_secret,
     )
 
 

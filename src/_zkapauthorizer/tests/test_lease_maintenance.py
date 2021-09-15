@@ -160,7 +160,7 @@ class DummyStorageServer(object):
     def get_lease_seed(self):
         return self.lease_seed
 
-    def renew_lease(self, storage_index, renew_secret):
+    def add_lease(self, storage_index, renew_secret, cancel_secret):
         self.buckets[storage_index].lease_expiration = (
             self.clock.seconds() + timedelta(days=31).total_seconds()
         )
