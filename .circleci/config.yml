@@ -214,7 +214,7 @@ workflows:
   everything:
     jobs:
     - "documentation"
-    - "linux-tests"
+    - "linux-tests":
         matrix:
           parameters:
             tahoe-version:
