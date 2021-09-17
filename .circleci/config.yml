@@ -219,7 +219,7 @@ workflows:
           parameters:
             tahoe-version:
             - "1.14.0"
-            - "1.16.0-rc0"
+            - "1.16.0rc1"
 
     - "macos-tests":
         matrix:
