@@ -182,7 +182,7 @@ jobs:
             nix-build \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --arg tahoe-lafs << parameters.tahoe-version >> \
+              --argstr tahoe-lafs << parameters.tahoe-version >> \
               --attr doc
 
       - run:
