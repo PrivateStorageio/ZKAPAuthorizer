@@ -215,6 +215,12 @@ workflows:
     jobs:
     - "documentation"
     - "linux-tests"
+        matrix:
+          parameters:
+            tahoe-version:
+            - "1.14.0"
+            - "1.16.0-rc0"
+
     - "macos-tests":
         matrix:
           parameters:
@@ -225,7 +231,3 @@ workflows:
             # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
             - "12.3.0"
             - "11.7.0"
-
-            tahoe-version:
-            - "1.14.0"
-            - "1.16.0-rc0"
