@@ -143,6 +143,10 @@ jobs:
       # Run in a highly Nix-capable environment.
       - image: "nixos/nix:latest"
 
+    # Tahoe-LAFS requires more memory than we get from the default resource
+    # class and sometimes we have to build it.
+    resource_class: "large"
+
     environment:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
