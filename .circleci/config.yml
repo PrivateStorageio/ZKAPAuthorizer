@@ -137,6 +137,11 @@ jobs:
   linux-tests: &LINUX_TESTS
     parameters:
       tahoe-version:
+        # A Tahoe-LAFS version number string like "1.15.0" which corresponds
+        # to a version known by default.nix .  This is the version that will
+        # be declared as a dependency of the Nix package of ZKAPAuthorizer
+        # (and therefore used in the test run and pulled in should you install
+        # this package).
         type: "string"
 
     docker:
