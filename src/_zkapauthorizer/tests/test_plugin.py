@@ -21,7 +21,7 @@ from __future__ import (
 )
 
 from io import (
-    BytesIO,
+    StringIO,
 )
 from os import (
     makedirs,
@@ -397,7 +397,7 @@ class ClientPluginTests(TestCase):
             b"tub.port",
             config_text.encode("utf-8"),
         )
-        config_text = BytesIO()
+        config_text = StringIO()
         node_config.config.write(config_text)
         self.addDetail(u"config", text_content(config_text.getvalue()))
         self.addDetail(u"announcement", text_content(unicode(announcement)))
