@@ -204,7 +204,9 @@ class PassValidationTests(TestCase):
         # the same time so we can do lease expiration calculations more
         # easily.
         self.clock.advance(time())
-        self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
+        self.anonymous_storage_server = self.useFixture(
+            AnonymousStorageServer(self.clock),
+        ).storage_server
         self.signing_key = random_signing_key()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,

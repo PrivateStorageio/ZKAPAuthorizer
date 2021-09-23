@@ -64,6 +64,9 @@ from twisted.python.runtime import (
 from twisted.python.filepath import (
     FilePath,
 )
+from twisted.internet.task import (
+    Clock,
+)
 
 from foolscap.referenceable import (
     LocalReferenceable,
@@ -183,6 +186,16 @@ def is_successful_write():
     )
 
 
+def synchronize_clocks(from_clock, to_clock):
+    """
+    Make the time on ``to_clock`` match the time on ``from_clock``.
+
+    :param Clock from_clock: The clock from which to take the time.
+    :param Clock to_clock: The clock to which to write a time.
+    """
+    to_clock.advance(from_clock.seconds() - to_clock.seconds())
+
+
 class ShareTests(TestCase):
     """
     Tests for interaction with shares.
@@ -195,10 +208,19 @@ class ShareTests(TestCase):
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
-        self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
-
         self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
+
+        # Unfortunately we need to supply a Clock to AnonymousStorageServer
+        # now.  But Hypothesis won't give us the Clock it wants us to use
+        # until later. :/ We work around this by synchronizing this clock with
+        # the Hypothesis-supplied clock in the tests whenever time changed.
+        # It would be nice to find a different factoring that avoided this
+        # duplication.
+        self.clock = Clock()
+        self.anonymous_storage_server = self.useFixture(
+            AnonymousStorageServer(self.clock),
+        ).storage_server
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -577,8 +599,21 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        # anonymous_storage_server uses time.time(), unfortunately.  And
-        # useFixture does not interact very well with Hypothesis.
+        # Lease cancellation is unimplemented in Tahoe so this doesn't matter.
+        cancel_secret = b""
+
+        # self.clock is shared across all of the Hypothesis cases that get
+        # run.  That means we probably already advanced it to something.
+        # Hypothesis might want to try a case where time is further in the
+        # past than an earlier case - so we possibly rewind the clock here.
+        synchronize_clocks(from_clock=clock, to_clock=self.clock)
+
+        # anonymous_storage_server uses time.time() before Tahoe-LAFS 1.16,
+        # unfortunately.  For Tahoe-LAFS 1.16, AnonymousStorageServer will
+        # glue self.clock in for us.  For older versions we still need this
+        # monkey-patching.
+        #
+        # And useFixture does not interact very well with Hypothesis.
         patch = MonkeyPatch("time.time", clock.seconds)
         try:
             patch.setUp()
@@ -596,7 +631,7 @@ class ShareTests(TestCase):
                 self.anonymous_storage_server.remote_add_lease(
                     storage_index,
                     renew_secret,
-                    b"",
+                    cancel_secret,
                 )
         finally:
             patch.cleanUp()
@@ -799,8 +834,9 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        # anonymous_storage_server uses time.time(), unfortunately.  And
-        # useFixture does not interact very well with Hypothesis.
+        # See the comment in `_stat_shares_immutable_test` for an explanation
+        # of clock handling and time.time monkey-patching.
+        synchronize_clocks(from_clock=clock, to_clock=self.clock)
         patch = MonkeyPatch("time.time", clock.seconds)
         try:
             patch.setUp()
@@ -1043,8 +1079,9 @@ class ShareTests(TestCase):
                 r_vector=[],
             )
 
-        # anonymous_storage_server uses time.time() to assign leases,
-        # unfortunately.
+        # See the comment in `_stat_shares_immutable_test` for an explanation
+        # of clock handling and time.time monkey-patching.
+        synchronize_clocks(from_clock=clock, to_clock=self.clock)
         patch = MonkeyPatch("time.time", clock.seconds)
         try:
             patch.setUp()
@@ -1055,6 +1092,11 @@ class ShareTests(TestCase):
             # Advance time by more than a lease period so the lease is no
             # longer valid.
             clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
+
+            # Since we just changed the Hypothesis-supplied clock we need to
+            # update the other clock (the one StorageServer is looking at)
+            # too. :/
+            synchronize_clocks(from_clock=clock, to_clock=self.clock)
 
             self.assertThat(write(), is_successful_write())
         finally:
