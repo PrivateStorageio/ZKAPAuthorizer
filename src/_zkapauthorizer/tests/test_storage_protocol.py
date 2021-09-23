@@ -25,6 +25,7 @@ from fixtures import (
 )
 from testtools import (
     TestCase,
+    skipIf,
 )
 from testtools.matchers import (
     Always,
@@ -72,6 +73,7 @@ from challenge_bypass_ristretto import (
     random_signing_key,
 )
 
+from allmydata import __version__ as allmydata_version
 from allmydata.storage.common import (
     storage_index_to_dir,
 )
@@ -129,6 +131,7 @@ from .._storage_client import (
 from ..foolscap import (
     ShareStat,
 )
+
 
 class RequiredPassesTests(TestCase):
     """
@@ -522,6 +525,7 @@ class ShareTests(TestCase):
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
+    @skipIf(allmydata_version >= "1.16.", "Tahoe-LAFS 1.16.0 removed renew_lease")
     @given(
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),
