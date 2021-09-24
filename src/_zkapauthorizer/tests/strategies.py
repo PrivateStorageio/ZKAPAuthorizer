@@ -827,7 +827,7 @@ def clocks(now=posix_safe_datetimes()):
 
 
 @implementer(IFilesystemNode)
-@attr.s
+@attr.s(frozen=True)
 class _LeafNode(object):
     _storage_index = attr.ib()
 
