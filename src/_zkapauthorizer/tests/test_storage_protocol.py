@@ -25,7 +25,6 @@ from fixtures import (
 )
 from testtools import (
     TestCase,
-    skipIf,
 )
 from testtools.matchers import (
     Always,
@@ -76,7 +75,6 @@ from challenge_bypass_ristretto import (
     random_signing_key,
 )
 
-from allmydata import __version__ as allmydata_version
 from allmydata.storage.common import (
     storage_index_to_dir,
 )
@@ -546,53 +544,6 @@ class ShareTests(TestCase):
         )
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
-
-    @skipIf(allmydata_version >= "1.16.", "Tahoe-LAFS 1.16.0 removed renew_lease")
-    @given(
-        storage_index=storage_indexes(),
-        renew_secret=lease_renew_secrets(),
-        cancel_secret=lease_cancel_secrets(),
-        sharenums=sharenum_sets(),
-        size=sizes(),
-    )
-    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenums, size):
-        """
-        A lease on an immutable share can be updated to expire at a later time.
-        """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
-        # Take control of time (in this hacky, fragile way) so we can verify
-        # the expiration time gets bumped by the renewal.
-        now = 1000000000.5
-        self.useFixture(MonkeyPatch("time.time", lambda: now))
-
-        # Create a share we can toy with.
-        write_toy_shares(
-            self.anonymous_storage_server,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            size,
-            canary=self.canary,
-        )
-
-        now += 100000
-        self.assertThat(
-            self.client.renew_lease(
-                storage_index,
-                renew_secret,
-            ),
-            succeeded(Always()),
-        )
-
-        [lease] = self.anonymous_storage_server.get_leases(storage_index)
-        self.assertThat(
-            lease.get_expiration_time(),
-            Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
-        )
 
     def _stat_shares_immutable_test(self, storage_index, sharenum, size, clock, leases, write_shares):
         # Hypothesis causes our storage server to be used many times.  Clean

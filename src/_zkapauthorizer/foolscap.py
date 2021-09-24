@@ -141,21 +141,6 @@ def add_arguments(schema, kwargs):
     return modified_schema
 
 
-def remoteinterface_hasattr(ri, name):
-    """
-    :param InterfaceClass ri: A ``RemoteInterface`` to inspect.
-    :param str name: The name of an attribute.
-
-    :return bool: ``True`` if and only if ``ri`` has the attribute named by
-        ``name``, ``False`` otherwise.
-    """
-    try:
-        ri[name]
-    except KeyError:
-        return False
-    return True
-
-
 class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     """
     An object which can store and retrieve shares, subject to pass-based
@@ -175,14 +160,6 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     allocate_buckets = add_passes(RIStorageServer["allocate_buckets"])
 
     add_lease = add_passes(RIStorageServer["add_lease"])
-
-    if remoteinterface_hasattr(RIStorageServer, "renew_lease"):
-        # Tahoe-LAFS 1.16.0 drops renew_lease from the interface.  Do likewise
-        # here, if we discover we have a version of Tahoe that has done so.
-        # If Tahoe has dropped this method then nothing in Tahoe is going to
-        # use it so it is fine if we don't define it.  We also do not use it
-        # ourselves.
-        renew_lease = add_passes(RIStorageServer["renew_lease"])
 
     get_buckets = RIStorageServer["get_buckets"]
 

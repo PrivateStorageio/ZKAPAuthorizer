@@ -103,7 +103,6 @@ from .storage_common import (
     required_passes,
     allocate_buckets_message,
     add_lease_message,
-    renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
     get_required_new_passes_for_mutable_write,
@@ -301,24 +300,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._original,
         )
         return self._original.remote_add_lease(storage_index, *a, **kw)
-
-    def remote_renew_lease(self, passes, storage_index, *a, **kw):
-        """
-        Pass-through after a pass check to ensure clients can only extend the
-        duration of share storage if they present valid passes.
-        """
-        valid_passes = _ValidationResult.validate_passes(
-            renew_lease_message(storage_index),
-            passes,
-            self._signing_key,
-        )
-        check_pass_quantity_for_lease(
-            self._pass_value,
-            storage_index,
-            valid_passes,
-            self._original,
-        )
-        return self._original.remote_renew_lease(storage_index, *a, **kw)
 
     def remote_advise_corrupt_share(self, *a, **kw):
         """
