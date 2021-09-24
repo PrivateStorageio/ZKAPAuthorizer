@@ -37,6 +37,7 @@ from twisted.python.filepath import (
 from twisted.internet.task import (
     Clock,
 )
+from allmydata import __version__ as allmydata_version
 from allmydata.storage.server import (
     StorageServer,
 )
