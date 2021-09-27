@@ -224,12 +224,14 @@ class ShareTests(TestCase):
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
+            clock=self.clock,
         )
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
             get_passes=self.pass_factory.get,
+            clock=self.clock,
         )
 
     def test_get_version(self):
@@ -1011,10 +1013,6 @@ class ShareTests(TestCase):
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
-
-        # Make the client and server use our clock.
-        self.server._clock = clock
-        self.client._clock = clock
 
         secrets = (write_enabler, renew_secret, cancel_secret)
 
