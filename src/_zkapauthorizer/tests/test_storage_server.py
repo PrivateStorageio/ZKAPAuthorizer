@@ -97,7 +97,6 @@ from ..storage_common import (
     required_passes,
     allocate_buckets_message,
     add_lease_message,
-    renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     get_implied_data_length,
     get_required_new_passes_for_mutable_write,
@@ -204,7 +203,9 @@ class PassValidationTests(TestCase):
         # the same time so we can do lease expiration calculations more
         # easily.
         self.clock.advance(time())
-        self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
+        self.anonymous_storage_server = self.useFixture(
+            AnonymousStorageServer(self.clock),
+        ).storage_server
         self.signing_key = random_signing_key()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
@@ -537,40 +538,6 @@ class PassValidationTests(TestCase):
             allocated_size,
             add_lease,
             add_lease_message,
-        )
-
-    @given(
-        storage_index=storage_indexes(),
-        secrets=tuples(
-            lease_renew_secrets(),
-            lease_cancel_secrets(),
-        ),
-        sharenums=sharenum_sets(),
-        allocated_size=sizes(),
-    )
-    def test_renew_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
-        """
-        If ``remote_renew_lease`` is invoked without supplying enough passes to
-        cover the storage for all shares on the given storage index, the
-        operation fails with ``MorePassesRequired``.
-        """
-        renew_secret, cancel_secret = secrets
-        def renew_lease(storage_server, passes):
-            return storage_server.doRemoteCall(
-                "renew_lease", (
-                    passes,
-                    storage_index,
-                    renew_secret,
-                ),
-                {},
-            )
-        return self._test_lease_operation_fails_without_passes(
-            storage_index,
-            secrets,
-            sharenums,
-            allocated_size,
-            renew_lease,
-            renew_lease_message,
         )
 
     @given(

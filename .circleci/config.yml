@@ -135,9 +135,22 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests: &LINUX_TESTS
+    parameters:
+      tahoe-version:
+        # A Tahoe-LAFS version number string like "1.15.0" which corresponds
+        # to a version known by default.nix .  This is the version that will
+        # be declared as a dependency of the Nix package of ZKAPAuthorizer
+        # (and therefore used in the test run and pulled in should you install
+        # this package).
+        type: "string"
+
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixos/nix:latest"
+
+    # Tahoe-LAFS requires more memory than we get from the default resource
+    # class and sometimes we have to build it.
+    resource_class: "large"
 
     environment:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
@@ -150,7 +163,7 @@ jobs:
       # somewhat current as of the time of this comment.  We can bump it to a
       # newer version when that makes sense.  Meanwhile, the platform won't
       # shift around beneath us unexpectedly.
-      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz"
+      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/c12c213c1c96bd1fea9f83f9e9e1fea28d0eaec6.tar.gz"
 
     steps:
       - run:
@@ -178,6 +191,7 @@ jobs:
             nix-build \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
+              --argstr tahoe-lafs << parameters.tahoe-version >> \
               --attr doc
 
       - run:
@@ -209,7 +223,13 @@ workflows:
   everything:
     jobs:
     - "documentation"
-    - "linux-tests"
+    - "linux-tests":
+        matrix:
+          parameters:
+            tahoe-version:
+            - "1.14.0"
+            - "1.16.0rc1"
+
     - "macos-tests":
         matrix:
           parameters:

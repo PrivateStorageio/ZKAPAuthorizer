@@ -63,6 +63,9 @@ from twisted.python.runtime import (
 from twisted.python.filepath import (
     FilePath,
 )
+from twisted.internet.task import (
+    Clock,
+)
 
 from foolscap.referenceable import (
     LocalReferenceable,
@@ -90,7 +93,7 @@ from .strategies import (
     sharenum_sets,
     sizes,
     slot_test_and_write_vectors_for_shares,
-    clocks,
+    posix_timestamps,
     # Not really a strategy...
     bytes_for_share,
 )
@@ -129,6 +132,7 @@ from .._storage_client import (
 from ..foolscap import (
     ShareStat,
 )
+
 
 class RequiredPassesTests(TestCase):
     """
@@ -192,22 +196,37 @@ class ShareTests(TestCase):
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
-        self.anonymous_storage_server = self.useFixture(AnonymousStorageServer()).storage_server
         self.signing_key = random_signing_key()
-
         self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
+
+        self.clock = Clock()
+        self.anonymous_storage_server = self.useFixture(
+            AnonymousStorageServer(self.clock),
+        ).storage_server
 
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
+            clock=self.clock,
         )
         self.local_remote_server = LocalRemote(self.server)
         self.client = ZKAPAuthorizerStorageClient(
             self.pass_value,
             get_rref=lambda: self.local_remote_server,
             get_passes=self.pass_factory.get,
+            clock=self.clock,
         )
+
+    def setup_example(self):
+        """
+        Initialize any necessary state prior to each Hypothesis iteration of a
+        test method.
+        """
+        # Reset the mutable, shared clock to the epoch to simplify related
+        # code in the tests and ensure consistent starting state for each
+        # iteration.
+        self.clock.advance(-self.clock.seconds())
 
     def test_get_version(self):
         """
@@ -522,60 +541,23 @@ class ShareTests(TestCase):
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
-    @given(
-        storage_index=storage_indexes(),
-        renew_secret=lease_renew_secrets(),
-        cancel_secret=lease_cancel_secrets(),
-        sharenums=sharenum_sets(),
-        size=sizes(),
-    )
-    def test_renew_lease(self, storage_index, renew_secret, cancel_secret, sharenums, size):
-        """
-        A lease on an immutable share can be updated to expire at a later time.
-        """
+    def _stat_shares_immutable_test(self, storage_index, sharenum, size, when, leases, write_shares):
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        # Take control of time (in this hacky, fragile way) so we can verify
-        # the expiration time gets bumped by the renewal.
-        now = 1000000000.5
-        self.useFixture(MonkeyPatch("time.time", lambda: now))
+        # Lease cancellation is unimplemented in Tahoe so this doesn't matter.
+        cancel_secret = b""
 
-        # Create a share we can toy with.
-        write_toy_shares(
-            self.anonymous_storage_server,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            size,
-            canary=self.canary,
-        )
+        self.clock.advance(when)
 
-        now += 100000
-        self.assertThat(
-            self.client.renew_lease(
-                storage_index,
-                renew_secret,
-            ),
-            succeeded(Always()),
-        )
-
-        [lease] = self.anonymous_storage_server.get_leases(storage_index)
-        self.assertThat(
-            lease.get_expiration_time(),
-            Equals(int(now + self.server.LEASE_PERIOD.total_seconds())),
-        )
-
-    def _stat_shares_immutable_test(self, storage_index, sharenum, size, clock, leases, write_shares):
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
-        # anonymous_storage_server uses time.time(), unfortunately.  And
-        # useFixture does not interact very well with Hypothesis.
-        patch = MonkeyPatch("time.time", clock.seconds)
+        # anonymous_storage_server uses time.time() before Tahoe-LAFS 1.16,
+        # unfortunately.  For Tahoe-LAFS 1.16, AnonymousStorageServer will
+        # glue self.clock in for us.  For older versions we still need this
+        # monkey-patching.
+        #
+        # And useFixture does not interact very well with Hypothesis.
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
             # Create a share we can toy with.
@@ -592,7 +574,7 @@ class ShareTests(TestCase):
                 self.anonymous_storage_server.remote_add_lease(
                     storage_index,
                     renew_secret,
-                    b"",
+                    cancel_secret,
                 )
         finally:
             patch.cleanUp()
@@ -600,7 +582,7 @@ class ShareTests(TestCase):
         expected = [{
             sharenum: ShareStat(
                 size=size,
-                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
             ),
         }]
         self.assertThat(
@@ -614,10 +596,10 @@ class ShareTests(TestCase):
         cancel_secret=lease_cancel_secrets(),
         sharenum=sharenums(),
         size=sizes(),
-        clock=clocks(),
+        when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True),
     )
-    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, clock, leases):
+    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, when, leases):
         """
         Size and lease information about immutable shares can be retrieved from a
         storage server.
@@ -626,7 +608,7 @@ class ShareTests(TestCase):
             storage_index,
             sharenum,
             size,
-            clock,
+            when,
             leases,
             lambda storage_server, storage_index, sharenums, size, canary: write_toy_shares(
                 storage_server,
@@ -643,11 +625,11 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         sharenum=sharenums(),
         size=sizes(),
-        clock=clocks(),
+        when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
         version=share_versions(),
     )
-    def test_stat_shares_immutable_wrong_version(self, storage_index, sharenum, size, clock, leases, version):
+    def test_stat_shares_immutable_wrong_version(self, storage_index, sharenum, size, when, leases, version):
         """
         If a share file with an unexpected version is found, ``stat_shares``
         declines to offer a result (by raising ``ValueError``).
@@ -670,7 +652,7 @@ class ShareTests(TestCase):
             version=version,
             size=size,
             leases=leases,
-            now=clock.seconds(),
+            now=when,
         )
 
         self.assertThat(
@@ -687,12 +669,12 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         sharenum=sharenums(),
         size=sizes(),
-        clock=clocks(),
+        when=posix_timestamps(),
         version=share_versions(),
         # Encode our knowledge of the share header format and size right here...
         position=integers(min_value=0, max_value=11),
     )
-    def test_stat_shares_truncated_file(self, storage_index, sharenum, size, clock, version, position):
+    def test_stat_shares_truncated_file(self, storage_index, sharenum, size, when, version, position):
         """
         If a share file is truncated in the middle of the header,
         ``stat_shares`` declines to offer a result (by raising
@@ -716,7 +698,7 @@ class ShareTests(TestCase):
             # We know leases are at the end, where they'll get chopped off, so
             # we don't bother to write any.
             leases=[],
-            now=clock.seconds(),
+            now=when,
         )
         with sharepath.open("wb") as fobj:
             fobj.truncate(position)
@@ -737,10 +719,10 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         sharenum=sharenums(),
         size=sizes(min_value=2 ** 18, max_value=2 ** 40),
-        clock=clocks(),
+        when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
     )
-    def test_stat_shares_immutable_large(self, storage_index, sharenum, size, clock, leases):
+    def test_stat_shares_immutable_large(self, storage_index, sharenum, size, when, leases):
         """
         Size and lease information about very large immutable shares can be
         retrieved from a storage server.
@@ -763,14 +745,14 @@ class ShareTests(TestCase):
                     version=1,
                     size=size,
                     leases=leases,
-                    now=clock.seconds(),
+                    now=when,
                 )
 
         return self._stat_shares_immutable_test(
             storage_index,
             sharenum,
             size,
-            clock,
+            when,
             leases,
             write_shares,
         )
@@ -784,9 +766,9 @@ class ShareTests(TestCase):
             lease_cancel_secrets(),
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
-        clock=clocks(),
+        when=posix_timestamps(),
     )
-    def test_stat_shares_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares, clock):
+    def test_stat_shares_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares, when):
         """
         Size and lease information about mutable shares can be retrieved from a
         storage server.
@@ -795,9 +777,9 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        # anonymous_storage_server uses time.time(), unfortunately.  And
-        # useFixture does not interact very well with Hypothesis.
-        patch = MonkeyPatch("time.time", clock.seconds)
+        self.clock.advance(when)
+
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
             # Create a share we can toy with.
@@ -827,7 +809,7 @@ class ShareTests(TestCase):
                     vectors.write_vector,
                     vectors.new_length,
                 ),
-                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
             )
             for (sharenum, vectors)
             in test_and_write_vectors_for_shares.items()
@@ -996,7 +978,7 @@ class ShareTests(TestCase):
         storage_index=storage_indexes(),
         sharenum=sharenums(),
         size=sizes(),
-        clock=clocks(),
+        when=posix_timestamps(),
         write_enabler=write_enabler_secrets(),
         renew_secret=lease_renew_secrets(),
         cancel_secret=lease_cancel_secrets(),
@@ -1005,7 +987,7 @@ class ShareTests(TestCase):
     def test_mutable_rewrite_renews_expired_lease(
             self,
             storage_index,
-            clock,
+            when,
             sharenum,
             size,
             write_enabler,
@@ -1021,9 +1003,7 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
-        # Make the client and server use our clock.
-        self.server._clock = clock
-        self.client._clock = clock
+        self.clock.advance(when)
 
         secrets = (write_enabler, renew_secret, cancel_secret)
 
@@ -1039,9 +1019,7 @@ class ShareTests(TestCase):
                 r_vector=[],
             )
 
-        # anonymous_storage_server uses time.time() to assign leases,
-        # unfortunately.
-        patch = MonkeyPatch("time.time", clock.seconds)
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
 
@@ -1050,7 +1028,7 @@ class ShareTests(TestCase):
 
             # Advance time by more than a lease period so the lease is no
             # longer valid.
-            clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
+            self.clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
 
             self.assertThat(write(), is_successful_write())
         finally:
@@ -1066,7 +1044,7 @@ class ShareTests(TestCase):
                         test_and_write_vectors_for_shares[num].write_vector,
                         test_and_write_vectors_for_shares[num].new_length,
                     ),
-                    lease_expiration=int(clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
+                    lease_expiration=int(self.clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
                 )
                 for num
                 in test_and_write_vectors_for_shares
