@@ -400,6 +400,11 @@ class ClientPluginTests(TestCase):
         # On Tahoe-LAFS <1.16, the config is written as bytes.
         # On Tahoe-LAFS >=1.16, the config is written as unicode.
         #
+        # So we'll use `StringIO.StringIO` (not `io.StringIO`) here - which
+        # will allow either type (it will also implicitly decode bytes to
+        # unicode if we mix them, though I don't think that should happen
+        # here).
+        #
         # After support for Tahoe <1.16 support is dropped we probably want to
         # switch to an io.StringIO here.
         config_text = StringIO()
