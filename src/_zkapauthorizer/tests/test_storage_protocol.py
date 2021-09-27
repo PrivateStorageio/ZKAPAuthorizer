@@ -560,6 +560,10 @@ class ShareTests(TestCase):
         # Hypothesis might want to try a case where time is further in the
         # past than an earlier case - so we possibly rewind the clock here.
         synchronize_clocks(from_clock=clock, to_clock=self.clock)
+        # Throw away the Hypothesis-supplied clock now that we've adopted its
+        # time.  This prevents us from accidentally using it instead of
+        # self.clock later on.
+        del clock
 
         # anonymous_storage_server uses time.time() before Tahoe-LAFS 1.16,
         # unfortunately.  For Tahoe-LAFS 1.16, AnonymousStorageServer will
@@ -567,7 +571,7 @@ class ShareTests(TestCase):
         # monkey-patching.
         #
         # And useFixture does not interact very well with Hypothesis.
-        patch = MonkeyPatch("time.time", clock.seconds)
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
             # Create a share we can toy with.
@@ -592,7 +596,7 @@ class ShareTests(TestCase):
         expected = [{
             sharenum: ShareStat(
                 size=size,
-                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
             ),
         }]
         self.assertThat(
@@ -790,7 +794,9 @@ class ShareTests(TestCase):
         # See the comment in `_stat_shares_immutable_test` for an explanation
         # of clock handling and time.time monkey-patching.
         synchronize_clocks(from_clock=clock, to_clock=self.clock)
-        patch = MonkeyPatch("time.time", clock.seconds)
+        del clock
+
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
             # Create a share we can toy with.
@@ -820,7 +826,7 @@ class ShareTests(TestCase):
                     vectors.write_vector,
                     vectors.new_length,
                 ),
-                lease_expiration=int(clock.seconds() + LEASE_INTERVAL),
+                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
             )
             for (sharenum, vectors)
             in test_and_write_vectors_for_shares.items()
@@ -1014,6 +1020,11 @@ class ShareTests(TestCase):
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
 
+        # See the comment in `_stat_shares_immutable_test` for an explanation
+        # of clock handling and time.time monkey-patching.
+        synchronize_clocks(from_clock=clock, to_clock=self.clock)
+        del clock
+
         secrets = (write_enabler, renew_secret, cancel_secret)
 
         def write():
@@ -1028,10 +1039,7 @@ class ShareTests(TestCase):
                 r_vector=[],
             )
 
-        # See the comment in `_stat_shares_immutable_test` for an explanation
-        # of clock handling and time.time monkey-patching.
-        synchronize_clocks(from_clock=clock, to_clock=self.clock)
-        patch = MonkeyPatch("time.time", clock.seconds)
+        patch = MonkeyPatch("time.time", self.clock.seconds)
         try:
             patch.setUp()
 
@@ -1040,12 +1048,7 @@ class ShareTests(TestCase):
 
             # Advance time by more than a lease period so the lease is no
             # longer valid.
-            clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
-
-            # Since we just changed the Hypothesis-supplied clock we need to
-            # update the other clock (the one StorageServer is looking at)
-            # too. :/
-            synchronize_clocks(from_clock=clock, to_clock=self.clock)
+            self.clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
 
             self.assertThat(write(), is_successful_write())
         finally:
@@ -1061,7 +1064,7 @@ class ShareTests(TestCase):
                         test_and_write_vectors_for_shares[num].write_vector,
                         test_and_write_vectors_for_shares[num].new_length,
                     ),
-                    lease_expiration=int(clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
+                    lease_expiration=int(self.clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
                 )
                 for num
                 in test_and_write_vectors_for_shares
