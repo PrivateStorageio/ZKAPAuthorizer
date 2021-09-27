@@ -70,7 +70,6 @@ def _message_maker(label):
 # construction for different Tahoe-LAFS storage operations.
 allocate_buckets_message = _message_maker(u"allocate_buckets")
 add_lease_message = _message_maker(u"add_lease")
-renew_lease_message = _message_maker(u"renew_lease")
 slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_and_writev")
 
 # The number of bytes we're willing to store for a lease period for each pass

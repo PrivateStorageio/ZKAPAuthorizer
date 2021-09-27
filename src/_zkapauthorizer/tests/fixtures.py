@@ -37,6 +37,7 @@ from twisted.python.filepath import (
 from twisted.internet.task import (
     Clock,
 )
+from allmydata import __version__ as allmydata_version
 from allmydata.storage.server import (
     StorageServer,
 )
@@ -51,6 +52,7 @@ from ..controller import (
     PaymentController,
 )
 
+@attr.s
 class AnonymousStorageServer(Fixture):
     """
     Supply an instance of allmydata.storage.server.StorageServer which
@@ -61,12 +63,28 @@ class AnonymousStorageServer(Fixture):
 
     :ivar allmydata.storage.server.StorageServer storage_server: The storage
         server.
+
+    :ivar twisted.internet.task.Clock clock: The ``IReactorTime`` provider to
+        supply to ``StorageServer`` for its time-checking needs.
     """
+    clock = attr.ib()
+
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
+        if allmydata_version >= "1.16.":
+            # This version of Tahoe adds a new StorageServer argument for
+            # controlling time.
+            timeargs = {"get_current_time": self.clock.seconds}
+        else:
+            # Older versions just use time.time() and there's not much we can
+            # do _here_.  Code somewhere else will have to monkey-patch that
+            # to control things.
+            timeargs = {}
+
         self.storage_server = StorageServer(
             self.tempdir.asBytesMode().path,
             b"x" * 20,
+            **timeargs
         )
 
 

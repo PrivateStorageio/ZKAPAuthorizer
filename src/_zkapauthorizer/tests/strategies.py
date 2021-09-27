@@ -812,18 +812,29 @@ def posix_safe_datetimes():
     )
 
 
-def clocks(now=posix_safe_datetimes()):
+def posix_timestamps():
+    """
+    Build floats in a range that can represent time without losing microsecond
+    precision.
+    """
+    return posix_safe_datetimes().map(
+        lambda when: (when - _POSIX_EPOCH).total_seconds(),
+    )
+
+
+def clocks(now=posix_timestamps()):
     """
     Build ``twisted.internet.task.Clock`` instances set to a time built by
     ``now``.
+
+    :param now: A strategy that builds POSIX timestamps (ie, ints or floats in
+        the range of time_t).
     """
     def clock_at_time(when):
         c = Clock()
-        c.advance((when - _POSIX_EPOCH).total_seconds())
+        c.advance(when)
         return c
     return now.map(clock_at_time)
-
-
 
 
 @implementer(IFilesystemNode)
