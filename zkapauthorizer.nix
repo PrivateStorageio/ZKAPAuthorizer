@@ -34,15 +34,17 @@ buildPythonPackage rec {
   ];
 
   propagatedBuildInputs = [
-    attrs
-    zope_interface
     aniso8601
-    # Inherit eliot from tahoe-lafs
-    # eliot
-    twisted
     tahoe-lafs
     challenge-bypass-ristretto
-    treq
+
+    # Inherit some things from tahoe-lafs to avoid conflicting versions
+    #
+    # attrs
+    # zope_interface
+    # twisted
+    # eliot
+    # treq
   ];
 
   checkInputs = [
