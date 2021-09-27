@@ -141,7 +141,6 @@ def add_arguments(schema, kwargs):
     return modified_schema
 
 
-
 class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     """
     An object which can store and retrieve shares, subject to pass-based
@@ -161,8 +160,6 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     allocate_buckets = add_passes(RIStorageServer["allocate_buckets"])
 
     add_lease = add_passes(RIStorageServer["add_lease"])
-
-    renew_lease = add_passes(RIStorageServer["renew_lease"])
 
     get_buckets = RIStorageServer["get_buckets"]
 

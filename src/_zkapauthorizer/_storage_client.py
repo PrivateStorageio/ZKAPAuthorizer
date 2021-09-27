@@ -66,7 +66,6 @@ from .storage_common import (
     required_passes,
     allocate_buckets_message,
     add_lease_message,
-    renew_lease_message,
     slot_testv_and_readv_and_writev_message,
     has_writes,
     get_required_new_passes_for_mutable_write,
@@ -400,33 +399,6 @@ class ZKAPAuthorizerStorageClient(object):
             ),
             num_passes,
             partial(self._get_passes, add_lease_message(storage_index).encode("utf-8")),
-        )
-        returnValue(result)
-
-    @inline_callbacks
-    @with_rref
-    def renew_lease(
-            self,
-            rref,
-            storage_index,
-            renew_secret,
-    ):
-        share_sizes = (yield rref.callRemote(
-            "share_sizes",
-            storage_index,
-            None,
-        )).values()
-        num_passes = required_passes(self._pass_value, share_sizes)
-
-        result = yield call_with_passes(
-            lambda passes: rref.callRemote(
-                "renew_lease",
-                _encode_passes(passes),
-                storage_index,
-                renew_secret,
-            ),
-            num_passes,
-            partial(self._get_passes, renew_lease_message(storage_index).encode("utf-8")),
         )
         returnValue(result)
 

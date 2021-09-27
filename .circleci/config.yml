@@ -163,7 +163,7 @@ jobs:
       # somewhat current as of the time of this comment.  We can bump it to a
       # newer version when that makes sense.  Meanwhile, the platform won't
       # shift around beneath us unexpectedly.
-      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/730129887a84a8f84f3b78ffac7add72aeb551b6.tar.gz"
+      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/c12c213c1c96bd1fea9f83f9e9e1fea28d0eaec6.tar.gz"
 
     steps:
       - run:
