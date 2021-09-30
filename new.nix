@@ -55,6 +55,14 @@ in
         urllib3 = "wheel";
         # FIMXE
       };
+      _.tahoe-lafs.patches = [
+        (
+          pkgs.fetchpatch {
+            url = "https://raw.githubusercontent.com/PrivateStorageio/nixpkgs/privatestorageio/pkgs/development/python-modules/tahoe-lafs/rsa-exponent.patch";
+            sha256 = "sha256-0vIMj5gZPbKLkow6wpA+Tz7bpyy+mZRSSFGmpg0VMyk=";
+          }
+        )
+      ];
       format = "setuptools";
       overridesPre = [ (self: super: { inherit python-challenge-bypass-ristretto; }) ];
       requirements = builtins.readFile ./requirements/base.txt;
