@@ -1,0 +1,44 @@
+{
+    "mach-nix": {
+        "branch": "refs/tags/3.3.0",
+        "description": "Create highly reproducible python environments",
+        "homepage": "",
+        "owner": "DavHau",
+        "repo": "mach-nix",
+        "rev": "773580c35bcdb8cbd0820018d304686282f88d16",
+        "sha256": "105d6b6kgvn8kll639vx5adh5hp4gjcl4bs9rjzzyqz7367wbxj6",
+        "type": "tarball",
+        "url": "https://github.com/DavHau/mach-nix/archive/773580c35bcdb8cbd0820018d304686282f88d16.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "niv": {
+        "branch": "master",
+        "description": "Easy dependency management for Nix projects",
+        "homepage": "https://github.com/nmattia/niv",
+        "owner": "nmattia",
+        "repo": "niv",
+        "rev": "e0ca65c81a2d7a4d82a189f1e23a48d59ad42070",
+        "sha256": "1pq9nh1d8nn3xvbdny8fafzw87mj7gsmp6pxkdl65w2g18rmcmzx",
+        "type": "tarball",
+        "url": "https://github.com/nmattia/niv/archive/e0ca65c81a2d7a4d82a189f1e23a48d59ad42070.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "pypi-deps-db": {
+        "branch": "master",
+        "description": "Probably the most complete python dependency database",
+        "homepage": "",
+        "owner": "DavHau",
+        "repo": "pypi-deps-db",
+        "rev": "86593d090eb4753138a501fef60cdfbd2c612e77",
+        "sha256": "0dfr92vh4fr8cyd5cgicxaa4wy4m53a7nmwbn1352isph2zbp0kk",
+        "type": "tarball",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/86593d090eb4753138a501fef60cdfbd2c612e77.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "release2015": {
+        "sha256": "12p7v805xj5as2fbdh30i0b9iwy8y24sk256rgqfqylxj1784mn8",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3367.fd8a7fd07da/nixexprs.tar.xz",
+        "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3367.fd8a7fd07da/nixexprs.tar.xz"
+    }
+}
