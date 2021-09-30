@@ -1,0 +1,9 @@
+attrs
+zope.interface
+eliot
+aniso8601
+python-challenge-bypass-ristretto
+tahoe-lafs >=1.14, <1.15
+treq
+pyutil
+
