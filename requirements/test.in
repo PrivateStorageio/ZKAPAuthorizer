@@ -2,3 +2,4 @@ coverage
 fixtures
 testtools
 hypothesis
+flake8
