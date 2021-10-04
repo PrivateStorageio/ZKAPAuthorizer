@@ -111,7 +111,7 @@ pyopenssl==21.0.0
     #   twisted
 pyrsistent==0.16.1
     # via eliot
-python-challenge-bypass-ristretto==2021.7.12
+python-challenge-bypass-ristretto
     # via -r requirements/base.in
 pyutil==3.3.0
     # via -r requirements/base.in
