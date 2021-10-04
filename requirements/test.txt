@@ -8,29 +8,56 @@ argparse==1.4.0
     # via unittest2
 attrs==21.2.0
     # via hypothesis
+configparser==4.0.2
+    # via
+    #   flake8
+    #   importlib-metadata
+contextlib2==0.6.0.post1
+    # via
+    #   importlib-metadata
+    #   zipp
 coverage==5.5
     # via -r requirements/test.in
 enum34==1.1.10
-    # via hypothesis
+    # via
+    #   flake8
+    #   hypothesis
 extras==1.0.0
     # via testtools
 fixtures==3.0.0
     # via
     #   -r requirements/test.in
     #   testtools
+flake8==3.9.2
+    # via -r requirements/test.in
+functools32==3.2.3.post2
+    # via flake8
 hypothesis==4.57.1
     # via -r requirements/test.in
+importlib-metadata==2.1.1
+    # via flake8
 linecache2==1.0.0
     # via traceback2
+mccabe==0.6.1
+    # via flake8
+pathlib2==2.3.6
+    # via importlib-metadata
 pbr==5.6.0
     # via
     #   fixtures
     #   testtools
+pycodestyle==2.7.0
+    # via flake8
+pyflakes==2.3.1
+    # via flake8
 python-mimeparse==1.6.0
     # via testtools
+scandir==1.10.0
+    # via pathlib2
 six==1.16.0
     # via
     #   fixtures
+    #   pathlib2
     #   testtools
     #   unittest2
 sortedcontainers==2.4.0
@@ -43,5 +70,9 @@ traceback2==1.4.0
     # via
     #   testtools
     #   unittest2
+typing==3.10.0.0
+    # via flake8
 unittest2==1.1.0
     # via testtools
+zipp==1.2.0
+    # via importlib-metadata
