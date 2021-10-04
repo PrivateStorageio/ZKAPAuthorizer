@@ -3,10 +3,11 @@ let
 in
 { pkgs ? import sources.release2015 {}
 , pypiData ? sources.pypi-deps-db
-, mach-nix ? import sources.mach-nix { inherit pkgs pypiData; python = "python27"; }
+, mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 ,
 }:
     mach-nix.buildPythonApplication rec {
+      python = "python27";
       name = "zero-knowledge-access-pass-authorizer";
       src = ./.;
       providers = {
@@ -36,5 +37,5 @@ in
       format = "setuptools";
       requirements = builtins.readFile ./requirements/base.txt;
       # Record some settings here, so downstream nix files can consume them.
-      #meta.mach-nix = { inherit python providers; };
+      meta.mach-nix = { inherit python providers; };
     }
