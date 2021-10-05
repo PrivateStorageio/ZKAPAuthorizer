@@ -115,6 +115,7 @@ pyopenssl==21.0.0
     # via
     #   foolscap
     #   twisted
+tahoe-lafs
 pyrsistent==0.16.1
     # via
     #   eliot
