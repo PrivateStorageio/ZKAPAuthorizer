@@ -147,8 +147,6 @@ six==1.16.0
     #   txaio
 spake2==0.8
     # via magic-wormhole
-https://github.com/fenn-cs/tahoe-lafs/archive/f6a96ae3976ee21ad0376f7b6a22fc3d12110dce.tar.gz
-    # via -r requirements/base-1.16.in
 tqdm==4.62.3
     # via magic-wormhole
 treq==21.1.0
@@ -179,9 +177,3 @@ zope.interface==5.4.0
     #   tahoe-lafs
     #   twisted
     #   txtorcon
-
-# The following packages are considered to be unsafe in a requirements file:
-setuptools==44.1.1
-    # via
-    #   tahoe-lafs
-    #   zope.interface
