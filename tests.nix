@@ -25,6 +25,7 @@ let
     requirements =
       builtins.readFile ./requirements/test.txt;
     packagesExtra = [ zkapauthorizer ];
+    _.hypothesis.postUnpack = "";
   };
 in
   pkgs.runCommand "zkapauthorizer-tests" {
@@ -45,11 +46,19 @@ in
       ''
     }
     pushd ${zkapauthorizer.src}
-    ${python}/bin/flake8 $flake8_args
+    #${python}/bin/flake8 $flake8_args
+    ${python}/bin/pyflakes
     popd
 
     ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
       then "coverage run --debug=config --module"
       else ""
     } twisted.trial ${extraTrialArgs} ${testSuite'}
+
+    ${lib.optionalString collectCoverage
+      ''
+        mkdir -p "$out/coverage"
+        cp -v .coverage.* "$out/coverage"
+      ''
+    }
   ''

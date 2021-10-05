@@ -30,7 +30,7 @@ fixtures==3.0.0
     #   testtools
 flake8==3.9.2
     # via -r requirements/test.in
-functools32==3.2.3.post2
+functools32==3.2.3-2
     # via flake8
 hypothesis==4.57.1
     # via -r requirements/test.in

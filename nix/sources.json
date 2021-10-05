@@ -1,14 +1,14 @@
 {
     "mach-nix": {
-        "branch": "refs/tags/3.3.0",
+        "branch": "master",
         "description": "Create highly reproducible python environments",
         "homepage": "",
         "owner": "DavHau",
         "repo": "mach-nix",
-        "rev": "773580c35bcdb8cbd0820018d304686282f88d16",
-        "sha256": "105d6b6kgvn8kll639vx5adh5hp4gjcl4bs9rjzzyqz7367wbxj6",
+        "rev": "d223656fc0eff33f4da77d69db19752edc9a5ba5",
+        "sha256": "1lnj8g83nsjl21yy4xbz7mrx152xdj01dyzz1mqrb3zjcwxibc0c",
         "type": "tarball",
-        "url": "https://github.com/DavHau/mach-nix/archive/773580c35bcdb8cbd0820018d304686282f88d16.tar.gz",
+        "url": "https://github.com/DavHau/mach-nix/archive/d223656fc0eff33f4da77d69db19752edc9a5ba5.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -29,10 +29,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "86593d090eb4753138a501fef60cdfbd2c612e77",
-        "sha256": "0dfr92vh4fr8cyd5cgicxaa4wy4m53a7nmwbn1352isph2zbp0kk",
+        "rev": "1f60509dcf1877b3bdee057412cbc938ccdb5d77",
+        "sha256": "1f6n1jcpi8pphyp5l76mcimywzw0if6h36glwjd62ki82d2jxq6b",
         "type": "tarball",
-        "url": "https://github.com/DavHau/pypi-deps-db/archive/86593d090eb4753138a501fef60cdfbd2c612e77.tar.gz",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/1f60509dcf1877b3bdee057412cbc938ccdb5d77.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2015": {

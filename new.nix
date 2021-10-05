@@ -18,16 +18,13 @@ in
         # Pure python packages that don't build correctly from sdists
         # - patches in nixpkgs that don't apply
         # - missing build dependencies
-        # "backports_functools_lru_cache" = "wheel";
         platformdirs = "wheel";
         boltons = "wheel";
         klein = "wheel";
         humanize = "wheel";
         chardet = "wheel";
         urllib3 = "wheel";
-        # zipp = "wheel";
-        # tqdm = "wheel";
-        # FIMXE
+        zipp = "wheel";
       };
       _.tahoe-lafs.patches = [
         (
