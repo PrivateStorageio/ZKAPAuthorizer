@@ -4,11 +4,12 @@ in
 { pkgs ? import sources.release2015 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
+, tahoe-lafs-repo ? sources.tahoe-lafs
 }:
   let
     providers = {
       _default = "sdist,nixpkgs,wheel";
-      tahoe-lafs = "nixpkgs,sdist";
+      tahoe-lafs = "nixpkgs";
       # not packaged in nixpkgs at all, we can use the binary wheel from
       # pypi though.
       python-challenge-bypass-ristretto = "wheel";
@@ -44,12 +45,7 @@ in
         __version__ = verstr
         EOF
       '';
-      src = pkgs.fetchFromGitHub {
-        owner = "fenn-cs";
-        repo = "tahoe-lafs";
-        rev = "f6a96ae3976ee21ad0376f7b6a22fc3d12110dce";
-        sha256 = "ZN2V5vH+VqPaBmQXXqyH+vUiqW1YNhz+7LsiNNhA/4g=";
-      };
+      src = tahoe-lafs-repo;
     };
   in
     mach-nix.buildPythonApplication rec {

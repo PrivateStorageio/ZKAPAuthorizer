@@ -45,6 +45,8 @@ chardet==4.0.0
     # via requests
 click==7.1.2
     # via magic-wormhole
+collections-extended==1.0.3
+    # via tahoe-lafs
 configparser==4.0.2
     # via tahoe-lafs
 constantly==15.1.0
