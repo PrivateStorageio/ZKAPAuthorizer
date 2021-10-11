@@ -23,8 +23,6 @@ in
       chardet = "wheel";
       urllib3 = "wheel";
       zipp = "wheel";
-      # marked broken
-      magic-wormhole = "wheel";
     };
     tahoe-lafs = mach-nix.buildPythonPackage {
       python = "python27";
@@ -63,12 +61,6 @@ in
           }
         )
       ];
-      requirementsExtra = ''
-        pyrsistent
-        foolscap == 0.13.1
-        configparser
-        eliot
-      '';
       format = "setuptools";
       # Record some settings here, so downstream nix files can consume them.
       meta.mach-nix = { inherit python providers; };
