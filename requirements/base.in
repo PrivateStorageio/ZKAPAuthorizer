@@ -3,7 +3,5 @@ zope.interface
 eliot
 aniso8601
 python-challenge-bypass-ristretto
-tahoe-lafs >=1.14, <1.15
+https://github.com/fenn-cs/tahoe-lafs/archive/f6a96ae3976ee21ad0376f7b6a22fc3d12110dce.tar.gz
 treq
-pyutil
-

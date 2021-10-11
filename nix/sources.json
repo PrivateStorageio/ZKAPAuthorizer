@@ -36,9 +36,9 @@
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2015": {
-        "sha256": "12p7v805xj5as2fbdh30i0b9iwy8y24sk256rgqfqylxj1784mn8",
+        "sha256": "112drvixj81vscj8cncmks311rk2ik5gydpd03d3r0yc939zjskg",
         "type": "tarball",
-        "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3367.fd8a7fd07da/nixexprs.tar.xz",
-        "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3367.fd8a7fd07da/nixexprs.tar.xz"
+        "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
+        "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
     }
 }

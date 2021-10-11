@@ -4,8 +4,7 @@ in
 { pkgs ? import sources.release2015 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs ? "1.14.0"
-, zkapauthorizer ? import ./new.nix { inherit pkgs pypiData mach-nix tahoe-lafs; }
+, zkapauthorizer ? import ./new.nix { inherit pkgs pypiData mach-nix; }
 , ci-reports ? false
 , hypothesisProfile ? null
 , collectCoverage ? false

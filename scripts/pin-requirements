@@ -2,5 +2,4 @@
 
 export PYTHONPATH=.
 pip-compile -q --allow-unsafe requirements/base.in -o requirements/base.txt
-pip-compile -q --allow-unsafe requirements/base-1.16.in -o requirements/base-1.16.txt
-pip-compile -q --allow-unsafe requirements/test.in -o requirements/test.txt --pip-args "-c requirements/base-1.16.txt -c requirements/base.txt"
+pip-compile -q --allow-unsafe requirements/test.in -o requirements/test.txt --pip-args "-c requirements/base.txt"
