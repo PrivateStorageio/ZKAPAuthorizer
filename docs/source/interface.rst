@@ -181,6 +181,22 @@ The response is **OK** with ``application/json`` content-type response body like
 
   { }
 
+``PATCH /storage-plugins/privatestorageio-zkapauthz-v1/unblinded-token``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This endpoint allows an external agent to discard unblinded tokens from the node's database.
+The unblinded tokens to trim are indicated by supplying a single unblinded token value.
+All unblinded tokens that appear before the given unblinded token in spend order will be discarded.
+
+The request body must be ``application/json`` encoded and contain an object like::
+
+  { "first-unspent": <unblinded token string>
+  }
+
+The response is **OK** with ``application/json`` content-type response body like::
+
+  { }
+
 ``POST /storage-plugins/privatestorageio-zkapauthz-v1/calculate-price``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
