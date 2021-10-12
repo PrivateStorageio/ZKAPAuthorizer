@@ -401,11 +401,12 @@ class _UnblindedTokenCollection(Resource):
             This discards all tokens that appear before the given token in
             spending order.  This is intended to support backup recovery.
         """
+        application_json(request)
         body = request.content.read()
         parsed = loads(body)
         token = UnblindedToken(parsed["first-unspent"])
         self._store.discard_unblinded_tokens_before(token)
-        return b""
+        return dumps({})
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()
