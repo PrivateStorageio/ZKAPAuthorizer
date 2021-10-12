@@ -611,6 +611,7 @@ class UnblindedTokenTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         if extra_tokens is None:
+            # None means test the system without any tokens in it at all.
             num_tokens = 0
         else:
             num_tokens = root.controller.num_redemption_groups + extra_tokens
