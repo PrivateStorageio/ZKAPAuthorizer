@@ -92,6 +92,7 @@ from hypothesis.strategies import (
     builds,
     tuples,
     dictionaries,
+    data,
 )
 
 from twisted.python.filepath import (
@@ -814,6 +815,73 @@ class UnblindedTokenTests(TestCase):
                     u"initial, after (%s): initial[1:] != after",
                 ),
             ),
+        )
+
+    @given(
+        get_config=tahoe_configs(),
+        api_auth_token=api_auth_tokens(),
+        voucher=vouchers(),
+        num_extra_tokens=integers(min_value=0, max_value=100),
+        pick_checkpoint=data(),
+    )
+    def test_patch(self, get_config, api_auth_token, voucher, num_extra_tokens, pick_checkpoint):
+        """
+        A **PATCH** request can be used to drop all unblinded tokens that appear
+        before a given token in spending order.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+
+        # Compute a safe number of tokens to redeem to populate the system.
+        num_tokens = root.controller.num_redemption_groups + num_extra_tokens
+
+        # Put in a number of tokens with which to test.
+        redeeming = root.controller.redeem(voucher, num_tokens)
+
+        # Make sure the operation completed before proceeding.
+        self.assertThat(
+            redeeming,
+            succeeded(Always()),
+        )
+
+        # Look up all of the token values in spending order.
+        all_tokens = root.store.backup()["unblinded-tokens"]
+
+        # Pick one at random
+        checkpoint_index = pick_checkpoint.draw(
+            integers(min_value=0, max_value=num_tokens - 1),
+        )
+        checkpoint = all_tokens[checkpoint_index]
+
+        # Drop everything before it
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"PATCH",
+            b"http://127.0.0.1/unblinded-token",
+            data=BytesIO(dumps({"first-unspent": checkpoint})),
+        )
+
+        self.assertThat(
+            requesting,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(OK),
+                    body_matcher=Equals(b""),
+                ),
+            ),
+        )
+
+        # Verify that the database now has exactly the non-discarded ZKAPs.
+        remaining_tokens = root.store.backup()["unblinded-tokens"]
+        self.assertThat(
+            remaining_tokens,
+            Equals(all_tokens[checkpoint_index:]),
         )
 
     @given(
