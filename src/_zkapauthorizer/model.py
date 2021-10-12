@@ -555,6 +555,34 @@ class VoucherStore(object):
         )
 
     @with_cursor
+    def discard_unblinded_tokens_before(self, cursor, unblinded_token):
+        """
+        Get rid of all unblinded tokens that appear before the given token in
+        spend order.
+
+        :param UnblindedToken unblinded_token: The token that defines the
+            discard point.  All unblinded tokens that appear before this token
+            in spend order are discarded.
+
+        :return: ``None``
+        """
+        cursor.execute(
+            """
+            SELECT [rowid] FROM [unblinded-tokens] WHERE [token] = ?
+            """,
+            (unblinded_token.unblinded_token,),
+        )
+        (rowid,) = cursor.fetchone()
+        cursor.execute(
+            """
+            DELETE FROM [unblinded-tokens]
+            WHERE [rowid] < ?
+            """,
+            (rowid,),
+        )
+        cursor.execute("SELECT changes()")
+
+    @with_cursor
     def discard_unblinded_tokens(self, cursor, unblinded_tokens):
         """
         Get rid of some unblinded tokens.  The tokens will be completely removed

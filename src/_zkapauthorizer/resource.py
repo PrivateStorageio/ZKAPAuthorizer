@@ -70,6 +70,10 @@ from .pricecalculator import (
     PriceCalculator,
 )
 
+from .model import (
+    UnblindedToken,
+)
+
 from .controller import (
     PaymentController,
     get_redeemer,
@@ -386,6 +390,22 @@ class _UnblindedTokenCollection(Resource):
         self._store.insert_unblinded_tokens(unblinded_tokens)
         return dumps({})
 
+    def render_PATCH(self, request):
+        """
+        Change the collection of unblinded tokens that exists in the store.
+
+        The following changes are supported:
+
+          * ``{ "first-unspent": <unblinded token> }``
+
+            This discards all tokens that appear before the given token in
+            spending order.  This is intended to support backup recovery.
+        """
+        body = request.content.read()
+        parsed = loads(body)
+        token = UnblindedToken(parsed["first-unspent"])
+        self._store.discard_unblinded_tokens_before(token)
+        return b""
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()
