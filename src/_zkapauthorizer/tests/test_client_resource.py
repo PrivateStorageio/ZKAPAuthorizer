@@ -873,7 +873,11 @@ class UnblindedTokenTests(TestCase):
             succeeded(
                 matches_response(
                     code_matcher=Equals(OK),
-                    body_matcher=Equals(b""),
+                    headers_matcher=application_json(),
+                    body_matcher=AfterPreprocessing(
+                        loads,
+                        Equals({}),
+                    ),
                 ),
             ),
         )
