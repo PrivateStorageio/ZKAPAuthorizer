@@ -23,7 +23,7 @@ in
     python = mach-nix.mkPython {
       inherit (zkapauthorizer.meta.mach-nix) python providers;
       requirements =
-        builtins.readFile ./requirements/test.txt;
+        builtins.readFile ./requirements/test.in;
       packagesExtra = [ zkapauthorizer ];
       _.hypothesis.postUnpack = "";
     };
