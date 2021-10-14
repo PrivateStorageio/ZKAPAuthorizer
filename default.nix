@@ -9,6 +9,9 @@ in
   let
     providers = {
       _default = "sdist,nixpkgs,wheel";
+      # mach-nix doesn't provide a good way to depend on mach-nix packages,
+      # so we get it as a nixpkgs dependency from an overlay. See below for
+      # details.
       tahoe-lafs = "nixpkgs";
       # not packaged in nixpkgs at all, we can use the binary wheel from
       # pypi though.
@@ -51,11 +54,13 @@ in
       name = "zero-knowledge-access-pass-authorizer";
       src = ./.;
       inherit providers;
-      # We need to specify requirements here, since mach-nix does not
-      # grab reqs from nixpkg dependencies
-      # TODO: File issue
+      # mach-nix does not provide a way to specify dependencies on other
+      # mach-nix packages, that incorporates the requirements and overlays
+      # of that package.
+      # See https://github.com/DavHau/mach-nix/issues/123
+      # In particular, we explicitly include the requirements of tahoe-lafs
+      # here, and include it in a python package overlay.
       requirementsExtra = tahoe-lafs.requirements;
-      # Add 
       overridesPre = [
         (
           self: super: {
