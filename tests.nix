@@ -51,7 +51,7 @@ in
       popd
 
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
-    then "coverage run --debug=config --module"
+    then "coverage run --debug=config --rcfile=${zkapauthorizer.src}/.coveragerc --module"
     else ""
     } twisted.trial ${extraTrialArgs} ${testSuite'}
 
