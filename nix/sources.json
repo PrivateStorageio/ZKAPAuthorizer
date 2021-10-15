@@ -3,12 +3,12 @@
         "branch": "merged",
         "description": "Create highly reproducible python environments",
         "homepage": "",
-        "owner": "tp-la",
+        "owner": "PrivateStorageio",
         "repo": "mach-nix",
         "rev": "0872dd81afe9c4a6552604f7d21fe7f2baddf454",
         "sha256": "0hsbm6rmjjjzxdciirmcxyvrrlz19cbhprd2hfksrv6nnl4c3mc3",
         "type": "tarball",
-        "url": "https://github.com/tp-la/mach-nix/archive/0872dd81afe9c4a6552604f7d21fe7f2baddf454.tar.gz",
+        "url": "https://github.com/PrivateStorageio/mach-nix/archive/0872dd81afe9c4a6552604f7d21fe7f2baddf454.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
