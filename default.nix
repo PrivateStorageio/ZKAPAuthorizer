@@ -26,6 +26,8 @@ in
       fixtures = "wheel";
       testtools = "wheel";
       traceback2 = "wheel";
+      # - Incorrectly merged extras - https://github.com/DavHau/mach-nix/pull/334
+      tqdm = "wheel";
     };
     tahoe-lafs = mach-nix.buildPythonPackage rec {
       python = "python27";
