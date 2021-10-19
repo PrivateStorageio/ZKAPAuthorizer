@@ -51,6 +51,12 @@ To update to the latest commit, run
 
 It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
 
+.. note::
+
+   Since tahoe-lafs doesn't have correct version information when installed from a github archive,
+   the packaging in ``default.nix`` includes a fake version number.
+   This will need to be update manually at least when the minor version of tahoe-lafs changes.
+
 If you want to test multiple versions, you can add an additional source, pointing at other version
 
 .. code:: shell
