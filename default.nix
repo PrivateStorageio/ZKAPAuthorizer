@@ -4,7 +4,8 @@ in
 { pkgs ? import sources.release2015 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs-repo ? sources.tahoe-lafs
+, tahoe-lafs-source ? "tahoe-lafs"
+, tahoe-lafs-repo ? sources.${tahoe-lafs-source}
 }:
   let
     lib = pkgs.lib;
