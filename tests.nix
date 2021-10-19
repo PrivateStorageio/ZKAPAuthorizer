@@ -5,7 +5,6 @@ in
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , zkapauthorizer ? (import ./. { inherit pkgs pypiData mach-nix; }).zkapauthorizer
-, ci-reports ? false
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
@@ -28,37 +27,22 @@ in
       _.hypothesis.postUnpack = "";
     };
   in
-    pkgs.runCommand "zkapauthorizer-tests" {
-      # When running in CI, we want `nix build` to succeed and create the `result` symlink
-      # even if the tests fail. `succeedOnFailure` will create a `nix-support/failed` file
-      # with the exit code, which is read by the CI command to propogate the exit status.
-      succeedOnFailure = ci-reports;
-    } ''
-      ${if ci-reports then
-      ''
-        mkdir -p $out/codeclimate
-        flake8_args+="--format=gl-codeclimate --output-file $out/codeclimate/flake8.json"
-      ''
-    else
-      ''
-        mkdir -p $out
-        flake8_args+="--tee --output-file $out/flake8.txt"
-      ''
-    }
+    pkgs.runCommand "zkapauthorizer-tests" {} ''
+      mkdir -p $out
+
       pushd ${zkapauthorizer.src}
-      #${python}/bin/flake8 $flake8_args
       ${python}/bin/pyflakes
       popd
 
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
-    then "coverage run --debug=config --rcfile=${zkapauthorizer.src}/.coveragerc --module"
-    else ""
-    } twisted.trial ${extraTrialArgs} ${testSuite'}
+        then "coverage run --debug=config --rcfile=${zkapauthorizer.src}/.coveragerc --module"
+        else ""
+      } twisted.trial ${extraTrialArgs} ${testSuite'}
 
       ${lib.optionalString collectCoverage
-      ''
-        mkdir -p "$out/coverage"
-        cp -v .coverage.* "$out/coverage"
-      ''
-    }
+        ''
+          mkdir -p "$out/coverage"
+          cp -v .coverage.* "$out/coverage"
+        ''
+      }
     ''
