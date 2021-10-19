@@ -27,7 +27,11 @@ in
       _.hypothesis.postUnpack = "";
     };
   in
-    pkgs.runCommand "zkapauthorizer-tests" {} ''
+    pkgs.runCommand "zkapauthorizer-tests" {
+      passthru = {
+        inherit python;
+      };
+    } ''
       mkdir -p $out
 
       pushd ${zkapauthorizer.src}
