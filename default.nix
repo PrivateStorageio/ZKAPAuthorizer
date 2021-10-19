@@ -84,5 +84,8 @@ in
           ''
             mkdir -p $out/bin
             ln -s ${python-env}/bin/tahoe $out/bin
+            # Include some tools that are useful for debugging.
+            ln -s ${python-env}/bin/flogtool $out/bin
+            ln -s ${python-env}/bin/eliot-prettyprint $out/bin
           '';
     }
