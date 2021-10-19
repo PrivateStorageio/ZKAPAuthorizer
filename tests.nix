@@ -4,7 +4,7 @@ in
 { pkgs ? import sources.release2015 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, zkapauthorizer ? import ./. { inherit pkgs pypiData mach-nix; }
+, zkapauthorizer ? (import ./. { inherit pkgs pypiData mach-nix; }).zkapauthorizer
 , ci-reports ? false
 , hypothesisProfile ? null
 , collectCoverage ? false
