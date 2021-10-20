@@ -135,6 +135,14 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
   linux-tests: &LINUX_TESTS
+    parameters:
+      tahoe-lafs-source:
+        # The name of a niv source in nix/sources.json which corresponds to
+        # a Tahoe-LAFS version. This is the version that will be declared as a
+        # dependency of the Nix package of ZKAPAuthorizer (and therefore used
+        # in the test run and pulled in should you install this package).
+        type: "string"
+
     docker:
       # Run in a highly Nix-capable environment.
       - image: "nixos/nix:latest"
@@ -182,6 +190,8 @@ jobs:
             nix-build tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
+              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
+              --attr doc
 
       - run:
           name: "Push to Cachix"
@@ -212,7 +222,12 @@ workflows:
   everything:
     jobs:
     - "documentation"
-    - "linux-tests"
+    - "linux-tests":
+        matrix:
+          parameters:
+            tahoe-lafs-source:
+            - "tahoe-lafs"
+
     - "macos-tests":
         matrix:
           parameters:
