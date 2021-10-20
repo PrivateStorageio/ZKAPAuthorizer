@@ -42,15 +42,15 @@
         "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
     },
     "tahoe-lafs": {
-        "branch": "pull/1129/head",
+        "branch": "tahoe-lafs-1.16.0",
         "description": "The Tahoe-LAFS decentralized secure filesystem.",
         "homepage": "https://tahoe-lafs.org/",
         "owner": "tahoe-lafs",
         "repo": "tahoe-lafs",
-        "rev": "f6a96ae3976ee21ad0376f7b6a22fc3d12110dce",
-        "sha256": "127z83c388mvxkz1qdjqdnlj5xgshyn5w5v40vda6mpyy7k9bpb4",
+        "rev": "4bfb9d21700b8084d5fb2c697ceeb7088dd97c37",
+        "sha256": "1hcp9gq5hcw43xmg7n24xx580jrg0fd382pklv79r5lr4cicyx7g",
         "type": "tarball",
-        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/f6a96ae3976ee21ad0376f7b6a22fc3d12110dce.tar.gz",
+        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/4bfb9d21700b8084d5fb2c697ceeb7088dd97c37.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
