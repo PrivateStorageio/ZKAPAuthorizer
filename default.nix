@@ -56,7 +56,7 @@ in
       };
       zkapauthorizer = mach-nix.buildPythonApplication rec {
         inherit python providers;
-        src = ./.;
+        src = lib.cleanSource ./.;
         # mach-nix does not provide a way to specify dependencies on other
         # mach-nix packages, that incorporates the requirements and overlays
         # of that package.
@@ -81,6 +81,10 @@ in
           packagesExtra = [ zkapauthorizer tahoe-lafs ];
         };
       in
+        # Since we use this derivation in `environment.systemPackages`,
+        # we create a derivation that has just the executables we use,
+        # to avoid polluting the system PATH with all the executables
+        # from our dependencies.
         pkgs.runCommandNoCC "privatestorage" {}
           ''
             mkdir -p $out/bin
