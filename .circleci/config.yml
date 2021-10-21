@@ -190,8 +190,7 @@ jobs:
             nix-build tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
-              --attr doc
+              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >>
 
       - run:
           name: "Push to Cachix"
