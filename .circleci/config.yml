@@ -136,12 +136,11 @@ jobs:
 
   linux-tests: &LINUX_TESTS
     parameters:
-      tahoe-version:
-        # A Tahoe-LAFS version number string like "1.15.0" which corresponds
-        # to a version known by default.nix .  This is the version that will
-        # be declared as a dependency of the Nix package of ZKAPAuthorizer
-        # (and therefore used in the test run and pulled in should you install
-        # this package).
+      tahoe-lafs-source:
+        # The name of a niv source in nix/sources.json which corresponds to
+        # a Tahoe-LAFS version. This is the version that will be declared as a
+        # dependency of the Nix package of ZKAPAuthorizer (and therefore used
+        # in the test run and pulled in should you install this package).
         type: "string"
 
     docker:
@@ -188,11 +187,10 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build \
+            nix-build tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --argstr tahoe-lafs << parameters.tahoe-version >> \
-              --attr doc
+              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >>
 
       - run:
           name: "Push to Cachix"
@@ -226,9 +224,8 @@ workflows:
     - "linux-tests":
         matrix:
           parameters:
-            tahoe-version:
-            - "1.14.0"
-            - "1.16.0rc1"
+            tahoe-lafs-source:
+            - "tahoe-lafs"
 
     - "macos-tests":
         matrix:

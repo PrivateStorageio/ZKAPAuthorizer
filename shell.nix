@@ -1,14 +1,17 @@
-{ pkgs ? import ./nixpkgs.nix { } }:
 let
-  zkapauthorizer = pkgs.callPackage ./default.nix { };
+  sources = import nix/sources.nix;
 in
-  (pkgs.python27.buildEnv.override {
-    extraLibs = with pkgs.python27Packages; [
-      fixtures
-      testtools
-      hypothesis
-      pyhamcrest
-      zkapauthorizer
-    ];
-    ignoreCollisions = true;
-  }).env
+{ pkgs ? import sources.release2015 {}
+, tahoe-lafs-source ? "tahoe-lafs"
+}:
+  let
+    tests = pkgs.callPackage ./tests.nix {
+      inherit tahoe-lafs-source;
+    };
+  in
+    pkgs.mkShell {
+      packages = [
+        tests.python
+        pkgs.niv
+      ];
+    }

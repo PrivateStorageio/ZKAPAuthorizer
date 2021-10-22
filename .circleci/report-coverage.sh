@@ -1,8 +1,8 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i bash -p "curl" -p "python.withPackages (ps: [ ps.coverage ])"
 set -x
-find ./result-doc/share/doc
-cp ./result-doc/share/doc/*/.coverage.* ./
+find ./result/share/doc
+cp ./result/share/doc/*/.coverage.* ./
 python -m coverage combine
 python -m coverage report
 python -m coverage xml

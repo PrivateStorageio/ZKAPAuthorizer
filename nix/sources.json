@@ -1,0 +1,56 @@
+{
+    "mach-nix": {
+        "branch": "merged",
+        "description": "Create highly reproducible python environments",
+        "homepage": "",
+        "owner": "PrivateStorageio",
+        "repo": "mach-nix",
+        "rev": "0872dd81afe9c4a6552604f7d21fe7f2baddf454",
+        "sha256": "0hsbm6rmjjjzxdciirmcxyvrrlz19cbhprd2hfksrv6nnl4c3mc3",
+        "type": "tarball",
+        "url": "https://github.com/PrivateStorageio/mach-nix/archive/0872dd81afe9c4a6552604f7d21fe7f2baddf454.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "niv": {
+        "branch": "master",
+        "description": "Easy dependency management for Nix projects",
+        "homepage": "https://github.com/nmattia/niv",
+        "owner": "nmattia",
+        "repo": "niv",
+        "rev": "e0ca65c81a2d7a4d82a189f1e23a48d59ad42070",
+        "sha256": "1pq9nh1d8nn3xvbdny8fafzw87mj7gsmp6pxkdl65w2g18rmcmzx",
+        "type": "tarball",
+        "url": "https://github.com/nmattia/niv/archive/e0ca65c81a2d7a4d82a189f1e23a48d59ad42070.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "pypi-deps-db": {
+        "branch": "master",
+        "description": "Probably the most complete python dependency database",
+        "homepage": "",
+        "owner": "DavHau",
+        "repo": "pypi-deps-db",
+        "rev": "96d01556b4597c022647acbf8c3b58d2a99bc963",
+        "sha256": "0s6ll2hi40gj6mp2zdg7w3dq17g381gnfkm390mqgp574lmbq6yw",
+        "type": "tarball",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/96d01556b4597c022647acbf8c3b58d2a99bc963.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "release2015": {
+        "sha256": "112drvixj81vscj8cncmks311rk2ik5gydpd03d3r0yc939zjskg",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
+        "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
+    },
+    "tahoe-lafs": {
+        "branch": "tahoe-lafs-1.16.0",
+        "description": "The Tahoe-LAFS decentralized secure filesystem.",
+        "homepage": "https://tahoe-lafs.org/",
+        "owner": "tahoe-lafs",
+        "repo": "tahoe-lafs",
+        "rev": "4bfb9d21700b8084d5fb2c697ceeb7088dd97c37",
+        "sha256": "1hcp9gq5hcw43xmg7n24xx580jrg0fd382pklv79r5lr4cicyx7g",
+        "type": "tarball",
+        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/4bfb9d21700b8084d5fb2c697ceeb7088dd97c37.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    }
+}

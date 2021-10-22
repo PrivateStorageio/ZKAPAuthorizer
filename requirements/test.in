@@ -1,0 +1,5 @@
+coverage
+fixtures
+testtools
+hypothesis
+pyflakes
