@@ -5,10 +5,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "mach-nix",
-        "rev": "9d4599fa1cc7be7fb30a19aec3d81849760112bb",
-        "sha256": "0xrp9lndlv9mnn18lv66bvvfcg84zjanvn6v3fcx6hrm7j2rm257",
+        "rev": "dc94135e31d5c90c40a00a6cbdf9330526e8153b",
+        "sha256": "08l7v0hn9cs8irda0kd55c6lmph3an2i7p47wh2d48hza9pipckr",
         "type": "tarball",
-        "url": "https://github.com/DavHau/mach-nix/archive/9d4599fa1cc7be7fb30a19aec3d81849760112bb.tar.gz",
+        "url": "https://github.com/DavHau/mach-nix/archive/dc94135e31d5c90c40a00a6cbdf9330526e8153b.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
