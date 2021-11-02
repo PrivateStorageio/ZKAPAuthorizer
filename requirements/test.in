@@ -2,4 +2,4 @@ coverage
 fixtures
 testtools
 hypothesis
-pyflakes
+flake8
