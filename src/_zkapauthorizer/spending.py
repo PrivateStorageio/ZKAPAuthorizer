@@ -16,20 +16,10 @@
 A module for logic controlling the manner in which ZKAPs are spent.
 """
 
-from zope.interface import (
-    Interface,
-    Attribute,
-    implementer,
-)
-
 import attr
+from zope.interface import Attribute, Interface, implementer
 
-from .eliot import (
-    GET_PASSES,
-    SPENT_PASSES,
-    INVALID_PASSES,
-    RESET_PASSES,
-)
+from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
 
 
 class IPassGroup(Interface):

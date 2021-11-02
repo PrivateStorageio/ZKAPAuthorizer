@@ -16,138 +16,77 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
-from __future__ import (
-    absolute_import,
-    division,
-)
+from __future__ import absolute_import, division
 
-from json import (
-    loads,
-    dumps,
-)
-from functools import (
-    partial,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
-from zope.interface import (
-    implementer,
-)
-from testtools import (
-    TestCase,
-)
-from testtools.content import (
-    text_content,
-)
-from testtools.matchers import (
-    Always,
-    Equals,
-    MatchesAll,
-    AllMatch,
-    IsInstance,
-    HasLength,
-    AfterPreprocessing,
-    MatchesStructure,
-)
-from testtools.twistedsupport import (
-    succeeded,
-    has_no_result,
-    failed,
-)
-
-from hypothesis import (
-    given,
-    assume,
-)
-from hypothesis.strategies import (
-    integers,
-    datetimes,
-    lists,
-    sampled_from,
-    randoms,
-)
-from twisted.python.url import (
-    URL,
-)
-from twisted.internet.defer import (
-    fail,
-)
-from twisted.internet.task import (
-    Clock,
-)
-from twisted.web.iweb import (
-    IAgent,
-)
-from twisted.web.resource import (
-    ErrorPage,
-    Resource,
-)
-from twisted.web.http_headers import (
-    Headers,
-)
-from twisted.web.http import (
-    UNSUPPORTED_MEDIA_TYPE,
-    BAD_REQUEST,
-    INTERNAL_SERVER_ERROR,
-)
-from treq.testing import (
-    StubTreq,
-)
+from datetime import datetime, timedelta
+from functools import partial
+from json import dumps, loads
 
 from challenge_bypass_ristretto import (
-    SecurityException,
-    PublicKey,
-    BlindedToken,
     BatchDLEQProof,
+    BlindedToken,
+    PublicKey,
+    SecurityException,
     TokenPreimage,
     VerificationSignature,
     random_signing_key,
 )
+from hypothesis import assume, given
+from hypothesis.strategies import datetimes, integers, lists, randoms, sampled_from
+from testtools import TestCase
+from testtools.content import text_content
+from testtools.matchers import (
+    AfterPreprocessing,
+    AllMatch,
+    Always,
+    Equals,
+    HasLength,
+    IsInstance,
+    MatchesAll,
+    MatchesStructure,
+)
+from testtools.twistedsupport import failed, has_no_result, succeeded
+from treq.testing import StubTreq
+from twisted.internet.defer import fail
+from twisted.internet.task import Clock
+from twisted.python.url import URL
+from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
+from twisted.web.http_headers import Headers
+from twisted.web.iweb import IAgent
+from twisted.web.resource import ErrorPage, Resource
+from zope.interface import implementer
 
 from ..controller import (
+    AlreadySpent,
+    DoubleSpendRedeemer,
+    DummyRedeemer,
+    IndexedRedeemer,
     IRedeemer,
     NonRedeemer,
-    DummyRedeemer,
-    DoubleSpendRedeemer,
-    UnpaidRedeemer,
-    RistrettoRedeemer,
-    IndexedRedeemer,
-    RecordingRedeemer,
     PaymentController,
+    RecordingRedeemer,
+    RistrettoRedeemer,
     UnexpectedResponse,
-    AlreadySpent,
     Unpaid,
+    UnpaidRedeemer,
     token_count_for_group,
 )
-
-from ..model import (
-    UnblindedToken,
-    Pending as model_Pending,
-    Redeeming as model_Redeeming,
-    DoubleSpend as model_DoubleSpend,
-    Redeemed as model_Redeemed,
-    Unpaid as model_Unpaid,
-)
-
+from ..model import DoubleSpend as model_DoubleSpend
+from ..model import Pending as model_Pending
+from ..model import Redeemed as model_Redeemed
+from ..model import Redeeming as model_Redeeming
+from ..model import UnblindedToken
+from ..model import Unpaid as model_Unpaid
+from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from .matchers import Provides, between, raises
 from .strategies import (
-    tahoe_configs,
-    vouchers,
-    voucher_objects,
-    voucher_counters,
-    redemption_group_counts,
-    dummy_ristretto_keys,
     clocks,
-)
-from .matchers import (
-    Provides,
-    raises,
-    between,
-)
-from .fixtures import (
-    TemporaryVoucherStore,
-    ConfiglessMemoryVoucherStore,
+    dummy_ristretto_keys,
+    redemption_group_counts,
+    tahoe_configs,
+    voucher_counters,
+    voucher_objects,
+    vouchers,
 )
 
 

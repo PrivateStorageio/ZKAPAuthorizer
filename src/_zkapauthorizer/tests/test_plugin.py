@@ -16,163 +16,77 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from StringIO import (
-    StringIO,
-)
-from os import (
-    makedirs,
-)
 import tempfile
-from functools import (
-    partial,
-)
+from functools import partial
+from os import makedirs
 
-from fixtures import (
-    TempDir,
-)
-
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Always,
-    Contains,
-    Equals,
-    AfterPreprocessing,
-    MatchesAll,
-    HasLength,
-    AllMatch,
-    ContainsDict,
-    MatchesStructure,
-    IsInstance,
-)
-from testtools.twistedsupport import (
-    succeeded,
-)
-from testtools.content import (
-    text_content,
-)
-from hypothesis import (
-    given,
-    settings,
-)
-from hypothesis.strategies import (
-    just,
-    datetimes,
-    sampled_from,
-)
-from foolscap.broker import (
-    Broker,
-)
-from foolscap.ipb import (
-    IReferenceable,
-    IRemotelyCallable,
-)
-from foolscap.referenceable import (
-    LocalReferenceable,
-)
-
+from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
-    IFoolscapStoragePlugin,
     IAnnounceableStorageServer,
+    IFoolscapStoragePlugin,
     IStorageServer,
     RIStorageServer,
 )
-from allmydata.client import (
-    config_from_string,
-    create_client_from_config,
+from challenge_bypass_ristretto import SigningKey
+from eliot.testing import LoggedMessage
+from fixtures import TempDir
+from foolscap.broker import Broker
+from foolscap.ipb import IReferenceable, IRemotelyCallable
+from foolscap.referenceable import LocalReferenceable
+from hypothesis import given, settings
+from hypothesis.strategies import datetimes, just, sampled_from
+from StringIO import StringIO
+from testtools import TestCase
+from testtools.content import text_content
+from testtools.matchers import (
+    AfterPreprocessing,
+    AllMatch,
+    Always,
+    Contains,
+    ContainsDict,
+    Equals,
+    HasLength,
+    IsInstance,
+    MatchesAll,
+    MatchesStructure,
 )
+from testtools.twistedsupport import succeeded
+from twisted.internet.task import Clock
+from twisted.plugin import getPlugins
+from twisted.python.filepath import FilePath
+from twisted.test.proto_helpers import StringTransport
+from twisted.web.resource import IResource
 
-from eliot.testing import (
-    LoggedMessage,
-)
+from twisted.plugins.zkapauthorizer import storage_server
 
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.plugin import (
-    getPlugins,
-)
-from twisted.test.proto_helpers import (
-    StringTransport,
-)
-from twisted.internet.task import (
-    Clock,
-)
-from twisted.web.resource import (
-    IResource,
-)
-from twisted.plugins.zkapauthorizer import (
-    storage_server,
-)
-
-from challenge_bypass_ristretto import (
-    SigningKey,
-)
-
-from ..spending import (
-    GET_PASSES,
-)
-
-from ..foolscap import (
-    RIPrivacyPassAuthorizedStorageServer,
-)
-from ..model import (
-    NotEnoughTokens,
-    VoucherStore,
-)
-from ..controller import (
-    IssuerConfigurationMismatch,
-    PaymentController,
-    DummyRedeemer,
-)
-from .._storage_client import (
-    IncorrectStorageServerReference,
-)
-
-from ..lease_maintenance import (
-    SERVICE_NAME,
-)
-
-from .._plugin import (
-    load_signing_key,
-)
-
+from .._plugin import load_signing_key
+from .._storage_client import IncorrectStorageServerReference
+from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
+from ..foolscap import RIPrivacyPassAuthorizedStorageServer
+from ..lease_maintenance import SERVICE_NAME
+from ..model import NotEnoughTokens, VoucherStore
+from ..spending import GET_PASSES
+from .eliot import capture_logging
+from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
+from .matchers import Provides, raises
 from .strategies import (
-    minimal_tahoe_configs,
-    tahoe_configs,
-    client_dummyredeemer_configurations,
-    server_configurations,
     announcements,
-    vouchers,
-    storage_indexes,
-    lease_renew_secrets,
+    client_dummyredeemer_configurations,
+    dummy_ristretto_keys,
     lease_cancel_secrets,
-    sharenum_sets,
-    sizes,
+    lease_renew_secrets,
+    minimal_tahoe_configs,
     pass_counts,
     ristretto_signing_keys,
-    dummy_ristretto_keys,
+    server_configurations,
+    sharenum_sets,
+    sizes,
+    storage_indexes,
+    tahoe_configs,
+    vouchers,
 )
-from .matchers import (
-    Provides,
-    raises,
-)
-
-from .foolscap import (
-    LocalRemote,
-    get_anonymous_storage_server,
-    DummyReferenceable,
-)
-
-from .eliot import (
-    capture_logging,
-)
-
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
 

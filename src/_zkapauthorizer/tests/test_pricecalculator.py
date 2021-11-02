@@ -17,41 +17,16 @@
 Tests for ``_zkapauthorizer.pricecalculator``.
 """
 
-from functools import (
-    partial,
-)
+from functools import partial
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Equals,
-    GreaterThan,
-    IsInstance,
-    MatchesAll,
-)
+from hypothesis import given
+from hypothesis.strategies import integers, lists, tuples
+from testtools import TestCase
+from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 
-from hypothesis import (
-    given,
-)
-
-from hypothesis.strategies import (
-    integers,
-    lists,
-    tuples,
-)
-
-from ..pricecalculator import (
-    PriceCalculator,
-)
-
-from .strategies import (
-    sizes,
-    share_parameters,
-)
-from .matchers import (
-    greater_or_equal,
-)
+from ..pricecalculator import PriceCalculator
+from .matchers import greater_or_equal
+from .strategies import share_parameters, sizes
 
 file_sizes = lists(sizes(), min_size=1)
 

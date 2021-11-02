@@ -17,55 +17,26 @@ This module implements a service which periodically spends ZKAPs to
 refresh leases on all shares reachable from a root.
 """
 
-from functools import (
-    partial,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
-from errno import (
-    ENOENT,
-)
+from datetime import datetime, timedelta
+from errno import ENOENT
+from functools import partial
+
 import attr
-
-from zope.interface import (
-    implementer,
-)
-
-from aniso8601 import (
-    parse_datetime,
-)
-
-from twisted.internet.defer import (
-    inlineCallbacks,
-    maybeDeferred,
-)
-from twisted.application.service import (
-    Service,
-)
-from twisted.python.log import (
-    err,
-)
-
-from allmydata.interfaces import (
-    IDirectoryNode,
-    IFilesystemNode,
-)
+from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
-    file_renewal_secret_hash,
+    bucket_cancel_secret_hash,
     bucket_renewal_secret_hash,
     file_cancel_secret_hash,
-    bucket_cancel_secret_hash,
+    file_renewal_secret_hash,
 )
+from aniso8601 import parse_datetime
+from twisted.application.service import Service
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.python.log import err
+from zope.interface import implementer
 
-from .controller import (
-    bracket,
-)
-
-from .model import (
-    ILeaseMaintenanceObserver,
-)
+from .controller import bracket
+from .model import ILeaseMaintenanceObserver
 
 SERVICE_NAME = u"lease maintenance service"
 

@@ -16,21 +16,11 @@
 This module implements base64 encoding-related functionality.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from re import (
-    compile as _compile,
-)
-
-from binascii import (
-    Error,
-)
-
-from base64 import (
-    b64decode as _b64decode,
-)
+from base64 import b64decode as _b64decode
+from binascii import Error
+from re import compile as _compile
 
 _b64decode_validator = _compile(b"^[A-Za-z0-9-_]*={0,2}$")
 

@@ -22,13 +22,8 @@ __all__ = [
 
 import sys
 
-from testtools.matchers import (
-    Matcher,
-    Mismatch,
-)
-from testtools.content import (
-    TracebackContent,
-)
+from testtools.content import TracebackContent
+from testtools.matchers import Matcher, Mismatch
 
 
 def _is_exception(exc):

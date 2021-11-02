@@ -29,10 +29,7 @@ calculator).
 
 import attr
 
-from .storage_common import (
-    required_passes,
-    share_size_for_data,
-)
+from .storage_common import required_passes, share_size_for_data
 
 
 @attr.s

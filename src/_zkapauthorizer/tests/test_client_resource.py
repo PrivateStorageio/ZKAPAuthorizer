@@ -17,178 +17,97 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
+
+from datetime import datetime
+from io import BytesIO
+from json import dumps
+from urllib import quote
 
 import attr
-
-from .._base64 import (
-    urlsafe_b64decode,
+from allmydata.client import config_from_string
+from aniso8601 import parse_datetime
+from fixtures import TempDir
+from hypothesis import given, note
+from hypothesis.strategies import (
+    binary,
+    builds,
+    datetimes,
+    dictionaries,
+    fixed_dictionaries,
+    integers,
+    just,
+    lists,
+    none,
+    one_of,
+    sampled_from,
+    text,
+    tuples,
 )
-
-from datetime import (
-    datetime,
-)
-from json import (
-    dumps,
-)
-from io import (
-    BytesIO,
-)
-from urllib import (
-    quote,
-)
-
-from testtools import (
-    TestCase,
-)
+from testtools import TestCase
+from testtools.content import text_content
 from testtools.matchers import (
-    MatchesStructure,
+    AfterPreprocessing,
+    AllMatch,
+    Always,
+    ContainsDict,
+    Equals,
+    GreaterThan,
+    HasLength,
+    Is,
+    IsInstance,
     MatchesAll,
     MatchesAny,
     MatchesPredicate,
-    AllMatch,
-    HasLength,
-    IsInstance,
-    ContainsDict,
-    AfterPreprocessing,
-    Equals,
-    Always,
-    GreaterThan,
-    Is,
+    MatchesStructure,
 )
-from testtools.twistedsupport import (
-    CaptureTwistedLogs,
-    succeeded,
-)
-from testtools.content import (
-    text_content,
-)
+from testtools.twistedsupport import CaptureTwistedLogs, succeeded
+from treq.testing import RequestTraversalAgent
+from twisted.internet.defer import Deferred, gatherResults, maybeDeferred
+from twisted.internet.task import Clock, Cooperator
+from twisted.python.filepath import FilePath
+from twisted.web.client import FileBodyProducer, readBody
+from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTHORIZED
+from twisted.web.http_headers import Headers
+from twisted.web.resource import IResource, getChildForRequest
 
-from aniso8601 import (
-    parse_datetime,
-)
-
-from fixtures import (
-    TempDir,
-)
-
-from hypothesis import (
-    given,
-    note,
-)
-from hypothesis.strategies import (
-    one_of,
-    none,
-    just,
-    fixed_dictionaries,
-    sampled_from,
-    lists,
-    integers,
-    binary,
-    text,
-    datetimes,
-    builds,
-    tuples,
-    dictionaries,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.defer import (
-    Deferred,
-    maybeDeferred,
-    gatherResults,
-)
-from twisted.internet.task import (
-    Cooperator,
-    Clock,
-)
-from twisted.web.http import (
-    OK,
-    UNAUTHORIZED,
-    NOT_FOUND,
-    BAD_REQUEST,
-    NOT_IMPLEMENTED,
-)
-from twisted.web.http_headers import (
-    Headers,
-)
-from twisted.web.resource import (
-    IResource,
-    getChildForRequest,
-)
-from twisted.web.client import (
-    FileBodyProducer,
-    readBody,
-)
-
-from treq.testing import (
-    RequestTraversalAgent,
-)
-
-from allmydata.client import (
-    config_from_string,
-)
-
-from .. import (
-    __version__ as zkapauthorizer_version,
-)
-
+from .. import __version__ as zkapauthorizer_version
+from .._base64 import urlsafe_b64decode
+from ..configutil import config_string_from_sections
 from ..model import (
-    Voucher,
-    Redeeming,
-    Redeemed,
     DoubleSpend,
-    Unpaid,
     Error,
+    Redeemed,
+    Redeeming,
+    Unpaid,
+    Voucher,
     VoucherStore,
     memory_connect,
 )
-from ..resource import (
-    NUM_TOKENS,
-    from_configuration,
-    get_token_count,
-)
-
-from ..pricecalculator import (
-    PriceCalculator,
-)
-from ..configutil import (
-    config_string_from_sections,
-)
-
+from ..pricecalculator import PriceCalculator
+from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
-    required_passes,
-    get_configured_pass_value,
-    get_configured_lease_duration,
     get_configured_allowed_public_keys,
+    get_configured_lease_duration,
+    get_configured_pass_value,
+    required_passes,
 )
-
+from .json import loads
+from .matchers import Provides, between, matches_response
 from .strategies import (
-    direct_tahoe_configs,
-    tahoe_configs,
-    client_unpaidredeemer_configurations,
+    api_auth_tokens,
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
-    client_nonredeemer_configurations,
     client_errorredeemer_configurations,
+    client_nonredeemer_configurations,
+    client_unpaidredeemer_configurations,
+    direct_tahoe_configs,
+    request_paths,
+    requests,
+    share_parameters,
+    tahoe_configs,
     unblinded_tokens,
     vouchers,
-    requests,
-    request_paths,
-    api_auth_tokens,
-    share_parameters,
-)
-from .matchers import (
-    Provides,
-    matches_response,
-    between,
-)
-from .json import (
-    loads,
 )
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"

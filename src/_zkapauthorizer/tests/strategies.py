@@ -16,77 +16,48 @@
 Hypothesis strategies for property testing.
 """
 
-from base64 import (
-    b64encode,
-    urlsafe_b64encode,
-)
-from datetime import (
-    datetime,
-)
-from urllib import (
-    quote,
-)
+from base64 import b64encode, urlsafe_b64encode
+from datetime import datetime
+from urllib import quote
 
 import attr
-
-from zope.interface import (
-    implementer,
-)
-
+from allmydata.client import config_from_string
+from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
 from hypothesis.strategies import (
-    one_of,
-    sampled_from,
-    just,
-    none,
     binary,
+    builds,
     characters,
-    text,
-    integers,
-    sets,
-    lists,
-    tuples,
+    datetimes,
     dictionaries,
     fixed_dictionaries,
-    builds,
-    datetimes,
+    integers,
+    just,
+    lists,
+    none,
+    one_of,
     recursive,
+    sampled_from,
+    sets,
+    text,
+    tuples,
 )
+from twisted.internet.defer import succeed
+from twisted.internet.task import Clock
+from twisted.web.test.requesthelper import DummyRequest
+from zope.interface import implementer
 
-from twisted.internet.defer import (
-    succeed,
-)
-from twisted.internet.task import (
-    Clock,
-)
-from twisted.web.test.requesthelper import (
-    DummyRequest,
-)
-
-from allmydata.interfaces import (
-    IFilesystemNode,
-    IDirectoryNode,
-    HASH_SIZE,
-)
-
-from allmydata.client import (
-    config_from_string,
-)
-
+from ..configutil import config_string_from_sections
 from ..model import (
-    Pass,
-    RandomToken,
-    UnblindedToken,
-    Voucher,
-    Pending,
     DoubleSpend,
-    Unpaid,
     Error,
-    Redeeming,
+    Pass,
+    Pending,
+    RandomToken,
     Redeemed,
-)
-
-from ..configutil import (
-    config_string_from_sections,
+    Redeeming,
+    UnblindedToken,
+    Unpaid,
+    Voucher,
 )
 
 # Sizes informed by

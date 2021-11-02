@@ -16,31 +16,16 @@
 Tests for ``_zkapauthorizer._base64``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from base64 import (
-    urlsafe_b64encode,
-)
+from base64 import urlsafe_b64encode
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Equals,
-)
+from hypothesis import given
+from hypothesis.strategies import binary
+from testtools import TestCase
+from testtools.matchers import Equals
 
-from hypothesis import (
-    given,
-)
-from hypothesis.strategies import (
-    binary,
-)
-
-from .._base64 import (
-    urlsafe_b64decode,
-)
+from .._base64 import urlsafe_b64decode
 
 
 class Base64Tests(TestCase):

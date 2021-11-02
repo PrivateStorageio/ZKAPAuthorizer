@@ -16,105 +16,55 @@
 Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
-from __future__ import (
-    absolute_import,
-    unicode_literals,
-)
+from __future__ import absolute_import, unicode_literals
 
-from datetime import (
-    datetime,
-    timedelta,
-)
+from datetime import datetime, timedelta
 
 import attr
-
-from zope.interface import (
-    implementer,
-)
-
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Is,
-    Equals,
-    Always,
-    HasLength,
-    MatchesAll,
-    AllMatch,
-    AfterPreprocessing,
-)
-from testtools.twistedsupport import (
-    succeeded,
-)
-from fixtures import (
-    TempDir,
-)
-from hypothesis import (
-    given,
-    note,
-)
+from allmydata.client import SecretHolder
+from allmydata.interfaces import IServer, IStorageBroker
+from allmydata.util.hashutil import CRYPTO_VAL_SIZE
+from fixtures import TempDir
+from hypothesis import given, note
 from hypothesis.strategies import (
-    builds,
     binary,
-    integers,
-    lists,
-    floats,
-    dictionaries,
-    randoms,
+    builds,
     composite,
+    dictionaries,
+    floats,
+    integers,
     just,
+    lists,
+    randoms,
 )
+from testtools import TestCase
+from testtools.matchers import (
+    AfterPreprocessing,
+    AllMatch,
+    Always,
+    Equals,
+    HasLength,
+    Is,
+    MatchesAll,
+)
+from testtools.twistedsupport import succeeded
+from twisted.application.service import IService
+from twisted.internet.defer import maybeDeferred, succeed
+from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.task import (
-    Clock,
-)
-from twisted.internet.defer import (
-    succeed,
-    maybeDeferred,
-)
-from twisted.application.service import (
-    IService,
-)
-
-from allmydata.util.hashutil import (
-    CRYPTO_VAL_SIZE,
-)
-from allmydata.client import (
-    SecretHolder,
-)
-from allmydata.interfaces import (
-    IStorageBroker,
-    IServer,
-)
-
-from ..foolscap import (
-    ShareStat,
-)
-
-from .matchers import (
-    Provides,
-    between,
-    leases_current,
-)
-from .strategies import (
-    storage_indexes,
-    clocks,
-    leaf_nodes,
-    node_hierarchies,
-)
-
+from ..foolscap import ShareStat
 from ..lease_maintenance import (
-    NoopMaintenanceObserver,
     MemoryMaintenanceObserver,
+    NoopMaintenanceObserver,
     lease_maintenance_service,
     maintain_leases_from_root,
-    visit_storage_indexes_from_root,
     renew_leases,
+    visit_storage_indexes_from_root,
 )
+from .matchers import Provides, between, leases_current
+from .strategies import clocks, leaf_nodes, node_hierarchies, storage_indexes
 
 
 def interval_means():

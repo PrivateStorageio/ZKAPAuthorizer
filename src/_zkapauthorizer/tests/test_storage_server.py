@@ -16,94 +16,45 @@
 Tests for ``_zkapauthorizer._storage_server``.
 """
 
-from __future__ import (
-    absolute_import,
-    division,
-)
+from __future__ import absolute_import, division
 
-from time import (
-    time,
-)
-from random import (
-    shuffle,
-)
+from random import shuffle
+from time import time
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Equals,
-    AfterPreprocessing,
-    MatchesAll,
-)
-from hypothesis import (
-    given,
-    note,
-)
-from hypothesis.strategies import (
-    integers,
-    lists,
-    tuples,
-    one_of,
-    just,
-)
-from challenge_bypass_ristretto import (
-    RandomToken,
-    random_signing_key,
-)
+from challenge_bypass_ristretto import RandomToken, random_signing_key
+from foolscap.referenceable import LocalReferenceable
+from hypothesis import given, note
+from hypothesis.strategies import integers, just, lists, one_of, tuples
+from testtools import TestCase
+from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
+from twisted.internet.task import Clock
+from twisted.python.runtime import platform
 
-from twisted.python.runtime import (
-    platform,
-)
-from twisted.internet.task import (
-    Clock,
-)
-
-from foolscap.referenceable import (
-    LocalReferenceable,
-)
-
-from .common import (
-    skipIf,
-)
-from .privacypass import (
-    make_passes,
-)
-from .matchers import (
-    raises,
-)
-from .strategies import (
-    zkaps,
-    sizes,
-    sharenum_sets,
-    storage_indexes,
-    write_enabler_secrets,
-    lease_renew_secrets,
-    lease_cancel_secrets,
-    slot_test_and_write_vectors_for_shares,
-)
-from .fixtures import (
-    AnonymousStorageServer,
-)
-from .storage_common import (
-    cleanup_storage_server,
-    write_toy_shares,
-)
-from ..api import (
-    ZKAPAuthorizerStorageServer,
-    MorePassesRequired,
-)
+from .._storage_server import _ValidationResult
+from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..storage_common import (
-    required_passes,
-    allocate_buckets_message,
     add_lease_message,
-    slot_testv_and_readv_and_writev_message,
+    allocate_buckets_message,
     get_implied_data_length,
     get_required_new_passes_for_mutable_write,
+    required_passes,
+    slot_testv_and_readv_and_writev_message,
     summarize,
 )
-from .._storage_server import (
-    _ValidationResult,
+from .common import skipIf
+from .fixtures import AnonymousStorageServer
+from .matchers import raises
+from .privacypass import make_passes
+from .storage_common import cleanup_storage_server, write_toy_shares
+from .strategies import (
+    lease_cancel_secrets,
+    lease_renew_secrets,
+    sharenum_sets,
+    sizes,
+    slot_test_and_write_vectors_for_shares,
+    storage_indexes,
+    write_enabler_secrets,
+    zkaps,
 )
 
 

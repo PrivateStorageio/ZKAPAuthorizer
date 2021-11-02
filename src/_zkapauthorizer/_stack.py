@@ -12,16 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import (
-    contextmanager,
-)
+from contextlib import contextmanager
 
 try:
-    from resource import (
-        RLIMIT_STACK,
-        getrlimit,
-        setrlimit,
-    )
+    from resource import RLIMIT_STACK, getrlimit, setrlimit
 except ImportError:
     # Not available on Windows, unfortunately.
     RLIMIT_STACK = object()

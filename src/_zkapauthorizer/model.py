@@ -17,59 +17,26 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from functools import (
-    wraps,
-)
-from json import (
-    loads,
-    dumps,
-)
-from datetime import (
-    datetime,
-)
-from zope.interface import (
-    Interface,
-    implementer,
-)
-
-from sqlite3 import (
-    OperationalError,
-    connect as _connect,
-)
+from datetime import datetime
+from functools import wraps
+from json import dumps, loads
+from sqlite3 import OperationalError
+from sqlite3 import connect as _connect
 
 import attr
+from aniso8601 import parse_datetime as _parse_datetime
+from twisted.logger import Logger
+from twisted.python.filepath import FilePath
+from zope.interface import Interface, implementer
 
-from aniso8601 import (
-    parse_datetime as _parse_datetime,
-)
-from twisted.logger import (
-    Logger,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-
-from ._base64 import (
-    urlsafe_b64decode,
-)
-
-from .validators import (
-    is_base64_encoded,
-    has_length,
-    greater_than,
-)
-
+from ._base64 import urlsafe_b64decode
+from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
-    pass_value_attribute,
     get_configured_pass_value,
+    pass_value_attribute,
     required_passes,
 )
-
-from .schema import (
-    get_schema_version,
-    get_schema_upgrades,
-    run_schema_upgrades,
-)
+from .validators import greater_than, has_length, is_base64_encoded
 
 
 def parse_datetime(s, **kw):

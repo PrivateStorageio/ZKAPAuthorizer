@@ -10,52 +10,7 @@ Support code for applying token-based HTTP authorization rules to a
 Twisted Web resource hierarchy.
 """
 
-from __future__ import (
-    print_function,
-    unicode_literals,
-    absolute_import,
-    division,
-)
-
-import attr
-
-from zope.interface import (
-    implementer,
-)
-
-from twisted.python.failure import (
-    Failure,
-)
-from twisted.internet.defer import (
-    succeed,
-    fail,
-)
-from twisted.cred.credentials import (
-    ICredentials,
-)
-from twisted.cred.portal import (
-    IRealm,
-    Portal,
-)
-from twisted.cred.checkers import (
-    ANONYMOUS,
-)
-from twisted.cred.error import (
-    UnauthorizedLogin,
-)
-from twisted.web.iweb import (
-    ICredentialFactory,
-)
-from twisted.web.resource import (
-    IResource,
-)
-from twisted.web.guard import (
-    HTTPAuthSessionWrapper,
-)
-
-from cryptography.hazmat.primitives.constant_time import (
-    bytes_eq,
-)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 # https://github.com/twisted/nevow/issues/106 may affect this code but if so
 # then the hotfix Tahoe-LAFS applies should deal with it.
@@ -64,6 +19,18 @@ from cryptography.hazmat.primitives.constant_time import (
 # public but we do want to make sure that hotfix is applied.  This seems like
 # an alright compromise.
 import allmydata.web.private as awp
+import attr
+from cryptography.hazmat.primitives.constant_time import bytes_eq
+from twisted.cred.checkers import ANONYMOUS
+from twisted.cred.credentials import ICredentials
+from twisted.cred.error import UnauthorizedLogin
+from twisted.cred.portal import IRealm, Portal
+from twisted.internet.defer import fail, succeed
+from twisted.python.failure import Failure
+from twisted.web.guard import HTTPAuthSessionWrapper
+from twisted.web.iweb import ICredentialFactory
+from twisted.web.resource import IResource
+from zope.interface import implementer
 
 del awp
 

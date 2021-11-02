@@ -16,121 +16,71 @@
 Tests for communication between the client and server components.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from fixtures import (
-    MonkeyPatch,
-)
-from testtools import (
-    TestCase,
-)
+from allmydata.storage.common import storage_index_to_dir
+from challenge_bypass_ristretto import random_signing_key
+from fixtures import MonkeyPatch
+from foolscap.referenceable import LocalReferenceable
+from hypothesis import assume, given
+from hypothesis.strategies import data as data_strategy
+from hypothesis.strategies import integers, lists, sets, tuples
+from testtools import TestCase
 from testtools.matchers import (
+    AfterPreprocessing,
     Always,
     Equals,
     HasLength,
     IsInstance,
-    AfterPreprocessing,
     MatchesStructure,
     raises,
 )
-from testtools.twistedsupport import (
-    succeeded,
-    failed,
-)
-from testtools.twistedsupport._deferred import (
-    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
-    # there appear to have stalled.
+from testtools.twistedsupport import failed, succeeded
+from testtools.twistedsupport._deferred import (  # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts; there appear to have stalled.
     extract_result,
 )
+from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
+from twisted.python.runtime import platform
 
-from hypothesis import (
-    given,
-    assume,
-)
-from hypothesis.strategies import (
-    sets,
-    lists,
-    tuples,
-    integers,
-    data as data_strategy,
-)
-
-from twisted.python.runtime import (
-    platform,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.task import (
-    Clock,
-)
-
-from foolscap.referenceable import (
-    LocalReferenceable,
-)
-
-from challenge_bypass_ristretto import (
-    random_signing_key,
-)
-
-from allmydata.storage.common import (
-    storage_index_to_dir,
-)
-
-from .common import (
-    skipIf,
-)
-
-from .strategies import (
-    storage_indexes,
-    lease_renew_secrets,
-    lease_cancel_secrets,
-    write_enabler_secrets,
-    share_versions,
-    sharenums,
-    sharenum_sets,
-    sizes,
-    slot_test_and_write_vectors_for_shares,
-    posix_timestamps,
-    # Not really a strategy...
-    bytes_for_share,
-)
-from .matchers import (
-    matches_version_dictionary,
-)
-from .fixtures import (
-    AnonymousStorageServer,
-)
-from .storage_common import (
-    LEASE_INTERVAL,
-    cleanup_storage_server,
-    write_toy_shares,
-    whitebox_write_sparse_share,
-    get_passes,
-    privacypass_passes,
-    pass_factory,
-)
-from .foolscap import (
-    LocalRemote,
-)
+from .._storage_client import _encode_passes
 from ..api import (
     MorePassesRequired,
-    ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
+    ZKAPAuthorizerStorageServer,
 )
+from ..foolscap import ShareStat
 from ..storage_common import (
-    slot_testv_and_readv_and_writev_message,
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
+    slot_testv_and_readv_and_writev_message,
 )
-from .._storage_client import (
-    _encode_passes,
+from .common import skipIf
+from .fixtures import AnonymousStorageServer
+from .foolscap import LocalRemote
+from .matchers import matches_version_dictionary
+from .storage_common import (
+    LEASE_INTERVAL,
+    cleanup_storage_server,
+    get_passes,
+    pass_factory,
+    privacypass_passes,
+    whitebox_write_sparse_share,
+    write_toy_shares,
 )
-from ..foolscap import (
-    ShareStat,
+from .strategies import (  # Not really a strategy...
+    bytes_for_share,
+    lease_cancel_secrets,
+    lease_renew_secrets,
+    posix_timestamps,
+    share_versions,
+    sharenum_sets,
+    sharenums,
+    sizes,
+    slot_test_and_write_vectors_for_shares,
+    storage_indexes,
+    write_enabler_secrets,
 )
 
 

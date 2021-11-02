@@ -24,10 +24,7 @@ def _configure_hypothesis():
     """
     from os import environ
 
-    from hypothesis import (
-        HealthCheck,
-        settings,
-    )
+    from hypothesis import HealthCheck, settings
 
     base = dict(
         suppress_health_check=[

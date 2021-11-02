@@ -9,49 +9,19 @@
 Tests for ``_zkapauthorizer.private``.
 """
 
-from __future__ import (
-    print_function,
-    unicode_literals,
-    absolute_import,
-    division,
-)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Equals,
-)
-from testtools.twistedsupport import (
-    succeeded,
-)
+from allmydata.test.web.matchers import has_response_code
+from testtools import TestCase
+from testtools.matchers import Equals
+from testtools.twistedsupport import succeeded
+from treq.client import HTTPClient
+from treq.testing import RequestTraversalAgent
+from twisted.web.http import NOT_FOUND, UNAUTHORIZED
+from twisted.web.http_headers import Headers
+from twisted.web.resource import Resource
 
-from twisted.web.http import (
-    UNAUTHORIZED,
-    NOT_FOUND,
-)
-from twisted.web.http_headers import (
-    Headers,
-)
-from twisted.web.resource import (
-    Resource,
-)
-
-from treq.client import (
-    HTTPClient,
-)
-from treq.testing import (
-    RequestTraversalAgent,
-)
-
-from ..private import (
-    SCHEME,
-    create_private_tree,
-)
-
-from allmydata.test.web.matchers import (
-    has_response_code,
-)
+from ..private import SCHEME, create_private_tree
 
 
 class PrivacyTests(TestCase):
