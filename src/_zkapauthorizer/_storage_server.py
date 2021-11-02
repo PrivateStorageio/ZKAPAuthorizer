@@ -38,11 +38,10 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import start_action
 from foolscap.api import Referenceable
-from foolscap.ipb import IReferenceable, IRemotelyCallable
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
-from zope.interface import implementer_only
+from zope.interface import implementer
 
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .storage_common import (
@@ -147,9 +146,7 @@ class LeaseRenewalRequired(Exception):
     """
 
 
-@implementer_only(
-    RIPrivacyPassAuthorizedStorageServer, IReferenceable, IRemotelyCallable
-)
+@implementer(RIPrivacyPassAuthorizedStorageServer)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
 # attributes on self and it's hard to avoid that.
@@ -698,14 +695,3 @@ def get_stat(sharepath):
             return stat_slot
         else:
             return stat_bucket
-
-
-from foolscap.ipb import ISlicer
-from foolscap.referenceable import ReferenceableSlicer
-
-# I don't understand why this is required.
-# ZKAPAuthorizerStorageServer is-a Referenceable.  It seems like
-# the built in adapter should take care of this case.
-from twisted.python.components import registerAdapter
-
-registerAdapter(ReferenceableSlicer, ZKAPAuthorizerStorageServer, ISlicer)
