@@ -392,6 +392,7 @@ class VoucherStoreTests(TestCase):
             public_key,
             unblinded_tokens,
             completed=data.draw(booleans()),
+            spendable=True,
         )
 
         backed_up_tokens = store.backup()[u"unblinded-tokens"]
@@ -725,6 +726,7 @@ class UnblindedTokenStoreTests(TestCase):
                 public_key,
                 unblinded_tokens,
                 completed,
+                spendable=True,
             ),
             raises(ValueError),
         )
@@ -739,13 +741,25 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, completed, data):
         """
-        Unblinded tokens that are added to the store can later be retrieved.
+        Unblinded tokens that are added to the store can later be retrieved and counted.
         """
         random_tokens, unblinded_tokens = paired_tokens(data)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens, completed)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens, completed, spendable=True)
+
+        # All the tokens just inserted should be counted.
+        self.expectThat(
+            store.count_unblinded_tokens(),
+            Equals(len(unblinded_tokens)),
+        )
         retrieved_tokens = store.get_unblinded_tokens(len(random_tokens))
+
+        # All the tokens just extracted should not be counted.
+        self.expectThat(
+            store.count_unblinded_tokens(),
+            Equals(0),
+        )
 
         self.expectThat(
             set(unblinded_tokens),
@@ -784,7 +798,7 @@ class UnblindedTokenStoreTests(TestCase):
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True, spendable=True)
         loaded_voucher = store.get(voucher_value)
         self.assertThat(
             loaded_voucher,
@@ -793,7 +807,6 @@ class UnblindedTokenStoreTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=num_tokens,
-                    public_key=public_key,
                 )),
             ),
         )
@@ -852,7 +865,7 @@ class UnblindedTokenStoreTests(TestCase):
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True)
+        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True, spendable=True)
         self.assertThat(
             lambda: store.mark_voucher_double_spent(voucher_value),
             raises(ValueError),
@@ -896,6 +909,7 @@ class UnblindedTokenStoreTests(TestCase):
             public_key,
             unblinded,
             completed,
+            spendable=True,
         )
         self.assertThat(
             lambda: store.get_unblinded_tokens(num_tokens + extra),

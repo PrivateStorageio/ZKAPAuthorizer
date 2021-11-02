@@ -147,16 +147,22 @@ This endpoint accepts several query arguments:
 
   * limit: An integer limiting the number of unblinded tokens to retrieve.
   * position: A string which can be compared against unblinded token values.
-    Only unblinded tokens which sort as great than this value are returned.
+    Only unblinded tokens which follow this token in the stable order are returned.
 
 This endpoint accepts no request body.
 
 The response is **OK** with ``application/json`` content-type response body like::
 
   { "total": <integer>
+  , "spendable": <integer>
   , "unblinded-tokens": [<unblinded token string>, ...]
   , "lease-maintenance-spending": <spending object>
   }
+
+The value associated with ``total`` gives the total number of unblinded tokens in the node's database
+(independent of any limit placed on this query).
+The value associated with ``spendable`` gives the number of unblinded tokens in the node's database which can actually be spent.
+The value associated with ``unblinded-tokens`` gives the requested list of unblinded tokens.
 
 The ``<spending object>`` may be ``null`` if the lease maintenance process has never run.
 If it has run,

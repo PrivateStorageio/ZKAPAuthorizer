@@ -510,6 +510,7 @@ class ClientPluginTests(TestCase):
             DummyRedeemer(public_key),
             default_token_count=num_passes,
             num_redemption_groups=1,
+            allowed_public_keys={public_key},
             clock=Clock(),
         )
         # Get a token inserted into the store.

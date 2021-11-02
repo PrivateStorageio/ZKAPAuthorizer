@@ -705,6 +705,9 @@ class PaymentController(object):
         redeeming a voucher, if no other count is given when the redemption is
         started.
 
+    :ivar set[unicode] allowed_public_keys: The base64-encoded public keys for
+        which to accept tokens.
+
     :ivar dict[unicode, Redeeming] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to a
         ``Redeeming`` state representing the attempt.
@@ -734,6 +737,8 @@ class PaymentController(object):
     store = attr.ib()
     redeemer = attr.ib()
     default_token_count = attr.ib()
+
+    allowed_public_keys = attr.ib(validator=attr.validators.instance_of(set))
 
     num_redemption_groups = attr.ib(default=16)
 
@@ -945,6 +950,7 @@ class PaymentController(object):
             result.public_key,
             result.unblinded_tokens,
             completed=(counter + 1 == self.num_redemption_groups),
+            spendable=result.public_key in self.allowed_public_keys,
         )
         return True
 

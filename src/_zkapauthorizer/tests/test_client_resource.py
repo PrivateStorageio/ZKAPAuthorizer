@@ -164,6 +164,7 @@ from ..storage_common import (
     required_passes,
     get_configured_pass_value,
     get_configured_lease_duration,
+    get_configured_allowed_public_keys,
 )
 
 from .strategies import (
@@ -191,32 +192,6 @@ from .json import (
 )
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
-
-def get_dummyredeemer_public_key(plugin_name, node_config):
-    """
-    Get the issuer public key a ``DummyRedeemer`` has been configured with.
-
-    :param unicode plugin_name: The plugin name to use to choose a
-        configuration section.
-
-    :param _Config node_config: See ``from_configuration``.
-    """
-    section_name = u"storageclient.plugins.{}".format(plugin_name)
-    redeemer_kind = node_config.get_config(
-        section=section_name,
-        option=u"redeemer",
-    )
-    if redeemer_kind != "dummy":
-        raise ValueError(
-            "Cannot read dummy redeemer public key from configuration for {!r} redeemer.".format(
-                redeemer_kind,
-            ),
-        )
-    return node_config.get_config(
-        section=section_name,
-        option=u"issuer-public-key",
-    ).decode("utf-8")
-
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
@@ -388,6 +363,30 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     FilePath(basedir).child(b"private").makedirs()
     config._basedir = basedir
     config.write_private_config(b"api_auth_token", api_auth_token)
+
+
+class FromConfigurationTests(TestCase):
+    """
+    Tests for ``from_configuration``.
+    """
+    @given(tahoe_configs())
+    def test_allowed_public_keys(self, get_config):
+        """
+        The controller created by ``from_configuration`` is configured to allow
+        the public keys found in the configuration.
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        allowed_public_keys = get_configured_allowed_public_keys(config)
+
+        # root_from_config is just an easier way to call from_configuration
+        root = root_from_config(config, datetime.now)
+        self.assertThat(
+            root.controller,
+            MatchesStructure(
+                allowed_public_keys=Equals(allowed_public_keys),
+            ),
+        )
 
 
 class GetTokenCountTests(TestCase):
@@ -737,6 +736,7 @@ class UnblindedTokenTests(TestCase):
             requesting,
             succeeded_with_unblinded_tokens_with_matcher(
                 num_tokens,
+                Equals(num_tokens),
                 AllMatch(
                     MatchesAll(
                         GreaterThan(position),
@@ -751,9 +751,10 @@ class UnblindedTokenTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
         vouchers(),
-        integers(min_value=0, max_value=100),
+        integers(min_value=1, max_value=16),
+        integers(min_value=1, max_value=128),
     )
-    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, extra_tokens):
+    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, num_redemption_groups, extra_tokens):
         """
         The first unblinded token returned in a response to a **GET** request is
         the first token to be used to authorize a storage request.
@@ -791,6 +792,7 @@ class UnblindedTokenTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
 
+        root.controller.num_redemption_groups = num_redemption_groups
         num_tokens = root.controller.num_redemption_groups + extra_tokens
 
         # Put in a number of tokens with which to test.
@@ -869,6 +871,7 @@ class UnblindedTokenTests(TestCase):
 
 def succeeded_with_unblinded_tokens_with_matcher(
         all_token_count,
+        match_spendable_token_count,
         match_unblinded_tokens,
         match_lease_maint_spending,
 ):
@@ -893,6 +896,7 @@ def succeeded_with_unblinded_tokens_with_matcher(
                 succeeded(
                     ContainsDict({
                         u"total": Equals(all_token_count),
+                        u"spendable": match_spendable_token_count,
                         u"unblinded-tokens": match_unblinded_tokens,
                         u"lease-maintenance-spending": match_lease_maint_spending,
                     }),
@@ -914,11 +918,12 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
     """
     return succeeded_with_unblinded_tokens_with_matcher(
         all_token_count,
-        MatchesAll(
+        match_spendable_token_count=Equals(all_token_count),
+        match_unblinded_tokens=MatchesAll(
             HasLength(returned_token_count),
             AllMatch(IsInstance(unicode)),
         ),
-        matches_lease_maintenance_spending(),
+        match_lease_maint_spending=matches_lease_maintenance_spending(),
     )
 
 def matches_lease_maintenance_spending():
@@ -1134,7 +1139,6 @@ class VoucherTests(TestCase):
         are included in a json-encoded response body.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
-        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1147,7 +1151,6 @@ class VoucherTests(TestCase):
                 state=Equals(Redeemed(
                     finished=now,
                     token_count=count,
-                    public_key=public_key,
                 )),
             ),
         )
@@ -1313,7 +1316,6 @@ class VoucherTests(TestCase):
         vouchers.
         """
         count = get_token_count("privatestorageio-zkapauthz-v1", config)
-        public_key = get_dummyredeemer_public_key("privatestorageio-zkapauthz-v1", config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1328,7 +1330,6 @@ class VoucherTests(TestCase):
                         state=Redeemed(
                             finished=now,
                             token_count=count,
-                            public_key=public_key,
                         ),
                     ).marshal()
                     for voucher

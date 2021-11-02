@@ -48,6 +48,8 @@ from hypothesis import (
 )
 from hypothesis.strategies import (
     sampled_from,
+    integers,
+    sets,
 )
 
 from twisted.internet.defer import (
@@ -55,15 +57,10 @@ from twisted.internet.defer import (
     fail,
 )
 
-from .matchers import (
-    even,
-    odd,
-    raises,
+from allmydata.client import (
+    config_from_string,
 )
 
-from .strategies import (
-    pass_counts,
-)
 
 from ..api import (
     MorePassesRequired,
@@ -71,17 +68,134 @@ from ..api import (
 from ..model import (
     NotEnoughTokens,
 )
+from ..storage_common import (
+    get_configured_shares_needed,
+    get_configured_shares_total,
+    get_configured_pass_value,
+    get_configured_allowed_public_keys,
+)
 from .._storage_client import (
     call_with_passes,
 )
+
 from .._storage_server import (
     _ValidationResult,
 )
-
+from .matchers import (
+    even,
+    odd,
+    raises,
+)
+from .strategies import (
+    pass_counts,
+    dummy_ristretto_keys,
+)
 from .storage_common import (
     pass_factory,
     integer_passes,
 )
+
+
+
+class GetConfiguredValueTests(TestCase):
+    """
+    Tests for helpers for reading certain configuration values.
+    """
+    @given(integers(min_value=1, max_value=255))
+    def test_get_configured_shares_needed(self, expected):
+        """
+        ``get_configured_shares_needed`` reads the ``shares.needed`` value from
+        the ``client`` section as an integer.
+        """
+        config = config_from_string(
+            "",
+            "",
+            """\
+[client]
+shares.needed = {}
+shares.happy = 5
+shares.total = 10
+""".format(expected),
+        )
+
+        self.assertThat(
+            get_configured_shares_needed(config),
+            Equals(expected),
+        )
+
+    @given(integers(min_value=1, max_value=255))
+    def test_get_configured_shares_total(self, expected):
+        """
+        ``get_configured_shares_total`` reads the ``shares.total`` value from
+        the ``client`` section as an integer.
+        """
+        config = config_from_string(
+            "",
+            "",
+            """\
+[client]
+shares.needed = 5
+shares.happy = 5
+shares.total = {}
+""".format(expected),
+        )
+
+        self.assertThat(
+            get_configured_shares_total(config),
+            Equals(expected),
+        )
+
+    @given(integers(min_value=1, max_value=10000000))
+    def test_get_configured_pass_value(self, expected):
+        """
+        ``get_configured_pass_value`` reads the ``pass-value`` value from the
+        ``storageclient.plugins.privatestorageio-zkapauthz-v1`` section as an
+        integer.
+        """
+        config = config_from_string(
+            "",
+            "",
+            """\
+[client]
+shares.needed = 3
+shares.happy = 5
+shares.total = 10
+
+[storageclient.plugins.privatestorageio-zkapauthz-v1]
+pass-value={}
+""".format(expected),
+        )
+
+        self.assertThat(
+            get_configured_pass_value(config),
+            Equals(expected),
+        )
+
+    @given(sets(dummy_ristretto_keys(), min_size=1, max_size=10))
+    def test_get_configured_allowed_public_keys(self, expected):
+        """
+        ``get_configured_pass_value`` reads the ``pass-value`` value from the
+        ``storageclient.plugins.privatestorageio-zkapauthz-v1`` section as an
+        integer.
+        """
+        config = config_from_string(
+            "",
+            "",
+            """\
+[client]
+shares.needed = 3
+shares.happy = 5
+shares.total = 10
+
+[storageclient.plugins.privatestorageio-zkapauthz-v1]
+allowed-public-keys = {}
+""".format(",".join(expected)),
+        )
+
+        self.assertThat(
+            get_configured_allowed_public_keys(config),
+            Equals(expected),
+        )
 
 
 class CallWithPassesTests(TestCase):

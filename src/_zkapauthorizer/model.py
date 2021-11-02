@@ -393,33 +393,36 @@ class VoucherStore(object):
             in refs
         )
 
-    def _insert_unblinded_tokens(self, cursor, unblinded_tokens):
+    def _insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
         """
         Helper function to really insert unblinded tokens into the database.
         """
         cursor.executemany(
             """
-            INSERT INTO [unblinded-tokens] VALUES (?)
+            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
             """,
             list(
-                (token,)
+                (token, group_id)
                 for token
                 in unblinded_tokens
             ),
         )
 
     @with_cursor
-    def insert_unblinded_tokens(self, cursor, unblinded_tokens):
+    def insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
         """
         Store some unblinded tokens, for example as part of a backup-restore
         process.
 
         :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+
+        :param int group_id: The unique identifier of the redemption group to
+            which these tokens belong.
         """
-        self._insert_unblinded_tokens(cursor, unblinded_tokens)
+        self._insert_unblinded_tokens(cursor, unblinded_tokens, group_id)
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed):
+    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed, spendable):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -435,32 +438,58 @@ class VoucherStore(object):
 
         :param bool completed: ``True`` if redemption of this voucher is now
             complete, ``False`` otherwise.
+
+        :param bool spendable: ``True`` if it should be possible to spend the
+            inserted tokens, ``False`` otherwise.
         """
         if  completed:
             voucher_state = u"redeemed"
         else:
             voucher_state = u"pending"
 
+        if spendable:
+            token_count_increase = len(unblinded_tokens)
+            sequestered_count_increase = 0
+        else:
+            token_count_increase = 0
+            sequestered_count_increase = len(unblinded_tokens)
+
+        cursor.execute(
+            """
+            INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
+            """,
+            (voucher, public_key, spendable),
+        )
+        group_id = cursor.lastrowid
+
+        self._log.info(
+            "Recording {count} {unspendable}spendable unblinded tokens from public key {public_key}.",
+            count=len(unblinded_tokens),
+            unspendable="" if spendable else "un",
+            public_key=public_key,
+        )
+
         cursor.execute(
             """
             UPDATE [vouchers]
             SET [state] = ?
               , [token-count] = COALESCE([token-count], 0) + ?
+              , [sequestered-count] = COALESCE([sequestered-count], 0) + ?
               , [finished] = ?
-              , [public-key] = ?
               , [counter] = [counter] + 1
             WHERE [number] = ?
             """,
             (
                 voucher_state,
-                len(unblinded_tokens),
+                token_count_increase,
+                sequestered_count_increase,
                 self.now(),
-                public_key,
                 voucher,
             ),
         )
         if cursor.rowcount == 0:
             raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
+
         self._insert_unblinded_tokens(
             cursor,
             list(
@@ -468,6 +497,7 @@ class VoucherStore(object):
                 for t
                 in unblinded_tokens
             ),
+            group_id,
         )
 
     @with_cursor
@@ -522,6 +552,10 @@ class VoucherStore(object):
         which have not had their state changed to invalid or spent have been
         reset.
 
+        :raise NotEnoughTokens: If there are fewer than the requested number
+            of tokens available to be spent.  In this case, all tokens remain
+            available to future calls and do not need to be reset.
+
         :return list[UnblindedTokens]: The removed unblinded tokens.
         """
         if count > _SQLITE3_INTEGER_MAX:
@@ -531,9 +565,11 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            SELECT [token]
-            FROM [unblinded-tokens]
-            WHERE [token] NOT IN [in-use]
+            SELECT T.[token]
+            FROM   [unblinded-tokens] AS T, [redemption-groups] AS G
+            WHERE  T.[redemption-group] = G.[rowid]
+            AND    G.[spendable] = 1
+            AND    T.[token] NOT IN [in-use]
             LIMIT ?
             """,
             (count,),
@@ -553,6 +589,25 @@ class VoucherStore(object):
             for (t,)
             in texts
         )
+
+    @with_cursor
+    def count_unblinded_tokens(self, cursor):
+        """
+        Return the largest number of unblinded tokens that can be requested from
+        ``get_unblinded_tokens`` without causing it to raise
+        ``NotEnoughTokens``.
+        """
+        cursor.execute(
+            """
+            SELECT count(1)
+            FROM   [unblinded-tokens] AS T, [redemption-groups] AS G
+            WHERE  T.[redemption-group] = G.[rowid]
+            AND    G.[spendable] = 1
+            AND    T.[token] NOT IN [in-use]
+            """,
+        )
+        (count,) = cursor.fetchone()
+        return count
 
     @with_cursor
     def discard_unblinded_tokens(self, cursor, unblinded_tokens):
@@ -658,7 +713,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            SELECT [token] FROM [unblinded-tokens]
+            SELECT [token] FROM [unblinded-tokens] ORDER BY [rowid]
             """,
         )
         tokens = cursor.fetchall()
@@ -928,13 +983,9 @@ class Redeemed(object):
     :ivar datetime finished: The time when the redemption finished.
 
     :ivar int token_count: The number of tokens the voucher was redeemed for.
-
-    :ivar unicode public_key: The public part of the key used to sign the
-        tokens for this voucher.
     """
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
-    public_key = attr.ib(validator=attr.validators.optional(attr.validators.instance_of(unicode)))
 
     def should_start_redemption(self):
         return False
@@ -944,7 +995,6 @@ class Redeemed(object):
             u"name": u"redeemed",
             u"finished": self.finished.isoformat(),
             u"token-count": self.token_count,
-            u"public-key": self.public_key,
         }
 
 
@@ -1067,7 +1117,6 @@ class Voucher(object):
                 return Redeemed(
                     parse_datetime(row[0], delimiter=u" "),
                     row[1],
-                    row[2],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
 
@@ -1111,7 +1160,6 @@ class Voucher(object):
             state = Redeemed(
                 finished=parse_datetime(state_json[u"finished"]),
                 token_count=state_json[u"token-count"],
-                public_key=state_json[u"public-key"],
             )
         elif state_name == u"unpaid":
             state = Unpaid(

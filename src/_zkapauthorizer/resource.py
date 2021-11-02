@@ -64,6 +64,7 @@ from .storage_common import (
     get_configured_shares_total,
     get_configured_pass_value,
     get_configured_lease_duration,
+    get_configured_allowed_public_keys,
 )
 
 from .pricecalculator import (
@@ -157,6 +158,7 @@ def from_configuration(
         store,
         redeemer,
         default_token_count,
+        allowed_public_keys=get_configured_allowed_public_keys(node_config),
         clock=clock,
     )
 
@@ -368,6 +370,7 @@ class _UnblindedTokenCollection(Resource):
 
         return dumps({
             u"total": len(unblinded_tokens),
+            u"spendable": self._store.count_unblinded_tokens(),
             u"unblinded-tokens": list(islice((
                 token
                 for token
@@ -383,7 +386,7 @@ class _UnblindedTokenCollection(Resource):
         """
         application_json(request)
         unblinded_tokens = load(request.content)[u"unblinded-tokens"]
-        self._store.insert_unblinded_tokens(unblinded_tokens)
+        self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
         return dumps({})
 
 

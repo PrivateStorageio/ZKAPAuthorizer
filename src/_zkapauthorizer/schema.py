@@ -128,6 +128,8 @@ _UPGRADES = {
 
     1: [
         """
+        -- Incorrectly track a single public-key for all.  Later version of
+        -- the schema moves this elsewhere.
         ALTER TABLE [vouchers] ADD COLUMN [public-key] text
         """,
     ],
@@ -165,6 +167,59 @@ _UPGRADES = {
 
             PRIMARY KEY([token])
         )
+        """,
+    ],
+
+    5: [
+        """
+        -- Create a table where rows represent a single group of unblinded
+        -- tokens all redeemed together.  Some number of these rows represent
+        -- a complete redemption of a voucher.
+        CREATE TABLE [redemption-groups] (
+            -- A unique identifier for this redemption group.
+            [rowid] INTEGER PRIMARY KEY,
+
+            -- The text representation of the voucher this group is associated with.
+            [voucher] text,
+
+            -- A flag indicating whether these tokens can be spent or if
+            -- they're being held for further inspection.
+            [spendable] integer,
+
+            -- The public key seen when redeeming this group.
+            [public-key] text
+        )
+        """,
+
+        """
+        -- Create one redemption group for every existing, redeemed voucher.
+        -- These tokens were probably *not* all redeemed in one group but
+        -- we've only preserved one public key for them so we can't do much
+        -- better than this.
+        INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable])
+            SELECT DISTINCT([number]), [public-key], 1 FROM [vouchers] WHERE [state] = "redeemed"
+        """,
+
+        """
+        -- Give each voucher a count of "sequestered" tokens.  Currently,
+        -- these are unspendable tokens that were issued using a disallowed
+        -- public key.
+        ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
+        """,
+
+        """
+        -- Give each unblinded token a reference to the [redemption-groups]
+        -- table identifying the group that token arrived with.  This lets us
+        -- act collectively on tokens from these groups and identify tokens
+        -- which are spendable.
+        --
+        -- The default value is provided for rows that
+        -- existed prior to this upgrade which had no group association.  For
+        -- unblinded tokens to exist at all there must be at least one voucher
+        -- in the vouchers table.  [redemption-groups] will therefore have at
+        -- least one row added to it (by the statement a few lines above).
+        -- Note that SQLite3 rowid numbering begins at 1.
+        ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 1
         """,
     ],
 }

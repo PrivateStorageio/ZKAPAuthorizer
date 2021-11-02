@@ -154,6 +154,7 @@ class ConfiglessMemoryVoucherStore(Fixture):
             # minimum token count requirement (can't have fewer tokens
             # than groups).
             num_redemption_groups=1,
+            allowed_public_keys={self._public_key},
             clock=Clock(),
         ).redeem(
             voucher,
