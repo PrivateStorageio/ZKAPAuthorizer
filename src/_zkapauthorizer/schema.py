@@ -20,6 +20,7 @@ from __future__ import (
 This module defines the database schema used by the model interface.
 """
 
+
 def get_schema_version(cursor):
     cursor.execute(
         """
@@ -63,12 +64,10 @@ def run_schema_upgrades(upgrades, cursor):
         cursor.execute(upgrade)
 
 
-_INCREMENT_VERSION = (
-    """
+_INCREMENT_VERSION = """
     UPDATE [version]
     SET [version] = [version] + 1
     """
-)
 
 # A mapping from old schema versions to lists of unicode strings of SQL to
 # execute against that version of the schema to create the successor schema.
@@ -125,7 +124,6 @@ _UPGRADES = {
         )
         """,
     ],
-
     1: [
         """
         -- Incorrectly track a single public-key for all.  Later version of
@@ -133,14 +131,12 @@ _UPGRADES = {
         ALTER TABLE [vouchers] ADD COLUMN [public-key] text
         """,
     ],
-
     2: [
         """
         -- Keep track of progress through redemption of each voucher.
         ALTER TABLE [vouchers] ADD COLUMN [counter] integer DEFAULT 0
         """,
     ],
-
     3: [
         """
         -- Reference to the counter these tokens go with.
@@ -158,7 +154,6 @@ _UPGRADES = {
         ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer NOT NULL DEFAULT 32768
         """,
     ],
-
     4: [
         """
         CREATE TABLE [invalid-unblinded-tokens] (
@@ -169,7 +164,6 @@ _UPGRADES = {
         )
         """,
     ],
-
     5: [
         """
         -- Create a table where rows represent a single group of unblinded
@@ -190,7 +184,6 @@ _UPGRADES = {
             [public-key] text
         )
         """,
-
         """
         -- Create one redemption group for every existing, redeemed voucher.
         -- These tokens were probably *not* all redeemed in one group but
@@ -199,14 +192,12 @@ _UPGRADES = {
         INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable])
             SELECT DISTINCT([number]), [public-key], 1 FROM [vouchers] WHERE [state] = "redeemed"
         """,
-
         """
         -- Give each voucher a count of "sequestered" tokens.  Currently,
         -- these are unspendable tokens that were issued using a disallowed
         -- public key.
         ALTER TABLE [vouchers] ADD COLUMN [sequestered-count] integer NOT NULL DEFAULT 0
         """,
-
         """
         -- Give each unblinded token a reference to the [redemption-groups]
         -- table identifying the group that token arrived with.  This lets us

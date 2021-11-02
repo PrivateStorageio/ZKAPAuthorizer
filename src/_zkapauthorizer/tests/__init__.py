@@ -16,6 +16,7 @@
 The automated unit test suite.
 """
 
+
 def _configure_hypothesis():
     """
     Select define Hypothesis profiles and select one based on environment
@@ -41,10 +42,7 @@ def _configure_hypothesis():
         deadline=None,
     )
 
-    settings.register_profile(
-        "default",
-        **base
-    )
+    settings.register_profile("default", **base)
 
     settings.register_profile(
         "ci",
@@ -69,5 +67,6 @@ def _configure_hypothesis():
     profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")
     settings.load_profile(profile_name)
     print("Loaded profile {}".format(profile_name))
+
 
 _configure_hypothesis()

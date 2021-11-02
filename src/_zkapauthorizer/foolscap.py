@@ -44,6 +44,7 @@ from allmydata.interfaces import (
     Offset,
 )
 
+
 @attr.s
 class ShareStat(Copyable, RemoteCopy):
     """
@@ -54,6 +55,7 @@ class ShareStat(Copyable, RemoteCopy):
     :ivar int lease_expiration: The POSIX timestamp of the time at which the
         lease on this share expires, or None if there is no lease.
     """
+
     typeToCopy = copytype = "ShareStat"
 
     # To be a RemoteCopy it must be possible to instantiate this with no
@@ -134,7 +136,8 @@ def add_arguments(schema, kwargs):
     # arguments.
     modified_schema.argumentNames = (
         # The new arguments
-        list(argName for (argName, _) in kwargs) +
+        list(argName for (argName, _) in kwargs)
+        +
         # The original arguments in the original order
         schema.argumentNames
     )
@@ -151,9 +154,8 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     are expected to supply suitable passes and only after the passes have been
     validated is service provided.
     """
-    __remote_name__ = (
-        "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
-    )
+
+    __remote_name__ = "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
 
     get_version = RIStorageServer["get_version"]
 
@@ -164,11 +166,11 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     get_buckets = RIStorageServer["get_buckets"]
 
     def share_sizes(
-            storage_index_or_slot=StorageIndex,
-            # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
-            # However, support for such a construction appears to be
-            # unimplemented in Foolscap.  So, instead...
-            sharenums=Any(),
+        storage_index_or_slot=StorageIndex,
+        # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
+        # However, support for such a construction appears to be
+        # unimplemented in Foolscap.  So, instead...
+        sharenums=Any(),
     ):
         """
         Get the size of the given shares in the given storage index or slot.  If a
@@ -177,7 +179,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
         return DictOf(int, Offset)
 
     def stat_shares(
-            storage_indexes_or_slots=ListOf(StorageIndex),
+        storage_indexes_or_slots=ListOf(StorageIndex),
     ):
         """
         Get various metadata about shares in the given storage index or slot.

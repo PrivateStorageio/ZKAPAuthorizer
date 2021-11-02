@@ -56,10 +56,12 @@ from ..spending import (
     SpendingController,
 )
 
+
 class PassGroupTests(TestCase):
     """
     Tests for ``IPassGroup`` and the factories that create them.
     """
+
     @given(vouchers(), pass_counts(), posix_safe_datetimes())
     def test_get(self, voucher, num_passes, now):
         """
@@ -94,14 +96,14 @@ class PassGroupTests(TestCase):
         )
 
     def _test_token_group_operation(
-            self,
-            operation,
-            matches_tokens,
-            voucher,
-            num_passes,
-            now,
-            random,
-            data,
+        self,
+        operation,
+        matches_tokens,
+        voucher,
+        num_passes,
+        now,
+        random,
+        data,
     ):
         configless = self.useFixture(
             ConfiglessMemoryVoucherStore(
@@ -143,6 +145,7 @@ class PassGroupTests(TestCase):
         Passes in a group can be marked as successfully spent to prevent them from
         being re-used by a future ``get`` call.
         """
+
         def matches_tokens(num_passes, group):
             return AfterPreprocessing(
                 # The use of `backup` here to check is questionable.  TODO:
@@ -150,6 +153,7 @@ class PassGroupTests(TestCase):
                 lambda store: store.backup()[u"unblinded-tokens"],
                 HasLength(num_passes - len(group.passes)),
             )
+
         return self._test_token_group_operation(
             lambda group: group.mark_spent(),
             matches_tokens,
@@ -166,6 +170,7 @@ class PassGroupTests(TestCase):
         Passes in a group can be marked as invalid to prevent them from being
         re-used by a future ``get`` call.
         """
+
         def matches_tokens(num_passes, group):
             return AfterPreprocessing(
                 # The use of `backup` here to check is questionable.  TODO:
@@ -173,6 +178,7 @@ class PassGroupTests(TestCase):
                 lambda store: store.backup()[u"unblinded-tokens"],
                 HasLength(num_passes - len(group.passes)),
             )
+
         return self._test_token_group_operation(
             lambda group: group.mark_invalid(u"reason"),
             matches_tokens,
@@ -189,12 +195,14 @@ class PassGroupTests(TestCase):
         Passes in a group can be reset to allow them to be re-used by a future
         ``get`` call.
         """
+
         def matches_tokens(num_passes, group):
             return AfterPreprocessing(
                 # They've been reset so we should be able to re-get them.
                 lambda store: store.get_unblinded_tokens(len(group.passes)),
                 Equals(group.unblinded_tokens),
             )
+
         return self._test_token_group_operation(
             lambda group: group.reset(),
             matches_tokens,

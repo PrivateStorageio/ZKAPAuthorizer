@@ -67,6 +67,7 @@ from ..spending import (
 # Hard-coded in Tahoe-LAFS
 LEASE_INTERVAL = 60 * 60 * 24 * 31
 
+
 def cleanup_storage_server(storage_server):
     """
     Delete all of the shares held by the given storage server.
@@ -85,13 +86,13 @@ def cleanup_storage_server(storage_server):
 
 
 def write_toy_shares(
-        storage_server,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary,
+    storage_server,
+    storage_index,
+    renew_secret,
+    cancel_secret,
+    sharenums,
+    size,
+    canary,
 ):
     """
     Write some immutable shares to the given storage server.
@@ -161,8 +162,7 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
                     # expiration timestamp
                     int(now + LEASE_INTERVAL),
                 )
-                for renew
-                in leases
+                for renew in leases
             ),
         )
 
@@ -175,11 +175,13 @@ def integer_passes(limit):
         passes.  Successive calls to the function return unique pass values.
     """
     counter = iter(range(limit))
+
     def get_passes(message, num_passes):
         result = list(islice(counter, num_passes))
         if len(result) < num_passes:
             raise NotEnoughTokens()
         return result
+
     return get_passes
 
 
@@ -196,8 +198,7 @@ def get_passes(message, count, signing_key):
     """
     return list(
         Pass(*pass_.split(u" "))
-        for pass_
-        in make_passes(
+        for pass_ in make_passes(
             signing_key,
             message,
             list(RandomToken.create() for n in range(count)),
@@ -252,6 +253,7 @@ class _PassFactory(object):
     :ivar list[int] returned: A list of passes which were given out but then
         returned via ``IPassGroup.reset``.
     """
+
     _get_passes = attr.ib()
 
     returned = attr.ib(default=attr.Factory(list), init=False)
@@ -291,7 +293,9 @@ class _PassFactory(object):
     def _mark_invalid(self, reason, passes):
         for p in passes:
             if p not in self.in_use:
-                raise ValueError("Pass {} cannot be invalid, it is not in use.".format(p))
+                raise ValueError(
+                    "Pass {} cannot be invalid, it is not in use.".format(p)
+                )
         self.invalid.update(dict.fromkeys(passes, reason))
         self.in_use.difference_update(passes)
 

@@ -47,6 +47,7 @@ class Base64Tests(TestCase):
     """
     Tests for ``urlsafe_b64decode``.
     """
+
     @given(binary())
     def test_roundtrip(self, bytestring):
         """

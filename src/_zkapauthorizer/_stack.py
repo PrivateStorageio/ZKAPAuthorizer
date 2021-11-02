@@ -25,11 +25,12 @@ try:
 except ImportError:
     # Not available on Windows, unfortunately.
     RLIMIT_STACK = object()
+
     def getrlimit(which):
         return (-1, -1)
+
     def setrlimit(which, what):
         pass
-
 
 
 @contextmanager

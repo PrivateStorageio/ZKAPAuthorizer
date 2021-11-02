@@ -104,11 +104,13 @@ from .model import (
 
 RETRY_INTERVAL = timedelta(milliseconds=1000)
 
+
 @attr.s
 class UnexpectedResponse(Exception):
     """
     The issuer responded in an unexpected and unhandled way.
     """
+
     code = attr.ib()
     body = attr.ib()
 
@@ -139,6 +141,7 @@ class RedemptionResult(object):
     :ivar unicode public_key: The public key which the server proved was
         involved in the redemption process.
     """
+
     unblinded_tokens = attr.ib()
     public_key = attr.ib()
 
@@ -147,6 +150,7 @@ class IRedeemer(Interface):
     """
     An ``IRedeemer`` can exchange a voucher for one or more passes.
     """
+
     def random_tokens_for_voucher(voucher, counter, count):
         """
         Generate a number of random tokens to use in the redemption process for
@@ -222,6 +226,7 @@ class IndexedRedeemer(object):
     A ``IndexedRedeemer`` delegates redemption to a redeemer chosen to
     correspond to the redemption counter given.
     """
+
     _log = Logger()
 
     redeemers = attr.ib()
@@ -248,6 +253,7 @@ class NonRedeemer(object):
     """
     A ``NonRedeemer`` never tries to redeem vouchers for ZKAPs.
     """
+
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
@@ -272,6 +278,7 @@ class ErrorRedeemer(object):
     An ``ErrorRedeemer`` immediately locally fails voucher redemption with a
     configured error.
     """
+
     details = attr.ib(validator=attr.validators.instance_of(unicode))
 
     @classmethod
@@ -301,6 +308,7 @@ class DoubleSpendRedeemer(object):
     A ``DoubleSpendRedeemer`` pretends to try to redeem vouchers for ZKAPs but
     always fails with an error indicating the voucher has already been spent.
     """
+
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
@@ -319,6 +327,7 @@ class UnpaidRedeemer(object):
     An ``UnpaidRedeemer`` pretends to try to redeem vouchers for ZKAPs but
     always fails with an error indicating the voucher has not been paid for.
     """
+
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
@@ -337,6 +346,7 @@ class RecordingRedeemer(object):
     A ``CountingRedeemer`` delegates redemption logic to another object but
     records all redemption attempts.
     """
+
     original = attr.ib()
     redemptions = attr.ib(default=attr.Factory(list))
 
@@ -350,6 +360,7 @@ class RecordingRedeemer(object):
 
 def dummy_random_tokens(voucher, counter, count):
     v = urlsafe_b64decode(voucher.number.encode("ascii"))
+
     def dummy_random_token(n):
         return RandomToken(
             # Padding is 96 (random token length) - 32 (decoded voucher
@@ -358,11 +369,8 @@ def dummy_random_tokens(voucher, counter, count):
                 v + u"{:0>4}{:0>60}".format(counter, n).encode("ascii"),
             ).decode("ascii"),
         )
-    return list(
-        dummy_random_token(n)
-        for n
-        in range(count)
-    )
+
+    return list(dummy_random_token(n) for n in range(count))
 
 
 @implementer(IRedeemer)
@@ -379,6 +387,7 @@ class DummyRedeemer(object):
         Its corresponding private key certainly has not been used to sign
         anything.
     """
+
     _public_key = attr.ib(
         validator=attr.validators.instance_of(unicode),
     )
@@ -410,17 +419,15 @@ class DummyRedeemer(object):
                     voucher,
                 ),
             )
+
         def dummy_unblinded_token(random_token):
             random_value = b64decode(random_token.token_value.encode("ascii"))
             unblinded_value = random_value + b"x" * (96 - len(random_value))
             return UnblindedToken(b64encode(unblinded_value).decode("ascii"))
+
         return succeed(
             RedemptionResult(
-                list(
-                    dummy_unblinded_token(token)
-                    for token
-                    in random_tokens
-                ),
+                list(dummy_unblinded_token(token) for token in random_tokens),
                 self._public_key,
             ),
         )
@@ -431,21 +438,20 @@ class DummyRedeemer(object):
             # can include in the resulting Pass.  This ensures the pass values
             # will be unique if and only if the unblinded tokens were unique
             # (barring improbable hash collisions).
-            token_digest = sha256(
-                token.unblinded_token.encode("ascii")
-            ).hexdigest().encode("ascii")
+            token_digest = (
+                sha256(token.unblinded_token.encode("ascii"))
+                .hexdigest()
+                .encode("ascii")
+            )
 
-            preimage = b"preimage-" + token_digest[len(b"preimage-"):]
-            signature = b"signature-" + token_digest[len(b"signature-"):]
+            preimage = b"preimage-" + token_digest[len(b"preimage-") :]
+            signature = b"signature-" + token_digest[len(b"signature-") :]
             return Pass(
                 b64encode(preimage).decode("ascii"),
                 b64encode(signature).decode("ascii"),
             )
-        return list(
-            token_to_pass(token)
-            for token
-            in unblinded_tokens
-        )
+
+        return list(token_to_pass(token) for token in unblinded_tokens)
 
 
 class IssuerConfigurationMismatch(Exception):
@@ -470,6 +476,7 @@ class IssuerConfigurationMismatch(Exception):
     ZKAPs and chooses to change its configured issuer address, those existing
     ZKAPs will not be usable and new ones must be obtained.
     """
+
     def __str__(self):
         return "Announced issuer ({}) disagrees with configured issuer ({}).".format(
             *self.args
@@ -489,6 +496,7 @@ class RistrettoRedeemer(object):
 
     :ivar URL _api_root: The root of the issuer HTTP API.
     """
+
     _log = Logger()
 
     _treq = attr.ib()
@@ -522,31 +530,33 @@ class RistrettoRedeemer(object):
     def random_tokens_for_voucher(self, voucher, counter, count):
         return list(
             RandomToken(
-                challenge_bypass_ristretto.RandomToken.create().encode_base64().decode("ascii"),
+                challenge_bypass_ristretto.RandomToken.create()
+                .encode_base64()
+                .decode("ascii"),
             )
-            for n
-            in range(count)
+            for n in range(count)
         )
 
     @inlineCallbacks
     def redeemWithCounter(self, voucher, counter, encoded_random_tokens):
         random_tokens = list(
-            challenge_bypass_ristretto.RandomToken.decode_base64(token.token_value.encode("ascii"))
-            for token
-            in encoded_random_tokens
+            challenge_bypass_ristretto.RandomToken.decode_base64(
+                token.token_value.encode("ascii")
+            )
+            for token in encoded_random_tokens
         )
         blinded_tokens = list(token.blind() for token in random_tokens)
         response = yield self._treq.post(
             self._api_root.child(u"v1", u"redeem").to_text(),
-            dumps({
-                u"redeemVoucher": voucher.number,
-                u"redeemCounter": counter,
-                u"redeemTokens": list(
-                    token.encode_base64()
-                    for token
-                    in blinded_tokens
-                ),
-            }),
+            dumps(
+                {
+                    u"redeemVoucher": voucher.number,
+                    u"redeemCounter": counter,
+                    u"redeemTokens": list(
+                        token.encode_base64() for token in blinded_tokens
+                    ),
+                }
+            ),
             headers={b"content-type": b"application/json"},
         )
         response_body = yield content(response)
@@ -583,8 +593,7 @@ class RistrettoRedeemer(object):
             challenge_bypass_ristretto.SignedToken.decode_base64(
                 marshaled_signed_token.encode("ascii"),
             )
-            for marshaled_signed_token
-            in marshaled_signed_tokens
+            for marshaled_signed_token in marshaled_signed_tokens
         )
         self._log.info("Decoded signed tokens")
         clients_proof = challenge_bypass_ristretto.BatchDLEQProof.decode_base64(
@@ -601,45 +610,39 @@ class RistrettoRedeemer(object):
         self._log.info("Validated proof")
         unblinded_tokens = list(
             UnblindedToken(token.encode_base64().decode("ascii"))
-            for token
-            in clients_unblinded_tokens
+            for token in clients_unblinded_tokens
         )
-        returnValue(RedemptionResult(
-            unblinded_tokens,
-            marshaled_public_key,
-        ))
+        returnValue(
+            RedemptionResult(
+                unblinded_tokens,
+                marshaled_public_key,
+            )
+        )
 
     def tokens_to_passes(self, message, unblinded_tokens):
         assert isinstance(message, bytes)
         assert isinstance(unblinded_tokens, list)
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
-            challenge_bypass_ristretto.UnblindedToken.decode_base64(token.unblinded_token.encode("ascii"))
-            for token
-            in unblinded_tokens
+            challenge_bypass_ristretto.UnblindedToken.decode_base64(
+                token.unblinded_token.encode("ascii")
+            )
+            for token in unblinded_tokens
         )
         clients_verification_keys = list(
-            token.derive_verification_key_sha512()
-            for token
-            in unblinded_tokens
+            token.derive_verification_key_sha512() for token in unblinded_tokens
         )
         clients_signatures = list(
             verification_key.sign_sha512(message)
-            for verification_key
-            in clients_verification_keys
+            for verification_key in clients_verification_keys
         )
-        clients_preimages = list(
-            token.preimage()
-            for token
-            in unblinded_tokens
-        )
+        clients_preimages = list(token.preimage() for token in unblinded_tokens)
         passes = list(
             Pass(
                 preimage.encode_base64().decode("ascii"),
                 signature.encode_base64().decode("ascii"),
             )
-            for (preimage, signature)
-            in zip(clients_preimages, clients_signatures)
+            for (preimage, signature) in zip(clients_preimages, clients_signatures)
         )
         return passes
 
@@ -732,6 +735,7 @@ class PaymentController(object):
     :ivar IReactorTime _clock: The reactor to use for scheduling redemption
         retries.
     """
+
     _log = Logger()
 
     store = attr.ib()
@@ -801,7 +805,9 @@ class PaymentController(object):
                     voucher=voucher.number,
                 )
 
-    def _get_random_tokens_for_voucher(self, voucher, counter, num_tokens, total_tokens):
+    def _get_random_tokens_for_voucher(
+        self, voucher, counter, num_tokens, total_tokens
+    ):
         """
         Generate or load random tokens for a redemption attempt of a voucher.
 
@@ -810,6 +816,7 @@ class PaymentController(object):
         :param int total_tokens: The total number of tokens for which this
             voucher is expected to be redeemed.
         """
+
         def get_tokens():
             self._log.info(
                 "Generating random tokens for a voucher ({voucher}).",
@@ -878,7 +885,9 @@ class PaymentController(object):
             # server signs a given set of random tokens once or many times, the
             # number of passes that can be constructed is still only the size of
             # the set of random tokens.
-            token_count = token_count_for_group(self.num_redemption_groups, num_tokens, counter)
+            token_count = token_count_for_group(
+                self.num_redemption_groups, num_tokens, counter
+            )
             tokens = self._get_random_tokens_for_voucher(
                 voucher,
                 counter,
@@ -915,7 +924,9 @@ class PaymentController(object):
             )
 
         # Ask the redeemer to do the real task of redemption.
-        self._log.info("Redeeming random tokens for a voucher ({voucher}).", voucher=voucher)
+        self._log.info(
+            "Redeeming random tokens for a voucher ({voucher}).", voucher=voucher
+        )
         d = bracket(
             lambda: setitem(
                 self._active,

@@ -55,10 +55,12 @@ from .matchers import (
 
 file_sizes = lists(sizes(), min_size=1)
 
+
 class PriceCalculatorTests(TestCase):
     """
     Tests for ``PriceCalculator``.
     """
+
     @given(
         integers(min_value=1),
         integers(min_value=1),
@@ -102,7 +104,6 @@ class PriceCalculatorTests(TestCase):
             fewer_needed_price,
             greater_or_equal(more_needed_price),
         )
-
 
     @given(
         integers(min_value=1, max_value=127),

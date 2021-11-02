@@ -53,21 +53,25 @@ from allmydata.test.web.matchers import (
     has_response_code,
 )
 
+
 class PrivacyTests(TestCase):
     """
     Tests for the privacy features of the resources created by ``create_private_tree``.
     """
+
     def setUp(self):
         self.token = b"abcdef"
         self.resource = create_private_tree(lambda: self.token, Resource())
         self.agent = RequestTraversalAgent(self.resource)
-        self.client =  HTTPClient(self.agent)
+        self.client = HTTPClient(self.agent)
         return super(PrivacyTests, self).setUp()
 
     def _authorization(self, scheme, value):
-        return Headers({
-            u"authorization": [u"{} {}".format(scheme, value)],
-        })
+        return Headers(
+            {
+                "authorization": ["{} {}".format(scheme, value)],
+            }
+        )
 
     def test_unauthorized(self):
         """
@@ -86,7 +90,7 @@ class PrivacyTests(TestCase):
         self.assertThat(
             self.client.head(
                 b"http:///foo/bar",
-                headers=self._authorization(u"basic", self.token),
+                headers=self._authorization("basic", self.token),
             ),
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )
@@ -99,7 +103,7 @@ class PrivacyTests(TestCase):
         self.assertThat(
             self.client.head(
                 b"http:///foo/bar",
-                headers=self._authorization(SCHEME, u"foo bar"),
+                headers=self._authorization(SCHEME, "foo bar"),
             ),
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )

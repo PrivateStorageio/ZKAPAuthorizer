@@ -57,11 +57,13 @@ from ._exception import (
     raises,
 )
 
+
 @attr.s
 class Provides(object):
     """
     Match objects that provide all of a list of Zope Interface interfaces.
     """
+
     interfaces = attr.ib(validator=attr.validators.instance_of(list))
 
     def match(self, obj):
@@ -70,9 +72,12 @@ class Provides(object):
             if not iface.providedBy(obj):
                 missing.add(iface)
         if missing:
-            return Mismatch("{} does not provide expected {}".format(
-                obj, ", ".join(str(iface) for iface in missing),
-            ))
+            return Mismatch(
+                "{} does not provide expected {}".format(
+                    obj,
+                    ", ".join(str(iface) for iface in missing),
+                )
+            )
 
 
 def matches_version_dictionary():
@@ -81,13 +86,14 @@ def matches_version_dictionary():
     ``RIStorageServer.get_version`` which is also the dictionary returned by
     our own ``RIPrivacyPassAuthorizedStorageServer.get_version``.
     """
-    return ContainsDict({
-        # It has these two top-level keys, at least.  Try not to be too
-        # fragile by asserting much more than that they are present.
-        b'application-version': Always(),
-        b'http://allmydata.org/tahoe/protocols/storage/v1': Always(),
-    })
-
+    return ContainsDict(
+        {
+            # It has these two top-level keys, at least.  Try not to be too
+            # fragile by asserting much more than that they are present.
+            b"application-version": Always(),
+            b"http://allmydata.org/tahoe/protocols/storage/v1": Always(),
+        }
+    )
 
 
 def returns(matcher):
@@ -98,15 +104,12 @@ def returns(matcher):
     return _Returns(matcher)
 
 
-
 class _Returns(Matcher):
     def __init__(self, result_matcher):
         self.result_matcher = result_matcher
 
-
     def match(self, matchee):
         return self.result_matcher.match(matchee())
-
 
     def __str__(self):
         return "Returns({})".format(self.result_matcher)
@@ -147,8 +150,7 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
         # visited and maintained.
         lambda storage_server: list(
             stat
-            for (storage_index, stat)
-            in storage_server.buckets.items()
+            for (storage_index, stat) in storage_server.buckets.items()
             if storage_index in relevant_storage_indexes
         ),
         AllMatch(
@@ -157,7 +159,9 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
                 # further in the future than min_lease_remaining,
                 # either because it had time left or because we
                 # renewed it.
-                lambda share_stat: datetime.utcfromtimestamp(share_stat.lease_expiration),
+                lambda share_stat: datetime.utcfromtimestamp(
+                    share_stat.lease_expiration
+                ),
                 GreaterThan(now + min_lease_remaining),
             ),
         ),
@@ -184,7 +188,9 @@ def odd():
     )
 
 
-def matches_response(code_matcher=Always(), headers_matcher=Always(), body_matcher=Always()):
+def matches_response(
+    code_matcher=Always(), headers_matcher=Always(), body_matcher=Always()
+):
     """
     Match a Treq response object with certain code and body.
 

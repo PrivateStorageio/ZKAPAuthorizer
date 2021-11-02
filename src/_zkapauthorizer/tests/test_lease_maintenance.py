@@ -146,16 +146,18 @@ class DummyStorageServer(object):
     :ivar dict[bytes, ShareStat] buckets: A mapping from storage index to
         metadata about shares at that storage index.
     """
+
     clock = attr.ib()
     buckets = attr.ib()
     lease_seed = attr.ib()
 
     def stat_shares(self, storage_indexes):
-        return succeed(list(
-            {0: self.buckets[idx]} if idx in self.buckets else {}
-            for idx
-            in storage_indexes
-        ))
+        return succeed(
+            list(
+                {0: self.buckets[idx]} if idx in self.buckets else {}
+                for idx in storage_indexes
+            )
+        )
 
     def get_lease_seed(self):
         return self.lease_seed
@@ -227,6 +229,7 @@ class DummyServer(object):
     """
     A partial implementation of a Tahoe-LAFS "native" storage server.
     """
+
     _storage_server = attr.ib()
 
     def get_storage_server(self):
@@ -239,6 +242,7 @@ class DummyStorageBroker(object):
     """
     A partial implementation of a Tahoe-LAFS storage broker.
     """
+
     clock = attr.ib()
     _storage_servers = attr.ib()
 
@@ -259,6 +263,7 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
     Tests for the service returned by ``lease_maintenance_service``.
     """
+
     @given(randoms())
     def test_interface(self, random):
         """
@@ -268,7 +273,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             dummy_maintain_leases,
             clock,
-            FilePath(self.useFixture(TempDir()).join(u"last-run")),
+            FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
         )
         self.assertThat(
@@ -296,7 +301,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             dummy_maintain_leases,
             clock,
-            FilePath(self.useFixture(TempDir()).join(u"last-run")),
+            FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
             mean,
             range_,
@@ -333,7 +338,7 @@ class LeaseMaintenanceServiceTests(TestCase):
 
         # Figure out the absolute last run time.
         last_run = datetime_now - since_last_run
-        last_run_path = FilePath(self.useFixture(TempDir()).join(u"last-run"))
+        last_run_path = FilePath(self.useFixture(TempDir()).join("last-run"))
         last_run_path.setContent(last_run.isoformat())
 
         service = lease_maintenance_service(
@@ -359,9 +364,16 @@ class LeaseMaintenanceServiceTests(TestCase):
             datetime_now + mean + (range_ / 2) - since_last_run,
         )
 
-        note("mean: {}\nrange: {}\nnow: {}\nlow: {}\nhigh: {}\nsince last: {}".format(
-            mean, range_, datetime_now, low, high, since_last_run,
-        ))
+        note(
+            "mean: {}\nrange: {}\nnow: {}\nlow: {}\nhigh: {}\nsince last: {}".format(
+                mean,
+                range_,
+                datetime_now,
+                low,
+                high,
+                since_last_run,
+            )
+        )
 
         self.assertThat(
             datetime.utcfromtimestamp(maintenance_call.getTime()),
@@ -379,7 +391,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         service = lease_maintenance_service(
             lambda: None,
             clock,
-            FilePath(self.useFixture(TempDir()).join(u"last-run")),
+            FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
         )
         service.startService()
@@ -405,13 +417,14 @@ class LeaseMaintenanceServiceTests(TestCase):
         When the service runs, it calls the ``maintain_leases`` object.
         """
         leases_maintained_at = []
+
         def maintain_leases():
             leases_maintained_at.append(datetime.utcfromtimestamp(clock.seconds()))
 
         service = lease_maintenance_service(
             maintain_leases,
             clock,
-            FilePath(self.useFixture(TempDir()).join(u"last-run")),
+            FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
         )
         service.startService()
@@ -428,6 +441,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
     """
     Tests for ``visit_storage_indexes_from_root``.
     """
+
     @given(node_hierarchies(), clocks())
     def test_visits_all_nodes(self, root_node, clock):
         """
@@ -435,6 +449,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
         its deepest children.
         """
         visited = []
+
         def perform_visit(visit_assets):
             return visit_assets(visited.append)
 
@@ -454,11 +469,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
                 HasLength(len(expected)),
                 AfterPreprocessing(
                     set,
-                    Equals(set(
-                        node.get_storage_index()
-                        for node
-                        in expected
-                    )),
+                    Equals(set(node.get_storage_index() for node in expected)),
                 ),
             ),
         )
@@ -468,6 +479,7 @@ class RenewLeasesTests(TestCase):
     """
     Tests for ``renew_leases``.
     """
+
     @given(storage_brokers(clocks()), lists(leaf_nodes(), unique=True))
     def test_renewed(self, storage_broker, nodes):
         """
@@ -519,23 +531,20 @@ class RenewLeasesTests(TestCase):
             succeeded(Always()),
         )
 
-        relevant_storage_indexes = set(
-            node.get_storage_index()
-            for node
-            in nodes
-        )
+        relevant_storage_indexes = set(node.get_storage_index() for node in nodes)
 
         self.assertThat(
             list(
                 server.get_storage_server()
-                for server
-                in storage_broker.get_connected_servers()
+                for server in storage_broker.get_connected_servers()
             ),
-            AllMatch(leases_current(
-                relevant_storage_indexes,
-                get_now(),
-                min_lease_remaining,
-            )),
+            AllMatch(
+                leases_current(
+                    relevant_storage_indexes,
+                    get_now(),
+                    min_lease_remaining,
+                )
+            ),
         )
 
 
@@ -543,6 +552,7 @@ class MaintainLeasesFromRootTests(TestCase):
     """
     Tests for ``maintain_leases_from_root``.
     """
+
     @given(storage_brokers(clocks()), node_hierarchies())
     def test_renewed(self, storage_broker, root_node):
         """
@@ -575,22 +585,21 @@ class MaintainLeasesFromRootTests(TestCase):
         )
 
         relevant_storage_indexes = set(
-            node.get_storage_index()
-            for node
-            in root_node.flatten()
+            node.get_storage_index() for node in root_node.flatten()
         )
 
         self.assertThat(
             list(
                 server.get_storage_server()
-                for server
-                in storage_broker.get_connected_servers()
+                for server in storage_broker.get_connected_servers()
             ),
-            AllMatch(leases_current(
-                relevant_storage_indexes,
-                get_now(),
-                min_lease_remaining,
-            ))
+            AllMatch(
+                leases_current(
+                    relevant_storage_indexes,
+                    get_now(),
+                    min_lease_remaining,
+                )
+            ),
         )
 
     @given(storage_brokers(clocks()), node_hierarchies())

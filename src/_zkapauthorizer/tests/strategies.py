@@ -101,6 +101,7 @@ _UNBLINDED_TOKEN_LENGTH = 96
 # The length of a `VerificationSignature`, in bytes.
 _VERIFICATION_SIGNATURE_LENGTH = 64
 
+
 def tahoe_config_texts(storage_client_plugins, shares):
     """
     Build the text of complete Tahoe-LAFS configurations for a node.
@@ -113,6 +114,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
         may be an integer or None to leave it unconfigured (and rely on the
         default).
     """
+
     def merge_shares(shares, the_rest):
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
@@ -138,8 +140,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
         fixed_dictionaries(
             {
                 "storageclient.plugins.{}".format(name): configs
-                for (name, configs)
-                in storage_client_plugins.items()
+                for (name, configs) in storage_client_plugins.items()
             },
         ),
         fixed_dictionaries(
@@ -198,13 +199,17 @@ def dummy_ristretto_keys():
     They're not really because they're entirely random rather than points on
     the curve.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
-    ).map(
-        b64encode,
-    ).map(
-        lambda bs: bs.decode("ascii"),
+    return (
+        binary(
+            min_size=32,
+            max_size=32,
+        )
+        .map(
+            b64encode,
+        )
+        .map(
+            lambda bs: bs.decode("ascii"),
+        )
     )
 
 
@@ -216,17 +221,22 @@ def server_configurations(signing_key_path):
         **ristretto-signing-key-path** item.
     """
     return one_of(
-        fixed_dictionaries({
-            u"pass-value":
-            # The configuration is ini so everything is always a byte string!
-            integers(min_value=1).map(bytes),
-        }),
+        fixed_dictionaries(
+            {
+                u"pass-value":
+                # The configuration is ini so everything is always a byte string!
+                integers(min_value=1).map(bytes),
+            }
+        ),
         just({}),
     ).map(
-        lambda config: config.update({
-            u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-            u"ristretto-signing-key-path": signing_key_path.path,
-        }) or config,
+        lambda config: config.update(
+            {
+                u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+                u"ristretto-signing-key-path": signing_key_path.path,
+            }
+        )
+        or config,
     )
 
 
@@ -274,26 +284,34 @@ def client_ristrettoredeemer_configurations():
     """
     Build Ristretto-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(just({
-        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-        u"redeemer": u"ristretto",
-    }))
+    return zkapauthz_configuration(
+        just(
+            {
+                u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+                u"redeemer": u"ristretto",
+            }
+        )
+    )
 
 
 def client_dummyredeemer_configurations():
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
+
     def share_a_key(allowed_keys):
         return zkapauthz_configuration(
-            just({
-                u"redeemer": u"dummy",
-                # Pick out one of the allowed public keys so that the dummy
-                # appears to produce usable tokens.
-                u"issuer-public-key": next(iter(allowed_keys)),
-            }),
+            just(
+                {
+                    u"redeemer": u"dummy",
+                    # Pick out one of the allowed public keys so that the dummy
+                    # appears to produce usable tokens.
+                    u"issuer-public-key": next(iter(allowed_keys)),
+                }
+            ),
             allowed_public_keys=just(allowed_keys),
         )
+
     return dummy_ristretto_keys_sets().flatmap(share_a_key)
 
 
@@ -309,42 +327,58 @@ def client_doublespendredeemer_configurations(default_token_counts=token_counts(
     """
     Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(just({
-        u"redeemer": u"double-spend",
-    }))
+    return zkapauthz_configuration(
+        just(
+            {
+                u"redeemer": u"double-spend",
+            }
+        )
+    )
 
 
 def client_unpaidredeemer_configurations():
     """
     Build UnpaidRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(just({
-        u"redeemer": u"unpaid",
-    }))
+    return zkapauthz_configuration(
+        just(
+            {
+                u"redeemer": u"unpaid",
+            }
+        )
+    )
 
 
 def client_nonredeemer_configurations():
     """
     Build NonRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(just({
-        u"redeemer": u"non",
-    }))
+    return zkapauthz_configuration(
+        just(
+            {
+                u"redeemer": u"non",
+            }
+        )
+    )
 
 
 def client_errorredeemer_configurations(details):
     """
     Build ErrorRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(just({
-        u"redeemer": u"error",
-        u"details": details,
-    }))
+    return zkapauthz_configuration(
+        just(
+            {
+                u"redeemer": u"error",
+                u"details": details,
+            }
+        )
+    )
 
 
 def direct_tahoe_configs(
-        zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
-        shares=just((None, None, None)),
+    zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+    shares=just((None, None, None)),
 ):
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
@@ -355,9 +389,12 @@ def direct_tahoe_configs(
     :return SearchStrategy[_Config]: A strategy that builds Tahoe config
         objects.
     """
-    config_texts = minimal_tahoe_configs({
-        u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
-    }, shares)
+    config_texts = minimal_tahoe_configs(
+        {
+            u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
+        },
+        shares,
+    )
     return config_texts.map(
         lambda config_text: config_from_string(
             u"/dev/null/illegal",
@@ -368,8 +405,8 @@ def direct_tahoe_configs(
 
 
 def tahoe_configs(
-        zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
-        shares=just((None, None, None)),
+    zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+    shares=just((None, None, None)),
 ):
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
@@ -384,16 +421,16 @@ def tahoe_configs(
         are the ``basedir`` and ``portnumfile`` arguments to Tahoe's
         ``config_from_string.``
     """
+
     def path_setter(config):
         def set_paths(basedir, portnumfile):
             config._basedir = basedir.decode("ascii")
             config.portnum_fname = portnumfile
             return config
+
         return set_paths
-    return direct_tahoe_configs(
-        zkapauthz_v1_configuration,
-        shares,
-    ).map(
+
+    return direct_tahoe_configs(zkapauthz_v1_configuration, shares,).map(
         path_setter,
     )
 
@@ -403,11 +440,7 @@ def share_parameters():
     Build three-tuples of integers giving usable k, happy, N parameters to
     Tahoe-LAFS' erasure encoding process.
     """
-    return lists(
-        integers(min_value=1, max_value=255),
-        min_size=3,
-        max_size=3,
-    ).map(
+    return lists(integers(min_value=1, max_value=255), min_size=3, max_size=3,).map(
         sorted,
     )
 
@@ -416,13 +449,17 @@ def vouchers():
     """
     Build unicode strings in the format of vouchers.
     """
-    return binary(
-        min_size=32,
-        max_size=32,
-    ).map(
-        urlsafe_b64encode,
-    ).map(
-        lambda voucher: voucher.decode("ascii"),
+    return (
+        binary(
+            min_size=32,
+            max_size=32,
+        )
+        .map(
+            urlsafe_b64encode,
+        )
+        .map(
+            lambda voucher: voucher.decode("ascii"),
+        )
     )
 
 
@@ -516,13 +553,12 @@ def byte_strings(label, length, entropy):
     potentially the entire length is random.
     """
     if len(label) + entropy > length:
-        raise ValueError("Entropy and label don't fit into {} bytes".format(
-            length,
-        ))
-    return binary(
-        min_size=entropy,
-        max_size=entropy,
-    ).map(
+        raise ValueError(
+            "Entropy and label don't fit into {} bytes".format(
+                length,
+            )
+        )
+    return binary(min_size=entropy, max_size=entropy,).map(
         lambda bs: label + b"x" * (length - entropy - len(label)) + bs,
     )
 
@@ -531,14 +567,18 @@ def random_tokens():
     """
     Build ``RandomToken`` instances.
     """
-    return byte_strings(
-        label=b"random-tokens",
-        length=_TOKEN_LENGTH,
-        entropy=4,
-    ).map(
-        b64encode,
-    ).map(
-        lambda token: RandomToken(token.decode("ascii")),
+    return (
+        byte_strings(
+            label=b"random-tokens",
+            length=_TOKEN_LENGTH,
+            entropy=4,
+        )
+        .map(
+            b64encode,
+        )
+        .map(
+            lambda token: RandomToken(token.decode("ascii")),
+        )
     )
 
 
@@ -586,14 +626,18 @@ def unblinded_tokens():
     base64 encode data.  You cannot use these in the PrivacyPass cryptographic
     protocol but you can put them into the database and take them out again.
     """
-    return byte_strings(
-        label=b"unblinded-tokens",
-        length=_UNBLINDED_TOKEN_LENGTH,
-        entropy=4,
-    ).map(
-        b64encode,
-    ).map(
-        lambda zkap: UnblindedToken(zkap.decode("ascii")),
+    return (
+        byte_strings(
+            label=b"unblinded-tokens",
+            length=_UNBLINDED_TOKEN_LENGTH,
+            entropy=4,
+        )
+        .map(
+            b64encode,
+        )
+        .map(
+            lambda zkap: UnblindedToken(zkap.decode("ascii")),
+        )
     )
 
 
@@ -729,10 +773,7 @@ def shares():
     """
     Build Tahoe-LAFS share data.
     """
-    return tuples(
-        sharenums(),
-        sizes()
-    ).map(
+    return tuples(sharenums(), sizes()).map(
         lambda num_and_size: bytes_for_share(*num_and_size),
     )
 
@@ -775,6 +816,7 @@ class TestAndWriteVectors(object):
     ``tw_vectors`` parameter accepted by
     ``RIStorageServer.slot_testv_and_readv_and_writev``.
     """
+
     test_vector = attr.ib()
     write_vector = attr.ib()
     new_length = attr.ib()
@@ -822,12 +864,15 @@ def announcements():
     """
     Build announcements for the ZKAPAuthorizer plugin.
     """
-    return just({
-        u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-    })
+    return just(
+        {
+            u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+        }
+    )
 
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
+
 
 def posix_safe_datetimes():
     """
@@ -869,10 +914,12 @@ def clocks(now=posix_timestamps()):
     :param now: A strategy that builds POSIX timestamps (ie, ints or floats in
         the range of time_t).
     """
+
     def clock_at_time(when):
         c = Clock()
         c.advance(when)
         return c
+
     return now.map(clock_at_time)
 
 
@@ -936,6 +983,7 @@ def node_hierarchies():
     Build hierarchies of ``IDirectoryNode`` and other ``IFilesystemNode``
     (incomplete) providers.
     """
+
     def storage_indexes_are_distinct(nodes):
         seen = set()
         for n in nodes.flatten():
@@ -945,10 +993,7 @@ def node_hierarchies():
             seen.add(si)
         return True
 
-    return recursive(
-        leaf_nodes(),
-        directory_nodes,
-    ).filter(
+    return recursive(leaf_nodes(), directory_nodes,).filter(
         storage_indexes_are_distinct,
     )
 
@@ -975,22 +1020,26 @@ def ristretto_signing_keys():
     Build byte strings holding base64-encoded Ristretto signing keys, perhaps
     with leading or trailing whitespace.
     """
-    keys = sampled_from([
-        # A few legit keys
-        b"mkQf85V2vyLQRUYuqRb+Ke6K+M9pOtXm4MslsuCdBgg=",
-        b"6f93OIdZHHAmSIaRXDSIU1UcN+sbDAh41TRPb5DhrgI=",
-        b"k58h8yPT18epw+EKMJhwHFfoM6r3TIExKm4efQHNBgM=",
-        b"rbaAlWZ3NCnl5oZ9meviGfpLbyJpgpuiuFOX0rLnNwQ=",
-    ])
-    whitespace = sampled_from([
-        # maybe no whitespace at all
-        b""
-        # or maybe some
-        b" ",
-        b"\t",
-        b"\n",
-        b"\r\n",
-    ])
+    keys = sampled_from(
+        [
+            # A few legit keys
+            b"mkQf85V2vyLQRUYuqRb+Ke6K+M9pOtXm4MslsuCdBgg=",
+            b"6f93OIdZHHAmSIaRXDSIU1UcN+sbDAh41TRPb5DhrgI=",
+            b"k58h8yPT18epw+EKMJhwHFfoM6r3TIExKm4efQHNBgM=",
+            b"rbaAlWZ3NCnl5oZ9meviGfpLbyJpgpuiuFOX0rLnNwQ=",
+        ]
+    )
+    whitespace = sampled_from(
+        [
+            # maybe no whitespace at all
+            b""
+            # or maybe some
+            b" ",
+            b"\t",
+            b"\n",
+            b"\r\n",
+        ]
+    )
 
     return builds(
         lambda leading, key, trailing: leading + key + trailing,

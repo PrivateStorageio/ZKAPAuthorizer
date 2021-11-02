@@ -88,13 +88,14 @@ class IZKAPRoot(IResource):
     """
     The root of the resource tree of this plugin's client web presence.
     """
+
     store = Attribute("The ``VoucherStore`` used by this resource tree.")
     controller = Attribute("The ``PaymentController`` used by this resource tree.")
 
 
 def get_token_count(
-        plugin_name,
-        node_config,
+    plugin_name,
+    node_config,
 ):
     """
     Retrieve the configured voucher value, in number of tokens, from the given
@@ -108,18 +109,20 @@ def get_token_count(
     :param int default: The value to return if none is configured.
     """
     section_name = u"storageclient.plugins.{}".format(plugin_name)
-    return int(node_config.get_config(
-        section=section_name,
-        option=u"default-token-count",
-        default=NUM_TOKENS,
-    ))
+    return int(
+        node_config.get_config(
+            section=section_name,
+            option=u"default-token-count",
+            default=NUM_TOKENS,
+        )
+    )
 
 
 def from_configuration(
-        node_config,
-        store,
-        redeemer=None,
-        clock=None,
+    node_config,
+    store,
+    redeemer=None,
+    clock=None,
 ):
     """
     Instantiate the plugin root resource using data from its configuration
@@ -186,9 +189,9 @@ def from_configuration(
 
 
 def authorizationless_resource_tree(
-        store,
-        controller,
-        calculate_price,
+    store,
+    controller,
+    calculate_price,
 ):
     """
     Create the full ZKAPAuthorizer client plugin resource hierarchy with no
@@ -231,6 +234,7 @@ class _CalculatePrice(Resource):
     """
     This resource exposes a storage price calculator.
     """
+
     allowedMethods = [b"POST"]
 
     render_HEAD = render_GET = None
@@ -260,43 +264,50 @@ class _CalculatePrice(Resource):
             body_object = loads(payload)
         except ValueError:
             request.setResponseCode(BAD_REQUEST)
-            return dumps({
-                "error": "could not parse request body",
-            })
+            return dumps(
+                {
+                    "error": "could not parse request body",
+                }
+            )
 
         try:
             version = body_object[u"version"]
             sizes = body_object[u"sizes"]
         except (TypeError, KeyError):
             request.setResponseCode(BAD_REQUEST)
-            return dumps({
-                "error": "could not read `version` and `sizes` properties",
-            })
+            return dumps(
+                {
+                    "error": "could not read `version` and `sizes` properties",
+                }
+            )
 
         if version != 1:
             request.setResponseCode(BAD_REQUEST)
-            return dumps({
-                "error": "did not find required version number 1 in request",
-            })
+            return dumps(
+                {
+                    "error": "did not find required version number 1 in request",
+                }
+            )
 
-        if (not isinstance(sizes, list) or
-            not all(
-                isinstance(size, (int, long)) and size >= 0
-                for size
-                in sizes
-        )):
+        if not isinstance(sizes, list) or not all(
+            isinstance(size, (int, long)) and size >= 0 for size in sizes
+        ):
             request.setResponseCode(BAD_REQUEST)
-            return dumps({
-                "error": "did not find required positive integer sizes list in request",
-            })
+            return dumps(
+                {
+                    "error": "did not find required positive integer sizes list in request",
+                }
+            )
 
         application_json(request)
 
         price = self._price_calculator.calculate(sizes)
-        return dumps({
-            u"price": price,
-            u"period": self._lease_period,
-        })
+        return dumps(
+            {
+                u"price": price,
+                u"period": self._lease_period,
+            }
+        )
 
 
 def wrong_content_type(request, required_type):
@@ -335,11 +346,14 @@ class _ProjectVersion(Resource):
     """
     This resource exposes the version of **ZKAPAuthorizer** itself.
     """
+
     def render_GET(self, request):
         application_json(request)
-        return dumps({
-            "version": _zkapauthorizer_version,
-        })
+        return dumps(
+            {
+                "version": _zkapauthorizer_version,
+            }
+        )
 
 
 class _UnblindedTokenCollection(Resource):
@@ -347,6 +361,7 @@ class _UnblindedTokenCollection(Resource):
     This class implements inspection of unblinded tokens.  Users **GET** this
     resource to find out about unblinded tokens in the system.
     """
+
     _log = Logger()
 
     def __init__(self, store, controller):
@@ -368,17 +383,18 @@ class _UnblindedTokenCollection(Resource):
 
         position = request.args.get(b"position", [b""])[0].decode("utf-8")
 
-        return dumps({
-            u"total": len(unblinded_tokens),
-            u"spendable": self._store.count_unblinded_tokens(),
-            u"unblinded-tokens": list(islice((
-                token
-                for token
-                in unblinded_tokens
-                if token > position
-            ), limit)),
-            u"lease-maintenance-spending": self._lease_maintenance_activity(),
-        })
+        return dumps(
+            {
+                u"total": len(unblinded_tokens),
+                u"spendable": self._store.count_unblinded_tokens(),
+                u"unblinded-tokens": list(
+                    islice(
+                        (token for token in unblinded_tokens if token > position), limit
+                    )
+                ),
+                u"lease-maintenance-spending": self._lease_maintenance_activity(),
+            }
+        )
 
     def render_POST(self, request):
         """
@@ -388,7 +404,6 @@ class _UnblindedTokenCollection(Resource):
         unblinded_tokens = load(request.content)[u"unblinded-tokens"]
         self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
         return dumps({})
-
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()
@@ -400,7 +415,6 @@ class _UnblindedTokenCollection(Resource):
         }
 
 
-
 class _VoucherCollection(Resource):
     """
     This class implements redemption of vouchers.  Users **PUT** such numbers
@@ -408,13 +422,13 @@ class _VoucherCollection(Resource):
     redemption controller.  Child resources of this resource can also be
     retrieved to monitor the status of previously submitted vouchers.
     """
+
     _log = Logger()
 
     def __init__(self, store, controller):
         self._store = store
         self._controller = controller
         Resource.__init__(self)
-
 
     def render_PUT(self, request):
         """
@@ -425,26 +439,31 @@ class _VoucherCollection(Resource):
         except Exception:
             return bad_request(u"json request body required").render(request)
         if payload.keys() != [u"voucher"]:
-            return bad_request(u"request object must have exactly one key: 'voucher'").render(request)
+            return bad_request(
+                u"request object must have exactly one key: 'voucher'"
+            ).render(request)
         voucher = payload[u"voucher"]
         if not is_syntactic_voucher(voucher):
-            return bad_request(u"submitted voucher is syntactically invalid").render(request)
+            return bad_request(u"submitted voucher is syntactically invalid").render(
+                request
+            )
 
-        self._log.info("Accepting a voucher ({voucher}) for redemption.", voucher=voucher)
+        self._log.info(
+            "Accepting a voucher ({voucher}) for redemption.", voucher=voucher
+        )
         self._controller.redeem(voucher)
         return b""
 
-
     def render_GET(self, request):
         application_json(request)
-        return dumps({
-            u"vouchers": list(
-                self._controller.incorporate_transient_state(voucher).marshal()
-                for voucher
-                in self._store.list()
-            ),
-        })
-
+        return dumps(
+            {
+                u"vouchers": list(
+                    self._controller.incorporate_transient_state(voucher).marshal()
+                    for voucher in self._store.list()
+                ),
+            }
+        )
 
     def getChild(self, segment, request):
         voucher = segment.decode("utf-8")
@@ -483,6 +502,7 @@ class VoucherView(Resource):
     """
     This class implements a view for a ``Voucher`` instance.
     """
+
     def __init__(self, voucher):
         """
         :param Voucher reference: The model object for which to provide a
@@ -490,7 +510,6 @@ class VoucherView(Resource):
         """
         self._voucher = voucher
         Resource.__init__(self)
-
 
     def render_GET(self, request):
         application_json(request)
@@ -503,5 +522,7 @@ def bad_request(reason=u"Bad Request"):
         REQUEST** response.
     """
     return ErrorPage(
-        BAD_REQUEST, b"Bad Request", reason.encode("utf-8"),
+        BAD_REQUEST,
+        b"Bad Request",
+        reason.encode("utf-8"),
     )

@@ -34,6 +34,7 @@ from .storage_common import (
     share_size_for_data,
 )
 
+
 @attr.s
 class PriceCalculator(object):
     """
@@ -46,6 +47,7 @@ class PriceCalculator(object):
     :ivar int _pass_value: The bytes component of the bytes×time value of a
         single pass.
     """
+
     _shares_needed = attr.ib()
     _shares_total = attr.ib()
     _pass_value = attr.ib()
@@ -59,15 +61,10 @@ class PriceCalculator(object):
 
         :return int: The number of ZKAPs required.
         """
-        share_sizes = (
-            share_size_for_data(self._shares_needed, size)
-            for size
-            in sizes
-        )
+        share_sizes = (share_size_for_data(self._shares_needed, size) for size in sizes)
         all_required_passes = (
             required_passes(self._pass_value, [share_size] * self._shares_total)
-            for share_size
-            in share_sizes
+            for share_size in share_sizes
         )
         price = sum(all_required_passes, 0)
         return price

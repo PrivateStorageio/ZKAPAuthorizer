@@ -38,6 +38,7 @@ from pyutil.mathutil import (
     div_ceil,
 )
 
+
 @attr.s(frozen=True, str=True)
 class MorePassesRequired(Exception):
     """
@@ -53,6 +54,7 @@ class MorePassesRequired(Exception):
     :ivar set[int] signature_check_failed: Indices into the supplied list of
         passes indicating passes which failed the signature check.
     """
+
     valid_count = attr.ib(validator=attr.validators.instance_of((int, long)))
     required_count = attr.ib(validator=attr.validators.instance_of((int, long)))
     signature_check_failed = attr.ib(converter=frozenset)
@@ -64,17 +66,22 @@ def _message_maker(label):
             label=label,
             storage_index=b64encode(storage_index),
         )
+
     return make_message
+
 
 # Functions to construct the PrivacyPass request-binding message for pass
 # construction for different Tahoe-LAFS storage operations.
 allocate_buckets_message = _message_maker(u"allocate_buckets")
 add_lease_message = _message_maker(u"add_lease")
-slot_testv_and_readv_and_writev_message = _message_maker(u"slot_testv_and_readv_and_writev")
+slot_testv_and_readv_and_writev_message = _message_maker(
+    u"slot_testv_and_readv_and_writev"
+)
 
 # The number of bytes we're willing to store for a lease period for each pass
 # submitted.
 BYTES_PER_PASS = 1024 * 1024
+
 
 def get_configured_shares_needed(node_config):
     """
@@ -83,11 +90,13 @@ def get_configured_shares_needed(node_config):
     If no value is explicitly configured, the Tahoe-LAFS default (as best as
     we know it) is returned.
     """
-    return int(node_config.get_config(
-        section=u"client",
-        option=u"shares.needed",
-        default=3,
-    ))
+    return int(
+        node_config.get_config(
+            section=u"client",
+            option=u"shares.needed",
+            default=3,
+        )
+    )
 
 
 def get_configured_shares_total(node_config):
@@ -97,11 +106,13 @@ def get_configured_shares_total(node_config):
     If no value is explicitly configured, the Tahoe-LAFS default (as best as
     we know it) is returned.
     """
-    return int(node_config.get_config(
-        section=u"client",
-        option=u"shares.total",
-        default=10,
-    ))
+    return int(
+        node_config.get_config(
+            section=u"client",
+            option=u"shares.total",
+            default=10,
+        )
+    )
 
 
 def get_configured_pass_value(node_config):
@@ -113,11 +124,13 @@ def get_configured_pass_value(node_config):
     client section.
     """
     section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
-    return int(node_config.get_config(
-        section=section_name,
-        option=u"pass-value",
-        default=BYTES_PER_PASS,
-    ))
+    return int(
+        node_config.get_config(
+            section=section_name,
+            option=u"pass-value",
+            default=BYTES_PER_PASS,
+        )
+    )
 
 
 def get_configured_lease_duration(node_config):
@@ -136,10 +149,14 @@ def get_configured_allowed_public_keys(node_config):
     Read the set of allowed issuer public keys from the given configuration.
     """
     section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
-    return set(node_config.get_config(
-        section=section_name,
-        option=u"allowed-public-keys",
-    ).strip().split(","))
+    return set(
+        node_config.get_config(
+            section=section_name,
+            option=u"allowed-public-keys",
+        )
+        .strip()
+        .split(",")
+    )
 
 
 def required_passes(bytes_per_pass, share_sizes):
@@ -194,8 +211,7 @@ def has_writes(tw_vectors):
     """
     return any(
         data or (new_length is not None)
-        for (test, data, new_length)
-        in tw_vectors.values()
+        for (test, data, new_length) in tw_vectors.values()
     )
 
 
@@ -207,10 +223,7 @@ def get_sharenums(tw_vectors):
     :return set[int]: The share numbers which the given test/write vectors would write to.
     """
     return set(
-        sharenum
-        for (sharenum, (test, data, new_length))
-        in tw_vectors.items()
-        if data
+        sharenum for (sharenum, (test, data, new_length)) in tw_vectors.items() if data
     )
 
 
@@ -224,8 +237,7 @@ def get_allocated_size(tw_vectors):
     return max(
         list(
             max(offset + len(s) for (offset, s) in data)
-            for (sharenum, (test, data, new_length))
-            in tw_vectors.items()
+            for (sharenum, (test, data, new_length)) in tw_vectors.items()
             if data
         ),
     )
@@ -241,11 +253,9 @@ def get_implied_data_length(data_vector, new_length):
     :return int: The amount of data, in bytes, implied by a data vector and a
         size.
     """
-    data_based_size = max(
-        offset + len(data)
-        for (offset, data)
-        in data_vector
-    ) if data_vector else 0
+    data_based_size = (
+        max(offset + len(data) for (offset, data) in data_vector) if data_vector else 0
+    )
     if new_length is None:
         return data_based_size
     # new_length is only allowed to truncate, not expand.
@@ -266,8 +276,7 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     new_sizes = current_sizes.copy()
     size_updates = {
         sharenum: get_implied_data_length(data_vector, new_length)
-        for (sharenum, (_, data_vector, new_length))
-        in tw_vectors.items()
+        for (sharenum, (_, data_vector, new_length)) in tw_vectors.items()
     }
     for sharenum, size in size_updates.items():
         if size > new_sizes.get(sharenum, 0):
@@ -289,24 +298,20 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     )
     return required_new_passes
 
+
 def summarize(tw_vectors):
     return {
         sharenum: (
             list(
                 (offset, length, operator, len(specimen))
-                for (offset, length, operator, specimen)
-                in test_vector
+                for (offset, length, operator, specimen) in test_vector
             ),
-            list(
-                (offset, len(data))
-                for (offset, data)
-                in data_vectors
-            ),
+            list((offset, len(data)) for (offset, data) in data_vectors),
             new_length,
         )
-        for (sharenum, (test_vector, data_vectors, new_length))
-        in tw_vectors.items()
+        for (sharenum, (test_vector, data_vectors, new_length)) in tw_vectors.items()
     }
+
 
 def pass_value_attribute():
     """

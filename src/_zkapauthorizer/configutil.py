@@ -62,14 +62,15 @@ def config_string_from_sections(divided_sections):
         last value wins).
     """
     sections = _merge_dictionaries(divided_sections)
-    return "".join(list(
-        "[{name}]\n{items}\n".format(
-            name=name,
-            items="\n".join(
-                "{key} = {value}".format(key=key, value=_tahoe_config_quote(value))
-                for (key, value)
-                in contents.items()
+    return "".join(
+        list(
+            "[{name}]\n{items}\n".format(
+                name=name,
+                items="\n".join(
+                    "{key} = {value}".format(key=key, value=_tahoe_config_quote(value))
+                    for (key, value) in contents.items()
+                ),
             )
+            for (name, contents) in sections.items()
         )
-        for (name, contents) in sections.items()
-    ))
+    )
