@@ -167,7 +167,7 @@ def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_succes
                 else:
                     on_success(result, pass_group)
                     break
-        except:
+        except Exception:
             # Something went wrong that we can't address with a retry.
             pass_group.reset()
             raise

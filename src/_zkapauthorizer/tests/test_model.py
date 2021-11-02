@@ -349,7 +349,8 @@ class VoucherStoreTests(TestCase):
 
         :param get_config: See ``tahoe_configs``
         :param unicode voucher_value: A voucher value to associate with the tokens.
-        :param unicode public_key: A public key to associate with inserted unblinded tokens.
+        :param unicode public_key: A public key to associate with inserted
+            unblinded tokens.
         :param datetime now: A time to pretend is current.
         :param data: A Hypothesis data for drawing values from strategies.
 
@@ -711,7 +712,8 @@ class UnblindedTokenStoreTests(TestCase):
         self, get_config, now, voucher_value, public_key, unblinded_tokens, completed
     ):
         """
-        Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
+        Unblinded tokens for a voucher which has not been added to the store
+        cannot be inserted.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         self.assertThat(

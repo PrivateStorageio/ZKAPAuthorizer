@@ -743,13 +743,15 @@ class PaymentController(object):
         for voucher in vouchers:
             if voucher.state.should_start_redemption():
                 self._log.info(
-                    "Controller found voucher ({voucher}) at startup that needs redemption.",
+                    "Controller found voucher ({voucher}) at startup "
+                    "that needs redemption.",
                     voucher=voucher.number,
                 )
                 self.redeem(voucher.number)
             else:
                 self._log.info(
-                    "Controller found voucher ({voucher}) at startup that does not need redemption.",
+                    "Controller found voucher ({voucher}) at startup "
+                    "that does not need redemption.",
                     voucher=voucher.number,
                 )
 
@@ -849,7 +851,8 @@ class PaymentController(object):
             succeeded = yield self._perform_redeem(voucher_obj, counter, tokens)
             if not succeeded:
                 self._log.info(
-                    "Temporarily suspending redemption of {voucher} after non-success result.",
+                    "Temporarily suspending redemption of {voucher} "
+                    "after non-success result.",
                     voucher=voucher,
                 )
                 break
@@ -1019,7 +1022,7 @@ def bracket(first, last, between):
         result = yield between()
     except GeneratorExit:
         raise
-    except:
+    except Exception:
         info = exc_info()
         yield last()
         raise info[0], info[1], info[2]

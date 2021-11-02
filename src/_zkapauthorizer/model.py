@@ -202,8 +202,8 @@ class VoucherStore(object):
     """
     This class implements persistence for vouchers.
 
-    :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
-        the node that owns the persisted vouchers.
+    :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object
+        for the node that owns the persisted vouchers.
 
     :ivar now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
@@ -254,7 +254,8 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [expected-tokens], [state], [finished], [token-count], [public-key], [counter]
+                [number], [created], [expected-tokens], [state], [finished],
+                [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             WHERE
@@ -316,14 +317,17 @@ class VoucherStore(object):
         else:
             tokens = get_tokens()
             self._log.info(
-                "Persisting {count} random tokens for a voucher ({voucher}[{counter}]).",
+                "Persisting {count} random tokens for a voucher "
+                "({voucher}[{counter}]).",
                 count=len(tokens),
                 voucher=voucher,
                 counter=counter,
             )
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
+                INSERT OR IGNORE INTO [vouchers]
+                ([number], [expected-tokens], [created])
+                VALUES (?, ?, ?)
                 """,
                 (voucher, expected_tokens, self.now()),
             )
@@ -345,7 +349,8 @@ class VoucherStore(object):
         cursor.execute(
             """
             SELECT
-                [number], [created], [expected-tokens], [state], [finished], [token-count], [public-key], [counter]
+                [number], [created], [expected-tokens], [state], [finished],
+                [token-count], [public-key], [counter]
             FROM
                 [vouchers]
             """,
@@ -415,14 +420,17 @@ class VoucherStore(object):
 
         cursor.execute(
             """
-            INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
+            INSERT INTO [redemption-groups]
+            ([voucher], [public-key], [spendable])
+            VALUES (?, ?, ?)
             """,
             (voucher, public_key, spendable),
         )
         group_id = cursor.lastrowid
 
         self._log.info(
-            "Recording {count} {unspendable}spendable unblinded tokens from public key {public_key}.",
+            "Recording {count} {unspendable}spendable unblinded tokens "
+            "from public key {public_key}.",
             count=len(unblinded_tokens),
             unspendable="" if spendable else "un",
             public_key=public_key,

@@ -55,11 +55,11 @@ def cleanup_storage_server(storage_server):
 def write_toy_shares(
     storage_server,
     storage_index,
-    renew_secret,
-    cancel_secret,
     sharenums,
     size,
     canary,
+    renew_secret,
+    cancel_secret,
 ):
     """
     Write some immutable shares to the given storage server.

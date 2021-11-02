@@ -18,6 +18,8 @@ Tests for communication between the client and server components.
 
 from __future__ import absolute_import
 
+from functools import partial
+
 from allmydata.storage.common import storage_index_to_dir
 from challenge_bypass_ristretto import random_signing_key
 from fixtures import MonkeyPatch
@@ -36,9 +38,10 @@ from testtools.matchers import (
     raises,
 )
 from testtools.twistedsupport import failed, succeeded
-from testtools.twistedsupport._deferred import (  # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts; there appear to have stalled.
-    extract_result,
-)
+
+# I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts there
+# appear to have stalled.
+from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
@@ -399,11 +402,11 @@ class ShareTests(TestCase):
         write_toy_shares(
             self.anonymous_storage_server,
             storage_index,
-            renew_secret,
-            cancel_secret,
             existing_sharenums,
             size,
             canary=self.canary,
+            renew_secret=renew_secret,
+            cancel_secret=cancel_secret,
         )
 
         # Do a partial repeat of the operation.  Shuffle around
@@ -472,11 +475,11 @@ class ShareTests(TestCase):
         write_toy_shares(
             self.anonymous_storage_server,
             storage_index,
-            add_lease_secret,
-            cancel_secret,
             sharenums,
             size,
             canary=self.canary,
+            renew_secret=add_lease_secret,
+            cancel_secret=cancel_secret,
         )
 
         self.assertThat(
@@ -565,14 +568,10 @@ class ShareTests(TestCase):
             size,
             when,
             leases,
-            lambda storage_server, storage_index, sharenums, size, canary: write_toy_shares(
-                storage_server,
-                storage_index,
-                renew_secret,
-                cancel_secret,
-                sharenums,
-                size,
-                canary,
+            partial(
+                write_toy_shares,
+                renew_secret=renew_secret,
+                cancel_secret=cancel_secret,
             ),
         )
 
@@ -787,7 +786,8 @@ class ShareTests(TestCase):
 
     @skipIf(
         platform.isWindows(),
-        "StorageServer fails to create necessary directory for corruption advisories in Windows.",
+        "StorageServer fails to create necessary directory "
+        "for corruption advisories in Windows.",
     )
     @given(
         storage_index=storage_indexes(),
@@ -810,11 +810,11 @@ class ShareTests(TestCase):
         write_toy_shares(
             self.anonymous_storage_server,
             storage_index,
-            renew_secret,
-            cancel_secret,
             {sharenum},
             size,
             canary=self.canary,
+            renew_secret=renew_secret,
+            cancel_secret=cancel_secret,
         )
 
         self.assertThat(

@@ -74,15 +74,15 @@ _UPGRADES = {
         """
         CREATE TABLE [vouchers] (
             [number] text,
-            [created] text,                     -- An ISO8601 date+time string.
-            [state] text DEFAULT "pending",     -- pending, double-spend, redeemed
+            [created] text,                   -- An ISO8601 date+time string.
+            [state] text DEFAULT "pending",   -- pending, double-spend, redeemed
 
-            [finished] text DEFAULT NULL,       -- ISO8601 date+time string when
-                                                -- the current terminal state was entered.
+            [finished] text DEFAULT NULL,     -- ISO8601 date+time string when
+                                              -- the current terminal state was entered.
 
-            [token-count] num DEFAULT NULL,     -- Set in the redeemed state to the number
-                                                -- of tokens received on this voucher's
-                                                -- redemption.
+            [token-count] num DEFAULT NULL,   -- Set in the redeemed state to the number
+                                              -- of tokens received on this voucher's
+                                              -- redemption.
 
             PRIMARY KEY([number])
         )
@@ -105,9 +105,12 @@ _UPGRADES = {
         """,
         """
         CREATE TABLE [lease-maintenance-spending] (
-            [id] integer, -- A unique identifier for a group of activity.
-            [started] text, -- ISO8601 date+time string when the activity began.
-            [finished] text, -- ISO8601 date+time string when the activity completed (or null).
+             -- A unique identifier for a group of activity.
+            [id] integer,
+            -- ISO8601 date+time string when the activity began.
+            [started] text,
+            -- ISO8601 date+time string when the activity completed (or null).
+            [finished] text,
 
             -- The number of passes that would be required to renew all
             -- shares encountered during this activity.  Note that because
@@ -149,7 +152,8 @@ _UPGRADES = {
         -- time of this upgrade we'll just make up some value.  It doesn't
         -- particularly matter if it is wrong for some testing voucher someone
         -- used.
-        ALTER TABLE [vouchers] ADD COLUMN [expected-tokens] integer NOT NULL DEFAULT 32768
+        ALTER TABLE [vouchers]
+        ADD COLUMN [expected-tokens] integer NOT NULL DEFAULT 32768
         """,
     ],
     4: [
@@ -188,7 +192,9 @@ _UPGRADES = {
         -- we've only preserved one public key for them so we can't do much
         -- better than this.
         INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable])
-            SELECT DISTINCT([number]), [public-key], 1 FROM [vouchers] WHERE [state] = "redeemed"
+            SELECT DISTINCT([number]), [public-key], 1
+            FROM [vouchers]
+            WHERE [state] = "redeemed"
         """,
         """
         -- Give each voucher a count of "sequestered" tokens.  Currently,

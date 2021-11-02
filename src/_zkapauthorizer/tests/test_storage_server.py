@@ -132,7 +132,7 @@ class ValidationResultTests(TestCase):
                     AfterPreprocessing(
                         str,
                         Equals(
-                            "MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset([4]))"
+                            "MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset([4]))"  # noqa: 501
                         ),
                     ),
                 ),
@@ -414,11 +414,11 @@ class PassValidationTests(TestCase):
         write_toy_shares(
             self.anonymous_storage_server,
             storage_index,
-            renew_secret,
-            cancel_secret,
             sharenums,
             allocated_size,
             LocalReferenceable(None),
+            renew_secret,
+            cancel_secret,
         )
 
         # Advance time to a point where the lease is expired.  This simplifies

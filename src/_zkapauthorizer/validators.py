@@ -38,7 +38,8 @@ def has_length(expected):
     def validate_has_length(inst, attr, value):
         if len(value) != expected:
             raise ValueError(
-                "{name!r} must have length {expected}, instead has length {actual}".format(
+                "{name!r} must have length {expected}, "
+                "instead has length {actual}".format(
                     name=attr.name,
                     expected=expected,
                     actual=len(value),

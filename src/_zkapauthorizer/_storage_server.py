@@ -300,7 +300,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             same from the perspective of pass validation.
         """
         with start_action(
-            action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
+            action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",  # noqa: 501
             storage_index=b2a(storage_index),
             path=storage_index_to_dir(storage_index),
         ):
@@ -346,7 +346,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                         tw_vectors.keys(),
                     )
                 )
-                # print("has writes, has active lease, current sizes: {}".format(current_sizes))
             else:
                 # None of it is.
                 current_sizes = {}

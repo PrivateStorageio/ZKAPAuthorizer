@@ -59,7 +59,8 @@ INVALID_PASSES = MessageType(
 RESET_PASSES = MessageType(
     u"zkapauthorizer:reset-passes",
     [PASS_COUNT],
-    u"Some passes involved in a failed spending attempt have not definitely been spent and are being returned for future use.",
+    u"Some passes involved in a failed spending attempt have not definitely been spent "
+    u"and are being returned for future use.",
 )
 
 SIGNATURE_CHECK_FAILED = MessageType(
@@ -84,13 +85,15 @@ CURRENT_SIZES = Field(
 TW_VECTORS_SUMMARY = Field(
     u"tw_vectors_summary",
     dict,
-    u"A dictionary mapping share numbers from tw_vectors to test and write vector summaries.",
+    u"A dictionary mapping share numbers from tw_vectors "
+    u"to test and write vector summaries.",
 )
 
 NEW_SIZES = Field(
     u"new_sizes",
     dict,
-    u"A dictionary like that of CURRENT_SIZES but for the sizes computed for the shares after applying tw_vectors.",
+    u"A dictionary like that of CURRENT_SIZES but for the sizes computed for the "
+    u"shares after applying tw_vectors.",
 )
 
 NEW_PASSES = Field(

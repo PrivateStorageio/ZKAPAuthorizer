@@ -208,7 +208,8 @@ def get_sharenums(tw_vectors):
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
 
-    :return set[int]: The share numbers which the given test/write vectors would write to.
+    :return set[int]: The share numbers which the given test/write vectors
+        would write to.
     """
     return set(
         sharenum for (sharenum, (test, data, new_length)) in tw_vectors.items() if data

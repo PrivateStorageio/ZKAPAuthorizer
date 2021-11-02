@@ -112,6 +112,7 @@ from .strategies import (
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
 
+
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
     return Cooperator(
@@ -130,7 +131,7 @@ def is_not_json(bytestring):
     """
     try:
         loads(bytestring)
-    except:
+    except Exception:
         return True
     return False
 
@@ -161,7 +162,7 @@ def is_urlsafe_base64(text):
     """
     try:
         urlsafe_b64decode(text)
-    except:
+    except Exception:
         return False
     return True
 

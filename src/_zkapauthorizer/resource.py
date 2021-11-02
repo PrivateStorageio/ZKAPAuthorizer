@@ -259,7 +259,7 @@ class _CalculatePrice(Resource):
             request.setResponseCode(BAD_REQUEST)
             return dumps(
                 {
-                    "error": "did not find required positive integer sizes list in request",
+                    "error": "did not find required positive integer sizes list in request",  # noqa: E501
                 }
             )
 

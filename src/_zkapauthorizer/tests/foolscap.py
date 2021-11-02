@@ -130,7 +130,7 @@ class LocalRemote(object):
             schema.checkResults(result, inbound=False)
             _check_copyables([result])
             return succeed(result)
-        except:
+        except Exception:
             return fail()
 
 
