@@ -32,6 +32,14 @@ in
       packagesExtra = [ zkapauthorizer ];
       _.hypothesis.postUnpack = "";
     };
+
+    lint-python = mach-nix.mkPython {
+      python = "python39";
+      requirements = ''
+        isort
+        black
+      '';
+    };
   in
     pkgs.runCommand "zkapauthorizer-tests" {
       passthru = {
@@ -42,6 +50,8 @@ in
 
       pushd ${zkapauthorizer.src}
       ${python}/bin/pyflakes
+      ${lint-python}/bin/black --check src
+      ${lint-python}/bin/isort --check src
       popd
 
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
