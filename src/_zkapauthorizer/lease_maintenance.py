@@ -17,55 +17,26 @@ This module implements a service which periodically spends ZKAPs to
 refresh leases on all shares reachable from a root.
 """
 
-from functools import (
-    partial,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
-from errno import (
-    ENOENT,
-)
+from datetime import datetime, timedelta
+from errno import ENOENT
+from functools import partial
+
 import attr
-
-from zope.interface import (
-    implementer,
-)
-
-from aniso8601 import (
-    parse_datetime,
-)
-
-from twisted.internet.defer import (
-    inlineCallbacks,
-    maybeDeferred,
-)
-from twisted.application.service import (
-    Service,
-)
-from twisted.python.log import (
-    err,
-)
-
-from allmydata.interfaces import (
-    IDirectoryNode,
-    IFilesystemNode,
-)
+from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
-    file_renewal_secret_hash,
+    bucket_cancel_secret_hash,
     bucket_renewal_secret_hash,
     file_cancel_secret_hash,
-    bucket_cancel_secret_hash,
+    file_renewal_secret_hash,
 )
+from aniso8601 import parse_datetime
+from twisted.application.service import Service
+from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.python.log import err
+from zope.interface import implementer
 
-from .controller import (
-    bracket,
-)
-
-from .model import (
-    ILeaseMaintenanceObserver,
-)
+from .controller import bracket
+from .model import ILeaseMaintenanceObserver
 
 SERVICE_NAME = u"lease maintenance service"
 
@@ -85,14 +56,18 @@ def visit_storage_indexes(root_nodes, visit):
         visited.
     """
     if not isinstance(root_nodes, list):
-        raise TypeError("root_nodes must be a list, not {!r}".format(
-            root_nodes,
-        ))
+        raise TypeError(
+            "root_nodes must be a list, not {!r}".format(
+                root_nodes,
+            )
+        )
     for node in root_nodes:
         if not IFilesystemNode.providedBy(node):
-            raise TypeError("Root nodes must provide IFilesystemNode, {!r} does not".format(
-                node,
-            ))
+            raise TypeError(
+                "Root nodes must provide IFilesystemNode, {!r} does not".format(
+                    node,
+                )
+            )
 
     stack = root_nodes[:]
     while stack:
@@ -130,12 +105,12 @@ def iter_storage_indexes(visit_assets):
 
 @inlineCallbacks
 def renew_leases(
-        visit_assets,
-        storage_broker,
-        secret_holder,
-        min_lease_remaining,
-        get_activity_observer,
-        now,
+    visit_assets,
+    storage_broker,
+    secret_holder,
+    min_lease_remaining,
+    get_activity_observer,
+    now,
 ):
     """
     Check the leases on a group of nodes for those which are expired or close
@@ -169,9 +144,7 @@ def renew_leases(
     renewal_secret = secret_holder.get_renewal_secret()
     cancel_secret = secret_holder.get_cancel_secret()
     servers = list(
-        server.get_storage_server()
-        for server
-        in storage_broker.get_connected_servers()
+        server.get_storage_server() for server in storage_broker.get_connected_servers()
     )
 
     for server in servers:
@@ -191,13 +164,13 @@ def renew_leases(
 
 @inlineCallbacks
 def renew_leases_on_server(
-        min_lease_remaining,
-        renewal_secret,
-        cancel_secret,
-        storage_indexes,
-        server,
-        activity,
-        now,
+    min_lease_remaining,
+    renewal_secret,
+    cancel_secret,
+    storage_indexes,
+    server,
+    activity,
+    now,
 ):
     """
     Check leases on the shares for the given storage indexes on the given
@@ -318,6 +291,7 @@ class _FuzzyTimerService(Service):
     :ivar IReactorTime reactor: A Twisted reactor to use to schedule runs of
         the operation.
     """
+
     name = attr.ib()
     operation = attr.ib()
     initial_interval = attr.ib()
@@ -355,12 +329,12 @@ class _FuzzyTimerService(Service):
 
 
 def lease_maintenance_service(
-        maintain_leases,
-        reactor,
-        last_run_path,
-        random,
-        interval_mean=None,
-        interval_range=None,
+    maintain_leases,
+    reactor,
+    last_run_path,
+    random,
+    interval_mean=None,
+    interval_range=None,
 ):
     """
     Get an ``IService`` which will maintain leases on ``root_node`` and any
@@ -400,6 +374,7 @@ def lease_maintenance_service(
                 (interval_mean + halfrange).total_seconds(),
             ),
         )
+
     # Rather than an all-or-nothing last-run time we probably eventually want
     # to have a more comprehensive record of the state when we were last
     # interrupted.  This would remove the unfortunate behavior of restarting
@@ -419,7 +394,6 @@ def lease_maintenance_service(
             initial_interval,
             timedelta(0),
         )
-
 
     return _FuzzyTimerService(
         SERVICE_NAME,
@@ -496,6 +470,7 @@ class NoopMaintenanceObserver(object):
     """
     A lease maintenance observer that does nothing.
     """
+
     def observe(self, sizes):
         pass
 
@@ -509,6 +484,7 @@ class MemoryMaintenanceObserver(object):
     """
     A lease maintenance observer that records observations in memory.
     """
+
     observed = attr.ib(default=attr.Factory(list))
     finished = attr.ib(default=False)
 
@@ -520,12 +496,12 @@ class MemoryMaintenanceObserver(object):
 
 
 def maintain_leases_from_root(
-        get_root_nodes,
-        storage_broker,
-        secret_holder,
-        min_lease_remaining,
-        progress,
-        get_now,
+    get_root_nodes,
+    storage_broker,
+    secret_holder,
+    min_lease_remaining,
+    progress,
+    get_now,
 ):
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
@@ -552,6 +528,7 @@ def maintain_leases_from_root(
 
     :return: A no-argument callable to perform the maintenance.
     """
+
     def visitor(visit_assets):
         return renew_leases(
             visit_assets,

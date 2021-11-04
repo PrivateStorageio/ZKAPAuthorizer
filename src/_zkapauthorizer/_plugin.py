@@ -18,77 +18,34 @@ Tahoe-LAFS.
 """
 
 import random
-from weakref import (
-    WeakValueDictionary,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
-from functools import (
-    partial,
-)
+from datetime import datetime, timedelta
+from functools import partial
+from weakref import WeakValueDictionary
 
 import attr
+from allmydata.client import _Client
+from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
+from allmydata.node import MissingConfigEntry
+from challenge_bypass_ristretto import SigningKey
+from twisted.internet.defer import succeed
+from twisted.logger import Logger
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from twisted.logger import (
-    Logger,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.defer import (
-    succeed,
-)
-
-from allmydata.interfaces import (
-    IFoolscapStoragePlugin,
-    IAnnounceableStorageServer,
-)
-from allmydata.node import (
-    MissingConfigEntry,
-)
-from allmydata.client import (
-    _Client,
-)
-from challenge_bypass_ristretto import (
-    SigningKey,
-)
-
-from .api import (
-    ZKAPAuthorizerStorageServer,
-    ZKAPAuthorizerStorageClient,
-)
-
-from .model import (
-    VoucherStore,
-)
-
-from .resource import (
-    from_configuration as resource_from_configuration,
-)
-from .storage_common import (
-    BYTES_PER_PASS,
-    get_configured_pass_value,
-)
-from .controller import (
-    get_redeemer,
-)
-from .spending import (
-    SpendingController,
-)
-
+from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
+from .controller import get_redeemer
 from .lease_maintenance import (
     SERVICE_NAME,
     lease_maintenance_service,
     maintain_leases_from_root,
 )
+from .model import VoucherStore
+from .resource import from_configuration as resource_from_configuration
+from .spending import SpendingController
+from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 
 _log = Logger()
+
 
 @implementer(IAnnounceableStorageServer)
 @attr.s
@@ -112,6 +69,7 @@ class ZKAPAuthorizer(object):
         forces different methods to use instance state to share a database
         connection.
     """
+
     name = attr.ib(default=u"privatestorageio-zkapauthz-v1")
     _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
 
@@ -120,14 +78,13 @@ class ZKAPAuthorizer(object):
         :return VoucherStore: The database for the given node.  At most one
             connection is made to the database per ``ZKAPAuthorizer`` instance.
         """
-        key =  node_config.get_config_path()
+        key = node_config.get_config_path()
         try:
             s = self._stores[key]
         except KeyError:
             s = VoucherStore.from_node_config(node_config, datetime.now)
             self._stores[key] = s
         return s
-
 
     def _get_redeemer(self, node_config, announcement, reactor):
         """
@@ -136,7 +93,6 @@ class ZKAPAuthorizer(object):
             the redeemer interface is stateless.
         """
         return get_redeemer(self.name, node_config, announcement, reactor)
-
 
     def get_storage_server(self, configuration, get_anonymous_storage_server):
         kwargs = configuration.copy()
@@ -163,7 +119,6 @@ class ZKAPAuthorizer(object):
             ),
         )
 
-
     def get_storage_client(self, node_config, announcement, get_rref):
         """
         Create an ``IStorageClient`` that submits ZKAPs with certain requests in
@@ -172,18 +127,18 @@ class ZKAPAuthorizer(object):
         ``node_config``.
         """
         from twisted.internet import reactor
+
         redeemer = self._get_redeemer(node_config, announcement, reactor)
         store = self._get_store(node_config)
         controller = SpendingController.for_store(
             tokens_to_passes=redeemer.tokens_to_passes,
             store=store,
-       )
+        )
         return ZKAPAuthorizerStorageClient(
             get_configured_pass_value(node_config),
             get_rref,
             controller.get,
         )
-
 
     def get_client_resource(self, node_config, reactor=None):
         """
@@ -203,15 +158,20 @@ class ZKAPAuthorizer(object):
 
 
 _init_storage = _Client.__dict__["init_storage"]
+
+
 def maintenance_init_storage(self, announceable_storage_servers):
     """
     A monkey-patched version of ``_Client.init_storage`` which also
     initializes the lease maintenance service.
     """
     from twisted.internet import reactor
+
     result = _init_storage(self, announceable_storage_servers)
     _maybe_attach_maintenance_service(reactor, self)
     return result
+
+
 _Client.init_storage = maintenance_init_storage
 
 
@@ -252,12 +212,12 @@ def _create_maintenance_service(reactor, node_config, client_node):
     :param allmydata.client._Client client_node: The client node the lease
         maintenance service will be attached to.
     """
+
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
 
-    from twisted.plugins.zkapauthorizer import (
-        storage_server,
-    )
+    from twisted.plugins.zkapauthorizer import storage_server
+
     store = storage_server._get_store(node_config)
 
     # Create the operation which performs the lease maintenance job when
@@ -283,7 +243,9 @@ def _create_maintenance_service(reactor, node_config, client_node):
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
-    last_run_path = FilePath(node_config.get_private_path(b"last-lease-maintenance-run"))
+    last_run_path = FilePath(
+        node_config.get_private_path(b"last-lease-maintenance-run")
+    )
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
         maintain_leases,

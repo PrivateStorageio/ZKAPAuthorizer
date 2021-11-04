@@ -17,178 +17,97 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
+
+from datetime import datetime
+from io import BytesIO
+from json import dumps
+from urllib import quote
 
 import attr
-
-from .._base64 import (
-    urlsafe_b64decode,
+from allmydata.client import config_from_string
+from aniso8601 import parse_datetime
+from fixtures import TempDir
+from hypothesis import given, note
+from hypothesis.strategies import (
+    binary,
+    builds,
+    datetimes,
+    dictionaries,
+    fixed_dictionaries,
+    integers,
+    just,
+    lists,
+    none,
+    one_of,
+    sampled_from,
+    text,
+    tuples,
 )
-
-from datetime import (
-    datetime,
-)
-from json import (
-    dumps,
-)
-from io import (
-    BytesIO,
-)
-from urllib import (
-    quote,
-)
-
-from testtools import (
-    TestCase,
-)
+from testtools import TestCase
+from testtools.content import text_content
 from testtools.matchers import (
-    MatchesStructure,
+    AfterPreprocessing,
+    AllMatch,
+    Always,
+    ContainsDict,
+    Equals,
+    GreaterThan,
+    HasLength,
+    Is,
+    IsInstance,
     MatchesAll,
     MatchesAny,
     MatchesPredicate,
-    AllMatch,
-    HasLength,
-    IsInstance,
-    ContainsDict,
-    AfterPreprocessing,
-    Equals,
-    Always,
-    GreaterThan,
-    Is,
+    MatchesStructure,
 )
-from testtools.twistedsupport import (
-    CaptureTwistedLogs,
-    succeeded,
-)
-from testtools.content import (
-    text_content,
-)
+from testtools.twistedsupport import CaptureTwistedLogs, succeeded
+from treq.testing import RequestTraversalAgent
+from twisted.internet.defer import Deferred, gatherResults, maybeDeferred
+from twisted.internet.task import Clock, Cooperator
+from twisted.python.filepath import FilePath
+from twisted.web.client import FileBodyProducer, readBody
+from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTHORIZED
+from twisted.web.http_headers import Headers
+from twisted.web.resource import IResource, getChildForRequest
 
-from aniso8601 import (
-    parse_datetime,
-)
-
-from fixtures import (
-    TempDir,
-)
-
-from hypothesis import (
-    given,
-    note,
-)
-from hypothesis.strategies import (
-    one_of,
-    none,
-    just,
-    fixed_dictionaries,
-    sampled_from,
-    lists,
-    integers,
-    binary,
-    text,
-    datetimes,
-    builds,
-    tuples,
-    dictionaries,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.defer import (
-    Deferred,
-    maybeDeferred,
-    gatherResults,
-)
-from twisted.internet.task import (
-    Cooperator,
-    Clock,
-)
-from twisted.web.http import (
-    OK,
-    UNAUTHORIZED,
-    NOT_FOUND,
-    BAD_REQUEST,
-    NOT_IMPLEMENTED,
-)
-from twisted.web.http_headers import (
-    Headers,
-)
-from twisted.web.resource import (
-    IResource,
-    getChildForRequest,
-)
-from twisted.web.client import (
-    FileBodyProducer,
-    readBody,
-)
-
-from treq.testing import (
-    RequestTraversalAgent,
-)
-
-from allmydata.client import (
-    config_from_string,
-)
-
-from .. import (
-    __version__ as zkapauthorizer_version,
-)
-
+from .. import __version__ as zkapauthorizer_version
+from .._base64 import urlsafe_b64decode
+from ..configutil import config_string_from_sections
 from ..model import (
-    Voucher,
-    Redeeming,
-    Redeemed,
     DoubleSpend,
-    Unpaid,
     Error,
+    Redeemed,
+    Redeeming,
+    Unpaid,
+    Voucher,
     VoucherStore,
     memory_connect,
 )
-from ..resource import (
-    NUM_TOKENS,
-    from_configuration,
-    get_token_count,
-)
-
-from ..pricecalculator import (
-    PriceCalculator,
-)
-from ..configutil import (
-    config_string_from_sections,
-)
-
+from ..pricecalculator import PriceCalculator
+from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
-    required_passes,
-    get_configured_pass_value,
-    get_configured_lease_duration,
     get_configured_allowed_public_keys,
+    get_configured_lease_duration,
+    get_configured_pass_value,
+    required_passes,
 )
-
+from .json import loads
+from .matchers import Provides, between, matches_response
 from .strategies import (
-    direct_tahoe_configs,
-    tahoe_configs,
-    client_unpaidredeemer_configurations,
+    api_auth_tokens,
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
-    client_nonredeemer_configurations,
     client_errorredeemer_configurations,
+    client_nonredeemer_configurations,
+    client_unpaidredeemer_configurations,
+    direct_tahoe_configs,
+    request_paths,
+    requests,
+    share_parameters,
+    tahoe_configs,
     unblinded_tokens,
     vouchers,
-    requests,
-    request_paths,
-    api_auth_tokens,
-    share_parameters,
-)
-from .matchers import (
-    Provides,
-    matches_response,
-    between,
-)
-from .json import (
-    loads,
 )
 
 TRANSIENT_ERROR = u"something went wrong, who knows what"
@@ -222,15 +141,14 @@ def not_vouchers():
     """
     return one_of(
         text().filter(
-            lambda t: (
-                not is_urlsafe_base64(t)
-            ),
+            lambda t: (not is_urlsafe_base64(t)),
         ),
         vouchers().map(
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
             # from the urlsafe-base64 alphabet.
-            lambda voucher: u"/" + voucher[1:],
+            lambda voucher: u"/"
+            + voucher[1:],
         ),
     )
 
@@ -254,16 +172,20 @@ def invalid_bodies():
     """
     return one_of(
         # The wrong key but the right kind of value.
-        fixed_dictionaries({
-            u"some-key": vouchers(),
-        }).map(dumps),
+        fixed_dictionaries(
+            {
+                u"some-key": vouchers(),
+            }
+        ).map(dumps),
         # The right key but the wrong kind of value.
-        fixed_dictionaries({
-            u"voucher": one_of(
-                integers(),
-                not_vouchers(),
-            ),
-        }).map(dumps),
+        fixed_dictionaries(
+            {
+                u"voucher": one_of(
+                    integers(),
+                    not_vouchers(),
+                ),
+            }
+        ).map(dumps),
         # Not even JSON
         binary().filter(is_not_json),
     )
@@ -369,6 +291,7 @@ class FromConfigurationTests(TestCase):
     """
     Tests for ``from_configuration``.
     """
+
     @given(tahoe_configs())
     def test_allowed_public_keys(self, get_config):
         """
@@ -393,6 +316,7 @@ class GetTokenCountTests(TestCase):
     """
     Tests for ``get_token_count``.
     """
+
     @given(one_of(none(), integers(min_value=16)))
     def test_get_token_count(self, token_count):
         """
@@ -405,13 +329,15 @@ class GetTokenCountTests(TestCase):
             token_config = {}
         else:
             expected_count = token_count
-            token_config = {
-                u"default-token-count": u"{}".format(expected_count)
-            }
+            token_config = {u"default-token-count": u"{}".format(expected_count)}
 
-        config_text = config_string_from_sections([{
-            u"storageclient.plugins." + plugin_name: token_config,
-        }])
+        config_text = config_string_from_sections(
+            [
+                {
+                    u"storageclient.plugins." + plugin_name: token_config,
+                }
+            ]
+        )
         node_config = config_from_string(
             self.useFixture(TempDir()).join(b"tahoe"),
             u"tub.port",
@@ -427,6 +353,7 @@ class ResourceTests(TestCase):
     """
     General tests for the resources exposed by the plugin.
     """
+
     @given(
         tahoe_configs(),
         request_paths(),
@@ -459,11 +386,15 @@ class ResourceTests(TestCase):
 
     @given(
         tahoe_configs(),
-        requests(sampled_from([
-            [b"unblinded-token"],
-            [b"voucher"],
-            [b"version"],
-        ])),
+        requests(
+            sampled_from(
+                [
+                    [b"unblinded-token"],
+                    [b"voucher"],
+                    [b"version"],
+                ]
+            )
+        ),
     )
     def test_reachable(self, get_config, request):
         """
@@ -534,10 +465,10 @@ class UnblindedTokenTests(TestCase):
     Tests relating to ``/unblinded-token`` as implemented by the
     ``_zkapauthorizer.resource`` module.
     """
+
     def setUp(self):
         super(UnblindedTokenTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
-
 
     @given(
         tahoe_configs(),
@@ -558,11 +489,15 @@ class UnblindedTokenTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        data = BytesIO(dumps({u"unblinded-tokens": list(
-            token.unblinded_token
-            for token
-            in unblinded_tokens
-        )}))
+        data = BytesIO(
+            dumps(
+                {
+                    u"unblinded-tokens": list(
+                        token.unblinded_token for token in unblinded_tokens
+                    )
+                }
+            )
+        )
 
         requesting = authorized_request(
             api_auth_token,
@@ -582,11 +517,7 @@ class UnblindedTokenTests(TestCase):
 
         self.assertThat(
             stored_tokens,
-            Equals(list(
-                token.unblinded_token
-                for token
-                in unblinded_tokens
-            )),
+            Equals(list(token.unblinded_token for token in unblinded_tokens)),
         )
 
     @given(
@@ -694,7 +625,9 @@ class UnblindedTokenTests(TestCase):
         maybe_extra_tokens(),
         text(max_size=64),
     )
-    def test_get_position(self, get_config, api_auth_token, voucher, extra_tokens, position):
+    def test_get_position(
+        self, get_config, api_auth_token, voucher, extra_tokens, position
+    ):
         """
         When the unblinded token collection receives a **GET** with a **position**
         query argument, it returns all unblinded tokens which sort greater
@@ -754,16 +687,21 @@ class UnblindedTokenTests(TestCase):
         integers(min_value=1, max_value=16),
         integers(min_value=1, max_value=128),
     )
-    def test_get_order_matches_use_order(self, get_config, api_auth_token, voucher, num_redemption_groups, extra_tokens):
+    def test_get_order_matches_use_order(
+        self, get_config, api_auth_token, voucher, num_redemption_groups, extra_tokens
+    ):
         """
         The first unblinded token returned in a response to a **GET** request is
         the first token to be used to authorize a storage request.
         """
+
         def after(d, f):
             new_d = Deferred()
+
             def f_and_continue(result):
                 maybeDeferred(f).chainDeferred(new_d)
                 return result
+
             d.addCallback(f_and_continue)
             return new_d
 
@@ -812,7 +750,8 @@ class UnblindedTokenTests(TestCase):
             gatherResults([getting_initial_tokens, getting_tokens_after]),
             succeeded(
                 MatchesPredicate(
-                    lambda (initial_tokens, tokens_after): initial_tokens[1:] == tokens_after,
+                    lambda (initial_tokens, tokens_after): initial_tokens[1:]
+                    == tokens_after,
                     u"initial, after (%s): initial[1:] != after",
                 ),
             ),
@@ -829,7 +768,9 @@ class UnblindedTokenTests(TestCase):
         ),
         datetimes(),
     )
-    def test_latest_lease_maintenance_spending(self, get_config, api_auth_token, size_observations, now):
+    def test_latest_lease_maintenance_spending(
+        self, get_config, api_auth_token, size_observations, now
+    ):
         """
         The most recently completed record of lease maintenance spending activity
         is reported in the response to a **GET** request.
@@ -862,18 +803,22 @@ class UnblindedTokenTests(TestCase):
         )
         self.assertThat(
             d,
-            succeeded(Equals({
-                "when": now.isoformat(),
-                "count": total,
-            })),
+            succeeded(
+                Equals(
+                    {
+                        "when": now.isoformat(),
+                        "count": total,
+                    }
+                )
+            ),
         )
 
 
 def succeeded_with_unblinded_tokens_with_matcher(
-        all_token_count,
-        match_spendable_token_count,
-        match_unblinded_tokens,
-        match_lease_maint_spending,
+    all_token_count,
+    match_spendable_token_count,
+    match_unblinded_tokens,
+    match_lease_maint_spending,
 ):
     """
     :return: A matcher which matches a Deferred which fires with a response
@@ -894,16 +839,19 @@ def succeeded_with_unblinded_tokens_with_matcher(
             AfterPreprocessing(
                 json_content,
                 succeeded(
-                    ContainsDict({
-                        u"total": Equals(all_token_count),
-                        u"spendable": match_spendable_token_count,
-                        u"unblinded-tokens": match_unblinded_tokens,
-                        u"lease-maintenance-spending": match_lease_maint_spending,
-                    }),
+                    ContainsDict(
+                        {
+                            u"total": Equals(all_token_count),
+                            u"spendable": match_spendable_token_count,
+                            u"unblinded-tokens": match_unblinded_tokens,
+                            u"lease-maintenance-spending": match_lease_maint_spending,
+                        }
+                    ),
                 ),
             ),
         ),
     )
+
 
 def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
     """
@@ -926,6 +874,7 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
         match_lease_maint_spending=matches_lease_maintenance_spending(),
     )
 
+
 def matches_lease_maintenance_spending():
     """
     :return: A matcher which matches the value of the
@@ -934,17 +883,21 @@ def matches_lease_maintenance_spending():
     """
     return MatchesAny(
         Is(None),
-        ContainsDict({
-            u"when": matches_iso8601_datetime(),
-            u"amount": matches_positive_integer(),
-        }),
+        ContainsDict(
+            {
+                u"when": matches_iso8601_datetime(),
+                u"amount": matches_positive_integer(),
+            }
+        ),
     )
+
 
 def matches_positive_integer():
     return MatchesAll(
         IsInstance(int),
         GreaterThan(0),
     )
+
 
 def matches_iso8601_datetime():
     """
@@ -959,16 +912,17 @@ def matches_iso8601_datetime():
         ),
     )
 
+
 class VoucherTests(TestCase):
     """
     Tests relating to ``/voucher`` as implemented by the
     ``_zkapauthorizer.resource`` module and its handling of
     vouchers.
     """
+
     def setUp(self):
         super(VoucherTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
-
 
     @given(tahoe_configs(), api_auth_tokens(), vouchers())
     def test_put_voucher(self, get_config, api_auth_token, voucher):
@@ -1067,7 +1021,6 @@ class VoucherTests(TestCase):
             ),
         )
 
-
     @given(tahoe_configs(), api_auth_tokens(), vouchers())
     def test_get_unknown_voucher(self, get_config, api_auth_token, voucher):
         """
@@ -1118,10 +1071,12 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 expected_tokens=Equals(count),
                 created=Equals(now),
-                state=Equals(Redeeming(
-                    started=now,
-                    counter=0,
-                )),
+                state=Equals(
+                    Redeeming(
+                        started=now,
+                        counter=0,
+                    )
+                ),
             ),
         )
 
@@ -1148,10 +1103,12 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 expected_tokens=Equals(count),
                 created=Equals(now),
-                state=Equals(Redeemed(
-                    finished=now,
-                    token_count=count,
-                )),
+                state=Equals(
+                    Redeemed(
+                        finished=now,
+                        token_count=count,
+                    )
+                ),
             ),
         )
 
@@ -1179,9 +1136,11 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 expected_tokens=Equals(count),
                 created=Equals(now),
-                state=Equals(DoubleSpend(
-                    finished=now,
-                )),
+                state=Equals(
+                    DoubleSpend(
+                        finished=now,
+                    )
+                ),
             ),
         )
 
@@ -1209,9 +1168,11 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 expected_tokens=Equals(count),
                 created=Equals(now),
-                state=Equals(Unpaid(
-                    finished=now,
-                )),
+                state=Equals(
+                    Unpaid(
+                        finished=now,
+                    )
+                ),
             ),
         )
 
@@ -1239,14 +1200,18 @@ class VoucherTests(TestCase):
                 number=Equals(voucher),
                 expected_tokens=Equals(count),
                 created=Equals(now),
-                state=Equals(Error(
-                    finished=now,
-                    details=TRANSIENT_ERROR,
-                )),
+                state=Equals(
+                    Error(
+                        finished=now,
+                        details=TRANSIENT_ERROR,
+                    )
+                ),
             ),
         )
 
-    def _test_get_known_voucher(self, config, api_auth_token, now, voucher, voucher_matcher):
+    def _test_get_known_voucher(
+        self, config, api_auth_token, now, voucher, voucher_matcher
+    ):
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
@@ -1321,21 +1286,22 @@ class VoucherTests(TestCase):
             api_auth_token,
             now,
             vouchers,
-            Equals({
-                u"vouchers": list(
-                    Voucher(
-                        number=voucher,
-                        expected_tokens=count,
-                        created=now,
-                        state=Redeemed(
-                            finished=now,
-                            token_count=count,
-                        ),
-                    ).marshal()
-                    for voucher
-                    in vouchers
-                ),
-            }),
+            Equals(
+                {
+                    u"vouchers": list(
+                        Voucher(
+                            number=voucher,
+                            expected_tokens=count,
+                            created=now,
+                            state=Redeemed(
+                                finished=now,
+                                token_count=count,
+                            ),
+                        ).marshal()
+                        for voucher in vouchers
+                    ),
+                }
+            ),
         )
 
     @given(
@@ -1344,7 +1310,9 @@ class VoucherTests(TestCase):
         datetimes(),
         lists(vouchers(), unique=True),
     )
-    def test_list_vouchers_transient_states(self, config, api_auth_token, now, vouchers):
+    def test_list_vouchers_transient_states(
+        self, config, api_auth_token, now, vouchers
+    ):
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
@@ -1355,23 +1323,26 @@ class VoucherTests(TestCase):
             api_auth_token,
             now,
             vouchers,
-            Equals({
-                u"vouchers": list(
-                    Voucher(
-                        number=voucher,
-                        expected_tokens=count,
-                        created=now,
-                        state=Unpaid(
-                            finished=now,
-                        ),
-                    ).marshal()
-                    for voucher
-                    in vouchers
-                ),
-            }),
+            Equals(
+                {
+                    u"vouchers": list(
+                        Voucher(
+                            number=voucher,
+                            expected_tokens=count,
+                            created=now,
+                            state=Unpaid(
+                                finished=now,
+                            ),
+                        ).marshal()
+                        for voucher in vouchers
+                    ),
+                }
+            ),
         )
 
-    def _test_list_vouchers(self, config, api_auth_token, now, vouchers, match_response_object):
+    def _test_list_vouchers(
+        self, config, api_auth_token, now, vouchers, match_response_object
+    ):
         add_api_token_to_config(
             # Hypothesis causes our test case instances to be re-used many
             # times between setUp and tearDown.  Avoid re-using the same
@@ -1434,13 +1405,17 @@ def mime_types(blacklist=None):
     """
     if blacklist is None:
         blacklist = set()
-    return tuples(
-        text(),
-        text(),
-    ).map(
-        b"/".join,
-    ).filter(
-        lambda content_type: content_type not in blacklist,
+    return (
+        tuples(
+            text(),
+            text(),
+        )
+        .map(
+            b"/".join,
+        )
+        .filter(
+            lambda content_type: content_type not in blacklist,
+        )
     )
 
 
@@ -1449,6 +1424,7 @@ class Request(object):
     """
     Represent some of the parameters of an HTTP request.
     """
+
     method = attr.ib()
     headers = attr.ib()
     data = attr.ib()
@@ -1460,23 +1436,25 @@ def bad_calculate_price_requests():
     ``/calculate-price`` endpoint.
     """
     good_methods = just(b"POST")
-    bad_methods = sampled_from([
-        b"GET",
-        b"HEAD",
-        b"PUT",
-        b"PATCH",
-        b"OPTIONS",
-        b"FOO",
-    ])
+    bad_methods = sampled_from(
+        [
+            b"GET",
+            b"HEAD",
+            b"PUT",
+            b"PATCH",
+            b"OPTIONS",
+            b"FOO",
+        ]
+    )
 
     good_headers = just({b"content-type": [b"application/json"]})
-    bad_headers = fixed_dictionaries({
-        b"content-type": mime_types(
-            blacklist={b"application/json"},
-        ).map(
-            lambda content_type: [content_type],
-        ),
-    })
+    bad_headers = fixed_dictionaries(
+        {
+            b"content-type": mime_types(blacklist={b"application/json"},).map(
+                lambda content_type: [content_type],
+            ),
+        }
+    )
 
     good_version = just(1)
     bad_version = one_of(
@@ -1495,20 +1473,26 @@ def bad_calculate_price_requests():
         lists(integers(max_value=-1), min_size=1),
     )
 
-    good_data = fixed_dictionaries({
-        u"version": good_version,
-        u"sizes": good_sizes,
-    }).map(dumps)
+    good_data = fixed_dictionaries(
+        {
+            u"version": good_version,
+            u"sizes": good_sizes,
+        }
+    ).map(dumps)
 
-    bad_data_version = fixed_dictionaries({
-        u"version": bad_version,
-        u"sizes": good_sizes,
-    }).map(dumps)
+    bad_data_version = fixed_dictionaries(
+        {
+            u"version": bad_version,
+            u"sizes": good_sizes,
+        }
+    ).map(dumps)
 
-    bad_data_sizes = fixed_dictionaries({
-        u"version": good_version,
-        u"sizes": bad_sizes,
-    }).map(dumps)
+    bad_data_sizes = fixed_dictionaries(
+        {
+            u"version": good_version,
+            u"sizes": bad_sizes,
+        }
+    ).map(dumps)
 
     bad_data_other = dictionaries(
         text(),
@@ -1537,13 +1521,8 @@ def bad_calculate_price_requests():
         fields[key] = value
         return fields
 
-    return sampled_from(
-        bad_choices,
-    ).flatmap(
-        lambda bad_choice: builds(
-            Request,
-            **merge(good_fields, *bad_choice)
-        ),
+    return sampled_from(bad_choices,).flatmap(
+        lambda bad_choice: builds(Request, **merge(good_fields, *bad_choice)),
     )
 
 
@@ -1552,6 +1531,7 @@ class CalculatePriceTests(TestCase):
     Tests relating to ``/calculate-price`` as implemented by the
     ``_zkapauthorizer.resource`` module.
     """
+
     url = b"http://127.0.0.1/calculate-price"
 
     @given(
@@ -1617,7 +1597,9 @@ class CalculatePriceTests(TestCase):
         api_auth_tokens(),
         lists(integers(min_value=0)),
     )
-    def test_calculated_price(self, encoding_params_and_get_config, api_auth_token, sizes):
+    def test_calculated_price(
+        self, encoding_params_and_get_config, api_auth_token, sizes
+    ):
         """
         A well-formed request returns the price in ZKAPs as an integer and the
         storage period (the minimum allowed) that they pay for.
@@ -1654,10 +1636,12 @@ class CalculatePriceTests(TestCase):
                     headers_matcher=application_json(),
                     body_matcher=AfterPreprocessing(
                         loads,
-                        Equals({
-                            u"price": expected_price,
-                            u"period": get_configured_lease_duration(config),
-                        }),
+                        Equals(
+                            {
+                                u"price": expected_price,
+                                u"period": get_configured_lease_duration(config),
+                            }
+                        ),
                     ),
                 ),
             ),
@@ -1705,10 +1689,12 @@ class _MatchResponse(object):
     _details = attr.ib(default=attr.Factory(dict))
 
     def match(self, response):
-        self._details.update({
-            u"code": response.code,
-            u"headers": response.headers.getAllRawHeaders(),
-        })
+        self._details.update(
+            {
+                u"code": response.code,
+                u"headers": response.headers.getAllRawHeaders(),
+            }
+        )
         return MatchesStructure(
             code=self.code,
             headers=self.headers,

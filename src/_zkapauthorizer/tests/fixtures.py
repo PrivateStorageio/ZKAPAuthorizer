@@ -16,41 +16,20 @@
 Common fixtures to let the test suite focus on application logic.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from base64 import (
-    b64encode,
-)
+from base64 import b64encode
 
 import attr
-
-from fixtures import (
-    Fixture,
-    TempDir,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.task import (
-    Clock,
-)
 from allmydata import __version__ as allmydata_version
-from allmydata.storage.server import (
-    StorageServer,
-)
+from allmydata.storage.server import StorageServer
+from fixtures import Fixture, TempDir
+from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
 
-from ..model import (
-    VoucherStore,
-    open_and_initialize,
-    memory_connect,
-)
-from ..controller import (
-    DummyRedeemer,
-    PaymentController,
-)
+from ..controller import DummyRedeemer, PaymentController
+from ..model import VoucherStore, memory_connect, open_and_initialize
+
 
 @attr.s
 class AnonymousStorageServer(Fixture):
@@ -67,6 +46,7 @@ class AnonymousStorageServer(Fixture):
     :ivar twisted.internet.task.Clock clock: The ``IReactorTime`` provider to
         supply to ``StorageServer`` for its time-checking needs.
     """
+
     clock = attr.ib()
 
     def _setUp(self):
@@ -82,9 +62,7 @@ class AnonymousStorageServer(Fixture):
             timeargs = {}
 
         self.storage_server = StorageServer(
-            self.tempdir.asBytesMode().path,
-            b"x" * 20,
-            **timeargs
+            self.tempdir.asBytesMode().path, b"x" * 20, **timeargs
         )
 
 
@@ -100,6 +78,7 @@ class TemporaryVoucherStore(Fixture):
 
     :ivar store: A newly created temporary store.
     """
+
     get_config = attr.ib()
     get_now = attr.ib()
 
@@ -122,6 +101,7 @@ class ConfiglessMemoryVoucherStore(Fixture):
     This is like ``TemporaryVoucherStore`` but faster because it skips the
     Tahoe-LAFS parts.
     """
+
     get_now = attr.ib()
     _public_key = attr.ib(default=b64encode(b"A" * 32).decode("utf-8"))
     redeemer = attr.ib(default=None, init=False)

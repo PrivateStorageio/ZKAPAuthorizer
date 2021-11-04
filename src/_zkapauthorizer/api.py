@@ -20,17 +20,10 @@ __all__ = [
     "ZKAPAuthorizer",
 ]
 
-from .storage_common import (
-    MorePassesRequired,
-)
-from ._storage_server import (
-    LeaseRenewalRequired,
-    ZKAPAuthorizerStorageServer,
-)
-from ._storage_client import (
-    ZKAPAuthorizerStorageClient,
-)
+from ._storage_client import ZKAPAuthorizerStorageClient
+from ._storage_server import LeaseRenewalRequired, ZKAPAuthorizerStorageServer
+from .storage_common import MorePassesRequired
 
-from ._plugin import (
-    ZKAPAuthorizer,
-)
+# This needs to be imported after the above, since it imports those things from here.
+# isort: split
+from ._plugin import ZKAPAuthorizer

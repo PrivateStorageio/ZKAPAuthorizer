@@ -16,56 +16,24 @@
 ``allmydata.storage``-related helpers shared across the test suite.
 """
 
-from functools import (
-    partial,
-)
-
-from os import (
-    SEEK_CUR,
-)
-from struct import (
-    pack,
-)
-
-from itertools import (
-    islice,
-)
+from functools import partial
+from itertools import islice
+from os import SEEK_CUR
+from struct import pack
 
 import attr
+from challenge_bypass_ristretto import RandomToken
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-
-from challenge_bypass_ristretto import (
-    RandomToken,
-)
-
-from .strategies import (
-    # Not really a strategy...
-    bytes_for_share,
-)
-
-from .privacypass import (
-    make_passes,
-)
-
-from ..model import (
-    NotEnoughTokens,
-    Pass,
-)
-
-from ..spending import (
-    IPassFactory,
-    PassGroup,
-)
+from ..model import NotEnoughTokens, Pass
+from ..spending import IPassFactory, PassGroup
+from .privacypass import make_passes
+from .strategies import bytes_for_share  # Not really a strategy...
 
 # Hard-coded in Tahoe-LAFS
 LEASE_INTERVAL = 60 * 60 * 24 * 31
+
 
 def cleanup_storage_server(storage_server):
     """
@@ -85,13 +53,13 @@ def cleanup_storage_server(storage_server):
 
 
 def write_toy_shares(
-        storage_server,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-        canary,
+    storage_server,
+    storage_index,
+    renew_secret,
+    cancel_secret,
+    sharenums,
+    size,
+    canary,
 ):
     """
     Write some immutable shares to the given storage server.
@@ -161,8 +129,7 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
                     # expiration timestamp
                     int(now + LEASE_INTERVAL),
                 )
-                for renew
-                in leases
+                for renew in leases
             ),
         )
 
@@ -175,11 +142,13 @@ def integer_passes(limit):
         passes.  Successive calls to the function return unique pass values.
     """
     counter = iter(range(limit))
+
     def get_passes(message, num_passes):
         result = list(islice(counter, num_passes))
         if len(result) < num_passes:
             raise NotEnoughTokens()
         return result
+
     return get_passes
 
 
@@ -196,8 +165,7 @@ def get_passes(message, count, signing_key):
     """
     return list(
         Pass(*pass_.split(u" "))
-        for pass_
-        in make_passes(
+        for pass_ in make_passes(
             signing_key,
             message,
             list(RandomToken.create() for n in range(count)),
@@ -252,6 +220,7 @@ class _PassFactory(object):
     :ivar list[int] returned: A list of passes which were given out but then
         returned via ``IPassGroup.reset``.
     """
+
     _get_passes = attr.ib()
 
     returned = attr.ib(default=attr.Factory(list), init=False)
@@ -291,7 +260,9 @@ class _PassFactory(object):
     def _mark_invalid(self, reason, passes):
         for p in passes:
             if p not in self.in_use:
-                raise ValueError("Pass {} cannot be invalid, it is not in use.".format(p))
+                raise ValueError(
+                    "Pass {} cannot be invalid, it is not in use.".format(p)
+                )
         self.invalid.update(dict.fromkeys(passes, reason))
         self.in_use.difference_update(passes)
 

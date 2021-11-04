@@ -16,121 +16,72 @@
 Tests for communication between the client and server components.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from fixtures import (
-    MonkeyPatch,
-)
-from testtools import (
-    TestCase,
-)
+from allmydata.storage.common import storage_index_to_dir
+from challenge_bypass_ristretto import random_signing_key
+from fixtures import MonkeyPatch
+from foolscap.referenceable import LocalReferenceable
+from hypothesis import assume, given
+from hypothesis.strategies import data as data_strategy
+from hypothesis.strategies import integers, lists, sets, tuples
+from testtools import TestCase
 from testtools.matchers import (
+    AfterPreprocessing,
     Always,
     Equals,
     HasLength,
     IsInstance,
-    AfterPreprocessing,
     MatchesStructure,
     raises,
 )
-from testtools.twistedsupport import (
-    succeeded,
-    failed,
-)
-from testtools.twistedsupport._deferred import (
-    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
-    # there appear to have stalled.
-    extract_result,
-)
+from testtools.twistedsupport import failed, succeeded
 
-from hypothesis import (
-    given,
-    assume,
-)
-from hypothesis.strategies import (
-    sets,
-    lists,
-    tuples,
-    integers,
-    data as data_strategy,
-)
+# I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
+# there appear to have stalled.
+from testtools.twistedsupport._deferred import extract_result
+from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
+from twisted.python.runtime import platform
 
-from twisted.python.runtime import (
-    platform,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.task import (
-    Clock,
-)
-
-from foolscap.referenceable import (
-    LocalReferenceable,
-)
-
-from challenge_bypass_ristretto import (
-    random_signing_key,
-)
-
-from allmydata.storage.common import (
-    storage_index_to_dir,
-)
-
-from .common import (
-    skipIf,
-)
-
-from .strategies import (
-    storage_indexes,
-    lease_renew_secrets,
-    lease_cancel_secrets,
-    write_enabler_secrets,
-    share_versions,
-    sharenums,
-    sharenum_sets,
-    sizes,
-    slot_test_and_write_vectors_for_shares,
-    posix_timestamps,
-    # Not really a strategy...
-    bytes_for_share,
-)
-from .matchers import (
-    matches_version_dictionary,
-)
-from .fixtures import (
-    AnonymousStorageServer,
-)
-from .storage_common import (
-    LEASE_INTERVAL,
-    cleanup_storage_server,
-    write_toy_shares,
-    whitebox_write_sparse_share,
-    get_passes,
-    privacypass_passes,
-    pass_factory,
-)
-from .foolscap import (
-    LocalRemote,
-)
+from .._storage_client import _encode_passes
 from ..api import (
     MorePassesRequired,
-    ZKAPAuthorizerStorageServer,
     ZKAPAuthorizerStorageClient,
+    ZKAPAuthorizerStorageServer,
 )
+from ..foolscap import ShareStat
 from ..storage_common import (
-    slot_testv_and_readv_and_writev_message,
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
+    slot_testv_and_readv_and_writev_message,
 )
-from .._storage_client import (
-    _encode_passes,
+from .common import skipIf
+from .fixtures import AnonymousStorageServer
+from .foolscap import LocalRemote
+from .matchers import matches_version_dictionary
+from .storage_common import (
+    LEASE_INTERVAL,
+    cleanup_storage_server,
+    get_passes,
+    pass_factory,
+    privacypass_passes,
+    whitebox_write_sparse_share,
+    write_toy_shares,
 )
-from ..foolscap import (
-    ShareStat,
+from .strategies import bytes_for_share  # Not really a strategy...
+from .strategies import (
+    lease_cancel_secrets,
+    lease_renew_secrets,
+    posix_timestamps,
+    share_versions,
+    sharenum_sets,
+    sharenums,
+    sizes,
+    slot_test_and_write_vectors_for_shares,
+    storage_indexes,
+    write_enabler_secrets,
 )
 
 
@@ -138,6 +89,7 @@ class RequiredPassesTests(TestCase):
     """
     Tests for ``required_passes``.
     """
+
     @given(integers(min_value=1), sets(integers(min_value=0)))
     def test_incorrect_types(self, bytes_per_pass, share_sizes):
         """
@@ -160,11 +112,7 @@ class RequiredPassesTests(TestCase):
         """
         actual = required_passes(
             bytes_per_pass,
-            list(
-                passes * bytes_per_pass
-                for passes
-                in expected_per_share
-            ),
+            list(passes * bytes_per_pass for passes in expected_per_share),
         )
         self.assertThat(
             actual,
@@ -191,13 +139,16 @@ class ShareTests(TestCase):
     :ivar pass_factory: An object which is responsible for creating passes
         which are used by these tests.
     """
+
     pass_value = 128 * 1024
 
     def setUp(self):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.signing_key = random_signing_key()
-        self.pass_factory = pass_factory(get_passes=privacypass_passes(self.signing_key))
+        self.pass_factory = pass_factory(
+            get_passes=privacypass_passes(self.signing_key)
+        )
 
         self.clock = Clock()
         self.anonymous_storage_server = self.useFixture(
@@ -246,7 +197,9 @@ class ShareTests(TestCase):
         size=sizes(),
         data=data_strategy(),
     )
-    def test_rejected_passes_reported(self, storage_index, renew_secret, cancel_secret, sharenums, size, data):
+    def test_rejected_passes_reported(
+        self, storage_index, renew_secret, cancel_secret, sharenums, size, data
+    ):
         """
         Any passes rejected by the storage server are reported with a
         ``MorePassesRequired`` exception sent to the client.
@@ -301,11 +254,7 @@ class ShareTests(TestCase):
             # it.
             self.local_remote_server.callRemote(
                 "allocate_buckets",
-                list(
-                    pass_.pass_text.encode("ascii")
-                    for pass_
-                    in all_passes
-                ),
+                list(pass_.pass_text.encode("ascii") for pass_ in all_passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -334,7 +283,9 @@ class ShareTests(TestCase):
         sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_create_immutable(self, storage_index, renew_secret, cancel_secret, sharenums, size):
+    def test_create_immutable(
+        self, storage_index, renew_secret, cancel_secret, sharenums, size
+    ):
         """
         Immutable share data created using *allocate_buckets* and methods of the
         resulting buckets can be read back using *get_buckets* and methods of
@@ -399,13 +350,11 @@ class ShareTests(TestCase):
             MatchesStructure(
                 issued=HasLength(anticipated_passes),
                 spent=HasLength(anticipated_passes),
-
                 returned=HasLength(0),
                 in_use=HasLength(0),
                 invalid=HasLength(0),
             ),
         )
-
 
     @given(
         storage_index=storage_indexes(),
@@ -416,13 +365,13 @@ class ShareTests(TestCase):
         size=sizes(),
     )
     def test_shares_already_exist(
-            self,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            existing_sharenums,
-            additional_sharenums,
-            size,
+        self,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        existing_sharenums,
+        additional_sharenums,
+        size,
     ):
         """
         When the remote *allocate_buckets* implementation reports that shares
@@ -493,7 +442,6 @@ class ShareTests(TestCase):
                 issued=HasLength(anticipated_passes),
                 spent=HasLength(expected_spent_passes),
                 returned=HasLength(expected_returned_passes),
-
                 in_use=HasLength(0),
                 invalid=HasLength(0),
             ),
@@ -506,7 +454,9 @@ class ShareTests(TestCase):
         sharenums=sharenum_sets(),
         size=sizes(),
     )
-    def test_add_lease(self, storage_index, renew_secrets, cancel_secret, sharenums, size):
+    def test_add_lease(
+        self, storage_index, renew_secrets, cancel_secret, sharenums, size
+    ):
         """
         A lease can be added to an existing immutable share.
         """
@@ -541,7 +491,9 @@ class ShareTests(TestCase):
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
-    def _stat_shares_immutable_test(self, storage_index, sharenum, size, when, leases, write_shares):
+    def _stat_shares_immutable_test(
+        self, storage_index, sharenum, size, when, leases, write_shares
+    ):
         # Hypothesis causes our storage server to be used many times.  Clean
         # up between iterations.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -579,12 +531,14 @@ class ShareTests(TestCase):
         finally:
             patch.cleanUp()
 
-        expected = [{
-            sharenum: ShareStat(
-                size=size,
-                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
-            ),
-        }]
+        expected = [
+            {
+                sharenum: ShareStat(
+                    size=size,
+                    lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
+                ),
+            }
+        ]
         self.assertThat(
             self.client.stat_shares([storage_index]),
             succeeded(Equals(expected)),
@@ -599,7 +553,9 @@ class ShareTests(TestCase):
         when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True),
     )
-    def test_stat_shares_immutable(self, storage_index, renew_secret, cancel_secret, sharenum, size, when, leases):
+    def test_stat_shares_immutable(
+        self, storage_index, renew_secret, cancel_secret, sharenum, size, when, leases
+    ):
         """
         Size and lease information about immutable shares can be retrieved from a
         storage server.
@@ -629,7 +585,9 @@ class ShareTests(TestCase):
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
         version=share_versions(),
     )
-    def test_stat_shares_immutable_wrong_version(self, storage_index, sharenum, size, when, leases, version):
+    def test_stat_shares_immutable_wrong_version(
+        self, storage_index, sharenum, size, when, leases, version
+    ):
         """
         If a share file with an unexpected version is found, ``stat_shares``
         declines to offer a result (by raising ``ValueError``).
@@ -674,7 +632,9 @@ class ShareTests(TestCase):
         # Encode our knowledge of the share header format and size right here...
         position=integers(min_value=0, max_value=11),
     )
-    def test_stat_shares_truncated_file(self, storage_index, sharenum, size, when, version, position):
+    def test_stat_shares_truncated_file(
+        self, storage_index, sharenum, size, when, version, position
+    ):
         """
         If a share file is truncated in the middle of the header,
         ``stat_shares`` declines to offer a result (by raising
@@ -713,8 +673,10 @@ class ShareTests(TestCase):
             ),
         )
 
-
-    @skipIf(platform.isWindows(), "Creating large files on Windows (no sparse files) is too slow")
+    @skipIf(
+        platform.isWindows(),
+        "Creating large files on Windows (no sparse files) is too slow",
+    )
     @given(
         storage_index=storage_indexes(),
         sharenum=sharenums(),
@@ -722,7 +684,9 @@ class ShareTests(TestCase):
         when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
     )
-    def test_stat_shares_immutable_large(self, storage_index, sharenum, size, when, leases):
+    def test_stat_shares_immutable_large(
+        self, storage_index, sharenum, size, when, leases
+    ):
         """
         Size and lease information about very large immutable shares can be
         retrieved from a storage server.
@@ -731,6 +695,7 @@ class ShareTests(TestCase):
         share placement and layout.  This is necessary to avoid having to
         write real multi-gigabyte files to exercise the behavior.
         """
+
         def write_shares(storage_server, storage_index, sharenums, size, canary):
             sharedir = FilePath(storage_server.sharedir).preauthChild(
                 # storage_index_to_dir likes to return multiple segments
@@ -768,7 +733,9 @@ class ShareTests(TestCase):
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
         when=posix_timestamps(),
     )
-    def test_stat_shares_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares, when):
+    def test_stat_shares_mutable(
+        self, storage_index, secrets, test_and_write_vectors_for_shares, when
+    ):
         """
         Size and lease information about mutable shares can be retrieved from a
         storage server.
@@ -789,8 +756,7 @@ class ShareTests(TestCase):
                     secrets=secrets,
                     tw_vectors={
                         k: v.for_call()
-                        for (k, v)
-                        in test_and_write_vectors_for_shares.items()
+                        for (k, v) in test_and_write_vectors_for_shares.items()
                     },
                     r_vector=[],
                 ),
@@ -803,22 +769,22 @@ class ShareTests(TestCase):
             u"Server rejected a write to a new mutable slot",
         )
 
-        expected = [{
-            sharenum: ShareStat(
-                size=get_implied_data_length(
-                    vectors.write_vector,
-                    vectors.new_length,
-                ),
-                lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
-            )
-            for (sharenum, vectors)
-            in test_and_write_vectors_for_shares.items()
-        }]
+        expected = [
+            {
+                sharenum: ShareStat(
+                    size=get_implied_data_length(
+                        vectors.write_vector,
+                        vectors.new_length,
+                    ),
+                    lease_expiration=int(self.clock.seconds() + LEASE_INTERVAL),
+                )
+                for (sharenum, vectors) in test_and_write_vectors_for_shares.items()
+            }
+        ]
         self.assertThat(
             self.client.stat_shares([storage_index]),
             succeeded(Equals(expected)),
         )
-
 
     @skipIf(
         platform.isWindows(),
@@ -831,7 +797,9 @@ class ShareTests(TestCase):
         sharenum=sharenums(),
         size=sizes(),
     )
-    def test_advise_corrupt_share(self, storage_index, renew_secret, cancel_secret, sharenum, size):
+    def test_advise_corrupt_share(
+        self, storage_index, renew_secret, cancel_secret, sharenum, size
+    ):
         """
         An advisory of corruption in a share can be sent to the server.
         """
@@ -873,7 +841,9 @@ class ShareTests(TestCase):
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
-    def test_create_mutable(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_create_mutable(
+        self, storage_index, secrets, test_and_write_vectors_for_shares
+    ):
         """
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
@@ -888,8 +858,7 @@ class ShareTests(TestCase):
                 secrets=secrets,
                 tw_vectors={
                     k: v.for_call()
-                    for (k, v)
-                    in test_and_write_vectors_for_shares.items()
+                    for (k, v) in test_and_write_vectors_for_shares.items()
                 },
                 r_vector=[],
             ),
@@ -906,7 +875,9 @@ class ShareTests(TestCase):
         )
         # Now we can read it back without spending any more passes.
         before_passes = len(self.pass_factory.issued)
-        assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares)
+        assert_read_back_data(
+            self, storage_index, secrets, test_and_write_vectors_for_shares
+        )
         after_passes = len(self.pass_factory.issued)
         self.assertThat(
             before_passes,
@@ -922,7 +893,9 @@ class ShareTests(TestCase):
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
-    def test_mutable_rewrite_preserves_lease(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_mutable_rewrite_preserves_lease(
+        self, storage_index, secrets, test_and_write_vectors_for_shares
+    ):
         """
         When mutable share data is rewritten using
         *slot_testv_and_readv_and_writev* any leases on the corresponding slot
@@ -935,8 +908,9 @@ class ShareTests(TestCase):
         def leases():
             return list(
                 lease.to_mutable_data()
-                for lease
-                in self.anonymous_storage_server.get_slot_leases(storage_index)
+                for lease in self.anonymous_storage_server.get_slot_leases(
+                    storage_index
+                )
             )
 
         def write():
@@ -945,8 +919,7 @@ class ShareTests(TestCase):
                 secrets=secrets,
                 tw_vectors={
                     k: v.for_call()
-                    for (k, v)
-                    in test_and_write_vectors_for_shares.items()
+                    for (k, v) in test_and_write_vectors_for_shares.items()
                 },
                 r_vector=[],
             )
@@ -985,15 +958,15 @@ class ShareTests(TestCase):
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_rewrite_renews_expired_lease(
-            self,
-            storage_index,
-            when,
-            sharenum,
-            size,
-            write_enabler,
-            renew_secret,
-            cancel_secret,
-            test_and_write_vectors_for_shares,
+        self,
+        storage_index,
+        when,
+        sharenum,
+        size,
+        write_enabler,
+        renew_secret,
+        cancel_secret,
+        test_and_write_vectors_for_shares,
     ):
         """
         When mutable share data with an expired lease is rewritten using
@@ -1013,8 +986,7 @@ class ShareTests(TestCase):
                 secrets=secrets,
                 tw_vectors={
                     k: v.for_call()
-                    for (k, v)
-                    in test_and_write_vectors_for_shares.items()
+                    for (k, v) in test_and_write_vectors_for_shares.items()
                 },
                 r_vector=[],
             )
@@ -1038,17 +1010,23 @@ class ShareTests(TestCase):
         # marked as expiring one additional lease period into the future.
         self.assertThat(
             self.server.remote_stat_shares([storage_index]),
-            Equals([{
-                num: ShareStat(
-                    size=get_implied_data_length(
-                        test_and_write_vectors_for_shares[num].write_vector,
-                        test_and_write_vectors_for_shares[num].new_length,
-                    ),
-                    lease_expiration=int(self.clock.seconds() + self.server.LEASE_PERIOD.total_seconds()),
-                )
-                for num
-                in test_and_write_vectors_for_shares
-            }]),
+            Equals(
+                [
+                    {
+                        num: ShareStat(
+                            size=get_implied_data_length(
+                                test_and_write_vectors_for_shares[num].write_vector,
+                                test_and_write_vectors_for_shares[num].new_length,
+                            ),
+                            lease_expiration=int(
+                                self.clock.seconds()
+                                + self.server.LEASE_PERIOD.total_seconds()
+                            ),
+                        )
+                        for num in test_and_write_vectors_for_shares
+                    }
+                ]
+            ),
         )
 
     @given(
@@ -1060,7 +1038,9 @@ class ShareTests(TestCase):
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
-    def test_client_cannot_control_lease_behavior(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_client_cannot_control_lease_behavior(
+        self, storage_index, secrets, test_and_write_vectors_for_shares
+    ):
         """
         If the client passes ``renew_leases`` to *slot_testv_and_readv_and_writev*
         it fails with ``TypeError``, no lease is updated, and no share data is
@@ -1087,11 +1067,7 @@ class ShareTests(TestCase):
             # secrets
             secrets,
             # tw_vectors
-            {
-                k: v.for_call()
-                for (k, v)
-                in test_and_write_vectors_for_shares.items()
-            },
+            {k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()},
             # r_vector
             [],
             # add_leases
@@ -1116,8 +1092,7 @@ class ShareTests(TestCase):
             shares=None,
             r_vector=list(
                 list(map(write_vector_to_read_vector, vector.write_vector))
-                for vector
-                in test_and_write_vectors_for_shares.values()
+                for vector in test_and_write_vectors_for_shares.values()
             ),
         )
         self.expectThat(
@@ -1134,7 +1109,9 @@ class ShareTests(TestCase):
         )
 
 
-def assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_for_shares):
+def assert_read_back_data(
+    self, storage_index, secrets, test_and_write_vectors_for_shares
+):
     """
     Assert that the data written by ``test_and_write_vectors_for_shares`` can
     be read back from ``storage_index``.
@@ -1150,22 +1127,17 @@ def assert_read_back_data(self, storage_index, secrets, test_and_write_vectors_f
     # Create a buffer and pile up all the write operations in it.
     # This lets us make correct assertions about overlapping writes.
     for sharenum, vectors in test_and_write_vectors_for_shares.items():
-        length = max(
-            offset + len(data)
-            for (offset, data)
-            in vectors.write_vector
-        )
+        length = max(offset + len(data) for (offset, data) in vectors.write_vector)
         expected = b"\x00" * length
         for (offset, data) in vectors.write_vector:
-            expected = expected[:offset] + data + expected[offset + len(data):]
+            expected = expected[:offset] + data + expected[offset + len(data) :]
         if vectors.new_length is not None and vectors.new_length < length:
-            expected = expected[:vectors.new_length]
+            expected = expected[: vectors.new_length]
 
         expected_result = list(
             # Get the expected value out of our scratch buffer.
-            expected[offset:offset + len(data)]
-            for (offset, data)
-            in vectors.write_vector
+            expected[offset : offset + len(data)]
+            for (offset, data) in vectors.write_vector
         )
 
         _, single_read = extract_result(

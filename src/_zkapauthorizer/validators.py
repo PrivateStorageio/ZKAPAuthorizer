@@ -16,9 +16,8 @@
 This module implements validators for ``attrs``-defined attributes.
 """
 
-from base64 import (
-    b64decode,
-)
+from base64 import b64decode
+
 
 def is_base64_encoded(b64decode=b64decode):
     def validate_is_base64_encoded(inst, attr, value):
@@ -31,7 +30,9 @@ def is_base64_encoded(b64decode=b64decode):
                     value=value,
                 ),
             )
+
     return validate_is_base64_encoded
+
 
 def has_length(expected):
     def validate_has_length(inst, attr, value):
@@ -43,7 +44,9 @@ def has_length(expected):
                     actual=len(value),
                 ),
             )
+
     return validate_has_length
+
 
 def greater_than(expected):
     def validate_relation(inst, attr, value):
@@ -57,4 +60,5 @@ def greater_than(expected):
                 actual=value,
             ),
         )
+
     return validate_relation

@@ -16,8 +16,6 @@
 A drop-in to supply plugins to the Twisted plugin system.
 """
 
-from _zkapauthorizer.api import (
-    ZKAPAuthorizer,
-)
+from _zkapauthorizer.api import ZKAPAuthorizer
 
 storage_server = ZKAPAuthorizer()

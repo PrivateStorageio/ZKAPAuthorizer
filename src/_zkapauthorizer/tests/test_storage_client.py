@@ -16,91 +16,48 @@
 Tests for ``_zkapauthorizer._storage_client``.
 """
 
-from __future__ import (
-    division,
-)
+from __future__ import division
 
-from functools import (
-    partial,
-)
+from functools import partial
 
-from testtools import (
-    TestCase,
-)
+from allmydata.client import config_from_string
+from hypothesis import given
+from hypothesis.strategies import integers, sampled_from, sets
+from testtools import TestCase
 from testtools.matchers import (
-    Always,
-    Is,
-    Equals,
     AfterPreprocessing,
-    MatchesStructure,
-    HasLength,
-    MatchesAll,
     AllMatch,
+    Always,
+    Equals,
+    HasLength,
+    Is,
     IsInstance,
+    MatchesAll,
+    MatchesStructure,
 )
-from testtools.twistedsupport import (
-    succeeded,
-    failed,
-)
+from testtools.twistedsupport import failed, succeeded
+from twisted.internet.defer import fail, succeed
 
-from hypothesis import (
-    given,
-)
-from hypothesis.strategies import (
-    sampled_from,
-    integers,
-    sets,
-)
-
-from twisted.internet.defer import (
-    succeed,
-    fail,
-)
-
-from allmydata.client import (
-    config_from_string,
-)
-
-
-from ..api import (
-    MorePassesRequired,
-)
-from ..model import (
-    NotEnoughTokens,
-)
+from .._storage_client import call_with_passes
+from .._storage_server import _ValidationResult
+from ..api import MorePassesRequired
+from ..model import NotEnoughTokens
 from ..storage_common import (
+    get_configured_allowed_public_keys,
+    get_configured_pass_value,
     get_configured_shares_needed,
     get_configured_shares_total,
-    get_configured_pass_value,
-    get_configured_allowed_public_keys,
 )
-from .._storage_client import (
-    call_with_passes,
-)
-
-from .._storage_server import (
-    _ValidationResult,
-)
-from .matchers import (
-    even,
-    odd,
-    raises,
-)
-from .strategies import (
-    pass_counts,
-    dummy_ristretto_keys,
-)
-from .storage_common import (
-    pass_factory,
-    integer_passes,
-)
-
+from .matchers import even, odd, raises
+from .storage_common import integer_passes, pass_factory
+from .strategies import dummy_ristretto_keys, pass_counts
 
 
 class GetConfiguredValueTests(TestCase):
     """
     Tests for helpers for reading certain configuration values.
     """
+
     @given(integers(min_value=1, max_value=255))
     def test_get_configured_shares_needed(self, expected):
         """
@@ -115,7 +72,9 @@ class GetConfiguredValueTests(TestCase):
 shares.needed = {}
 shares.happy = 5
 shares.total = 10
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -137,7 +96,9 @@ shares.total = 10
 shares.needed = 5
 shares.happy = 5
 shares.total = {}
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -163,7 +124,9 @@ shares.total = 10
 
 [storageclient.plugins.privatestorageio-zkapauthz-v1]
 pass-value={}
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -189,7 +152,9 @@ shares.total = 10
 
 [storageclient.plugins.privatestorageio-zkapauthz-v1]
 allowed-public-keys = {}
-""".format(",".join(expected)),
+""".format(
+                ",".join(expected)
+            ),
         )
 
         self.assertThat(
@@ -202,6 +167,7 @@ class CallWithPassesTests(TestCase):
     """
     Tests for ``call_with_passes``.
     """
+
     @given(pass_counts())
     def test_success_result(self, num_passes):
         """
@@ -321,7 +287,9 @@ class CallWithPassesTests(TestCase):
         def reject_even_pass_values(group):
             passes = group.passes
             good_passes = list(idx for (idx, p) in enumerate(passes) if p % 2)
-            bad_passes = list(idx for (idx, p) in enumerate(passes) if idx not in good_passes)
+            bad_passes = list(
+                idx for (idx, p) in enumerate(passes) if idx not in good_passes
+            )
             if len(good_passes) < num_passes:
                 _ValidationResult(
                     valid=good_passes,
@@ -463,11 +431,14 @@ class CallWithPassesTests(TestCase):
             ),
         )
 
+
 def reset(group):
     group.reset()
 
+
 def spend(group):
     group.mark_spent()
+
 
 def invalidate(group):
     group.mark_invalid(u"reason")
@@ -480,6 +451,7 @@ class PassFactoryTests(TestCase):
     It is unfortunate that this isn't the same test suite as
     ``test_spending.PassGroupTests``.
     """
+
     @given(pass_counts(), pass_counts())
     def test_returned_passes_reused(self, num_passes_a, num_passes_b):
         """

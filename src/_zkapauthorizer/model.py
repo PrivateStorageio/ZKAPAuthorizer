@@ -17,59 +17,26 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from functools import (
-    wraps,
-)
-from json import (
-    loads,
-    dumps,
-)
-from datetime import (
-    datetime,
-)
-from zope.interface import (
-    Interface,
-    implementer,
-)
-
-from sqlite3 import (
-    OperationalError,
-    connect as _connect,
-)
+from datetime import datetime
+from functools import wraps
+from json import dumps, loads
+from sqlite3 import OperationalError
+from sqlite3 import connect as _connect
 
 import attr
+from aniso8601 import parse_datetime as _parse_datetime
+from twisted.logger import Logger
+from twisted.python.filepath import FilePath
+from zope.interface import Interface, implementer
 
-from aniso8601 import (
-    parse_datetime as _parse_datetime,
-)
-from twisted.logger import (
-    Logger,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-
-from ._base64 import (
-    urlsafe_b64decode,
-)
-
-from .validators import (
-    is_base64_encoded,
-    has_length,
-    greater_than,
-)
-
+from ._base64 import urlsafe_b64decode
+from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
-    pass_value_attribute,
     get_configured_pass_value,
+    pass_value_attribute,
     required_passes,
 )
-
-from .schema import (
-    get_schema_version,
-    get_schema_upgrades,
-    run_schema_upgrades,
-)
+from .validators import greater_than, has_length, is_base64_encoded
 
 
 def parse_datetime(s, **kw):
@@ -89,6 +56,7 @@ class ILeaseMaintenanceObserver(Interface):
     An object which is interested in receiving events related to the progress
     of lease maintenance activity.
     """
+
     def observe(sizes):
         """
         Observe some shares encountered during lease maintenance.
@@ -106,6 +74,7 @@ class StoreOpenError(Exception):
     """
     There was a problem opening the underlying data store.
     """
+
     def __init__(self, reason):
         self.reason = reason
 
@@ -118,6 +87,7 @@ class NotEnoughTokens(Exception):
 
 
 CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
+
 
 def open_and_initialize(path, connect=None):
     """
@@ -204,12 +174,14 @@ def with_cursor(f):
     normally then the transaction will be committed.  Otherwise, the
     transaction will be rolled back.
     """
+
     @wraps(f)
     def with_cursor(self, *a, **kw):
         with self._connection:
             cursor = self._connection.cursor()
             cursor.execute("BEGIN IMMEDIATE TRANSACTION")
             return f(self, cursor, *a, **kw)
+
     return with_cursor
 
 
@@ -236,6 +208,7 @@ class VoucherStore(object):
     :ivar now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
     """
+
     _log = Logger()
 
     pass_value = pass_value_attribute()
@@ -339,11 +312,7 @@ class VoucherStore(object):
                 voucher=voucher,
                 counter=counter,
             )
-            tokens = list(
-                RandomToken(token_value)
-                for (token_value,)
-                in rows
-            )
+            tokens = list(RandomToken(token_value) for (token_value,) in rows)
         else:
             tokens = get_tokens()
             self._log.info(
@@ -356,17 +325,13 @@ class VoucherStore(object):
                 """
                 INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
                 """,
-                (voucher, expected_tokens, self.now())
+                (voucher, expected_tokens, self.now()),
             )
             cursor.executemany(
                 """
                 INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
                 """,
-                list(
-                    (voucher, counter, token.token_value)
-                    for token
-                    in tokens
-                ),
+                list((voucher, counter, token.token_value) for token in tokens),
             )
         return tokens
 
@@ -387,11 +352,7 @@ class VoucherStore(object):
         )
         refs = cursor.fetchall()
 
-        return list(
-            Voucher.from_row(row)
-            for row
-            in refs
-        )
+        return list(Voucher.from_row(row) for row in refs)
 
     def _insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
         """
@@ -401,11 +362,7 @@ class VoucherStore(object):
             """
             INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
             """,
-            list(
-                (token, group_id)
-                for token
-                in unblinded_tokens
-            ),
+            list((token, group_id) for token in unblinded_tokens),
         )
 
     @with_cursor
@@ -422,7 +379,9 @@ class VoucherStore(object):
         self._insert_unblinded_tokens(cursor, unblinded_tokens, group_id)
 
     @with_cursor
-    def insert_unblinded_tokens_for_voucher(self, cursor, voucher, public_key, unblinded_tokens, completed, spendable):
+    def insert_unblinded_tokens_for_voucher(
+        self, cursor, voucher, public_key, unblinded_tokens, completed, spendable
+    ):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -442,7 +401,7 @@ class VoucherStore(object):
         :param bool spendable: ``True`` if it should be possible to spend the
             inserted tokens, ``False`` otherwise.
         """
-        if  completed:
+        if completed:
             voucher_state = u"redeemed"
         else:
             voucher_state = u"pending"
@@ -488,15 +447,13 @@ class VoucherStore(object):
             ),
         )
         if cursor.rowcount == 0:
-            raise ValueError("Cannot insert tokens for unknown voucher; add voucher first")
+            raise ValueError(
+                "Cannot insert tokens for unknown voucher; add voucher first"
+            )
 
         self._insert_unblinded_tokens(
             cursor,
-            list(
-                t.unblinded_token
-                for t
-                in unblinded_tokens
-            ),
+            list(t.unblinded_token for t in unblinded_tokens),
             group_id,
         )
 
@@ -524,7 +481,7 @@ class VoucherStore(object):
                 FROM [vouchers]
                 WHERE [number] = ?
                 """,
-                (voucher,)
+                (voucher,),
             )
             rows = cursor.fetchall()
             if len(rows) == 0:
@@ -584,11 +541,7 @@ class VoucherStore(object):
             """,
             texts,
         )
-        return list(
-            UnblindedToken(t)
-            for (t,)
-            in texts
-        )
+        return list(UnblindedToken(t) for (t,) in texts)
 
     @with_cursor
     def count_unblinded_tokens(self, cursor):
@@ -661,11 +614,7 @@ class VoucherStore(object):
             """
             INSERT INTO [invalid-unblinded-tokens] VALUES (?, ?)
             """,
-            list(
-                (token.unblinded_token, reason)
-                for token
-                in unblinded_tokens
-            ),
+            list((token.unblinded_token, reason) for token in unblinded_tokens),
         )
         cursor.execute(
             """
@@ -784,6 +733,7 @@ class LeaseMaintenance(object):
         objects, the database row id that corresponds to the started run.
         This is used to make sure future updates go to the right row.
     """
+
     _pass_value = pass_value_attribute()
     _now = attr.ib()
     _connection = attr.ib()
@@ -854,6 +804,7 @@ class LeaseMaintenanceActivity(object):
 # x = store.get_latest_lease_maintenance_activity()
 # xs.started, xs.passes_required, xs.finished
 
+
 @attr.s(frozen=True)
 class UnblindedToken(object):
     """
@@ -867,6 +818,7 @@ class UnblindedToken(object):
         ``challenge_bypass_ristretto.UnblindedToken`` using that class's
         ``decode_base64`` method.
     """
+
     unblinded_token = attr.ib(
         validator=attr.validators.and_(
             attr.validators.instance_of(unicode),
@@ -888,6 +840,7 @@ class Pass(object):
         text should be kept secret.  If pass text is divulged to third-parties
         the anonymity property may be compromised.
     """
+
     preimage = attr.ib(
         validator=attr.validators.and_(
             attr.validators.instance_of(unicode),
@@ -915,6 +868,7 @@ class RandomToken(object):
     :ivar unicode token_value: The base64-encoded representation of the random
         token.
     """
+
     token_value = attr.ib(
         validator=attr.validators.and_(
             attr.validators.instance_of(unicode),
@@ -941,6 +895,7 @@ class Pending(object):
     :ivar int counter: The number of partial redemptions which have been
         successfully performed for the voucher.
     """
+
     counter = _counter_attribute()
 
     def should_start_redemption(self):
@@ -960,6 +915,7 @@ class Redeeming(object):
     state is **pending** but for which there is a redemption operation in
     progress.
     """
+
     started = attr.ib(validator=attr.validators.instance_of(datetime))
     counter = _counter_attribute()
 
@@ -984,6 +940,7 @@ class Redeemed(object):
 
     :ivar int token_count: The number of tokens the voucher was redeemed for.
     """
+
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
 
@@ -1019,6 +976,7 @@ class Unpaid(object):
     state is **pending** but the most recent redemption attempt has failed due
     to lack of payment.
     """
+
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
 
     def should_start_redemption(self):
@@ -1038,6 +996,7 @@ class Error(object):
     state is **pending** but the most recent redemption attempt has failed due
     to an error that is not handled by any other part of the system.
     """
+
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
     details = attr.ib(validator=attr.validators.instance_of(unicode))
 
@@ -1070,6 +1029,7 @@ class Voucher(object):
         an instance of ``Pending``, ``Redeeming``, ``Redeemed``,
         ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
+
     number = attr.ib(
         validator=attr.validators.and_(
             attr.validators.instance_of(unicode),
@@ -1094,14 +1054,16 @@ class Voucher(object):
 
     state = attr.ib(
         default=Pending(counter=0),
-        validator=attr.validators.instance_of((
-            Pending,
-            Redeeming,
-            Redeemed,
-            DoubleSpend,
-            Unpaid,
-            Error,
-        )),
+        validator=attr.validators.instance_of(
+            (
+                Pending,
+                Redeeming,
+                Redeemed,
+                DoubleSpend,
+                Unpaid,
+                Error,
+            )
+        ),
     )
 
     @classmethod
@@ -1140,7 +1102,6 @@ class Voucher(object):
         version = values.pop(u"version")
         return getattr(cls, "from_json_v{}".format(version))(values)
 
-
     @classmethod
     def from_json_v1(cls, values):
         state_json = values[u"state"]
@@ -1176,18 +1137,17 @@ class Voucher(object):
         return cls(
             number=values[u"number"],
             expected_tokens=values[u"expected-tokens"],
-            created=None if values[u"created"] is None else parse_datetime(values[u"created"]),
+            created=None
+            if values[u"created"] is None
+            else parse_datetime(values[u"created"]),
             state=state,
         )
-
 
     def to_json(self):
         return dumps(self.marshal())
 
-
     def marshal(self):
         return self.to_json_v1()
-
 
     def to_json_v1(self):
         state = self.state.to_json_v1()

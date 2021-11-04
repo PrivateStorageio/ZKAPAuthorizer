@@ -16,15 +16,9 @@
 Eliot field, message, and action definitions for ZKAPAuthorizer.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from eliot import (
-    Field,
-    MessageType,
-    ActionType,
-)
+from eliot import ActionType, Field, MessageType
 
 PRIVACYPASS_MESSAGE = Field(
     u"message",

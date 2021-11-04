@@ -20,55 +20,29 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from functools import (
-    partial,
-    wraps,
-)
+from functools import partial, wraps
 
 import attr
-from attr.validators import (
-    provides,
-)
+from allmydata.interfaces import IStorageServer
+from attr.validators import provides
+from eliot.twisted import inline_callbacks
+from twisted.internet.defer import returnValue
+from twisted.internet.interfaces import IReactorTime
+from twisted.python.reflect import namedAny
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from eliot.twisted import (
-    inline_callbacks,
-)
-
-from twisted.internet.interfaces import (
-    IReactorTime,
-)
-from twisted.python.reflect import (
-    namedAny,
-)
-from twisted.internet.defer import (
-    returnValue,
-)
-from allmydata.interfaces import (
-    IStorageServer,
-)
-
-from .eliot import (
-    SIGNATURE_CHECK_FAILED,
-    CALL_WITH_PASSES,
-)
-
+from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED
 from .storage_common import (
     MorePassesRequired,
+    add_lease_message,
+    allocate_buckets_message,
+    get_required_new_passes_for_mutable_write,
+    has_writes,
     pass_value_attribute,
     required_passes,
-    allocate_buckets_message,
-    add_lease_message,
     slot_testv_and_readv_and_writev_message,
-    has_writes,
-    get_required_new_passes_for_mutable_write,
 )
 
 
@@ -78,6 +52,7 @@ class IncorrectStorageServerReference(Exception):
     server instead references some other kind of object.  This makes the
     connection, and thus the configured storage server, unusable.
     """
+
     def __init__(self, furl, actual_name, expected_name):
         self.furl = furl
         self.actual_name = actual_name
@@ -119,7 +94,9 @@ def invalidate_rejected_passes(passes, more_passes_required):
         # suite... but let's not be so vulgar.
         return None
     SIGNATURE_CHECK_FAILED.log(count=num_failed)
-    rejected_passes, okay_passes = passes.split(more_passes_required.signature_check_failed)
+    rejected_passes, okay_passes = passes.split(
+        more_passes_required.signature_check_failed
+    )
     rejected_passes.mark_invalid(u"signature check failed")
 
     # It would be great to just expand okay_passes right here.  However, if
@@ -184,7 +161,9 @@ def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_succes
                         pass_group = okay_pass_group
                         # Add the necessary number of new passes.  This might
                         # fail if we don't have enough tokens.
-                        pass_group = pass_group.expand(num_passes - len(pass_group.passes))
+                        pass_group = pass_group.expand(
+                            num_passes - len(pass_group.passes)
+                        )
                 else:
                     on_success(result, pass_group)
                     break
@@ -221,9 +200,11 @@ def with_rref(f):
     The ``RemoteReference`` is retrieved by calling ``_rref`` on the first
     argument passed to the function (expected to be ``self``).
     """
+
     @wraps(f)
     def g(self, *args, **kwargs):
         return f(self, self._rref(), *args, **kwargs)
+
     return g
 
 
@@ -233,11 +214,7 @@ def _encode_passes(group):
 
     :return list[bytes]: The encoded form of the passes in the given group.
     """
-    return list(
-        t.pass_text.encode("ascii")
-        for t
-        in group.passes
-    )
+    return list(t.pass_text.encode("ascii") for t in group.passes)
 
 
 @implementer(IStorageServer)
@@ -265,6 +242,7 @@ class ZKAPAuthorizerStorageClient(object):
         request for which they will be used.  The second gives the number of
         passes to request.
     """
+
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
@@ -302,10 +280,10 @@ class ZKAPAuthorizerStorageClient(object):
         )
 
     def _spend_for_allocate_buckets(
-            self,
-            allocated_size,
-            result,
-            pass_group,
+        self,
+        allocated_size,
+        result,
+        pass_group,
     ):
         """
         Spend some subset of a pass group based on the results of an
@@ -336,16 +314,18 @@ class ZKAPAuthorizerStorageClient(object):
 
     @with_rref
     def allocate_buckets(
-            self,
-            rref,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            allocated_size,
-            canary,
+        self,
+        rref,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        allocated_size,
+        canary,
     ):
-        num_passes = required_passes(self._pass_value, [allocated_size] * len(sharenums))
+        num_passes = required_passes(
+            self._pass_value, [allocated_size] * len(sharenums)
+        )
         return call_with_passes_with_manual_spend(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
@@ -358,15 +338,18 @@ class ZKAPAuthorizerStorageClient(object):
                 canary,
             ),
             num_passes,
-            partial(self._get_passes, allocate_buckets_message(storage_index).encode("utf-8")),
+            partial(
+                self._get_passes,
+                allocate_buckets_message(storage_index).encode("utf-8"),
+            ),
             partial(self._spend_for_allocate_buckets, allocated_size),
         )
 
     @with_rref
     def get_buckets(
-            self,
-            rref,
-            storage_index,
+        self,
+        rref,
+        storage_index,
     ):
         return rref.callRemote(
             "get_buckets",
@@ -376,17 +359,19 @@ class ZKAPAuthorizerStorageClient(object):
     @inline_callbacks
     @with_rref
     def add_lease(
-            self,
-            rref,
-            storage_index,
-            renew_secret,
-            cancel_secret,
+        self,
+        rref,
+        storage_index,
+        renew_secret,
+        cancel_secret,
     ):
-        share_sizes = (yield rref.callRemote(
-            "share_sizes",
-            storage_index,
-            None,
-        )).values()
+        share_sizes = (
+            yield rref.callRemote(
+                "share_sizes",
+                storage_index,
+                None,
+            )
+        ).values()
         num_passes = required_passes(self._pass_value, share_sizes)
 
         result = yield call_with_passes(
@@ -411,12 +396,12 @@ class ZKAPAuthorizerStorageClient(object):
 
     @with_rref
     def advise_corrupt_share(
-            self,
-            rref,
-            share_type,
-            storage_index,
-            shnum,
-            reason,
+        self,
+        rref,
+        share_type,
+        storage_index,
+        shnum,
+        reason,
     ):
         return rref.callRemote(
             "advise_corrupt_share",
@@ -429,12 +414,12 @@ class ZKAPAuthorizerStorageClient(object):
     @inline_callbacks
     @with_rref
     def slot_testv_and_readv_and_writev(
-            self,
-            rref,
-            storage_index,
-            secrets,
-            tw_vectors,
-            r_vector,
+        self,
+        rref,
+        storage_index,
+        secrets,
+        tw_vectors,
+        r_vector,
     ):
         # Read operations are free.
         num_passes = 0
@@ -459,8 +444,7 @@ class ZKAPAuthorizerStorageClient(object):
             now = self._clock.seconds()
             current_sizes = {
                 sharenum: stat.size
-                for (sharenum, stat)
-                in stats.items()
+                for (sharenum, stat) in stats.items()
                 if stat.lease_expiration > now
             }
             # Determine the cost of the new storage for the operation.
@@ -489,11 +473,11 @@ class ZKAPAuthorizerStorageClient(object):
 
     @with_rref
     def slot_readv(
-            self,
-            rref,
-            storage_index,
-            shares,
-            r_vector,
+        self,
+        rref,
+        storage_index,
+        shares,
+        r_vector,
     ):
         return rref.callRemote(
             "slot_readv",

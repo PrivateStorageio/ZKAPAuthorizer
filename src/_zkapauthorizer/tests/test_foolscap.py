@@ -16,70 +16,30 @@
 Tests for Foolscap-related test helpers.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from fixtures import (
-    Fixture,
-)
-from testtools import (
-    TestCase,
-)
+from fixtures import Fixture
+from foolscap.api import Any, RemoteInterface, Violation
+from foolscap.furl import decode_furl
+from foolscap.pb import Tub
+from foolscap.referenceable import RemoteReferenceOnly, RemoteReferenceTracker
+from hypothesis import given
+from hypothesis.strategies import just, one_of
+from testtools import TestCase
 from testtools.matchers import (
-    Equals,
-    MatchesAll,
     AfterPreprocessing,
     Always,
+    Equals,
     IsInstance,
+    MatchesAll,
 )
-from testtools.twistedsupport import (
-    succeeded,
-    failed,
-)
+from testtools.twistedsupport import failed, succeeded
+from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import TestCase as TrialTestCase
 
-from twisted.trial.unittest import (
-    TestCase as TrialTestCase,
-)
-from twisted.internet.defer import (
-    inlineCallbacks,
-)
+from ..foolscap import ShareStat
+from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, RIStub
 
-from foolscap.api import (
-    Violation,
-    RemoteInterface,
-    Any,
-)
-from foolscap.furl import (
-    decode_furl,
-)
-from foolscap.pb import (
-    Tub,
-)
-from foolscap.referenceable import (
-    RemoteReferenceTracker,
-    RemoteReferenceOnly,
-)
-
-from hypothesis import (
-    given,
-)
-from hypothesis.strategies import (
-    one_of,
-    just,
-)
-
-from .foolscap import (
-    RIStub,
-    Echoer,
-    LocalRemote,
-    BrokenCopyable,
-    DummyReferenceable,
-)
-
-from ..foolscap import (
-    ShareStat,
-)
 
 class IHasSchema(RemoteInterface):
     def method(arg=int):
@@ -111,6 +71,7 @@ class LocalRemoteTests(TestCase):
     """
     Tests for the ``LocalRemote`` test double.
     """
+
     @given(
         ref=one_of(
             just(remote_reference()),
@@ -195,6 +156,7 @@ class LocalRemoteTests(TestCase):
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fires with a
         failure if the method's result cannot be serialized.
         """
+
         class BrokenResultReferenceable(DummyReferenceable):
             def doRemoteCall(self, *a, **kw):
                 return BrokenCopyable()
@@ -224,6 +186,7 @@ class SerializationTests(TrialTestCase):
     """
     Tests for the serialization of types used in the Foolscap API.
     """
+
     def test_sharestat(self):
         """
         A ``ShareStat`` instance can be sent as an argument to and received in a

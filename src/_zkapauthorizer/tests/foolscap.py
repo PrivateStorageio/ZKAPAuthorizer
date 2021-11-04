@@ -16,35 +16,15 @@
 Testing helpers related to Foolscap.
 """
 
-from __future__ import (
-    absolute_import,
-)
-
-from zope.interface import (
-    implementer,
-)
+from __future__ import absolute_import
 
 import attr
+from allmydata.interfaces import RIStorageServer
+from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
+from foolscap.copyable import CopyableSlicer, ICopyable
+from twisted.internet.defer import fail, succeed
+from zope.interface import implementer
 
-from twisted.internet.defer import (
-    succeed,
-    fail,
-)
-
-from foolscap.api import (
-    RemoteInterface,
-    Referenceable,
-    Copyable,
-    Any,
-)
-from foolscap.copyable import (
-    ICopyable,
-    CopyableSlicer,
-)
-
-from allmydata.interfaces import (
-    RIStorageServer,
-)
 
 class RIStub(RemoteInterface):
     pass
@@ -53,6 +33,7 @@ class RIStub(RemoteInterface):
 class RIEcho(RemoteInterface):
     def echo(argument=Any()):
         return Any()
+
 
 @implementer(RIStorageServer)
 class StubStorageServer(object):
@@ -85,11 +66,13 @@ class DummyReferenceable(object):
     def doRemoteCall(self, *a, **kw):
         return None
 
+
 @attr.s
 class LocalTracker(object):
     """
     Pretend to be a tracker for a ``LocalRemote``.
     """
+
     interface = attr.ib()
     interfaceName = attr.ib(default=None)
 
@@ -115,6 +98,7 @@ class LocalRemote(object):
     :ivar foolscap.ipb.IReferenceable _referenceable: The object to which this
         provides a simulated remote interface.
     """
+
     _referenceable = attr.ib()
     check_args = attr.ib(default=True)
     tracker = attr.ib(default=None)

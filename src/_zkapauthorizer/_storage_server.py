@@ -21,96 +21,45 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from struct import (
-    unpack,
-    calcsize,
-)
+from datetime import timedelta
+from errno import ENOENT
+from functools import partial
+from os import listdir, stat
+from os.path import join
+from struct import calcsize, unpack
 
-from errno import (
-    ENOENT,
-)
-
-from functools import (
-    partial,
-)
-
-from os.path import (
-    join,
-)
-from os import (
-    listdir,
-    stat,
-)
-from datetime import (
-    timedelta,
-)
 import attr
-from attr.validators import (
-    provides,
-    instance_of,
-)
+from allmydata.interfaces import RIStorageServer
+from allmydata.storage.common import storage_index_to_dir
+from allmydata.util.base32 import b2a
+from attr.validators import instance_of, provides
+from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
+from eliot import start_action
+from foolscap.api import Referenceable
+from foolscap.ipb import IReferenceable, IRemotelyCallable
+from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IReactorTime
+from twisted.python.reflect import namedAny
+from zope.interface import implementer_only
 
-from zope.interface import (
-    implementer_only,
-)
-from foolscap.api import (
-    Referenceable,
-)
-from foolscap.ipb import (
-    IReferenceable,
-    IRemotelyCallable,
-)
-from allmydata.interfaces import (
-    RIStorageServer,
-)
-from allmydata.storage.common import (
-    storage_index_to_dir,
-)
-from allmydata.util.base32 import (
-    b2a,
-)
-from challenge_bypass_ristretto import (
-    TokenPreimage,
-    VerificationSignature,
-    SigningKey,
-)
-
-from twisted.internet.defer import (
-    Deferred,
-)
-from twisted.python.reflect import (
-    namedAny,
-)
-from twisted.internet.interfaces import (
-    IReactorTime,
-)
-
-from eliot import (
-    start_action,
-)
-
-from .foolscap import (
-    ShareStat,
-    RIPrivacyPassAuthorizedStorageServer,
-)
+from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .storage_common import (
     MorePassesRequired,
+    add_lease_message,
+    allocate_buckets_message,
+    get_required_new_passes_for_mutable_write,
+    has_writes,
     pass_value_attribute,
     required_passes,
-    allocate_buckets_message,
-    add_lease_message,
     slot_testv_and_readv_and_writev_message,
-    has_writes,
-    get_required_new_passes_for_mutable_write,
 )
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
+
 
 @attr.s
 class _ValidationResult(object):
@@ -123,6 +72,7 @@ class _ValidationResult(object):
     :ivar list[int] signature_check_failed: A list of indexes (into the
         validated list) of passes which did not have a correct signature.
     """
+
     valid = attr.ib()
     signature_check_failed = attr.ib()
 
@@ -145,7 +95,9 @@ class _ValidationResult(object):
             proposed_signature = VerificationSignature.decode_base64(signature_base64)
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
-            invalid_pass = verification_key.invalid_sha512(proposed_signature, message.encode("utf-8"))
+            invalid_pass = verification_key.invalid_sha512(
+                proposed_signature, message.encode("utf-8")
+            )
             return invalid_pass
         except Exception:
             # It would be pretty nice to log something here, sometimes, I guess?
@@ -195,7 +147,9 @@ class LeaseRenewalRequired(Exception):
     """
 
 
-@implementer_only(RIPrivacyPassAuthorizedStorageServer, IReferenceable, IRemotelyCallable)
+@implementer_only(
+    RIPrivacyPassAuthorizedStorageServer, IReferenceable, IRemotelyCallable
+)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
 # attributes on self and it's hard to avoid that.
@@ -229,7 +183,16 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         return self._original.remote_get_version()
 
-    def remote_allocate_buckets(self, passes, storage_index, renew_secret, cancel_secret, sharenums, allocated_size, canary):
+    def remote_allocate_buckets(
+        self,
+        passes,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        allocated_size,
+        canary,
+    ):
         """
         Pass-through after a pass check to ensure that clients can only allocate
         storage for immutable shares if they present valid passes.
@@ -310,8 +273,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         with start_action(
-                action_type=u"zkapauthorizer:storage-server:remote:share-sizes",
-                storage_index_or_slot=storage_index_or_slot,
+            action_type=u"zkapauthorizer:storage-server:remote:share-sizes",
+            storage_index_or_slot=storage_index_or_slot,
         ):
             return dict(
                 get_share_sizes(self._original, storage_index_or_slot, sharenums)
@@ -320,17 +283,16 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     def remote_stat_shares(self, storage_indexes_or_slots):
         return list(
             dict(stat_share(self._original, storage_index_or_slot))
-            for storage_index_or_slot
-            in storage_indexes_or_slots
+            for storage_index_or_slot in storage_indexes_or_slots
         )
 
     def remote_slot_testv_and_readv_and_writev(
-            self,
-            passes,
-            storage_index,
-            secrets,
-            tw_vectors,
-            r_vector,
+        self,
+        passes,
+        storage_index,
+        secrets,
+        tw_vectors,
+        r_vector,
     ):
         """
         Pass-through after a pass check to ensure clients can only allocate
@@ -341,9 +303,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             same from the perspective of pass validation.
         """
         with start_action(
-                action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
-                storage_index=b2a(storage_index),
-                path=storage_index_to_dir(storage_index),
+            action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
+            storage_index=b2a(storage_index),
+            path=storage_index_to_dir(storage_index),
         ):
             result = self._slot_testv_and_readv_and_writev(
                 passes,
@@ -357,12 +319,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             return result
 
     def _slot_testv_and_readv_and_writev(
-            self,
-            passes,
-            storage_index,
-            secrets,
-            tw_vectors,
-            r_vector,
+        self,
+        passes,
+        storage_index,
+        secrets,
+        tw_vectors,
+        r_vector,
     ):
         # Only writes to shares without an active lease will result in a lease
         # renewal.
@@ -380,11 +342,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             )
             if has_active_lease(self._original, storage_index, self._clock.seconds()):
                 # Some of the storage is paid for already.
-                current_sizes = dict(get_share_sizes(
-                    self._original,
-                    storage_index,
-                    tw_vectors.keys(),
-                ))
+                current_sizes = dict(
+                    get_share_sizes(
+                        self._original,
+                        storage_index,
+                        tw_vectors.keys(),
+                    )
+                )
                 # print("has writes, has active lease, current sizes: {}".format(current_sizes))
             else:
                 # None of it is.
@@ -434,11 +398,7 @@ def has_active_lease(storage_server, storage_index, now):
         with an expiration time after ``now``.
     """
     leases = storage_server.get_slot_leases(storage_index)
-    return any(
-        lease.get_expiration_time() > now
-        for lease
-        in leases
-    )
+    return any(lease.get_expiration_time() > now for lease in leases)
 
 
 def check_pass_quantity(pass_value, validation, share_sizes):
@@ -463,7 +423,9 @@ def check_pass_quantity(pass_value, validation, share_sizes):
         validation.raise_for(required_pass_count)
 
 
-def check_pass_quantity_for_lease(pass_value, storage_index, validation, storage_server):
+def check_pass_quantity_for_lease(
+    pass_value, storage_index, validation, storage_server
+):
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
@@ -567,8 +529,9 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
     """
     return (
         (sharenum, stat.size)
-        for (sharenum, stat)
-        in get_share_stats(storage_server, storage_index_or_slot, sharenums)
+        for (sharenum, stat) in get_share_stats(
+            storage_server, storage_index_or_slot, sharenums
+        )
     )
 
 
@@ -592,7 +555,9 @@ def get_share_stats(storage_server, storage_index_or_slot, sharenums):
         is a share number and the second element gives stats about that share.
     """
     stat = None
-    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
+    for sharenum, sharepath in get_all_share_paths(
+        storage_server, storage_index_or_slot
+    ):
         if stat is None:
             stat = get_stat(sharepath)
         if sharenums is None or sharenum in sharenums:
@@ -699,7 +664,7 @@ def get_slot_share_size(sharepath):
     """
     with open(sharepath, "rb") as share_file:
         share_data_length_bytes = share_file.read(92)[-8:]
-        (share_data_length,) = unpack('>Q', share_data_length_bytes)
+        (share_data_length,) = unpack(">Q", share_data_length_bytes)
         return share_data_length
 
 
@@ -711,7 +676,9 @@ def stat_share(storage_server, storage_index_or_slot):
         ``ShareStat``.
     """
     stat = None
-    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index_or_slot):
+    for sharenum, sharepath in get_all_share_paths(
+        storage_server, storage_index_or_slot
+    ):
         if stat is None:
             stat = get_stat(sharepath)
         yield (sharenum, stat(storage_server, storage_index_or_slot, sharepath))
@@ -733,16 +700,12 @@ def get_stat(sharepath):
             return stat_bucket
 
 
+from foolscap.ipb import ISlicer
+from foolscap.referenceable import ReferenceableSlicer
+
 # I don't understand why this is required.
 # ZKAPAuthorizerStorageServer is-a Referenceable.  It seems like
 # the built in adapter should take care of this case.
-from twisted.python.components import (
-    registerAdapter,
-)
-from foolscap.referenceable import (
-    ReferenceableSlicer,
-)
-from foolscap.ipb import (
-    ISlicer,
-)
+from twisted.python.components import registerAdapter
+
 registerAdapter(ReferenceableSlicer, ZKAPAuthorizerStorageServer, ISlicer)

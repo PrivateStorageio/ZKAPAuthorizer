@@ -37,5 +37,7 @@ def _skipper(reason):
     def wrapper(f):
         def skipIt(self, *a, **kw):
             self.skipTest(reason)
+
         return skipIt
+
     return wrapper
