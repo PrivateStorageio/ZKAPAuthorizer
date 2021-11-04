@@ -61,6 +61,7 @@ class ProvidesTests(TestCase):
     """
     Tests for ``Provides``.
     """
+
     def test_match(self):
         """
         ``Provides.match`` returns ``None`` when the given object provides all of
@@ -86,6 +87,7 @@ class ReturnsTests(TestCase):
     """
     Tests for ``returns``.
     """
+
     def test_match(self):
         """
         ``returns(m)`` returns a matcher that matches when the given object

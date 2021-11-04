@@ -31,10 +31,12 @@ from .eliot import (
     RESET_PASSES,
 )
 
+
 class IPassGroup(Interface):
     """
     A group of passed meant to be spent together.
     """
+
     passes = Attribute(":ivar list[Pass] passes: The passes themselves.")
 
     def split(select_indices):
@@ -91,6 +93,7 @@ class IPassFactory(Interface):
     """
     An object which can create passes.
     """
+
     def get(message, num_passes):
         """
         :param unicode message: A request-binding message for the resulting passes.
@@ -115,25 +118,18 @@ class PassGroup(object):
 
     :ivar list[Pass] passes: The passes of which this group consists.
     """
+
     _message = attr.ib()
     _factory = attr.ib()
     _tokens = attr.ib()
 
     @property
     def passes(self):
-        return list(
-            pass_
-            for (unblinded_token, pass_)
-            in self._tokens
-        )
+        return list(pass_ for (unblinded_token, pass_) in self._tokens)
 
     @property
     def unblinded_tokens(self):
-        return list(
-            unblinded_token
-            for (unblinded_token, pass_)
-            in self._tokens
-        )
+        return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
     def split(self, select_indices):
         selected = []
@@ -171,6 +167,7 @@ class SpendingController(object):
     A ``SpendingController`` gives out ZKAPs and arranges for re-spend
     attempts when necessary.
     """
+
     get_unblinded_tokens = attr.ib()
     discard_unblinded_tokens = attr.ib()
     invalidate_unblinded_tokens = attr.ib()

@@ -111,6 +111,7 @@ class ValidationResultTests(TestCase):
     """
     Tests for ``_ValidationResult``.
     """
+
     def setUp(self):
         super(ValidationResultTests, self).setUp()
         self.signing_key = random_signing_key()
@@ -128,9 +129,7 @@ class ValidationResultTests(TestCase):
             list(RandomToken.create() for i in range(valid_count)),
         )
         all_passes = valid_passes + list(
-            pass_.pass_text.encode("ascii")
-            for pass_
-            in invalid_passes
+            pass_.pass_text.encode("ascii") for pass_ in invalid_passes
         )
         shuffle(all_passes)
 
@@ -144,14 +143,12 @@ class ValidationResultTests(TestCase):
                 _ValidationResult(
                     valid=list(
                         idx
-                        for (idx, pass_)
-                        in enumerate(all_passes)
+                        for (idx, pass_) in enumerate(all_passes)
                         if pass_ in valid_passes
                     ),
                     signature_check_failed=list(
                         idx
-                        for (idx, pass_)
-                        in enumerate(all_passes)
+                        for (idx, pass_) in enumerate(all_passes)
                         if pass_ not in valid_passes
                     ),
                 ),
@@ -183,7 +180,9 @@ class ValidationResultTests(TestCase):
                     ),
                     AfterPreprocessing(
                         str,
-                        Equals("MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset([4]))"),
+                        Equals(
+                            "MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset([4]))"
+                        ),
                     ),
                 ),
             )
@@ -193,6 +192,7 @@ class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
     """
+
     pass_value = 128 * 1024
 
     @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
@@ -238,13 +238,14 @@ class PassValidationTests(TestCase):
 
         allocate_buckets = lambda: self.storage_server.doRemoteCall(
             "allocate_buckets",
-            (valid_passes,
-             storage_index,
-             renew_secret,
-             cancel_secret,
-             share_nums,
-             allocated_size,
-             LocalReferenceable(None),
+            (
+                valid_passes,
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                share_nums,
+                allocated_size,
+                LocalReferenceable(None),
             ),
             {},
         )
@@ -252,7 +253,6 @@ class PassValidationTests(TestCase):
             allocate_buckets,
             raises(MorePassesRequired),
         )
-
 
     @given(
         storage_index=storage_indexes(),
@@ -305,13 +305,12 @@ class PassValidationTests(TestCase):
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
 
-
     def _test_extend_mutable_fails_without_passes(
-            self,
-            storage_index,
-            secrets,
-            test_and_write_vectors_for_shares,
-            make_data_vector,
+        self,
+        storage_index,
+        secrets,
+        test_and_write_vectors_for_shares,
+        make_data_vector,
     ):
         """
         Verify that increasing the storage requirements of a slot without
@@ -327,9 +326,7 @@ class PassValidationTests(TestCase):
         cleanup_storage_server(self.anonymous_storage_server)
 
         tw_vectors = {
-            k: v.for_call()
-            for (k, v)
-            in test_and_write_vectors_for_shares.items()
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
         }
 
         note("tw_vectors summarized: {}".format(summarize(tw_vectors)))
@@ -344,11 +341,7 @@ class PassValidationTests(TestCase):
         valid_passes = make_passes(
             self.signing_key,
             slot_testv_and_readv_and_writev_message(storage_index),
-            list(
-                RandomToken.create()
-                for i
-                in range(required_pass_count)
-            ),
+            list(RandomToken.create() for i in range(required_pass_count)),
         )
 
         # Create an initial share to toy with.
@@ -417,7 +410,9 @@ class PassValidationTests(TestCase):
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
-    def test_extend_mutable_with_write_fails_without_passes(self, storage_index, secrets, test_and_write_vectors_for_shares):
+    def test_extend_mutable_with_write_fails_without_passes(
+        self, storage_index, secrets, test_and_write_vectors_for_shares
+    ):
         """
         If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
         storage usage by performing a write past the end of a share without
@@ -435,13 +430,13 @@ class PassValidationTests(TestCase):
         )
 
     def _test_lease_operation_fails_without_passes(
-            self,
-            storage_index,
-            secrets,
-            sharenums,
-            allocated_size,
-            lease_operation,
-            lease_operation_message,
+        self,
+        storage_index,
+        secrets,
+        sharenums,
+        allocated_size,
+        lease_operation,
+        lease_operation_message,
     ):
         """
         Assert that a lease-taking operation fails if it is not supplied with
@@ -461,7 +456,9 @@ class PassValidationTests(TestCase):
 
         renew_secret, cancel_secret = secrets
 
-        required_count = required_passes(self.pass_value, [allocated_size] * len(sharenums))
+        required_count = required_passes(
+            self.pass_value, [allocated_size] * len(sharenums)
+        )
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
             self.anonymous_storage_server,
@@ -514,16 +511,20 @@ class PassValidationTests(TestCase):
         sharenums=sharenum_sets(),
         allocated_size=sizes(),
     )
-    def test_add_lease_fails_without_passes(self, storage_index, secrets, sharenums, allocated_size):
+    def test_add_lease_fails_without_passes(
+        self, storage_index, secrets, sharenums, allocated_size
+    ):
         """
         If ``remote_add_lease`` is invoked without supplying enough passes to
         cover the storage for all shares on the given storage index, the
         operation fails with ``MorePassesRequired``.
         """
         renew_secret, cancel_secret = secrets
+
         def add_lease(storage_server, passes):
             return storage_server.doRemoteCall(
-                "add_lease", (
+                "add_lease",
+                (
                     passes,
                     storage_index,
                     renew_secret,
@@ -531,6 +532,7 @@ class PassValidationTests(TestCase):
                 ),
                 {},
             )
+
         return self._test_lease_operation_fails_without_passes(
             storage_index,
             secrets,
@@ -550,7 +552,9 @@ class PassValidationTests(TestCase):
         sharenums=one_of(just(None), sharenum_sets()),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
-    def test_mutable_share_sizes(self, slot, secrets, sharenums, test_and_write_vectors_for_shares):
+    def test_mutable_share_sizes(
+        self, slot, secrets, sharenums, test_and_write_vectors_for_shares
+    ):
         """
         ``share_sizes`` returns the size of the requested mutable shares in the
         requested slot.
@@ -560,9 +564,7 @@ class PassValidationTests(TestCase):
         cleanup_storage_server(self.anonymous_storage_server)
 
         tw_vectors = {
-            k: v.for_call()
-            for (k, v)
-            in test_and_write_vectors_for_shares.items()
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
         }
 
         # Create an initial share to toy with.
@@ -574,11 +576,7 @@ class PassValidationTests(TestCase):
         valid_passes = make_passes(
             self.signing_key,
             slot_testv_and_readv_and_writev_message(slot),
-            list(
-                RandomToken.create()
-                for i
-                in range(required_pass_count)
-            ),
+            list(RandomToken.create() for i in range(required_pass_count)),
         )
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
@@ -599,13 +597,13 @@ class PassValidationTests(TestCase):
 
         expected_sizes = {
             sharenum: get_implied_data_length(data_vector, new_length)
-            for (sharenum, (testv, data_vector, new_length))
-            in tw_vectors.items()
+            for (sharenum, (testv, data_vector, new_length)) in tw_vectors.items()
             if sharenums is None or sharenum in sharenums
         }
 
         actual_sizes = self.storage_server.doRemoteCall(
-            "share_sizes", (
+            "share_sizes",
+            (
                 slot,
                 sharenums,
             ),

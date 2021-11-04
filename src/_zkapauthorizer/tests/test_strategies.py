@@ -47,10 +47,12 @@ from .strategies import (
     share_parameters,
 )
 
+
 class TahoeConfigsTests(TestCase):
     """
     Tests for ``tahoe_configs``.
     """
+
     @given(data())
     def test_parses(self, data):
         """

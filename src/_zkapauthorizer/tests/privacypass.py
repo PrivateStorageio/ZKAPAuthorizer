@@ -25,6 +25,7 @@ from challenge_bypass_ristretto import (
     PublicKey,
 )
 
+
 def make_passes(signing_key, for_message, random_tokens):
     """
     Create a number of cryptographically correct privacy passes.
@@ -41,15 +42,9 @@ def make_passes(signing_key, for_message, random_tokens):
     :return list[unicode]: The privacy passes.  The returned list has one
         element for each element of ``random_tokens``.
     """
-    blinded_tokens = list(
-        token.blind()
-        for token
-        in random_tokens
-    )
+    blinded_tokens = list(token.blind() for token in random_tokens)
     signatures = list(
-        signing_key.sign(blinded_token)
-        for blinded_token
-        in blinded_tokens
+        signing_key.sign(blinded_token) for blinded_token in blinded_tokens
     )
     proof = BatchDLEQProof.create(
         signing_key,
@@ -63,26 +58,21 @@ def make_passes(signing_key, for_message, random_tokens):
         PublicKey.from_signing_key(signing_key),
     )
     preimages = list(
-        unblinded_signature.preimage()
-        for unblinded_signature
-        in unblinded_signatures
+        unblinded_signature.preimage() for unblinded_signature in unblinded_signatures
     )
     verification_keys = list(
         unblinded_signature.derive_verification_key_sha512()
-        for unblinded_signature
-        in unblinded_signatures
+        for unblinded_signature in unblinded_signatures
     )
     message_signatures = list(
         verification_key.sign_sha512(for_message.encode("utf-8"))
-        for verification_key
-        in verification_keys
+        for verification_key in verification_keys
     )
     passes = list(
         u"{} {}".format(
             preimage.encode_base64().decode("ascii"),
             signature.encode_base64().decode("ascii"),
         ).encode("ascii")
-        for (preimage, signature)
-        in zip(preimages, message_signatures)
+        for (preimage, signature) in zip(preimages, message_signatures)
     )
     return passes

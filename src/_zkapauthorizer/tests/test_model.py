@@ -67,7 +67,7 @@ from hypothesis.stateful import (
     rule,
     precondition,
     invariant,
-    run_state_machine_as_test
+    run_state_machine_as_test,
 )
 from hypothesis.strategies import (
     data,
@@ -119,6 +119,7 @@ class VoucherStoreTests(TestCase):
     """
     Tests for ``VoucherStore``.
     """
+
     @given(tahoe_configs(), datetimes(), vouchers())
     def test_get_missing(self, get_config, now, voucher):
         """
@@ -131,7 +132,12 @@ class VoucherStoreTests(TestCase):
             raises(KeyError),
         )
 
-    @given(tahoe_configs(), vouchers(), lists(random_tokens(), min_size=1, unique=True), datetimes())
+    @given(
+        tahoe_configs(),
+        vouchers(),
+        lists(random_tokens(), min_size=1, unique=True),
+        datetimes(),
+    )
     def test_add(self, get_config, voucher, tokens, now):
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
@@ -156,15 +162,17 @@ class VoucherStoreTests(TestCase):
         lists(random_tokens(), min_size=2, unique=True),
         datetimes(),
     )
-    def test_add_with_distinct_counters(self, get_config, voucher, counters, tokens, now):
+    def test_add_with_distinct_counters(
+        self, get_config, voucher, counters, tokens, now
+    ):
         """
         ``VoucherStore.add`` adds new tokens to the store when passed the same
         voucher but a different counter value.
         """
         counter_a = counters[0]
         counter_b = counters[1]
-        tokens_a = tokens[:len(tokens) / 2]
-        tokens_b = tokens[len(tokens) / 2:]
+        tokens_a = tokens[: len(tokens) / 2]
+        tokens_b = tokens[len(tokens) / 2 :]
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         # We only have to get the expected_tokens value (len(tokens)) right on
@@ -185,7 +193,12 @@ class VoucherStoreTests(TestCase):
         self.assertThat(tokens_a, Equals(added_tokens_a))
         self.assertThat(tokens_b, Equals(added_tokens_b))
 
-    @given(tahoe_configs(), vouchers(), datetimes(), lists(random_tokens(), min_size=1, unique=True))
+    @given(
+        tahoe_configs(),
+        vouchers(),
+        datetimes(),
+        lists(random_tokens(), min_size=1, unique=True),
+    )
     def test_add_idempotent(self, get_config, voucher, now, tokens):
         """
         More than one call to ``VoucherStore.add`` with the same argument results
@@ -233,14 +246,16 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
         """
-        tokens = iter(data.draw(
-            lists(
-                random_tokens(),
-                unique=True,
-                min_size=len(vouchers),
-                max_size=len(vouchers),
-            ),
-        ))
+        tokens = iter(
+            data.draw(
+                lists(
+                    random_tokens(),
+                    unique=True,
+                    min_size=len(vouchers),
+                    max_size=len(vouchers),
+                ),
+            )
+        )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         for voucher in vouchers:
             store.add(
@@ -252,11 +267,12 @@ class VoucherStoreTests(TestCase):
 
         self.assertThat(
             store.list(),
-            Equals(list(
-                Voucher(number, expected_tokens=1, created=now)
-                for number
-                in vouchers
-            )),
+            Equals(
+                list(
+                    Voucher(number, expected_tokens=1, created=now)
+                    for number in vouchers
+                )
+            ),
         )
 
     @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
@@ -299,8 +315,9 @@ class VoucherStoreTests(TestCase):
             ),
         )
 
-
-    @skipIf(platform.isWindows(), "Hard to prevent database from being opened on Windows")
+    @skipIf(
+        platform.isWindows(), "Hard to prevent database from being opened on Windows"
+    )
     @given(tahoe_configs(), datetimes())
     def test_unopenable_store(self, get_config, now):
         """
@@ -327,42 +344,36 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), vouchers(), dummy_ristretto_keys(), datetimes(), data())
-    def test_spend_order_equals_backup_order(self, get_config, voucher_value, public_key, now, data):
+    def test_spend_order_equals_backup_order(
+        self, get_config, voucher_value, public_key, now, data
+    ):
         """
         Unblinded tokens returned by ``VoucherStore.backup`` appear in the same
         order as they are returned by ``VoucherStore.get_unblinded_tokens``.
         """
         backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
-            get_config,
-            voucher_value,
-            public_key,
-            now,
-            data
+            get_config, voucher_value, public_key, now, data
         )
         self.assertThat(
             backed_up_tokens,
             Equals(spent_tokens),
         )
 
-
     @given(tahoe_configs(), vouchers(), dummy_ristretto_keys(), datetimes(), data())
-    def test_spend_order_equals_insert_order(self, get_config, voucher_value, public_key, now, data):
+    def test_spend_order_equals_insert_order(
+        self, get_config, voucher_value, public_key, now, data
+    ):
         """
         Unblinded tokens returned by ``VoucherStore.get_unblinded_tokens``
         appear in the same order as they were inserted.
         """
         backed_up_tokens, spent_tokens, inserted_tokens = self._spend_order_test(
-            get_config,
-            voucher_value,
-            public_key,
-            now,
-            data
+            get_config, voucher_value, public_key, now, data
         )
         self.assertThat(
             spent_tokens,
             Equals(inserted_tokens),
         )
-
 
     def _spend_order_test(self, get_config, voucher_value, public_key, now, data):
         """
@@ -385,7 +396,9 @@ class VoucherStoreTests(TestCase):
         store = VoucherStore.from_node_config(config, lambda: now)
 
         # Put some tokens in it that we can backup and extract
-        random_tokens, unblinded_tokens = paired_tokens(data, integers(min_value=1, max_value=5))
+        random_tokens, unblinded_tokens = paired_tokens(
+            data, integers(min_value=1, max_value=5)
+        )
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(
             voucher_value,
@@ -401,9 +414,7 @@ class VoucherStoreTests(TestCase):
         while tokens_remaining > 0:
             to_spend = data.draw(integers(min_value=1, max_value=tokens_remaining))
             extracted_tokens.extend(
-                token.unblinded_token
-                for token
-                in store.get_unblinded_tokens(to_spend)
+                token.unblinded_token for token in store.get_unblinded_tokens(to_spend)
             )
             tokens_remaining -= to_spend
 
@@ -420,6 +431,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     unblinded tokens in a ``VoucherStore`` - usable, in-use, spent, invalid,
     etc.
     """
+
     def __init__(self, case):
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
@@ -555,12 +567,14 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
     @invariant()
     def report_state(self):
-        note("available={} using={} invalid={} spent={}".format(
-            self.available,
-            len(self.using),
-            len(self.invalid),
-            len(self.spent),
-        ))
+        note(
+            "available={} using={} invalid={} spent={}".format(
+                self.available,
+                len(self.using),
+                len(self.invalid),
+                len(self.spent),
+            )
+        )
 
 
 def random_slice(taken_from, random, data):
@@ -588,6 +602,7 @@ class UnblindedTokenStateTests(TestCase):
     """
     Glue ``UnblindedTokenStateTests`` into our test runner.
     """
+
     def test_states(self):
         run_state_machine_as_test(lambda: UnblindedTokenStateMachine(self))
 
@@ -596,6 +611,7 @@ class LeaseMaintenanceTests(TestCase):
     """
     Tests for the lease-maintenance related parts of ``VoucherStore``.
     """
+
     @given(
         tahoe_configs(),
         posix_safe_datetimes(),
@@ -645,9 +661,11 @@ class LeaseMaintenanceTests(TestCase):
             for (num_passes, trim_size) in sizes:
                 passes_required += num_passes
                 trim_size %= store.pass_value
-                x.observe([
-                    num_passes * store.pass_value - trim_size,
-                ])
+                x.observe(
+                    [
+                        num_passes * store.pass_value - trim_size,
+                    ]
+                )
             now += finish_delay
             x.finish()
             finished = now
@@ -669,6 +687,7 @@ class VoucherTests(TestCase):
     """
     Tests for ``Voucher``.
     """
+
     @given(voucher_objects())
     def test_json_roundtrip(self, reference):
         """
@@ -688,18 +707,22 @@ def paired_tokens(data, sizes=integers(min_value=1, max_value=1000)):
     :rtype: ([RandomTokens], [UnblindedTokens])
     """
     num_tokens = data.draw(sizes)
-    r = data.draw(lists(
-        random_tokens(),
-        min_size=num_tokens,
-        max_size=num_tokens,
-        unique=True,
-    ))
-    u = data.draw(lists(
-        unblinded_tokens(),
-        min_size=num_tokens,
-        max_size=num_tokens,
-        unique=True,
-    ))
+    r = data.draw(
+        lists(
+            random_tokens(),
+            min_size=num_tokens,
+            max_size=num_tokens,
+            unique=True,
+        )
+    )
+    u = data.draw(
+        lists(
+            unblinded_tokens(),
+            min_size=num_tokens,
+            max_size=num_tokens,
+            unique=True,
+        )
+    )
     return r, u
 
 
@@ -707,6 +730,7 @@ class UnblindedTokenStoreTests(TestCase):
     """
     Tests for ``UnblindedToken``-related functionality of ``VoucherStore``.
     """
+
     @given(
         tahoe_configs(),
         datetimes(),
@@ -715,7 +739,9 @@ class UnblindedTokenStoreTests(TestCase):
         lists(unblinded_tokens(), unique=True),
         booleans(),
     )
-    def test_unblinded_tokens_without_voucher(self, get_config, now, voucher_value, public_key, unblinded_tokens, completed):
+    def test_unblinded_tokens_without_voucher(
+        self, get_config, now, voucher_value, public_key, unblinded_tokens, completed
+    ):
         """
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
         """
@@ -739,14 +765,18 @@ class UnblindedTokenStoreTests(TestCase):
         booleans(),
         data(),
     )
-    def test_unblinded_tokens_round_trip(self, get_config, now, voucher_value, public_key, completed, data):
+    def test_unblinded_tokens_round_trip(
+        self, get_config, now, voucher_value, public_key, completed, data
+    ):
         """
         Unblinded tokens that are added to the store can later be retrieved and counted.
         """
         random_tokens, unblinded_tokens = paired_tokens(data)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded_tokens, completed, spendable=True)
+        store.insert_unblinded_tokens_for_voucher(
+            voucher_value, public_key, unblinded_tokens, completed, spendable=True
+        )
 
         # All the tokens just inserted should be counted.
         self.expectThat(
@@ -774,7 +804,9 @@ class UnblindedTokenStoreTests(TestCase):
         integers(min_value=1, max_value=100),
         data(),
     )
-    def test_mark_vouchers_redeemed(self, get_config, now, voucher_value, public_key, num_tokens, data):
+    def test_mark_vouchers_redeemed(
+        self, get_config, now, voucher_value, public_key, num_tokens, data
+    ):
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
@@ -798,16 +830,20 @@ class UnblindedTokenStoreTests(TestCase):
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True, spendable=True)
+        store.insert_unblinded_tokens_for_voucher(
+            voucher_value, public_key, unblinded, completed=True, spendable=True
+        )
         loaded_voucher = store.get(voucher_value)
         self.assertThat(
             loaded_voucher,
             MatchesStructure(
                 expected_tokens=Equals(len(random)),
-                state=Equals(Redeemed(
-                    finished=now,
-                    token_count=num_tokens,
-                )),
+                state=Equals(
+                    Redeemed(
+                        finished=now,
+                        token_count=num_tokens,
+                    )
+                ),
             ),
         )
 
@@ -817,7 +853,9 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
         lists(random_tokens(), min_size=1, unique=True),
     )
-    def test_mark_vouchers_double_spent(self, get_config, now, voucher_value, random_tokens):
+    def test_mark_vouchers_double_spent(
+        self, get_config, now, voucher_value, random_tokens
+    ):
         """
         A voucher which is reported as double-spent is marked in the database as
         such.
@@ -829,9 +867,11 @@ class UnblindedTokenStoreTests(TestCase):
         self.assertThat(
             voucher,
             MatchesStructure(
-                state=Equals(DoubleSpend(
-                    finished=now,
-                )),
+                state=Equals(
+                    DoubleSpend(
+                        finished=now,
+                    )
+                ),
             ),
         )
 
@@ -843,7 +883,9 @@ class UnblindedTokenStoreTests(TestCase):
         integers(min_value=1, max_value=100),
         data(),
     )
-    def test_mark_spent_vouchers_double_spent(self, get_config, now, voucher_value, public_key, num_tokens, data):
+    def test_mark_spent_vouchers_double_spent(
+        self, get_config, now, voucher_value, public_key, num_tokens, data
+    ):
         """
         A voucher which has already been spent cannot be marked as double-spent.
         """
@@ -865,7 +907,9 @@ class UnblindedTokenStoreTests(TestCase):
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
-        store.insert_unblinded_tokens_for_voucher(voucher_value, public_key, unblinded, completed=True, spendable=True)
+        store.insert_unblinded_tokens_for_voucher(
+            voucher_value, public_key, unblinded, completed=True, spendable=True
+        )
         self.assertThat(
             lambda: store.mark_voucher_double_spent(voucher_value),
             raises(ValueError),
@@ -895,7 +939,9 @@ class UnblindedTokenStoreTests(TestCase):
         integers(min_value=1),
         data(),
     )
-    def test_not_enough_unblinded_tokens(self, get_config, now, voucher_value, public_key, completed, extra, data):
+    def test_not_enough_unblinded_tokens(
+        self, get_config, now, voucher_value, public_key, completed, extra, data
+    ):
         """
         ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
         greater than the number of unblinded tokens in the store.

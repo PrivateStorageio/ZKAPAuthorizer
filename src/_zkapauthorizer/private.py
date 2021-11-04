@@ -64,9 +64,11 @@ from cryptography.hazmat.primitives.constant_time import (
 # public but we do want to make sure that hotfix is applied.  This seems like
 # an alright compromise.
 import allmydata.web.private as awp
+
 del awp
 
 SCHEME = b"tahoe-lafs"
+
 
 class IToken(ICredentials):
     def check(auth_token):

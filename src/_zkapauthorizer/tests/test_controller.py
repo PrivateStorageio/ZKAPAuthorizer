@@ -155,6 +155,7 @@ class TokenCountForGroupTests(TestCase):
     """
     Tests for ``token_count_for_group``.
     """
+
     @given(
         integers(),
         integers(),
@@ -167,9 +168,7 @@ class TokenCountForGroupTests(TestCase):
         range then ``ValueError`` is raised.
         """
         assume(
-            group_number < 0 or
-            group_number >= num_groups or
-            total_tokens < num_groups
+            group_number < 0 or group_number >= num_groups or total_tokens < num_groups
         )
         self.assertThat(
             lambda: token_count_for_group(num_groups, total_tokens, group_number),
@@ -189,8 +188,7 @@ class TokenCountForGroupTests(TestCase):
         self.assertThat(
             sum(
                 token_count_for_group(num_groups, total_tokens, group_number)
-                for group_number
-                in range(num_groups)
+                for group_number in range(num_groups)
             ),
             Equals(total_tokens),
         )
@@ -211,8 +209,7 @@ class TokenCountForGroupTests(TestCase):
         self.assertThat(
             list(
                 token_count_for_group(num_groups, total_tokens, group_number)
-                for group_number
-                in range(num_groups)
+                for group_number in range(num_groups)
             ),
             AllMatch(between(lower_bound, upper_bound)),
         )
@@ -222,6 +219,7 @@ class PaymentControllerTests(TestCase):
     """
     Tests for ``PaymentController``.
     """
+
     @given(tahoe_configs(), datetimes(), vouchers(), dummy_ristretto_keys())
     def test_should_not_redeem(self, get_config, now, voucher, public_key):
         """
@@ -284,7 +282,13 @@ class PaymentControllerTests(TestCase):
             Equals(model_Pending(counter=0)),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), dummy_ristretto_keys())
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        voucher_counters(),
+        dummy_ristretto_keys(),
+    )
     def test_redeeming(self, get_config, now, voucher, num_successes, public_key):
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
@@ -296,8 +300,7 @@ class PaymentControllerTests(TestCase):
         # that.
         counter = num_successes + 1
         redeemer = IndexedRedeemer(
-            [DummyRedeemer(public_key)] * num_successes +
-            [NonRedeemer()],
+            [DummyRedeemer(public_key)] * num_successes + [NonRedeemer()],
         )
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
@@ -320,10 +323,12 @@ class PaymentControllerTests(TestCase):
         controller_voucher = controller.get_voucher(voucher)
         self.assertThat(
             controller_voucher.state,
-            Equals(model_Redeeming(
-                started=now,
-                counter=num_successes,
-            )),
+            Equals(
+                model_Redeeming(
+                    started=now,
+                    counter=num_successes,
+                )
+            ),
         )
 
     @given(
@@ -334,7 +339,9 @@ class PaymentControllerTests(TestCase):
         voucher_counters().map(lambda v: v + 1),
         dummy_ristretto_keys(),
     )
-    def test_restart_redeeming(self, get_config, now, voucher, before_restart, after_restart, public_key):
+    def test_restart_redeeming(
+        self, get_config, now, voucher, before_restart, after_restart, public_key
+    ):
         """
         If some redemption groups for a voucher have succeeded but the process is
         interrupted, redemption begins at the first incomplete redemption
@@ -360,8 +367,8 @@ class PaymentControllerTests(TestCase):
                 store,
                 # It will let `before_restart` attempts succeed before hanging.
                 IndexedRedeemer(
-                    [DummyRedeemer(public_key)] * before_restart +
-                    [NonRedeemer()] * after_restart,
+                    [DummyRedeemer(public_key)] * before_restart
+                    + [NonRedeemer()] * after_restart,
                 ),
                 default_token_count=num_tokens,
                 num_redemption_groups=num_redemption_groups,
@@ -381,8 +388,8 @@ class PaymentControllerTests(TestCase):
                 # It will succeed only for the higher counter values which did
                 # not succeed or did not get started on the first try.
                 IndexedRedeemer(
-                    [NonRedeemer()] * before_restart +
-                    [DummyRedeemer(public_key)] * after_restart,
+                    [NonRedeemer()] * before_restart
+                    + [DummyRedeemer(public_key)] * after_restart,
                 ),
                 # The default token count for this new controller doesn't
                 # matter.  The redemption attempt already started with some
@@ -410,8 +417,16 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_stop_redeeming_on_error(self, get_config, now, voucher, counter, extra_tokens):
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+        voucher_counters(),
+        integers(min_value=0, max_value=100),
+    )
+    def test_stop_redeeming_on_error(
+        self, get_config, now, voucher, counter, extra_tokens
+    ):
         """
         If an error is encountered on one of the redemption attempts performed by
         ``IRedeemer.redeem``, the effort is suspended until the normal retry
@@ -463,10 +478,12 @@ class PaymentControllerTests(TestCase):
         persisted_voucher = store.get(voucher)
         self.assertThat(
             persisted_voucher.state,
-            Equals(model_Redeemed(
-                finished=now,
-                token_count=100,
-            )),
+            Equals(
+                model_Redeemed(
+                    finished=now,
+                    token_count=100,
+                )
+            ),
         )
 
     @given(tahoe_configs(), datetimes(), vouchers())
@@ -492,9 +509,11 @@ class PaymentControllerTests(TestCase):
         self.assertThat(
             persisted_voucher,
             MatchesStructure(
-                state=Equals(model_DoubleSpend(
-                    finished=now,
-                )),
+                state=Equals(
+                    model_DoubleSpend(
+                        finished=now,
+                    )
+                ),
             ),
         )
 
@@ -578,7 +597,7 @@ class PaymentControllerTests(TestCase):
                 MatchesStructure(
                     finished=Equals(datetime_now()),
                 ),
-            )
+            ),
         )
 
         # Some time passes.
@@ -618,7 +637,10 @@ class PaymentControllerTests(TestCase):
                     unique=True,
                 ).map(
                     # Split the keys into allowed and disallowed groups
-                    lambda public_keys: (public_keys[:num_allowed_key_groups], public_keys[num_allowed_key_groups:]),
+                    lambda public_keys: (
+                        public_keys[:num_allowed_key_groups],
+                        public_keys[num_allowed_key_groups:],
+                    ),
                 ),
             ),
         ),
@@ -626,7 +648,9 @@ class PaymentControllerTests(TestCase):
         # required by the number of redemption groups we have.
         integers(min_value=0, max_value=32),
     )
-    def test_sequester_tokens_for_untrusted_key(self, random, clock, voucher, public_keys, extra_token_count):
+    def test_sequester_tokens_for_untrusted_key(
+        self, random, clock, voucher, public_keys, extra_token_count
+    ):
         """
         All unblinded tokens which are returned from the redemption process
         associated with a public key that the controller has not been
@@ -655,11 +679,7 @@ class PaymentControllerTests(TestCase):
         datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
         store = self.useFixture(ConfiglessMemoryVoucherStore(datetime_now)).store
 
-        redeemers = list(
-            DummyRedeemer(public_key)
-            for public_key
-            in all_public_keys
-        )
+        redeemers = list(DummyRedeemer(public_key) for public_key in all_public_keys)
 
         controller = PaymentController(
             store,
@@ -678,12 +698,14 @@ class PaymentControllerTests(TestCase):
         )
 
         def count_in_group(public_keys, key_group):
-            return sum((
-                token_count_for_group(num_redemption_groups, token_count, n)
-                for n, public_key
-                in enumerate(public_keys)
-                if public_key in key_group
-            ), 0)
+            return sum(
+                (
+                    token_count_for_group(num_redemption_groups, token_count, n)
+                    for n, public_key in enumerate(public_keys)
+                    if public_key in key_group
+                ),
+                0,
+            )
 
         allowed_token_count = count_in_group(all_public_keys, allowed_public_keys)
         disallowed_token_count = count_in_group(all_public_keys, disallowed_public_keys)
@@ -723,8 +745,7 @@ class PaymentControllerTests(TestCase):
             unblinded_token
             for counter, redeemer in enumerate(redeemers)
             if redeemer._public_key in allowed_public_keys
-            for unblinded_token
-            in redeemer.redeemWithCounter(
+            for unblinded_token in redeemer.redeemWithCounter(
                 voucher_obj,
                 counter,
                 redeemer.random_tokens_for_voucher(
@@ -746,10 +767,12 @@ class PaymentControllerTests(TestCase):
 
 NOWHERE = URL.from_text(u"https://127.0.0.1/")
 
+
 class RistrettoRedeemerTests(TestCase):
     """
     Tests for ``RistrettoRedeemer``.
     """
+
     def test_interface(self):
         """
         An ``RistrettoRedeemer`` instance provides ``IRedeemer``.
@@ -937,9 +960,11 @@ class RistrettoRedeemerTests(TestCase):
             counter,
             random_tokens,
         )
+
         def unblinded_tokens_to_passes(result):
             passes = redeemer.tokens_to_passes(message, result.unblinded_tokens)
             return passes
+
         d.addCallback(unblinded_tokens_to_passes)
 
         self.assertThat(
@@ -974,39 +999,32 @@ def ristretto_verify(signing_key, message, marshaled_passes):
         ``marshaled_passes`` pass the Ristretto-defined verification for an
         exchange using the given signing key and message.
     """
+
     def decode(marshaled_pass):
         t, s = marshaled_pass.split(u" ")
         return (
             TokenPreimage.decode_base64(t.encode("ascii")),
             VerificationSignature.decode_base64(s.encode("ascii")),
         )
+
     servers_passes = list(
-        decode(marshaled_pass.pass_text)
-        for marshaled_pass
-        in marshaled_passes
+        decode(marshaled_pass.pass_text) for marshaled_pass in marshaled_passes
     )
     servers_unblinded_tokens = list(
         signing_key.rederive_unblinded_token(token_preimage)
-        for (token_preimage, sig)
-        in servers_passes
+        for (token_preimage, sig) in servers_passes
     )
-    servers_verification_sigs = list(
-        sig
-        for (token_preimage, sig)
-        in servers_passes
-    )
+    servers_verification_sigs = list(sig for (token_preimage, sig) in servers_passes)
     servers_verification_keys = list(
         unblinded_token.derive_verification_key_sha512()
-        for unblinded_token
-        in servers_unblinded_tokens
+        for unblinded_token in servers_unblinded_tokens
     )
     invalid_passes = list(
         key.invalid_sha512(
             sig,
             message,
         )
-        for (key, sig)
-        in zip(servers_verification_keys, servers_verification_sigs)
+        for (key, sig) in zip(servers_verification_keys, servers_verification_sigs)
     )
 
     return not any(invalid_passes)
@@ -1038,6 +1056,7 @@ class UnexpectedResponseRedemption(Resource):
     An ``UnexpectedResponseRedemption`` simulates the Ristretto redemption
     server but always returns a non-JSON error response.
     """
+
     def render_POST(self, request):
         request.setResponseCode(INTERNAL_SERVER_ERROR)
         return b"Sorry, this server does not behave well."
@@ -1049,6 +1068,7 @@ class AlreadySpentRedemption(Resource):
     but always refuses to allow vouchers to be redeemed and reports an error
     that the voucher has already been redeemed.
     """
+
     def render_POST(self, request):
         request_error = check_redemption_request(request)
         if request_error is not None:
@@ -1063,6 +1083,7 @@ class UnpaidRedemption(Resource):
     always refuses to allow vouchers to be redeemed and reports an error that
     the voucher has not been paid for.
     """
+
     def render_POST(self, request):
         request_error = check_redemption_request(request)
         if request_error is not None:
@@ -1086,18 +1107,14 @@ class RistrettoRedemption(Resource):
         marshaled_blinded_tokens = request_body[u"redeemTokens"]
         servers_blinded_tokens = list(
             BlindedToken.decode_base64(marshaled_blinded_token.encode("ascii"))
-            for marshaled_blinded_token
-            in marshaled_blinded_tokens
+            for marshaled_blinded_token in marshaled_blinded_tokens
         )
         servers_signed_tokens = list(
             self.signing_key.sign(blinded_token)
-            for blinded_token
-            in servers_blinded_tokens
+            for blinded_token in servers_blinded_tokens
         )
         marshaled_signed_tokens = list(
-            signed_token.encode_base64()
-            for signed_token
-            in servers_signed_tokens
+            signed_token.encode_base64() for signed_token in servers_signed_tokens
         )
         servers_proof = BatchDLEQProof.create(
             self.signing_key,
@@ -1109,18 +1126,21 @@ class RistrettoRedemption(Resource):
         finally:
             servers_proof.destroy()
 
-        return dumps({
-            u"success": True,
-            u"public-key": self.public_key.encode_base64(),
-            u"signatures": marshaled_signed_tokens,
-            u"proof": marshaled_proof,
-        })
+        return dumps(
+            {
+                u"success": True,
+                u"public-key": self.public_key.encode_base64(),
+                u"signatures": marshaled_signed_tokens,
+                u"proof": marshaled_proof,
+            }
+        )
 
 
 class CheckRedemptionRequestTests(TestCase):
     """
     Tests for ``check_redemption_request``.
     """
+
     def test_content_type(self):
         """
         If the request content-type is not application/json, the response is
@@ -1197,6 +1217,7 @@ class CheckRedemptionRequestTests(TestCase):
             ),
         )
 
+
 def check_redemption_request(request):
     """
     Verify that the given request conforms to the redemption server's public
@@ -1218,7 +1239,8 @@ def check_redemption_request(request):
     actual_keys = set(request_body.keys())
     if expected_keys != actual_keys:
         return bad_request(
-            request, {
+            request,
+            {
                 u"success": False,
                 u"reason": u"{} != {}".format(
                     expected_keys,

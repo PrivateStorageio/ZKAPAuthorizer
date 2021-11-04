@@ -81,6 +81,7 @@ from ..foolscap import (
     ShareStat,
 )
 
+
 class IHasSchema(RemoteInterface):
     def method(arg=int):
         return bytes
@@ -111,6 +112,7 @@ class LocalRemoteTests(TestCase):
     """
     Tests for the ``LocalRemote`` test double.
     """
+
     @given(
         ref=one_of(
             just(remote_reference()),
@@ -195,6 +197,7 @@ class LocalRemoteTests(TestCase):
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fires with a
         failure if the method's result cannot be serialized.
         """
+
         class BrokenResultReferenceable(DummyReferenceable):
             def doRemoteCall(self, *a, **kw):
                 return BrokenCopyable()
@@ -224,6 +227,7 @@ class SerializationTests(TrialTestCase):
     """
     Tests for the serialization of types used in the Foolscap API.
     """
+
     def test_sharestat(self):
         """
         A ``ShareStat`` instance can be sent as an argument to and received in a

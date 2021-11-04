@@ -174,7 +174,6 @@ from .eliot import (
 )
 
 
-
 SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
 
 
@@ -184,11 +183,11 @@ def get_rref(interface=None):
     return LocalRemote(DummyReferenceable(interface))
 
 
-
 class GetRRefTests(TestCase):
     """
     Tests for ``get_rref``.
     """
+
     def test_localremote(self):
         """
         ``get_rref`` returns an instance of ``LocalRemote``.
@@ -210,7 +209,9 @@ class GetRRefTests(TestCase):
             AfterPreprocessing(
                 lambda ref: ref.tracker,
                 MatchesStructure(
-                    interfaceName=Equals(RIPrivacyPassAuthorizedStorageServer.__remote_name__),
+                    interfaceName=Equals(
+                        RIPrivacyPassAuthorizedStorageServer.__remote_name__
+                    ),
                 ),
             ),
         )
@@ -237,6 +238,7 @@ class PluginTests(TestCase):
     """
     Tests for ``twisted.plugins.zkapauthorizer.storage_server``.
     """
+
     def test_discoverable(self):
         """
         The plugin can be discovered.
@@ -245,7 +247,6 @@ class PluginTests(TestCase):
             getPlugins(IFoolscapStoragePlugin),
             Contains(storage_server),
         )
-
 
     def test_provides_interface(self):
         """
@@ -257,12 +258,12 @@ class PluginTests(TestCase):
         )
 
 
-
 class ServerPluginTests(TestCase):
     """
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
+
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_announceable(self, configuration):
         """
@@ -277,7 +278,6 @@ class ServerPluginTests(TestCase):
             storage_server_deferred,
             succeeded(Provides([IAnnounceableStorageServer])),
         )
-
 
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_referenceable(self, configuration):
@@ -323,7 +323,6 @@ class ServerPluginTests(TestCase):
             ),
         )
 
-
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_hashable(self, configuration):
         """
@@ -352,15 +351,21 @@ class ServerPluginTests(TestCase):
 
 tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
 
-tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs({
-    u"privatestorageio-zkapauthz-v1": just({u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}),
-})
+tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs(
+    {
+        u"privatestorageio-zkapauthz-v1": just(
+            {u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}
+        ),
+    }
+)
+
 
 class ClientPluginTests(TestCase):
     """
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
+
     @given(tahoe_configs(), announcements())
     def test_interface(self, get_config, announcement):
         """
@@ -383,7 +388,6 @@ class ClientPluginTests(TestCase):
             storage_client,
             Provides([IStorageServer]),
         )
-
 
     @given(tahoe_configs_with_mismatched_issuer, announcements())
     def test_mismatched_ristretto_issuer(self, config_text, announcement):
@@ -420,7 +424,6 @@ class ClientPluginTests(TestCase):
             raises(IssuerConfigurationMismatch),
         )
 
-
     @given(
         tahoe_configs(),
         announcements(),
@@ -431,15 +434,14 @@ class ClientPluginTests(TestCase):
         sizes(),
     )
     def test_mismatch_storage_server_furl(
-            self,
-            get_config,
-            announcement,
-            storage_index,
-            renew_secret,
-            cancel_secret,
-            sharenums,
-            size,
-
+        self,
+        get_config,
+        announcement,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        size,
     ):
         """
         If the ``get_rref`` passed to ``get_storage_client`` returns a reference
@@ -484,14 +486,14 @@ class ClientPluginTests(TestCase):
     )
     @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
-            self,
-            logger,
-            get_config,
-            now,
-            announcement,
-            voucher,
-            num_passes,
-            public_key,
+        self,
+        logger,
+        get_config,
+        now,
+        announcement,
+        voucher,
+        num_passes,
+        public_key,
     ):
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
@@ -548,10 +550,12 @@ class ClientPluginTests(TestCase):
                 AllMatch(
                     AfterPreprocessing(
                         lambda logged_message: logged_message.message,
-                        ContainsDict({
-                            u"message": Equals(u"request binding message"),
-                            u"count": Equals(num_passes),
-                        }),
+                        ContainsDict(
+                            {
+                                u"message": Equals(u"request binding message"),
+                                u"count": Equals(num_passes),
+                            }
+                        ),
                     ),
                 ),
             ),
@@ -563,6 +567,7 @@ class ClientResourceTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
+
     @given(tahoe_configs())
     def test_interface(self, get_config):
         """
@@ -617,6 +622,7 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
     Tests for the plugin's initialization of the lease maintenance service.
     """
+
     def _created_test(self, get_config, servers_yaml, rootcap):
         original_tempdir = tempfile.tempdir
 
@@ -654,7 +660,7 @@ class LeaseMaintenanceServiceTests(TestCase):
             # suite if we don't clean it up.  We can't do this with a tearDown
             # or a fixture or an addCleanup because hypothesis doesn't run any
             # of those at the right time. :/
-           tempfile.tempdir = original_tempdir
+            tempfile.tempdir = original_tempdir
 
     @settings(
         deadline=None,
@@ -670,7 +676,6 @@ class LeaseMaintenanceServiceTests(TestCase):
         connect to.
         """
         return self._created_test(get_config, servers_yaml, rootcap=True)
-
 
     @settings(
         deadline=None,
@@ -691,6 +696,7 @@ class LoadSigningKeyTests(TestCase):
     """
     Tests for ``load_signing_key``.
     """
+
     @given(ristretto_signing_keys())
     def test_valid(self, key_bytes):
         """

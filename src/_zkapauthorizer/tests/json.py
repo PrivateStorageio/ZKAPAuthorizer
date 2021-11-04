@@ -24,6 +24,7 @@ from json import (
     loads as _loads,
 )
 
+
 def loads(data):
     """
     Load a JSON object from a byte string.

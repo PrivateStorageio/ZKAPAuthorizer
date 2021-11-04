@@ -96,11 +96,11 @@ from .storage_common import (
 )
 
 
-
 class GetConfiguredValueTests(TestCase):
     """
     Tests for helpers for reading certain configuration values.
     """
+
     @given(integers(min_value=1, max_value=255))
     def test_get_configured_shares_needed(self, expected):
         """
@@ -115,7 +115,9 @@ class GetConfiguredValueTests(TestCase):
 shares.needed = {}
 shares.happy = 5
 shares.total = 10
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -137,7 +139,9 @@ shares.total = 10
 shares.needed = 5
 shares.happy = 5
 shares.total = {}
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -163,7 +167,9 @@ shares.total = 10
 
 [storageclient.plugins.privatestorageio-zkapauthz-v1]
 pass-value={}
-""".format(expected),
+""".format(
+                expected
+            ),
         )
 
         self.assertThat(
@@ -189,7 +195,9 @@ shares.total = 10
 
 [storageclient.plugins.privatestorageio-zkapauthz-v1]
 allowed-public-keys = {}
-""".format(",".join(expected)),
+""".format(
+                ",".join(expected)
+            ),
         )
 
         self.assertThat(
@@ -202,6 +210,7 @@ class CallWithPassesTests(TestCase):
     """
     Tests for ``call_with_passes``.
     """
+
     @given(pass_counts())
     def test_success_result(self, num_passes):
         """
@@ -321,7 +330,9 @@ class CallWithPassesTests(TestCase):
         def reject_even_pass_values(group):
             passes = group.passes
             good_passes = list(idx for (idx, p) in enumerate(passes) if p % 2)
-            bad_passes = list(idx for (idx, p) in enumerate(passes) if idx not in good_passes)
+            bad_passes = list(
+                idx for (idx, p) in enumerate(passes) if idx not in good_passes
+            )
             if len(good_passes) < num_passes:
                 _ValidationResult(
                     valid=good_passes,
@@ -463,11 +474,14 @@ class CallWithPassesTests(TestCase):
             ),
         )
 
+
 def reset(group):
     group.reset()
 
+
 def spend(group):
     group.mark_spent()
+
 
 def invalidate(group):
     group.mark_invalid(u"reason")
@@ -480,6 +494,7 @@ class PassFactoryTests(TestCase):
     It is unfortunate that this isn't the same test suite as
     ``test_spending.PassGroupTests``.
     """
+
     @given(pass_counts(), pass_counts())
     def test_returned_passes_reused(self, num_passes_a, num_passes_b):
         """

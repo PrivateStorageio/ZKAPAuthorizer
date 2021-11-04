@@ -15,10 +15,10 @@
 # limitations under the License.
 
 __all__ = [
-    'MatchesExceptionType',
-    'Raises',
-    'raises',
-    ]
+    "MatchesExceptionType",
+    "Raises",
+    "raises",
+]
 
 import sys
 
@@ -55,7 +55,7 @@ class MatchesExceptionType(Matcher):
 
     def match(self, other):
         if type(other) != tuple:
-            return Mismatch('{!r} is not an exc_info tuple'.format(other))
+            return Mismatch("{!r} is not an exc_info tuple".format(other))
         expected_class = self.expected
         etype, evalue, etb = other
         if not issubclass(etype, expected_class):
@@ -94,7 +94,7 @@ class Raises(Matcher):
     def match(self, matchee):
         try:
             result = matchee()
-            return Mismatch('%r returned %r' % (matchee, result))
+            return Mismatch("%r returned %r" % (matchee, result))
         # Catch all exceptions: Raises() should be able to match a
         # KeyboardInterrupt or SystemExit.
         except:
@@ -113,7 +113,7 @@ class Raises(Matcher):
         return None
 
     def __str__(self):
-        return 'Raises()'
+        return "Raises()"
 
 
 def raises(exception_type):

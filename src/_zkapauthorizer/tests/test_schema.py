@@ -32,6 +32,7 @@ from ..schema import (
     _UPGRADES,
 )
 
+
 class UpgradeTests(TestCase):
     def test_consistency(self):
         """
