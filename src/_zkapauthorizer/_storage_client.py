@@ -20,55 +20,29 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from functools import (
-    partial,
-    wraps,
-)
+from functools import partial, wraps
 
 import attr
-from attr.validators import (
-    provides,
-)
+from allmydata.interfaces import IStorageServer
+from attr.validators import provides
+from eliot.twisted import inline_callbacks
+from twisted.internet.defer import returnValue
+from twisted.internet.interfaces import IReactorTime
+from twisted.python.reflect import namedAny
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from eliot.twisted import (
-    inline_callbacks,
-)
-
-from twisted.internet.interfaces import (
-    IReactorTime,
-)
-from twisted.python.reflect import (
-    namedAny,
-)
-from twisted.internet.defer import (
-    returnValue,
-)
-from allmydata.interfaces import (
-    IStorageServer,
-)
-
-from .eliot import (
-    SIGNATURE_CHECK_FAILED,
-    CALL_WITH_PASSES,
-)
-
+from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED
 from .storage_common import (
     MorePassesRequired,
+    add_lease_message,
+    allocate_buckets_message,
+    get_required_new_passes_for_mutable_write,
+    has_writes,
     pass_value_attribute,
     required_passes,
-    allocate_buckets_message,
-    add_lease_message,
     slot_testv_and_readv_and_writev_message,
-    has_writes,
-    get_required_new_passes_for_mutable_write,
 )
 
 

@@ -18,75 +18,31 @@ Tahoe-LAFS.
 """
 
 import random
-from weakref import (
-    WeakValueDictionary,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
-from functools import (
-    partial,
-)
+from datetime import datetime, timedelta
+from functools import partial
+from weakref import WeakValueDictionary
 
 import attr
+from allmydata.client import _Client
+from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
+from allmydata.node import MissingConfigEntry
+from challenge_bypass_ristretto import SigningKey
+from twisted.internet.defer import succeed
+from twisted.logger import Logger
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from twisted.logger import (
-    Logger,
-)
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.defer import (
-    succeed,
-)
-
-from allmydata.interfaces import (
-    IFoolscapStoragePlugin,
-    IAnnounceableStorageServer,
-)
-from allmydata.node import (
-    MissingConfigEntry,
-)
-from allmydata.client import (
-    _Client,
-)
-from challenge_bypass_ristretto import (
-    SigningKey,
-)
-
-from .api import (
-    ZKAPAuthorizerStorageServer,
-    ZKAPAuthorizerStorageClient,
-)
-
-from .model import (
-    VoucherStore,
-)
-
-from .resource import (
-    from_configuration as resource_from_configuration,
-)
-from .storage_common import (
-    BYTES_PER_PASS,
-    get_configured_pass_value,
-)
-from .controller import (
-    get_redeemer,
-)
-from .spending import (
-    SpendingController,
-)
-
+from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
+from .controller import get_redeemer
 from .lease_maintenance import (
     SERVICE_NAME,
     lease_maintenance_service,
     maintain_leases_from_root,
 )
+from .model import VoucherStore
+from .resource import from_configuration as resource_from_configuration
+from .spending import SpendingController
+from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 
 _log = Logger()
 
@@ -260,9 +216,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
 
-    from twisted.plugins.zkapauthorizer import (
-        storage_server,
-    )
+    from twisted.plugins.zkapauthorizer import storage_server
 
     store = storage_server._get_store(node_config)
 

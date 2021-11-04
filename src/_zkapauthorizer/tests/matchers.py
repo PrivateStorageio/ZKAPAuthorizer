@@ -25,37 +25,27 @@ __all__ = [
     "leases_current",
 ]
 
-from datetime import (
-    datetime,
-)
+from datetime import datetime
 
 import attr
-
 from testtools.matchers import (
-    Matcher,
-    Mismatch,
-    ContainsDict,
+    AfterPreprocessing,
+    AllMatch,
     Always,
+    ContainsDict,
+    Equals,
+    GreaterThan,
+    LessThan,
+    Matcher,
     MatchesAll,
     MatchesAny,
     MatchesStructure,
-    GreaterThan,
-    LessThan,
-    Equals,
-    AfterPreprocessing,
-    AllMatch,
+    Mismatch,
 )
-from testtools.twistedsupport import (
-    succeeded,
-)
+from testtools.twistedsupport import succeeded
+from treq import content
 
-from treq import (
-    content,
-)
-
-from ._exception import (
-    raises,
-)
+from ._exception import raises
 
 
 @attr.s

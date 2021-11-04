@@ -16,27 +16,13 @@
 Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from zope.interface import (
-    Interface,
-    implementer,
-)
+from testtools import TestCase
+from testtools.matchers import Is, Not
+from zope.interface import Interface, implementer
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Not,
-    Is,
-)
-
-from .matchers import (
-    Provides,
-    returns,
-)
+from .matchers import Provides, returns
 
 
 class IX(Interface):

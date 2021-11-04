@@ -17,20 +17,12 @@
 Tests for ``_zkapauthorizer.schema``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Equals,
-)
+from testtools import TestCase
+from testtools.matchers import Equals
 
-from ..schema import (
-    _UPGRADES,
-)
+from ..schema import _UPGRADES
 
 
 class UpgradeTests(TestCase):

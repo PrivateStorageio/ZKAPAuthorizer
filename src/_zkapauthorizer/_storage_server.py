@@ -21,91 +21,39 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from struct import (
-    unpack,
-    calcsize,
-)
+from datetime import timedelta
+from errno import ENOENT
+from functools import partial
+from os import listdir, stat
+from os.path import join
+from struct import calcsize, unpack
 
-from errno import (
-    ENOENT,
-)
-
-from functools import (
-    partial,
-)
-
-from os.path import (
-    join,
-)
-from os import (
-    listdir,
-    stat,
-)
-from datetime import (
-    timedelta,
-)
 import attr
-from attr.validators import (
-    provides,
-    instance_of,
-)
+from allmydata.interfaces import RIStorageServer
+from allmydata.storage.common import storage_index_to_dir
+from allmydata.util.base32 import b2a
+from attr.validators import instance_of, provides
+from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
+from eliot import start_action
+from foolscap.api import Referenceable
+from foolscap.ipb import IReferenceable, IRemotelyCallable
+from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IReactorTime
+from twisted.python.reflect import namedAny
+from zope.interface import implementer_only
 
-from zope.interface import (
-    implementer_only,
-)
-from foolscap.api import (
-    Referenceable,
-)
-from foolscap.ipb import (
-    IReferenceable,
-    IRemotelyCallable,
-)
-from allmydata.interfaces import (
-    RIStorageServer,
-)
-from allmydata.storage.common import (
-    storage_index_to_dir,
-)
-from allmydata.util.base32 import (
-    b2a,
-)
-from challenge_bypass_ristretto import (
-    TokenPreimage,
-    VerificationSignature,
-    SigningKey,
-)
-
-from twisted.internet.defer import (
-    Deferred,
-)
-from twisted.python.reflect import (
-    namedAny,
-)
-from twisted.internet.interfaces import (
-    IReactorTime,
-)
-
-from eliot import (
-    start_action,
-)
-
-from .foolscap import (
-    ShareStat,
-    RIPrivacyPassAuthorizedStorageServer,
-)
+from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .storage_common import (
     MorePassesRequired,
+    add_lease_message,
+    allocate_buckets_message,
+    get_required_new_passes_for_mutable_write,
+    has_writes,
     pass_value_attribute,
     required_passes,
-    allocate_buckets_message,
-    add_lease_message,
     slot_testv_and_readv_and_writev_message,
-    has_writes,
-    get_required_new_passes_for_mutable_write,
 )
 
 # See allmydata/storage/mutable.py
@@ -752,17 +700,12 @@ def get_stat(sharepath):
             return stat_bucket
 
 
+from foolscap.ipb import ISlicer
+from foolscap.referenceable import ReferenceableSlicer
+
 # I don't understand why this is required.
 # ZKAPAuthorizerStorageServer is-a Referenceable.  It seems like
 # the built in adapter should take care of this case.
-from twisted.python.components import (
-    registerAdapter,
-)
-from foolscap.referenceable import (
-    ReferenceableSlicer,
-)
-from foolscap.ipb import (
-    ISlicer,
-)
+from twisted.python.components import registerAdapter
 
 registerAdapter(ReferenceableSlicer, ZKAPAuthorizerStorageServer, ISlicer)

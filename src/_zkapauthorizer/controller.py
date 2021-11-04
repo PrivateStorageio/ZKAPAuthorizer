@@ -17,90 +17,38 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from sys import (
-    exc_info,
-)
-from operator import (
-    setitem,
-    delitem,
-)
-from functools import (
-    partial,
-)
-from json import (
-    dumps,
-    loads,
-)
-from datetime import (
-    timedelta,
-)
-from base64 import (
-    b64encode,
-    b64decode,
-)
-from hashlib import (
-    sha256,
-)
+from base64 import b64decode, b64encode
+from datetime import timedelta
+from functools import partial
+from hashlib import sha256
+from json import dumps, loads
+from operator import delitem, setitem
+from sys import exc_info
 
 import attr
-
-from zope.interface import (
-    Interface,
-    implementer,
-)
-
-from twisted.python.reflect import (
-    namedAny,
-)
-from twisted.logger import (
-    Logger,
-)
-from twisted.python.url import (
-    URL,
-)
-from twisted.internet.defer import (
-    Deferred,
-    succeed,
-    fail,
-    inlineCallbacks,
-    returnValue,
-)
-from twisted.internet.task import (
-    LoopingCall,
-)
-from twisted.web.client import (
-    Agent,
-)
-from treq import (
-    content,
-)
-from treq.client import (
-    HTTPClient,
-)
-
 import challenge_bypass_ristretto
+from treq import content
+from treq.client import HTTPClient
+from twisted.internet.defer import Deferred, fail, inlineCallbacks, returnValue, succeed
+from twisted.internet.task import LoopingCall
+from twisted.logger import Logger
+from twisted.python.reflect import namedAny
+from twisted.python.url import URL
+from twisted.web.client import Agent
+from zope.interface import Interface, implementer
 
-from ._base64 import (
-    urlsafe_b64decode,
-)
-from ._stack import (
-    less_limited_stack,
-)
-
-from .model import (
-    RandomToken,
-    UnblindedToken,
-    Voucher,
-    Pass,
-    Pending as model_Pending,
-    Unpaid as model_Unpaid,
-    Redeeming as model_Redeeming,
-    Error as model_Error,
-)
+from ._base64 import urlsafe_b64decode
+from ._stack import less_limited_stack
+from .model import Error as model_Error
+from .model import Pass
+from .model import Pending as model_Pending
+from .model import RandomToken
+from .model import Redeeming as model_Redeeming
+from .model import UnblindedToken
+from .model import Unpaid as model_Unpaid
+from .model import Voucher
 
 RETRY_INTERVAL = timedelta(milliseconds=1000)
 

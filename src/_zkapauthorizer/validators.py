@@ -16,9 +16,7 @@
 This module implements validators for ``attrs``-defined attributes.
 """
 
-from base64 import (
-    b64decode,
-)
+from base64 import b64decode
 
 
 def is_base64_encoded(b64decode=b64decode):

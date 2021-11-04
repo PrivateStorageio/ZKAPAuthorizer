@@ -17,101 +17,69 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from os import (
-    mkdir,
-)
-from errno import (
-    EACCES,
-)
-from datetime import (
-    datetime,
-    timedelta,
-)
+from datetime import datetime, timedelta
+from errno import EACCES
+from os import mkdir
+from unittest import skipIf
 
-from unittest import (
-    skipIf,
-)
-
-from testtools import (
-    TestCase,
-)
-from testtools.matchers import (
-    Always,
-    HasLength,
-    AfterPreprocessing,
-    MatchesStructure,
-    MatchesAll,
-    Equals,
-    Raises,
-    IsInstance,
-)
-from testtools.twistedsupport import (
-    succeeded,
-)
-
-from fixtures import (
-    TempDir,
-)
-
-from hypothesis import (
-    note,
-    given,
-    assume,
-)
+from fixtures import TempDir
+from hypothesis import assume, given, note
 from hypothesis.stateful import (
     RuleBasedStateMachine,
-    rule,
-    precondition,
     invariant,
+    precondition,
+    rule,
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
-    data,
     booleans,
-    lists,
-    tuples,
+    data,
     datetimes,
-    timedeltas,
     integers,
+    lists,
     randoms,
+    timedeltas,
+    tuples,
 )
-
-from twisted.python.runtime import (
-    platform,
+from testtools import TestCase
+from testtools.matchers import (
+    AfterPreprocessing,
+    Always,
+    Equals,
+    HasLength,
+    IsInstance,
+    MatchesAll,
+    MatchesStructure,
+    Raises,
 )
+from testtools.twistedsupport import succeeded
+from twisted.python.runtime import platform
 
 from ..model import (
-    StoreOpenError,
-    NotEnoughTokens,
-    VoucherStore,
-    Voucher,
-    Pending,
     DoubleSpend,
-    Redeemed,
     LeaseMaintenanceActivity,
+    NotEnoughTokens,
+    Pending,
+    Redeemed,
+    StoreOpenError,
+    Voucher,
+    VoucherStore,
     memory_connect,
 )
+from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from .matchers import raises
 from .strategies import (
-    tahoe_configs,
-    vouchers,
-    voucher_objects,
-    voucher_counters,
-    random_tokens,
-    unblinded_tokens,
-    posix_safe_datetimes,
     dummy_ristretto_keys,
     pass_counts,
-)
-from .fixtures import (
-    TemporaryVoucherStore,
-    ConfiglessMemoryVoucherStore,
-)
-from .matchers import (
-    raises,
+    posix_safe_datetimes,
+    random_tokens,
+    tahoe_configs,
+    unblinded_tokens,
+    voucher_counters,
+    voucher_objects,
+    vouchers,
 )
 
 

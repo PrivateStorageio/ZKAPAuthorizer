@@ -16,27 +16,15 @@
 Functionality shared between the storage client and server.
 """
 
-from __future__ import (
-    division,
-)
+from __future__ import division
 
-from base64 import (
-    b64encode,
-)
+from base64 import b64encode
 
 import attr
+from pyutil.mathutil import div_ceil
 
-from .validators import (
-    greater_than,
-)
-
-from .eliot import (
-    MUTABLE_PASSES_REQUIRED,
-)
-
-from pyutil.mathutil import (
-    div_ceil,
-)
+from .eliot import MUTABLE_PASSES_REQUIRED
+from .validators import greater_than
 
 
 @attr.s(frozen=True, str=True)

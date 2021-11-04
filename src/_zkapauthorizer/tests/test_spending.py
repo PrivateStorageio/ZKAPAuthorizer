@@ -16,45 +16,23 @@
 Tests for ``_zkapauthorizer.spending``.
 """
 
-from testtools import (
-    TestCase,
-)
+from hypothesis import given
+from hypothesis.strategies import data, integers, randoms
+from testtools import TestCase
 from testtools.matchers import (
+    AfterPreprocessing,
     Always,
     Equals,
+    HasLength,
     MatchesAll,
     MatchesStructure,
-    HasLength,
-    AfterPreprocessing,
 )
-from testtools.twistedsupport import (
-    succeeded,
-)
+from testtools.twistedsupport import succeeded
 
-from hypothesis import (
-    given,
-)
-from hypothesis.strategies import (
-    integers,
-    randoms,
-    data,
-)
-
-from .strategies import (
-    vouchers,
-    pass_counts,
-    posix_safe_datetimes,
-)
-from .matchers import (
-    Provides,
-)
-from .fixtures import (
-    ConfiglessMemoryVoucherStore,
-)
-from ..spending import (
-    IPassGroup,
-    SpendingController,
-)
+from ..spending import IPassGroup, SpendingController
+from .fixtures import ConfiglessMemoryVoucherStore
+from .matchers import Provides
+from .strategies import pass_counts, posix_safe_datetimes, vouchers
 
 
 class PassGroupTests(TestCase):

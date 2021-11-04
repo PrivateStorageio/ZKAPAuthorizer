@@ -16,35 +16,14 @@
 Testing helpers related to Foolscap.
 """
 
-from __future__ import (
-    absolute_import,
-)
-
-from zope.interface import (
-    implementer,
-)
+from __future__ import absolute_import
 
 import attr
-
-from twisted.internet.defer import (
-    succeed,
-    fail,
-)
-
-from foolscap.api import (
-    RemoteInterface,
-    Referenceable,
-    Copyable,
-    Any,
-)
-from foolscap.copyable import (
-    ICopyable,
-    CopyableSlicer,
-)
-
-from allmydata.interfaces import (
-    RIStorageServer,
-)
+from allmydata.interfaces import RIStorageServer
+from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
+from foolscap.copyable import CopyableSlicer, ICopyable
+from twisted.internet.defer import fail, succeed
+from zope.interface import implementer
 
 
 class RIStub(RemoteInterface):

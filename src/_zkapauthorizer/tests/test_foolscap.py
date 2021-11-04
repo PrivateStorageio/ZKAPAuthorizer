@@ -16,70 +16,29 @@
 Tests for Foolscap-related test helpers.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from fixtures import (
-    Fixture,
-)
-from testtools import (
-    TestCase,
-)
+from fixtures import Fixture
+from foolscap.api import Any, RemoteInterface, Violation
+from foolscap.furl import decode_furl
+from foolscap.pb import Tub
+from foolscap.referenceable import RemoteReferenceOnly, RemoteReferenceTracker
+from hypothesis import given
+from hypothesis.strategies import just, one_of
+from testtools import TestCase
 from testtools.matchers import (
-    Equals,
-    MatchesAll,
     AfterPreprocessing,
     Always,
+    Equals,
     IsInstance,
+    MatchesAll,
 )
-from testtools.twistedsupport import (
-    succeeded,
-    failed,
-)
+from testtools.twistedsupport import failed, succeeded
+from twisted.internet.defer import inlineCallbacks
+from twisted.trial.unittest import TestCase as TrialTestCase
 
-from twisted.trial.unittest import (
-    TestCase as TrialTestCase,
-)
-from twisted.internet.defer import (
-    inlineCallbacks,
-)
-
-from foolscap.api import (
-    Violation,
-    RemoteInterface,
-    Any,
-)
-from foolscap.furl import (
-    decode_furl,
-)
-from foolscap.pb import (
-    Tub,
-)
-from foolscap.referenceable import (
-    RemoteReferenceTracker,
-    RemoteReferenceOnly,
-)
-
-from hypothesis import (
-    given,
-)
-from hypothesis.strategies import (
-    one_of,
-    just,
-)
-
-from .foolscap import (
-    RIStub,
-    Echoer,
-    LocalRemote,
-    BrokenCopyable,
-    DummyReferenceable,
-)
-
-from ..foolscap import (
-    ShareStat,
-)
+from ..foolscap import ShareStat
+from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, RIStub
 
 
 class IHasSchema(RemoteInterface):

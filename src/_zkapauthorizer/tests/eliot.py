@@ -16,26 +16,14 @@
 Eliot testing helpers.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from functools import (
-    wraps,
-)
+from functools import wraps
+from unittest import SkipTest
 
-from unittest import (
-    SkipTest,
-)
+from eliot import MemoryLogger
+from eliot.testing import check_for_errors, swap_logger
 
-from eliot import (
-    MemoryLogger,
-)
-
-from eliot.testing import (
-    swap_logger,
-    check_for_errors,
-)
 
 # validate_logging and capture_logging copied from Eliot around 1.11.  We
 # can't upgrade past 1.7 because we're not Python 3 compatible.

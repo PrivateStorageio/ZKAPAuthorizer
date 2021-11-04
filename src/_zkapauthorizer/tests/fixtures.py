@@ -16,41 +16,19 @@
 Common fixtures to let the test suite focus on application logic.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
-from base64 import (
-    b64encode,
-)
+from base64 import b64encode
 
 import attr
-
-from fixtures import (
-    Fixture,
-    TempDir,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-from twisted.internet.task import (
-    Clock,
-)
 from allmydata import __version__ as allmydata_version
-from allmydata.storage.server import (
-    StorageServer,
-)
+from allmydata.storage.server import StorageServer
+from fixtures import Fixture, TempDir
+from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
 
-from ..model import (
-    VoucherStore,
-    open_and_initialize,
-    memory_connect,
-)
-from ..controller import (
-    DummyRedeemer,
-    PaymentController,
-)
+from ..controller import DummyRedeemer, PaymentController
+from ..model import VoucherStore, memory_connect, open_and_initialize
 
 
 @attr.s

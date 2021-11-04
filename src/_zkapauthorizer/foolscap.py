@@ -17,32 +17,13 @@ Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
 to communicate between storage clients and servers.
 """
 
-from __future__ import (
-    absolute_import,
-)
+from __future__ import absolute_import
 
 import attr
-
-from foolscap.constraint import (
-    ByteStringConstraint,
-)
-from foolscap.api import (
-    Any,
-    DictOf,
-    ListOf,
-    Copyable,
-    RemoteCopy,
-)
-from foolscap.remoteinterface import (
-    RemoteMethodSchema,
-    RemoteInterface,
-)
-
-from allmydata.interfaces import (
-    StorageIndex,
-    RIStorageServer,
-    Offset,
-)
+from allmydata.interfaces import Offset, RIStorageServer, StorageIndex
+from foolscap.api import Any, Copyable, DictOf, ListOf, RemoteCopy
+from foolscap.constraint import ByteStringConstraint
+from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
 
 
 @attr.s

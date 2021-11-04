@@ -21,63 +21,27 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
-from sys import (
-    maxint,
-)
-from itertools import (
-    islice,
-)
-from json import (
-    loads,
-    load,
-    dumps,
-)
-from zope.interface import (
-    Attribute,
-)
-from twisted.logger import (
-    Logger,
-)
-from twisted.web.http import (
-    BAD_REQUEST,
-)
-from twisted.web.server import (
-    NOT_DONE_YET,
-)
-from twisted.web.resource import (
-    IResource,
-    ErrorPage,
-    NoResource,
-    Resource,
-)
+from itertools import islice
+from json import dumps, load, loads
+from sys import maxint
 
-from . import (
-    __version__ as _zkapauthorizer_version,
-)
+from twisted.logger import Logger
+from twisted.web.http import BAD_REQUEST
+from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
+from twisted.web.server import NOT_DONE_YET
+from zope.interface import Attribute
 
-from ._base64 import (
-    urlsafe_b64decode,
-)
-
+from . import __version__ as _zkapauthorizer_version
+from ._base64 import urlsafe_b64decode
+from .controller import PaymentController, get_redeemer
+from .pricecalculator import PriceCalculator
+from .private import create_private_tree
 from .storage_common import (
+    get_configured_allowed_public_keys,
+    get_configured_lease_duration,
+    get_configured_pass_value,
     get_configured_shares_needed,
     get_configured_shares_total,
-    get_configured_pass_value,
-    get_configured_lease_duration,
-    get_configured_allowed_public_keys,
-)
-
-from .pricecalculator import (
-    PriceCalculator,
-)
-
-from .controller import (
-    PaymentController,
-    get_redeemer,
-)
-
-from .private import (
-    create_private_tree,
 )
 
 # The number of tokens to submit with a voucher redemption.

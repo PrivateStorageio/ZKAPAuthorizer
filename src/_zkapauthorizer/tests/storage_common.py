@@ -16,53 +16,20 @@
 ``allmydata.storage``-related helpers shared across the test suite.
 """
 
-from functools import (
-    partial,
-)
-
-from os import (
-    SEEK_CUR,
-)
-from struct import (
-    pack,
-)
-
-from itertools import (
-    islice,
-)
+from functools import partial
+from itertools import islice
+from os import SEEK_CUR
+from struct import pack
 
 import attr
+from challenge_bypass_ristretto import RandomToken
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
-from zope.interface import (
-    implementer,
-)
-
-from twisted.python.filepath import (
-    FilePath,
-)
-
-from challenge_bypass_ristretto import (
-    RandomToken,
-)
-
-from .strategies import (
-    # Not really a strategy...
-    bytes_for_share,
-)
-
-from .privacypass import (
-    make_passes,
-)
-
-from ..model import (
-    NotEnoughTokens,
-    Pass,
-)
-
-from ..spending import (
-    IPassFactory,
-    PassGroup,
-)
+from ..model import NotEnoughTokens, Pass
+from ..spending import IPassFactory, PassGroup
+from .privacypass import make_passes
+from .strategies import bytes_for_share  # Not really a strategy...
 
 # Hard-coded in Tahoe-LAFS
 LEASE_INTERVAL = 60 * 60 * 24 * 31
