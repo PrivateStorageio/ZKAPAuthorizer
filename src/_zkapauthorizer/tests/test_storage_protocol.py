@@ -39,9 +39,9 @@ from testtools.twistedsupport import (
     succeeded,
     failed,
 )
+# I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
+# there appear to have stalled.
 from testtools.twistedsupport._deferred import (
-    # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
-    # there appear to have stalled.
     extract_result,
 )
 
@@ -94,8 +94,7 @@ from .strategies import (
     sizes,
     slot_test_and_write_vectors_for_shares,
     posix_timestamps,
-    # Not really a strategy...
-    bytes_for_share,
+    bytes_for_share,  # Not really a strategy...
 )
 from .matchers import (
     matches_version_dictionary,
