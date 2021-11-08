@@ -85,6 +85,7 @@ class UnrecognizedFailureReason(Exception):
 
     The redemption attempt may be automatically retried at some point.
     """
+
     response = attr.ib()
 
 
