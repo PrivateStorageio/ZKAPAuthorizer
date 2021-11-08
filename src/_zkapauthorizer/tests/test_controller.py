@@ -58,6 +58,7 @@ from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
 from ..controller import (
+    UnrecognizedFailureReason,
     AlreadySpent,
     DoubleSpendRedeemer,
     ErrorRedeemer,
@@ -884,6 +885,34 @@ class RistrettoRedeemerTests(TestCase):
                 ),
             ),
         )
+
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_unknown_response(self, voucher, counter, extra_tokens):
+        """
+        If the issuer returns a failure without a recognizable reason then
+        ``RistrettoRedeemer.redeemWithCounter`` returns a ``Deferred`` that
+        fails with ``UnrecognizedFailureReason``.
+        """
+        num_tokens = counter + extra_tokens
+        issuer = UnsuccessfulRedemption(u"mysterious")
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
+        d = redeemer.redeemWithCounter(
+            voucher,
+            counter,
+            random_tokens,
+        )
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(UnrecognizedFailureReason),
+                ),
+            ),
+        )
+
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
     def test_bad_ristretto_redemption(self, voucher, counter, extra_tokens):
