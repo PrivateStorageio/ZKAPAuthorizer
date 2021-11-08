@@ -144,7 +144,13 @@ These binary diffs could be copied to the backup location and would update the c
 These diffs would be smaller than new copies of the database and save on bandwidth and storage.
 At any point if the diffs grow to large the process can be started over with a new, recent copy of the database.
 
+Text Deltas
+~~~~~~~~~~~
 
+The full contents of a SLQite3 database can be dumped as SQL text at any time.
+The *Binary Deltas* design could be applied to these SQL text dumps instead.
+Text diffs could be compressed to reduce the overhead compared to binary deltas.
+These diffs are likely to be slightly easier to work with in the event any problems arise.
 
 *What we've considered.*
 *What trade-offs are involved with each choice.*
