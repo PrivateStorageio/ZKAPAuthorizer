@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from json import dumps, loads
 
+import attr
 from challenge_bypass_ristretto import (
     BatchDLEQProof,
     BlindedToken,
@@ -45,7 +46,6 @@ from testtools.matchers import (
     MatchesAll,
     MatchesStructure,
 )
-import attr
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
 from twisted.internet.defer import fail
@@ -58,11 +58,10 @@ from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
 from ..controller import (
-    UnrecognizedFailureReason,
     AlreadySpent,
     DoubleSpendRedeemer,
-    ErrorRedeemer,
     DummyRedeemer,
+    ErrorRedeemer,
     IndexedRedeemer,
     IRedeemer,
     NonRedeemer,
@@ -72,10 +71,11 @@ from ..controller import (
     UnexpectedResponse,
     Unpaid,
     UnpaidRedeemer,
+    UnrecognizedFailureReason,
     token_count_for_group,
 )
-from ..model import Error as model_Error
 from ..model import DoubleSpend as model_DoubleSpend
+from ..model import Error as model_Error
 from ..model import Pending as model_Pending
 from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
