@@ -81,6 +81,71 @@ so that I can use the system without always worrying about whether I have protec
 Alternatives Considered
 -----------------------
 
+Juggle Tokens
+~~~~~~~~~~~~~
+
+ZKAPAuthorizer currently exposes an HTTP API for reading and writing the list of token signatures.
+A third party can periodically read and back up this list.
+On recovery it can write the last back into ZKAPAuthorizer.
+
+This has the downside that it requires a third party to keep up-to-date with ZKAPAuthorizer's internal schema.
+This has not happened in practice and ZKAPAuthorizer now has more internal state than is backed up by any third party.
+
+Database Copying
+~~~~~~~~~~~~~~~~
+
+All of the internal state resides in a single SQLite3 database.
+This file can be copied to the backup location.
+This requires a ZKAPAuthorizer API to suspend writes to the database so a consistent copy can be made.
+
+This requires a large amount of bandwidth to upload full copies of the database periodically.
+The database occupies about 5 MiB per 10,000 ZKAPs.
+
+Copying "Sessions"
+~~~~~~~~~~~~~~~~~
+
+SQLite3 has a "session" system which can be used to capture all changes made to a database.
+All changes could be captured this way and then uploaded to the backup location.
+The set of changes will be smaller than new copies of the database and save on bandwidth and storage.
+
+The Python bindings to the SQLite3 library are missing support for the session-related APIs.
+It's also not possible to guarantee that all changes are always captured.
+This may allow the base database state and the session logs to become difficult to reconcile automatically.
+
+Copying WAL
+~~~~~~~~~~~
+
+SQLite3 has a (W)rite (A)head (L)og mode where it writes out all database changes to a "WAL" file before committing them.
+All changes could be captured this way and then uploaded to the backup location.
+The set of files will be smaller than new copies of the database and save on bandwidth and storage.
+
+This requires making sure to use the database in the correct mode.
+It is likely also sensitive to changes made outside of the control of the ZKAPAuthorizer implementation.
+
+Application SQL Log
+~~~~~~~~~~~~~~~~~~~
+
+ZKAPAuthorizer itself could write a log of all SQL it executes against the SQLite3 database.
+This log could be uploaded to the backup location.
+This log will be smaller than new copies of the database and save on bandwidth and storage.
+
+This non-trivial implementation work in ZKAPAuthorizer to capture the stream of SQL statements
+(including values of parameters).
+It is likely also sensitive to changes made outside of the control of the ZKAPAuthorizer implementation -
+though less sensitive than the WAL-based approach.
+
+Binary Deltas
+~~~~~~~~~~~~~
+
+An additional copy of the SQLite3 database could be kept around against which binary diffs could be computed.
+This additional copy could be copied to the backup location and would quickly become outdated.
+As changes are made to the working copy of the database local copies could be made and diffed against the additional copy.
+These binary diffs could be copied to the backup location and would update the copy already present.
+These diffs would be smaller than new copies of the database and save on bandwidth and storage.
+At any point if the diffs grow to large the process can be started over with a new, recent copy of the database.
+
+
+
 *What we've considered.*
 *What trade-offs are involved with each choice.*
 *Why we've chosen the one we did.*
