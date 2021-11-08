@@ -913,7 +913,6 @@ class RistrettoRedeemerTests(TestCase):
             ),
         )
 
-
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
     def test_bad_ristretto_redemption(self, voucher, counter, extra_tokens):
         """
@@ -1077,6 +1076,7 @@ class UnsuccessfulRedemption(Resource, object):
 
     :ivar unicode reason: The value for the ``reason`` field of the result.
     """
+
     reason = attr.ib()
 
     def __attrs_post_init__(self):
@@ -1088,6 +1088,7 @@ class UnsuccessfulRedemption(Resource, object):
             return request_error
 
         return bad_request(request, {u"success": False, u"reason": self.reason})
+
 
 def unpaid_redemption():
     """
