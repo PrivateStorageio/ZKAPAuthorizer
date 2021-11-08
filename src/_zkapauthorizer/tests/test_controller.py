@@ -893,8 +893,9 @@ class RistrettoRedeemerTests(TestCase):
         ``RistrettoRedeemer.redeemWithCounter`` returns a ``Deferred`` that
         fails with ``UnrecognizedFailureReason``.
         """
+        details = u"mysterious"
         num_tokens = counter + extra_tokens
-        issuer = UnsuccessfulRedemption(u"mysterious")
+        issuer = UnsuccessfulRedemption(details)
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
@@ -908,7 +909,14 @@ class RistrettoRedeemerTests(TestCase):
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
-                    IsInstance(UnrecognizedFailureReason),
+                    Equals(
+                        UnrecognizedFailureReason(
+                            {
+                                u"success": False,
+                                u"reason": details,
+                            }
+                        )
+                    ),
                 ),
             ),
         )
