@@ -59,6 +59,7 @@ from zope.interface import implementer
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
+    ErrorRedeemer,
     DummyRedeemer,
     IndexedRedeemer,
     IRedeemer,
@@ -71,6 +72,7 @@ from ..controller import (
     UnpaidRedeemer,
     token_count_for_group,
 )
+from ..model import Error as model_Error
 from ..model import DoubleSpend as model_DoubleSpend
 from ..model import Pending as model_Pending
 from ..model import Redeemed as model_Redeemed
@@ -422,6 +424,43 @@ class PaymentControllerTests(TestCase):
                     finished=now,
                     token_count=100,
                 )
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_error_state(self, get_config, now, voucher):
+        """
+        If ``IRedeemer.redeem`` fails with an unrecognized exception then the
+        voucher is put into the error state.
+        """
+        details = u"these are the reasons it broke"
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            ErrorRedeemer(details),
+            default_token_count=100,
+            allowed_public_keys=set(),
+            clock=Clock(),
+        )
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+
+        persisted_voucher = controller.get_voucher(voucher)
+        self.assertThat(
+            persisted_voucher,
+            MatchesStructure(
+                state=Equals(
+                    model_Error(
+                        finished=now,
+                        details=details,
+                    )
+                ),
             ),
         )
 
