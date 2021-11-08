@@ -45,6 +45,7 @@ from testtools.matchers import (
     MatchesAll,
     MatchesStructure,
 )
+import attr
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
 from twisted.internet.defer import fail
@@ -837,7 +838,7 @@ class RistrettoRedeemerTests(TestCase):
         ``AlreadySpent``.
         """
         num_tokens = counter + extra_tokens
-        issuer = AlreadySpentRedemption()
+        issuer = already_spent_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
@@ -865,7 +866,7 @@ class RistrettoRedeemerTests(TestCase):
         ``Unpaid``.
         """
         num_tokens = counter + extra_tokens
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
@@ -1040,34 +1041,41 @@ class UnexpectedResponseRedemption(Resource):
         return b"Sorry, this server does not behave well."
 
 
-class AlreadySpentRedemption(Resource):
+@attr.s
+class UnsuccessfulRedemption(Resource, object):
     """
-    An ``AlreadySpentRedemption`` simulates the Ristretto redemption server
-    but always refuses to allow vouchers to be redeemed and reports an error
-    that the voucher has already been redeemed.
+    A fake redemption server which always returns an unsuccessful response.
+
+    :ivar unicode reason: The value for the ``reason`` field of the result.
     """
+    reason = attr.ib()
+
+    def __attrs_post_init__(self):
+        Resource.__init__(self)
 
     def render_POST(self, request):
         request_error = check_redemption_request(request)
         if request_error is not None:
             return request_error
 
-        return bad_request(request, {u"success": False, u"reason": u"double-spend"})
+        return bad_request(request, {u"success": False, u"reason": self.reason})
 
-
-class UnpaidRedemption(Resource):
+def unpaid_redemption():
     """
-    An ``UnpaidRedemption`` simulates the Ristretto redemption server but
-    always refuses to allow vouchers to be redeemed and reports an error that
-    the voucher has not been paid for.
+    Return a fake Ristretto redemption server which always refuses to allow
+    vouchers to be redeemed and reports an error that the voucher has not been
+    paid for.
     """
+    return UnsuccessfulRedemption(u"unpaid")
 
-    def render_POST(self, request):
-        request_error = check_redemption_request(request)
-        if request_error is not None:
-            return request_error
 
-        return bad_request(request, {u"success": False, u"reason": u"unpaid"})
+def already_spent_redemption():
+    """
+    Return a fake Ristretto redemption server which always refuses to allow
+    vouchers to be redeemed and reports an error that the voucher has already
+    been redeemed.
+    """
+    return UnsuccessfulRedemption(u"double-spend")
 
 
 class RistrettoRedemption(Resource):
@@ -1124,7 +1132,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the request content-type is not application/json, the response is
         **Unsupported Media Type**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
@@ -1145,7 +1153,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the request body cannot be decoded as json, the response is **Bad
         Request**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
@@ -1178,7 +1186,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the JSON object in the request body does not include all the necessary
         properties, the response is **Bad Request**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
