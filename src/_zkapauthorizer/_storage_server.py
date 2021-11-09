@@ -33,6 +33,12 @@ from struct import calcsize, unpack
 import attr
 from allmydata.interfaces import RIStorageServer
 from allmydata.storage.common import storage_index_to_dir
+from allmydata.storage.shares import get_share_file
+
+from allmydata.storage.immutable import ShareFile
+from allmydata.storage.mutable import MutableShareFile
+
+
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
@@ -616,28 +622,13 @@ def get_storage_index_share_size(sharepath):
     return share_file_size - header_size - (number_of_leases * (4 + 32 + 32 + 4))
 
 
-def get_lease_expiration(get_leases, storage_index_or_slot):
-    """
-    Get the lease expiration time for the shares in a bucket or slot, or None
-    if there is no lease on them.
-
-    :param get_leases: A one-argument callable which returns the leases.
-
-    :param storage_index_or_slot: Either a storage index or a slot identifying
-        the shares the leases of which to inspect.
-    """
-    for lease in get_leases(storage_index_or_slot):
-        return lease.get_expiration_time()
-    return None
-
-
-def stat_bucket(storage_server, storage_index, sharepath):
+def stat_bucket(storage_server, bucket, sharepath):
     """
     Get a ``ShareStat`` for the shares in a bucket.
     """
     return ShareStat(
         size=get_storage_index_share_size(sharepath),
-        lease_expiration=get_lease_expiration(storage_server.get_leases, storage_index),
+        lease_expiration=get_lease_expiration(sharepath),
     )
 
 
@@ -647,9 +638,25 @@ def stat_slot(storage_server, slot, sharepath):
     """
     return ShareStat(
         size=get_slot_share_size(sharepath),
-        lease_expiration=get_lease_expiration(storage_server.get_slot_leases, slot),
+        lease_expiration=get_lease_expiration(sharepath),
     )
 
+def get_lease_expiration(sharepath):
+    # type: (str) -> Optional[int]
+    """
+    Get the latest lease expiration time for the share at the given path, or
+    ``None`` if there are no leases on it.
+
+    :param sharepath: The path to the share file to inspect.
+    """
+    leases = list(
+        lease.get_expiration_time()
+        for lease
+        in get_share_file(sharepath).get_leases()
+    )
+    if leases:
+        return max(leases)
+    return None
 
 def get_slot_share_size(sharepath):
     """
