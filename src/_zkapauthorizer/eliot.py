@@ -16,7 +16,8 @@
 Eliot field, message, and action definitions for ZKAPAuthorizer.
 """
 
-from eliot import ActionType, Field, MessageType
+import attrs
+from eliot import ActionType, Field, MessageType, register_exception_extractor
 
 PRIVACYPASS_MESSAGE = Field(
     "message",
@@ -102,3 +103,13 @@ MUTABLE_PASSES_REQUIRED = MessageType(
     [CURRENT_SIZES, TW_VECTORS_SUMMARY, NEW_SIZES, NEW_PASSES],
     "Some number of passes has been computed as the cost of updating a mutable.",
 )
+
+
+def register_attr_exception(cls):
+    """
+    Decorator that registers the decorated attrs exception class with eliot.
+
+    The fields of the exception will be included when the exception is logged.
+    """
+    register_exception_extractor(cls, attrs.asdict)
+    return cls
