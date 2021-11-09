@@ -78,6 +78,17 @@ class Unpaid(Exception):
     """
 
 
+@attr.s(frozen=True)
+class UnrecognizedFailureReason(Exception):
+    """
+    An attempt was made to redeem a voucher and the response contained an unknown reason.
+
+    The redemption attempt may be automatically retried at some point.
+    """
+
+    response = attr.ib()
+
+
 @attr.s
 class RedemptionResult(object):
     """
@@ -521,6 +532,8 @@ class RistrettoRedeemer(object):
                 raise AlreadySpent(voucher)
             elif reason == u"unpaid":
                 raise Unpaid(voucher)
+
+            raise UnrecognizedFailureReason(result)
 
         self._log.info(
             "Redeemed: {public_key} {proof} {count}",

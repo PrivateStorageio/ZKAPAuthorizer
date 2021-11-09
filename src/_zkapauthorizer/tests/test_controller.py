@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from json import dumps, loads
 
+import attr
 from challenge_bypass_ristretto import (
     BatchDLEQProof,
     BlindedToken,
@@ -60,6 +61,7 @@ from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
     DummyRedeemer,
+    ErrorRedeemer,
     IndexedRedeemer,
     IRedeemer,
     NonRedeemer,
@@ -69,9 +71,11 @@ from ..controller import (
     UnexpectedResponse,
     Unpaid,
     UnpaidRedeemer,
+    UnrecognizedFailureReason,
     token_count_for_group,
 )
 from ..model import DoubleSpend as model_DoubleSpend
+from ..model import Error as model_Error
 from ..model import Pending as model_Pending
 from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
@@ -422,6 +426,43 @@ class PaymentControllerTests(TestCase):
                     finished=now,
                     token_count=100,
                 )
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        datetimes(),
+        vouchers(),
+    )
+    def test_error_state(self, get_config, now, voucher):
+        """
+        If ``IRedeemer.redeem`` fails with an unrecognized exception then the
+        voucher is put into the error state.
+        """
+        details = u"these are the reasons it broke"
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        controller = PaymentController(
+            store,
+            ErrorRedeemer(details),
+            default_token_count=100,
+            allowed_public_keys=set(),
+            clock=Clock(),
+        )
+        self.assertThat(
+            controller.redeem(voucher),
+            succeeded(Always()),
+        )
+
+        persisted_voucher = controller.get_voucher(voucher)
+        self.assertThat(
+            persisted_voucher,
+            MatchesStructure(
+                state=Equals(
+                    model_Error(
+                        finished=now,
+                        details=details,
+                    )
+                ),
             ),
         )
 
@@ -798,7 +839,7 @@ class RistrettoRedeemerTests(TestCase):
         ``AlreadySpent``.
         """
         num_tokens = counter + extra_tokens
-        issuer = AlreadySpentRedemption()
+        issuer = already_spent_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
@@ -826,7 +867,7 @@ class RistrettoRedeemerTests(TestCase):
         ``Unpaid``.
         """
         num_tokens = counter + extra_tokens
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         redeemer = RistrettoRedeemer(treq, NOWHERE)
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
@@ -841,6 +882,41 @@ class RistrettoRedeemerTests(TestCase):
                 AfterPreprocessing(
                     lambda f: f.value,
                     IsInstance(Unpaid),
+                ),
+            ),
+        )
+
+    @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
+    def test_redemption_unknown_response(self, voucher, counter, extra_tokens):
+        """
+        If the issuer returns a failure without a recognizable reason then
+        ``RistrettoRedeemer.redeemWithCounter`` returns a ``Deferred`` that
+        fails with ``UnrecognizedFailureReason``.
+        """
+        details = u"mysterious"
+        num_tokens = counter + extra_tokens
+        issuer = UnsuccessfulRedemption(details)
+        treq = treq_for_loopback_ristretto(issuer)
+        redeemer = RistrettoRedeemer(treq, NOWHERE)
+        random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
+        d = redeemer.redeemWithCounter(
+            voucher,
+            counter,
+            random_tokens,
+        )
+        self.assertThat(
+            d,
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    Equals(
+                        UnrecognizedFailureReason(
+                            {
+                                u"success": False,
+                                u"reason": details,
+                            }
+                        )
+                    ),
                 ),
             ),
         )
@@ -1001,34 +1077,43 @@ class UnexpectedResponseRedemption(Resource):
         return b"Sorry, this server does not behave well."
 
 
-class AlreadySpentRedemption(Resource):
+@attr.s
+class UnsuccessfulRedemption(Resource, object):
     """
-    An ``AlreadySpentRedemption`` simulates the Ristretto redemption server
-    but always refuses to allow vouchers to be redeemed and reports an error
-    that the voucher has already been redeemed.
+    A fake redemption server which always returns an unsuccessful response.
+
+    :ivar unicode reason: The value for the ``reason`` field of the result.
     """
+
+    reason = attr.ib()
+
+    def __attrs_post_init__(self):
+        Resource.__init__(self)
 
     def render_POST(self, request):
         request_error = check_redemption_request(request)
         if request_error is not None:
             return request_error
 
-        return bad_request(request, {u"success": False, u"reason": u"double-spend"})
+        return bad_request(request, {u"success": False, u"reason": self.reason})
 
 
-class UnpaidRedemption(Resource):
+def unpaid_redemption():
     """
-    An ``UnpaidRedemption`` simulates the Ristretto redemption server but
-    always refuses to allow vouchers to be redeemed and reports an error that
-    the voucher has not been paid for.
+    Return a fake Ristretto redemption server which always refuses to allow
+    vouchers to be redeemed and reports an error that the voucher has not been
+    paid for.
     """
+    return UnsuccessfulRedemption(u"unpaid")
 
-    def render_POST(self, request):
-        request_error = check_redemption_request(request)
-        if request_error is not None:
-            return request_error
 
-        return bad_request(request, {u"success": False, u"reason": u"unpaid"})
+def already_spent_redemption():
+    """
+    Return a fake Ristretto redemption server which always refuses to allow
+    vouchers to be redeemed and reports an error that the voucher has already
+    been redeemed.
+    """
+    return UnsuccessfulRedemption(u"double-spend")
 
 
 class RistrettoRedemption(Resource):
@@ -1085,7 +1170,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the request content-type is not application/json, the response is
         **Unsupported Media Type**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
@@ -1106,7 +1191,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the request body cannot be decoded as json, the response is **Bad
         Request**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
@@ -1139,7 +1224,7 @@ class CheckRedemptionRequestTests(TestCase):
         If the JSON object in the request body does not include all the necessary
         properties, the response is **Bad Request**.
         """
-        issuer = UnpaidRedemption()
+        issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
