@@ -176,6 +176,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
+    def __attrs_post_init__(self):
+        self._original.implicit_lease_renewal = False
+
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
