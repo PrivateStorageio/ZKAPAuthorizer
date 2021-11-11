@@ -173,6 +173,19 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
+    def __attrs_post_init__(self):
+        # Avoid the default StorageServer ``allocate_buckets`` behavior of
+        # renewing leases on all existing shares in the same bucket.  It will
+        # still add leases to the newly uploaded shares.
+        self._original.set_implicit_bucket_lease_renewal(False)
+
+        # Similarly, wrapped ``slot_testv_and_readv_and_writev_message``
+        # renews leases on all shares that are being modified.  Turn that
+        # behavior off.  This means we have to take responsibility for
+        # creating the initial lease on shares when they are created (and we
+        # do in our wrapper for ``slot_testv_and_readv_and_writev_message``).
+        self._original.set_implicit_slot_lease_renewal(False)
+
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
@@ -202,7 +215,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
-        # operation is based only on the buckets which are really allocated
+        # operation is based only on the shares which are really allocated
         # here.  It's not clear if we can allow the client to supply the
         # reduced number of passes in the call but we can be sure to only mark
         # as spent enough passes to cover the allocated buckets.  The return
@@ -360,6 +373,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             if required_new_passes > len(validation.valid):
                 validation.raise_for(required_new_passes)
 
+        self._original.set_implicit_slot_lease_renewal(renew_leases)
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
         # about (and don't expose over the network): renew_leases.  We always
@@ -370,7 +384,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             secrets,
             tw_vectors,
             r_vector,
-            renew_leases=renew_leases,
         )
 
     def remote_slot_readv(self, *a, **kw):
