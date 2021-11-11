@@ -478,10 +478,6 @@ class ShareTests(TestCase):
     def _stat_shares_immutable_test(
         self, storage_index, sharenum, size, when, leases, write_shares
     ):
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         # Lease cancellation is unimplemented in Tahoe so this doesn't matter.
         cancel_secret = b""
 
