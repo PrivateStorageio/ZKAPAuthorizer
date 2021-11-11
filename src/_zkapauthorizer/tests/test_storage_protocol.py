@@ -179,6 +179,12 @@ class ShareTests(TestCase):
         # iteration.
         self.clock.advance(-self.clock.seconds())
 
+        # Reset the state of any passes in our pass factory.
+        self.pass_factory._clear()
+
+        # And clean out any shares that might confuse things.
+        cleanup_storage_server(self.anonymous_storage_server)
+
     def test_get_version(self):
         """
         Version information about the storage server can be retrieved using
@@ -204,10 +210,6 @@ class ShareTests(TestCase):
         Any passes rejected by the storage server are reported with a
         ``MorePassesRequired`` exception sent to the client.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         num_passes = required_passes(self.pass_value, [size] * len(sharenums))
 
         # Pick some passes to mess with.
@@ -291,13 +293,6 @@ class ShareTests(TestCase):
         resulting buckets can be read back using *get_buckets* and methods of
         those resulting buckets.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
-        # Oops our pass factory, too. :(
-        self.pass_factory._clear()
-
         alreadygot, allocated = extract_result(
             self.client.allocate_buckets(
                 storage_index,
@@ -377,13 +372,6 @@ class ShareTests(TestCase):
         When the remote *allocate_buckets* implementation reports that shares
         already exist, passes are not spent for those shares.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
-        # Oops our pass factory, too. :(
-        self.pass_factory._clear()
-
         # A helper that only varies on sharenums.
         def allocate_buckets(sharenums):
             return self.client.allocate_buckets(
@@ -460,10 +448,6 @@ class ShareTests(TestCase):
         """
         A lease can be added to an existing immutable share.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         # Use a different secret so that it's a new lease and not an
         # implicit renewal.
         add_lease_secret, renew_lease_secret = renew_secrets
@@ -594,10 +578,6 @@ class ShareTests(TestCase):
         """
         assume(version != 1)
 
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
             # joined by pathsep
@@ -640,10 +620,6 @@ class ShareTests(TestCase):
         ``stat_shares`` declines to offer a result (by raising
         ``ValueError``).
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
             # joined by pathsep
@@ -740,10 +716,6 @@ class ShareTests(TestCase):
         Size and lease information about mutable shares can be retrieved from a
         storage server.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         self.clock.advance(when)
 
         patch = MonkeyPatch("time.time", self.clock.seconds)
@@ -803,10 +775,6 @@ class ShareTests(TestCase):
         """
         An advisory of corruption in a share can be sent to the server.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         # Create a share we can toy with.
         write_toy_shares(
             self.anonymous_storage_server,
@@ -848,10 +816,6 @@ class ShareTests(TestCase):
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         wrote, read = extract_result(
             self.client.slot_testv_and_readv_and_writev(
                 storage_index,
@@ -901,9 +865,6 @@ class ShareTests(TestCase):
         *slot_testv_and_readv_and_writev* any leases on the corresponding slot
         remain the same.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
 
         def leases():
             return list(
@@ -972,10 +933,6 @@ class ShareTests(TestCase):
         When mutable share data with an expired lease is rewritten using
         *slot_testv_and_readv_and_writev* a new lease is paid for and granted.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         self.clock.advance(when)
 
         secrets = (write_enabler, renew_secret, cancel_secret)
