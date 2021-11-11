@@ -120,14 +120,20 @@ class RequiredPassesTests(TestCase):
         )
 
 
-def is_successful_write():
+def is_successful_write(read_result=None):
     """
     Match the successful result of a ``slot_testv_and_readv_and_writev`` call.
     """
+    if read_result is None:
+        read_result = {}
     return succeeded(
-        AfterPreprocessing(
-            lambda result: result[0],
-            Equals(True),
+        Equals(
+            (
+                # True indicates the overall operation succeded.
+                True,
+                # The requested read results should be here as well.
+                read_result,
+            )
         ),
     )
 
@@ -804,45 +810,46 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+        share_vectors=lists(slot_test_and_write_vectors_for_shares(), min_size=1),
     )
-    def test_create_mutable(
-        self, storage_index, secrets, test_and_write_vectors_for_shares
-    ):
+    def test_create_mutable(self, storage_index, secrets, share_vectors):
         """
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
-        wrote, read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
+
+        def write(vectors):
+            return self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v) in test_and_write_vectors_for_shares.items()
-                },
+                tw_vectors={k: v.for_call() for (k, v) in vectors.items()},
                 r_vector=[],
-            ),
-        )
-        self.assertThat(
-            wrote,
-            Equals(True),
-            u"Server rejected a write to a new mutable slot",
-        )
-        self.assertThat(
-            read,
-            Equals({}),
-            u"Server gave back read results when we asked for none.",
-        )
+            )
+
+        for vector in share_vectors:
+            self.assertThat(
+                write(vector),
+                is_successful_write(),
+            )
+
         # Now we can read it back without spending any more passes.
         before_passes = len(self.pass_factory.issued)
         assert_read_back_data(
-            self, storage_index, secrets, test_and_write_vectors_for_shares
+            self,
+            storage_index,
+            secrets,
+            share_vectors[-1],
         )
         after_passes = len(self.pass_factory.issued)
         self.assertThat(
             before_passes,
             Equals(after_passes),
+        )
+
+        # And the lease we paid for has been added to it.
+        self.assertThat(
+            self.client.stat_shares([storage_index]),
+            succeeded(HasLength(1)),
         )
 
     @given(
