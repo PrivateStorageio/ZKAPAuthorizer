@@ -179,13 +179,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # still add leases to the newly uploaded shares.
         self._original.set_implicit_bucket_lease_renewal(False)
 
-        # Similarly, wrapped ``slot_testv_and_readv_and_writev_message``
-        # renews leases on all shares that are being modified.  Turn that
-        # behavior off.  This means we have to take responsibility for
-        # creating the initial lease on shares when they are created (and we
-        # do in our wrapper for ``slot_testv_and_readv_and_writev_message``).
-        self._original.set_implicit_slot_lease_renewal(False)
-
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
