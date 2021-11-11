@@ -862,6 +862,7 @@ class ShareTests(TestCase):
         *slot_testv_and_readv_and_writev* any leases on the corresponding slot
         remain the same.
         """
+
         def leases():
             return list(
                 lease.to_mutable_data()
