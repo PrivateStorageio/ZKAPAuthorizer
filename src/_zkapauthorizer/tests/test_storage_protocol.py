@@ -450,8 +450,18 @@ class ShareTests(TestCase):
         )
 
         def get_lease_grant_times(storage_server, storage_index):
-            for sharenum, sharepath in storage_server._get_bucket_shares(storage_index):
-                yield sharenum, list(lease.get_grant_renew_time_time() for lease in get_share_file(sharepath).get_leases())
+            """
+            Get the grant times for all of the leases for all of the shares at the
+            given storage index.
+            """
+            shares = storage_server._get_bucket_shares(storage_index)
+            for sharenum, sharepath in shares:
+                sharefile = get_share_file(sharepath)
+                leases = sharefile.get_leases()
+                grant_times = list(
+                    lease.get_grant_renew_time_time() for lease in leases
+                )
+                yield sharenum, grant_times
 
         expected_leases = {}
         # Chop off the non-integer part of the expected values because share
