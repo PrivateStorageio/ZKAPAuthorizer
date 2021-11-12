@@ -40,11 +40,11 @@ from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
-from eliot import start_action, log_call
+from eliot import log_call, start_action
 from foolscap.api import Referenceable
-from twisted.python.filepath import FilePath
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
+from twisted.python.filepath import FilePath
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
