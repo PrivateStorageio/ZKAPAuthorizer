@@ -555,6 +555,7 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
         )
     )
 
+
 def get_share_stats(storage_server, storage_index_or_slot, sharenums):
     """
     Get the stats for the given share numbers for the given storage index *or*
@@ -726,10 +727,12 @@ def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, no
                     owner_num=1,
                     renew_secret=renew_secret,
                     cancel_secret=cancel_secret,
-                    expiration_time=now + ZKAPAuthorizerStorageServer.LEASE_PERIOD.total_seconds(),
+                    expiration_time=now
+                    + ZKAPAuthorizerStorageServer.LEASE_PERIOD.total_seconds(),
                     nodeid=storage_server.my_nodeid,
                 ),
             )
+
 
 def get_share_path(storage_server, storage_index, sharenum):
     # type: (StorageServer, bytes, int) -> FilePath

@@ -875,15 +875,17 @@ class ShareTests(TestCase):
             # time for a given share number to be updated here.  Only
             # sharenums being written for the first time will capture the time
             # here.
-            grant_times.update({
-                # The time is in a list to make it easier to compare the
-                # result with the return value of `get_lease_grant_times`
-                # later.  The time is truncated to the integer portion because
-                # that is how much precision leases keep.
-                sharenum: [int(self.clock.seconds())]
-                for sharenum in vector
-                if sharenum not in grant_times
-            })
+            grant_times.update(
+                {
+                    # The time is in a list to make it easier to compare the
+                    # result with the return value of `get_lease_grant_times`
+                    # later.  The time is truncated to the integer portion
+                    # because that is how much precision leases keep.
+                    sharenum: [int(self.clock.seconds())]
+                    for sharenum in vector
+                    if sharenum not in grant_times
+                }
+            )
 
             # Advance time so the grant times will be distinct.
             self.clock.advance(1)
@@ -905,10 +907,12 @@ class ShareTests(TestCase):
 
         # And the lease we paid for on every share is present.
         self.assertThat(
-            dict(get_lease_grant_times(
-                self.anonymous_storage_server,
-                storage_index,
-            )),
+            dict(
+                get_lease_grant_times(
+                    self.anonymous_storage_server,
+                    storage_index,
+                )
+            ),
             Equals(grant_times),
         )
 
@@ -1105,6 +1109,7 @@ def write_vector_to_read_vector(write_vector):
     """
     return (write_vector[0], len(write_vector[1]))
 
+
 def get_lease_grant_times(storage_server, storage_index):
     """
     Get the grant times for all of the leases for all of the shares at the
@@ -1114,7 +1119,5 @@ def get_lease_grant_times(storage_server, storage_index):
     for sharenum, sharepath in shares:
         sharefile = get_share_file(sharepath)
         leases = sharefile.get_leases()
-        grant_times = list(
-            lease.get_grant_renew_time_time() for lease in leases
-        )
+        grant_times = list(lease.get_grant_renew_time_time() for lease in leases)
         yield sharenum, grant_times
