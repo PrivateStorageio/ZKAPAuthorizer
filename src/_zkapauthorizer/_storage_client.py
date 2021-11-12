@@ -26,6 +26,7 @@ from functools import partial, wraps
 
 import attr
 from allmydata.interfaces import IStorageServer
+from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
 from eliot.twisted import inline_callbacks
 from twisted.internet.defer import returnValue
@@ -411,6 +412,7 @@ class ZKAPAuthorizerStorageClient(object):
             reason,
         )
 
+    @log_call_deferred("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     @inline_callbacks
     @with_rref
     def slot_testv_and_readv_and_writev(
