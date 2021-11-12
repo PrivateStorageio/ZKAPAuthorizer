@@ -356,7 +356,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                     get_share_sizes(
                         self._original,
                         storage_index,
-                        tw_vectors.keys(),
+                        # Consider the size of *all* shares even if they're
+                        # not being written.  If they have an unexpired lease
+                        # then we can apply some or all of the remainder of
+                        # the value of that lease towards this operation.
+                        sharenums=None,
                     )
                 )
                 # print("has writes, has active lease, current sizes: {}".format(current_sizes))
