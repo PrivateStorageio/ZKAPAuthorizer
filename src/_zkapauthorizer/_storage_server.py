@@ -39,7 +39,7 @@ from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
-from eliot import start_action
+from eliot import start_action, log_call
 from foolscap.api import Referenceable
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
@@ -524,6 +524,10 @@ def get_all_share_numbers(storage_server, storage_index):
         yield sharenum
 
 
+@log_call(
+    action_type="zkapauthorizer:storage-server:get-share-sizes",
+    include_args=["storage_index_or_slot", "sharenums"],
+)
 def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
     """
     Get sizes of the given share numbers for the given storage index *or*
@@ -531,17 +535,15 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
 
     :see: ``get_share_stats``
 
-    :return: A generator of tuples of (int, int) where the first element is a
-        share number and the second element is the data size for that share
-        number.
+    :return: A list of tuples of (int, int) where the first element is a share
+        number and the second element is the data size for that share number.
     """
-    return (
+    return list(
         (sharenum, stat.size)
         for (sharenum, stat) in get_share_stats(
             storage_server, storage_index_or_slot, sharenums
         )
     )
-
 
 def get_share_stats(storage_server, storage_index_or_slot, sharenums):
     """
