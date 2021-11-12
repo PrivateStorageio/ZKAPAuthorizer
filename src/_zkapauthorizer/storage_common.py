@@ -289,14 +289,14 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
 
 def summarize(tw_vectors):
     return {
-        sharenum: (
-            list(
+        sharenum: {
+            "testv": list(
                 (offset, length, operator, len(specimen))
                 for (offset, length, operator, specimen) in test_vector
             ),
-            list((offset, len(data)) for (offset, data) in data_vectors),
-            new_length,
-        )
+            "datav": list((offset, len(data)) for (offset, data) in data_vectors),
+            "new_length": new_length,
+        }
         for (sharenum, (test_vector, data_vectors, new_length)) in tw_vectors.items()
     }
 
