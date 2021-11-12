@@ -292,7 +292,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     def remote_stat_shares(self, storage_indexes_or_slots):
         # type: (List[bytes]) -> List[Dict[int, ShareStat]]
         return list(
-            dict(stat_share(self._original, storage_index_or_slot))
+            dict(get_share_stats(self._original, storage_index_or_slot, None))
             for storage_index_or_slot in storage_indexes_or_slots
         )
 
@@ -675,22 +675,6 @@ def get_slot_share_size(sharepath):
         share_data_length_bytes = share_file.read(92)[-8:]
         (share_data_length,) = unpack(">Q", share_data_length_bytes)
         return share_data_length
-
-
-def stat_share(storage_server, storage_index_or_slot):
-    """
-    Get a ``ShareStat`` for each share in a bucket or a slot.
-
-    :return: An iterator of two-tuples of share number and corresponding
-        ``ShareStat``.
-    """
-    stat = None
-    for sharenum, sharepath in get_all_share_paths(
-        storage_server, storage_index_or_slot
-    ):
-        if stat is None:
-            stat = get_stat(sharepath)
-        yield (sharenum, stat(storage_server, storage_index_or_slot, sharepath))
 
 
 def get_stat(sharepath):
