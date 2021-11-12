@@ -270,7 +270,6 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
         if size > new_sizes.get(sharenum, 0):
             new_sizes[sharenum] = size
 
-    new_sizes.update()
     new_passes = required_passes(
         pass_value,
         new_sizes.values(),
