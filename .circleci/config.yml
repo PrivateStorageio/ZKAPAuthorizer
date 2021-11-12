@@ -120,9 +120,6 @@ jobs:
             # dependencies into the environment.
             venv/bin/pip install --no-index --find-links file://${PWD}/wheelhouse .[test]
 
-            # For a while we depend on a pretty fresh Tahoe
-            pip install https://github.com/tahoe-lafs/tahoe-lafs/archive/refs/heads/3842.allocate_buckets-without-lease-renewal.zip
-
       - run:
           name: "Test"
           command: |
