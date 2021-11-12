@@ -466,10 +466,15 @@ class ShareTests(TestCase):
         expected_leases = {}
         # Chop off the non-integer part of the expected values because share
         # files only keep integer precision.
-        expected_leases.update({sharenum: [int(when)] for sharenum in existing_sharenums})
-        expected_leases.update({
-            sharenum: [int(when + interval)] for sharenum in all_sharenums - existing_sharenums
-        })
+        expected_leases.update(
+            {sharenum: [int(when)] for sharenum in existing_sharenums}
+        )
+        expected_leases.update(
+            {
+                sharenum: [int(when + interval)]
+                for sharenum in all_sharenums - existing_sharenums
+            }
+        )
 
         self.assertThat(
             dict(get_lease_grant_times(self.anonymous_storage_server, storage_index)),

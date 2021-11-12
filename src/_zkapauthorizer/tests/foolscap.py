@@ -43,6 +43,7 @@ class StubStorageServer(object):
     def set_implicit_slot_lease_renewal(self, enabled):
         pass
 
+
 def get_anonymous_storage_server():
     return StubStorageServer()
 
