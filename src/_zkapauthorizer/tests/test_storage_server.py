@@ -165,16 +165,27 @@ class PassValidationTests(TestCase):
             self.clock,
         )
 
+    def setup_example(self):
+        """
+        Prepare the TestCase to run one example of one test.
+        """
+        # The storage server accumulates shares through the course of running
+        # a single example.  Since existing state can invalidate assumptions
+        # made by the tests, get rid of it.
+        #
+        # It might be nice to just create a new, empty storage server here
+        # instead of cleaning up the old one.  For now, that's hard because
+        # Hypothesis and testtools fixtures don't play nicely together in a
+        # way that allows us to just move everything from `setUp` into this
+        # method.
+        cleanup_storage_server(self.anonymous_storage_server)
+
     def test_allocate_buckets_fails_without_enough_passes(self):
         """
         ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
         passed fewer passes than it requires for the amount of data to be
         stored.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         required_passes = 2
         share_nums = {3, 7}
         allocated_size = int((required_passes * self.pass_value) / len(share_nums))
@@ -219,10 +230,6 @@ class PassValidationTests(TestCase):
         initial writes on shares without supplying passes, the operation fails
         with ``MorePassesRequired``.
         """
-        # Hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         data = b"01234567"
         offset = 0
         sharenum = 0
@@ -272,10 +279,6 @@ class PassValidationTests(TestCase):
             vector which will increase the storage requirements of that slot
             share by at least ``self.pass_value``.
         """
-        # hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         tw_vectors = {
             k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
         }
@@ -401,10 +404,6 @@ class PassValidationTests(TestCase):
             with a storage index.  It should return the ZKAPAuthorizer binding
             message for the lease-taking operation.
         """
-        # hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         renew_secret, cancel_secret = secrets
 
         required_count = required_passes(
@@ -510,10 +509,6 @@ class PassValidationTests(TestCase):
         ``share_sizes`` returns the size of the requested mutable shares in the
         requested slot.
         """
-        # hypothesis causes our storage server to be used many times.  Clean
-        # up between iterations.
-        cleanup_storage_server(self.anonymous_storage_server)
-
         tw_vectors = {
             k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
         }
