@@ -291,8 +291,8 @@ def summarize(tw_vectors):
     return {
         sharenum: (
             list(
-                (offset, length, operator, len(specimen))
-                for (offset, length, operator, specimen) in test_vector
+                (offset, length, len(specimen))
+                for (offset, length, specimen) in test_vector
             ),
             list((offset, len(data)) for (offset, data) in data_vectors),
             new_length,
