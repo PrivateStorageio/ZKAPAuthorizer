@@ -283,10 +283,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 get_share_sizes(self._original, storage_index_or_slot, sharenums)
             )
 
-    def remote_stat_shares(self, storage_indexes_or_slots):
+    def remote_stat_shares(self, storage_indexes):
+        # type: (List[bytes]) -> List[Dict[int, ShareStat]]
         return list(
-            dict(stat_share(self._original, storage_index_or_slot))
-            for storage_index_or_slot in storage_indexes_or_slots
+            dict(stat_share(self._original, storage_index))
+            for storage_index in storage_indexes
         )
 
     def remote_slot_testv_and_readv_and_writev(

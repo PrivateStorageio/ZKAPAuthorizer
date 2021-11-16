@@ -140,8 +140,9 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
         # visited and maintained.
         lambda storage_server: list(
             stat
-            for (storage_index, stat) in storage_server.buckets.items()
+            for (storage_index, shares) in storage_server.buckets.items()
             if storage_index in relevant_storage_indexes
+            for (sharenum, stat) in shares.items()
         ),
         AllMatch(
             AfterPreprocessing(
