@@ -222,8 +222,8 @@ def renew_leases_on_server(
 def soonest_expiration(stats):
     # type: (Iterable[ShareStat]) -> ShareStat
     """
-    :return: The share stat from ``stats`` all the leases of which will expire
-        soonest.
+    :return: The share stat from ``stats`` with a lease which expires before
+        all others.
     """
     return min(
         stats,
