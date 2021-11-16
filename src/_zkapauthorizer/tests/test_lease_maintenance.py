@@ -66,7 +66,7 @@ from ..lease_maintenance import (
     visit_storage_indexes_from_root,
 )
 from .matchers import Provides, between, leases_current
-from .strategies import clocks, node_hierarchies, storage_indexes, sharenums
+from .strategies import clocks, posix_timestamps, node_hierarchies, storage_indexes, sharenums
 
 
 def interval_means():
@@ -436,17 +436,29 @@ def lists_of_buckets():
     """
     Build lists of bucket descriptions.
 
-    A bucket description is a two-tuple of a storage index and a set of share
-    numbers.  Any given storage index will appear only once in the overall
-    result.
+    A bucket description is a two-tuple of a storage index and a dict mapping
+    share numbers to lease expiration times (as posix timestamps).  Any given
+    storage index will appear only once in the overall result.
     """
+    def add_expiration_times(sharenums):
+        return builds(
+            lambda nums, expires: dict(zip(nums, expires)),
+            just(sharenums),
+            lists(
+                posix_timestamps(),
+                min_size=len(sharenums),
+                max_size=len(sharenums),
+            ),
+        )
+
     def buckets_strategy(count):
         si_strategy = sets(storage_indexes(), min_size=count, max_size=count)
         sharenum_strategy = lists(
-            sets(sharenums(), min_size=1),
+            sets(sharenums(), min_size=1).flatmap(add_expiration_times),
             min_size=count,
             max_size=count,
         )
+        expiration_strategy = lists
         return builds(
             zip,
             si_strategy,
@@ -477,15 +489,15 @@ class RenewLeasesTests(TestCase):
         # Make sure that the storage brokers have shares at the storage
         # indexes we're going to operate on.
         for storage_server in storage_broker.get_connected_servers():
-            for (storage_index, sharenums) in buckets:
-                for sharenum in sharenums:
+            for (storage_index, shares) in buckets:
+                for sharenum, expiration_time in shares.items():
                     try:
                         create_share(
                             storage_server.get_storage_server(),
                             storage_index,
                             sharenum,
                             size=123,
-                            lease_expiration=int(storage_broker.clock.seconds()),
+                            lease_expiration=int(expiration_time),
                         )
                     except SharesAlreadyExist:
                         # If the storage_brokers() strategy already put a
