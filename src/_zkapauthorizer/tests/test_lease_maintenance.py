@@ -34,10 +34,10 @@ from hypothesis.strategies import (
     floats,
     integers,
     just,
-    tuples,
     lists,
-    sets,
     randoms,
+    sets,
+    tuples,
 )
 from testtools import TestCase
 from testtools.matchers import (
@@ -66,7 +66,13 @@ from ..lease_maintenance import (
     visit_storage_indexes_from_root,
 )
 from .matchers import Provides, between, leases_current
-from .strategies import clocks, posix_timestamps, node_hierarchies, storage_indexes, sharenums
+from .strategies import (
+    clocks,
+    node_hierarchies,
+    posix_timestamps,
+    sharenums,
+    storage_indexes,
+)
 
 
 def interval_means():
@@ -100,17 +106,12 @@ class DummyStorageServer(object):
     """
 
     clock = attr.ib()
-    buckets = attr.ib() # type: Dict[bytes, Dict[int, ShareStat]]
+    buckets = attr.ib()  # type: Dict[bytes, Dict[int, ShareStat]]
     lease_seed = attr.ib()
 
     def stat_shares(self, storage_indexes):
         # type: (List[bytes]) -> Deferred[List[Dict[int, ShareStat]]]
-        return succeed(
-            list(
-                self.buckets.get(idx, {})
-                for idx in storage_indexes
-            )
-        )
+        return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
 
     def get_lease_seed(self):
         return self.lease_seed
@@ -440,6 +441,7 @@ def lists_of_buckets():
     share numbers to lease expiration times (as posix timestamps).  Any given
     storage index will appear only once in the overall result.
     """
+
     def add_expiration_times(sharenums):
         return builds(
             lambda nums, expires: dict(zip(nums, expires)),
@@ -634,7 +636,9 @@ class MaintainLeasesFromRootTests(TestCase):
         for node in root_node.flatten():
             for server in storage_broker.get_connected_servers():
                 try:
-                    shares = server.get_storage_server().buckets[node.get_storage_index()]
+                    shares = server.get_storage_server().buckets[
+                        node.get_storage_index()
+                    ]
                 except KeyError:
                     continue
                 else:

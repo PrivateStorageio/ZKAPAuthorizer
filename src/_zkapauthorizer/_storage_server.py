@@ -33,12 +33,9 @@ from struct import calcsize, unpack
 import attr
 from allmydata.interfaces import RIStorageServer
 from allmydata.storage.common import storage_index_to_dir
-from allmydata.storage.shares import get_share_file
-
 from allmydata.storage.immutable import ShareFile
 from allmydata.storage.mutable import MutableShareFile
-
-
+from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
@@ -642,6 +639,7 @@ def stat_slot(storage_server, slot, sharepath):
         lease_expiration=get_lease_expiration(sharepath),
     )
 
+
 def get_lease_expiration(sharepath):
     # type: (str) -> Optional[int]
     """
@@ -651,13 +649,12 @@ def get_lease_expiration(sharepath):
     :param sharepath: The path to the share file to inspect.
     """
     leases = list(
-        lease.get_expiration_time()
-        for lease
-        in get_share_file(sharepath).get_leases()
+        lease.get_expiration_time() for lease in get_share_file(sharepath).get_leases()
     )
     if leases:
         return max(leases)
     return None
+
 
 def get_slot_share_size(sharepath):
     """
