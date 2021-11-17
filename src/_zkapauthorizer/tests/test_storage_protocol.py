@@ -19,6 +19,7 @@ Tests for communication between the client and server components.
 from __future__ import absolute_import
 
 from allmydata.storage.common import storage_index_to_dir
+from allmydata.storage.shares import get_share_file
 from challenge_bypass_ristretto import random_signing_key
 from fixtures import MonkeyPatch
 from foolscap.referenceable import LocalReferenceable
@@ -357,6 +358,8 @@ class ShareTests(TestCase):
         cancel_secret=lease_cancel_secrets(),
         existing_sharenums=sharenum_sets(),
         additional_sharenums=sharenum_sets(),
+        when=posix_timestamps(),
+        interval=integers(min_value=1, max_value=60 * 60 * 24 * 31),
         size=sizes(),
     )
     def test_shares_already_exist(
@@ -366,6 +369,8 @@ class ShareTests(TestCase):
         cancel_secret,
         existing_sharenums,
         additional_sharenums,
+        when,
+        interval,
         size,
     ):
         """
@@ -374,14 +379,22 @@ class ShareTests(TestCase):
         """
         # A helper that only varies on sharenums.
         def allocate_buckets(sharenums):
-            return self.client.allocate_buckets(
-                storage_index,
-                renew_secret,
-                cancel_secret,
-                sharenums,
-                size,
-                canary=self.canary,
+            alreadygot, writers = extract_result(
+                self.client.allocate_buckets(
+                    storage_index,
+                    renew_secret,
+                    cancel_secret,
+                    sharenums,
+                    size,
+                    canary=self.canary,
+                ),
             )
+            for sharenum, writer in writers.items():
+                writer.remote_write(0, bytes_for_share(sharenum, size))
+                writer.remote_close()
+
+        # Set some arbitrary time so we can inspect lease renewal behavior.
+        self.clock.advance(when)
 
         # Create some shares to alter the behavior of the next
         # allocate_buckets.
@@ -395,14 +408,15 @@ class ShareTests(TestCase):
             canary=self.canary,
         )
 
+        # Let some time pass so leases added after this point will look
+        # different from leases added before this point.
+        self.clock.advance(interval)
+
         # Do a partial repeat of the operation.  Shuffle around
         # the shares in some random-ish way.  If there is partial overlap
         # there should be partial spending.
         all_sharenums = existing_sharenums | additional_sharenums
-        self.assertThat(
-            allocate_buckets(all_sharenums),
-            succeeded(Always()),
-        )
+        allocate_buckets(all_sharenums)
 
         # This is what the client should try to spend.  This should also match
         # the total number of passes issued during the test.
@@ -433,6 +447,38 @@ class ShareTests(TestCase):
                 in_use=HasLength(0),
                 invalid=HasLength(0),
             ),
+        )
+
+        def get_lease_grant_times(storage_server, storage_index):
+            """
+            Get the grant times for all of the leases for all of the shares at the
+            given storage index.
+            """
+            shares = storage_server._get_bucket_shares(storage_index)
+            for sharenum, sharepath in shares:
+                sharefile = get_share_file(sharepath)
+                leases = sharefile.get_leases()
+                grant_times = list(
+                    lease.get_grant_renew_time_time() for lease in leases
+                )
+                yield sharenum, grant_times
+
+        expected_leases = {}
+        # Chop off the non-integer part of the expected values because share
+        # files only keep integer precision.
+        expected_leases.update(
+            {sharenum: [int(when)] for sharenum in existing_sharenums}
+        )
+        expected_leases.update(
+            {
+                sharenum: [int(when + interval)]
+                for sharenum in all_sharenums - existing_sharenums
+            }
+        )
+
+        self.assertThat(
+            dict(get_lease_grant_times(self.anonymous_storage_server, storage_index)),
+            Equals(expected_leases),
         )
 
     @given(

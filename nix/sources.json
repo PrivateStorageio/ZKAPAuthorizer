@@ -3,12 +3,12 @@
         "branch": "master",
         "description": "Create highly reproducible python environments",
         "homepage": "",
-        "owner": "DavHau",
+        "owner": "PrivateStorageio",
         "repo": "mach-nix",
-        "rev": "dc94135e31d5c90c40a00a6cbdf9330526e8153b",
-        "sha256": "08l7v0hn9cs8irda0kd55c6lmph3an2i7p47wh2d48hza9pipckr",
+        "rev": "4d2cc6c6fe5b2875e7b48a84a1b1f688c6991c42",
+        "sha256": "03xabrwzbby6dcp3w4li7p9cxsca5n2jlz452sz7r4h1n5sx9mwg",
         "type": "tarball",
-        "url": "https://github.com/DavHau/mach-nix/archive/dc94135e31d5c90c40a00a6cbdf9330526e8153b.tar.gz",
+        "url": "https://github.com/PrivateStorageio/mach-nix/archive/4d2cc6c6fe5b2875e7b48a84a1b1f688c6991c42.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -47,10 +47,10 @@
         "homepage": "https://tahoe-lafs.org/",
         "owner": "tahoe-lafs",
         "repo": "tahoe-lafs",
-        "rev": "0a072a98c80f0a9ae1913674b54696ebc992406a",
-        "sha256": "13mbvg371xd2zncy8l9zxl9xv5fjxfddgp8vlv854z260ss4535r",
+        "rev": "d3c6f58a8ded7db3324ef97c47f5c1921c3d58b7",
+        "sha256": "18zr6l53r32pigymsnv10m67kgf981bxl8c3rjhv5bikfnf986q8",
         "type": "tarball",
-        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/0a072a98c80f0a9ae1913674b54696ebc992406a.tar.gz",
+        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/d3c6f58a8ded7db3324ef97c47f5c1921c3d58b7.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
