@@ -387,8 +387,17 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             renew_leases=False,
         )
 
-        # Add the lease that we charged the client for: leases on all written
-        # shares without an unexpired lease.
+        # Add the leases that we charged the client for.  This includes:
+        #
+        #  - leases on newly created shares
+        #
+        #  - leases on existing, modified shares without an unexpired lease
+        #
+        # Note it does not include existing shares that grew enough to be more
+        # expensive.  The operation was required to pay the full price
+        # difference but this only grants storage for the remainder of the
+        # existing lease period.  This results in the client being overcharged
+        # somewhat.
         add_leases_for_writev(self._original, storage_index, secrets, tw_vectors, now)
 
         # Propagate the result of the operation.
