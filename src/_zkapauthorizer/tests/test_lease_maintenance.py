@@ -642,7 +642,8 @@ class MaintainLeasesFromRootTests(TestCase):
                 except KeyError:
                     continue
                 else:
-                    expected.append(list(stat.size for stat in shares.values()))
+                    if shares:
+                        expected.append(list(stat.size for stat in shares.values()))
 
         # The visit order doesn't matter.
         expected.sort()
