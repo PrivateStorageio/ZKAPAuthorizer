@@ -37,11 +37,7 @@ class RIEcho(RemoteInterface):
 
 @implementer(RIStorageServer)
 class StubStorageServer(object):
-    def set_implicit_bucket_lease_renewal(self, enabled):
-        pass
-
-    def set_implicit_slot_lease_renewal(self, enabled):
-        pass
+    pass
 
 
 def get_anonymous_storage_server():
