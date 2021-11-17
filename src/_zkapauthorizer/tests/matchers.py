@@ -135,12 +135,12 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
     servers for which the leases on the given storage indexes do not expire
     before ``min_lease_remaining``.
     """
+
     def get_relevant_stats(storage_server):
         for (storage_index, shares) in storage_server.buckets.items():
             if storage_index in relevant_storage_indexes:
                 for (sharenum, stat) in shares.items():
                     yield stat
-
 
     return AfterPreprocessing(
         # Get share stats for storage indexes we should have
