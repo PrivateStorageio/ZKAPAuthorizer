@@ -424,6 +424,23 @@ class ZKAPAuthorizerStorageClient(object):
         # Read operations are free.
         num_passes = 0
 
+        # Convert tw_vectors from the new internal format to the wire format.
+        # See https://github.com/tahoe-lafs/tahoe-lafs/pull/1127/files#r716939082
+        tw_vectors = {
+            sharenum: (
+                [
+                    (offset, length, "eq", specimen)
+                    for (offset, length, specimen) in test_vector
+                ],
+                data_vectors,
+                new_length,
+            )
+            for (
+                sharenum,
+                (test_vector, data_vectors, new_length),
+            ) in tw_vectors.items()
+        }
+
         if has_writes(tw_vectors):
             # When performing writes, if we're increasing the storage
             # requirement, we need to spend more passes.  Unfortunately we

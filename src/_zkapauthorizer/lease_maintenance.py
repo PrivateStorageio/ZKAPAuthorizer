@@ -206,10 +206,29 @@ def renew_leases_on_server(
         # Keep track of what's been seen.
         activity.observe([stat.size for stat in stat_dict.values()])
 
-        # All shares have the same lease information.
-        stat = stat_dict.popitem()[1]
-        if needs_lease_renew(min_lease_remaining, stat, now):
+        # Each share has its own leases and each lease has its own expiration
+        # time.  For each share the server only returns the lease with the
+        # expiration time farthest in the future.
+        #
+        # There is no API for renewing leases on just *some* shares!  It is
+        # all or nothing.  So from the server's response we find the share
+        # that will have no active lease soonest and make our decision about
+        # whether to renew leases at this storage index or not based on that.
+        most_endangered = soonest_expiration(stat_dict.values())
+        if needs_lease_renew(min_lease_remaining, most_endangered, now):
             yield renew_lease(renewal_secret, cancel_secret, storage_index, server)
+
+
+def soonest_expiration(stats):
+    # type: (Iterable[ShareStat]) -> ShareStat
+    """
+    :return: The share stat from ``stats`` with a lease which expires before
+        all others.
+    """
+    return min(
+        stats,
+        key=lambda stat: stat.lease_expiration,
+    )
 
 
 def renew_lease(renewal_secret, cancel_secret, storage_index, server):
