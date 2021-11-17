@@ -176,12 +176,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
-    def __attrs_post_init__(self):
-        # Avoid the default StorageServer ``allocate_buckets`` behavior of
-        # renewing leases on all existing shares in the same bucket.  It will
-        # still add leases to the newly uploaded shares.
-        self._original.set_implicit_bucket_lease_renewal(False)
-
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
@@ -236,14 +230,23 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
         )
 
-        return self._original.remote_allocate_buckets(
+        alreadygot, bucketwriters = self._original._allocate_buckets(
             storage_index,
             renew_secret,
             cancel_secret,
             sharenums,
             allocated_size,
-            canary,
+            renew_leases=False,
         )
+        # Copy/paste the disconnection handling logic from
+        # StorageServer.remote_allocate_buckets.
+        for bw in bucketwriters.values():
+            disconnect_marker = canary.notifyOnDisconnect(bw.disconnected)
+            self._original._bucket_writer_disconnect_markers[bw] = (
+                canary,
+                disconnect_marker,
+            )
+        return alreadygot, bucketwriters
 
     def remote_get_buckets(self, storage_index):
         """
@@ -370,17 +373,15 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             if required_new_passes > len(validation.valid):
                 validation.raise_for(required_new_passes)
 
-        self._original.set_implicit_slot_lease_renewal(renew_leases)
         # Skip over the remotely exposed method and jump to the underlying
         # implementation which accepts one additional parameter that we know
-        # about (and don't expose over the network): renew_leases.  We always
-        # pass False for this because we want to manage leases completely
-        # separately from writes.
+        # about (and don't expose over the network): renew_leases.
         return self._original.slot_testv_and_readv_and_writev(
             storage_index,
             secrets,
             tw_vectors,
             r_vector,
+            renew_leases=renew_leases,
         )
 
     def remote_slot_readv(self, *a, **kw):
