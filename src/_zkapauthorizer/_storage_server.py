@@ -325,6 +325,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
         * If shares with unexpired leases are made larger.
           Passes are required for the difference in price between the old and new size.
+          Note that the lease is *not* renewed in this case (see #254).
         """
         with start_action(
             action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
