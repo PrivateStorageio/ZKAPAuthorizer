@@ -29,7 +29,7 @@ from allmydata.util.hashutil import (
     file_cancel_secret_hash,
     file_renewal_secret_hash,
 )
-from aniso8601 import parse_datetime
+from isodate import duration_isoformat, parse_datetime, parse_duration
 from twisted.application.service import Service
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python.log import err
@@ -309,12 +309,17 @@ class _FuzzyTimerService(Service):
 
     :ivar IReactorTime reactor: A Twisted reactor to use to schedule runs of
         the operation.
+
+    :ivar get_config: A function to call to return the service's
+        configuration.  The configuration is represented as a service-specific
+        object.
     """
 
     name = attr.ib()
     operation = attr.ib()
     initial_interval = attr.ib()
     sample_interval_distribution = attr.ib()
+    get_config = attr.ib()  # type: () -> Any
     reactor = attr.ib()
 
     def startService(self):
@@ -414,6 +419,12 @@ def lease_maintenance_service(
             timedelta(0),
         )
 
+    def get_config():
+        return LeaseMaintenanceConfig(
+            crawl_interval_mean=interval_mean,
+            crawl_interval_range=interval_range,
+        )
+
     return _FuzzyTimerService(
         SERVICE_NAME,
         lambda: bracket(
@@ -426,7 +437,38 @@ def lease_maintenance_service(
         ),
         initial_interval,
         sample_interval_distribution,
+        get_config,
         reactor,
+    )
+
+
+@attr.s(frozen=True)
+class LeaseMaintenanceConfig(object):
+    """
+    Represent the configuration for a lease maintenance service.
+    """
+
+    crawl_interval_mean = attr.ib()  # type: datetime.timedelta
+    crawl_interval_range = attr.ib()  # type: datetime.timedelta
+
+
+def lease_maintenance_config_to_dict(lease_maint_config):
+    # type: (LeaseMaintenanceConfig) -> Dict[str, str]
+    return {
+        "lease.crawl-interval.mean": duration_isoformat(
+            lease_maint_config.crawl_interval_mean,
+        ),
+        "lease.crawl-interval.range": duration_isoformat(
+            lease_maint_config.crawl_interval_range,
+        ),
+    }
+
+
+def lease_maintenance_config_from_dict(d):
+    # type: (Dict[str, str]) -> LeaseMaintenanceConfig
+    return LeaseMaintenanceConfig(
+        crawl_interval_mean=parse_duration(d["lease.crawl-interval.mean"]),
+        crawl_interval_range=parse_duration(d["lease.crawl-interval.range"]),
     )
 
 

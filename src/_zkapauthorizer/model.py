@@ -24,7 +24,7 @@ from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 
 import attr
-from aniso8601 import parse_datetime as _parse_datetime
+from isodate import parse_datetime
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -37,18 +37,6 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
-
-
-def parse_datetime(s, **kw):
-    """
-    Like ``aniso8601.parse_datetime`` but accept unicode as well.
-    """
-    if isinstance(s, unicode):
-        s = s.encode("utf-8")
-    assert isinstance(s, bytes)
-    if "delimiter" in kw and isinstance(kw["delimiter"], unicode):
-        kw["delimiter"] = kw["delimiter"].encode("utf-8")
-    return _parse_datetime(s, **kw)
 
 
 class ILeaseMaintenanceObserver(Interface):

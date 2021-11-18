@@ -17,7 +17,7 @@ Hypothesis strategies for property testing.
 """
 
 from base64 import b64encode, urlsafe_b64encode
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib import quote
 
 import attr
@@ -30,6 +30,7 @@ from hypothesis.strategies import (
     datetimes,
     dictionaries,
     fixed_dictionaries,
+    floats,
     integers,
     just,
     lists,
@@ -39,6 +40,7 @@ from hypothesis.strategies import (
     sampled_from,
     sets,
     text,
+    timedeltas,
     tuples,
 )
 from twisted.internet.defer import succeed
@@ -47,6 +49,7 @@ from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
 from ..configutil import config_string_from_sections
+from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (
     DoubleSpend,
     Error,
@@ -344,6 +347,50 @@ def client_errorredeemer_configurations(details):
                 u"details": details,
             }
         )
+    )
+
+
+def interval_means():
+    """
+    Build timedeltas representing the mean time between lease maintenance
+    runs.
+    """
+    return floats(
+        # It doesn't make sense to have a negative check interval mean.
+        min_value=0,
+        # We can't make this value too large or it isn't convertable to a
+        # timedelta.  Also, even values as large as this one are of
+        # questionable value.
+        max_value=60 * 60 * 24 * 365,
+    ).map(
+        # By representing the result as a timedelta we avoid the cases where
+        # the lower precision of timedelta compared to float drops the whole
+        # value (anything between 0 and 1 microsecond).  This is just one
+        # example of how working with timedeltas is nicer, in general.
+        lambda s: timedelta(seconds=s),
+    )
+
+
+def lease_maintenance_configurations():
+    """
+    Build LeaseMaintenanceConfig instances.
+    """
+    return builds(
+        LeaseMaintenanceConfig,
+        interval_means(),
+        timedeltas(min_value=timedelta(0)),
+    )
+
+
+def client_lease_maintenance_configurations(maint_configs=None):
+    """
+    Build dictionaries representing the lease maintenance options that go into
+    the ZKAPAuthorizer client plugin section.
+    """
+    if maint_configs is None:
+        maint_configs = lease_maintenance_configurations()
+    return maint_configs.map(
+        lambda lease_maint_config: lease_maintenance_config_to_dict(lease_maint_config),
     )
 
 

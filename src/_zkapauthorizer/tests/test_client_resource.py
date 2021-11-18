@@ -26,7 +26,6 @@ from urllib import quote
 
 import attr
 from allmydata.client import config_from_string
-from aniso8601 import parse_datetime
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
@@ -44,6 +43,7 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
+from isodate import parse_datetime
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
