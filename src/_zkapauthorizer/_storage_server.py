@@ -783,6 +783,20 @@ def get_writev_price(storage_server, pass_value, storage_index, tw_vectors, now)
             # written.  If they have an unexpired lease then we can apply some
             # or all of the remainder of the value of that lease towards this
             # operation.
+            #
+            # For example, if there are 5 0.5 MB shares already present then 5
+            # ZKAPs (assuming a ZKAP value of 1 MB-month) have been spent to
+            # store them while only 2.5 MB of storage has been allocated.
+            # This means we could accept another 2.5 MB of data for storage at
+            # no cost to the client while still having been completely paid
+            # for the storage committed.
+            #
+            # This is sort of a weird trick to try to reduce the impact of
+            # ZKAP value lost to the rounding scheme in use.  There's a good
+            # chance there are better solutions waiting to be discovered that
+            # would obsolete this logic.  Note that whatever the logic here,
+            # it must agree with the client-side logic so that both server and
+            # client come to the same conclusion regarding price.
             sharenums=None,
         ),
     )
