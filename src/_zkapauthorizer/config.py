@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Helpers for reading values from the Tahoe-LAFS configuration.
+"""
+
 from datetime import timedelta
 from isodate import parse_duration
 
