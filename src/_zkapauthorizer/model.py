@@ -38,6 +38,7 @@ from .storage_common import (
 )
 from .validators import greater_than, has_length, is_base64_encoded
 
+
 def parse_datetime(s):
     # type: (str) -> datetime
     """

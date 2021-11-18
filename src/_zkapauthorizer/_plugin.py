@@ -27,6 +27,7 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
+from isodate import parse_duration
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -36,6 +37,7 @@ from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .controller import get_redeemer
 from .lease_maintenance import (
     SERVICE_NAME,
+    LeaseMaintenanceConfig,
     lease_maintenance_service,
     maintain_leases_from_root,
 )
@@ -220,6 +222,8 @@ def _create_maintenance_service(reactor, node_config, client_node):
 
     store = storage_server._get_store(node_config)
 
+    maint_config = lease_maintenance_from_tahoe_config(node_config)
+
     # Create the operation which performs the lease maintenance job when
     # called.
     maintain_leases = maintain_leases_from_root(
@@ -252,7 +256,44 @@ def _create_maintenance_service(reactor, node_config, client_node):
         reactor,
         last_run_path,
         random,
+        interval_mean=maint_config.crawl_interval_mean,
+        interval_range=maint_config.crawl_interval_range,
     )
+
+
+def lease_maintenance_from_tahoe_config(node_config):
+    # type: (_Config) -> LeaseMaintenanceConfig
+    """
+    Return a ``LeaseMaintenanceConfig`` representing the values from the given
+    configuration object.
+    """
+    return LeaseMaintenanceConfig(
+        crawl_interval_mean=_read_duration(node_config, u"lease.crawl-interval.mean"),
+        crawl_interval_range=_read_duration(node_config, u"lease.crawl-interval.range"),
+    )
+
+
+def _read_duration(cfg, option):
+    """
+    Read an ISO8601 "duration" from the ZKAPAuthorizer section of a Tahoe-LAFS
+    config.
+
+    :param cfg: The Tahoe-LAFS config object to consult.
+    :param option: The name of the option to read.
+
+    :return: ``None`` if the option is missing, otherwise the parsed duration
+        as a ``timedelta``.
+    """
+    # type: (_Config, str) -> Optional[timedelta]
+    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    value_str = cfg.get_config(
+        section=section_name,
+        option=option,
+        default=None,
+    )
+    if value_str is None:
+        return None
+    return parse_duration(value_str)
 
 
 def get_root_nodes(client_node, node_config):
