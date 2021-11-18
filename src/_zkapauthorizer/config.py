@@ -17,19 +17,21 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 """
 
 from datetime import timedelta
+
 from isodate import parse_duration
 
-from .lease_maintenance import (
-    LeaseMaintenanceConfig,
-)
+from .lease_maintenance import LeaseMaintenanceConfig
+
 
 class _EmptyConfig(object):
     """
     Weakly pretend to be a Tahoe-LAFS configuration object with no
     configuration.
     """
+
     def get_config(self, section, option, default=object(), boolean=False):
         return default
+
 
 empty_config = _EmptyConfig()
 
