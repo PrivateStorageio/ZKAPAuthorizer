@@ -378,7 +378,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation.raise_for(required_new_passes)
 
         # Perform the operation.
-        result = self._original.remote_slot_testv_and_readv_and_writev(
+        result = self._original.slot_testv_and_readv_and_writev(
             storage_index,
             secrets,
             tw_vectors,
