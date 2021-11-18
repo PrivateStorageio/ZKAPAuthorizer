@@ -607,17 +607,16 @@ class LeaseMaintenanceServiceTests(TestCase):
         # First build the simple lease maintenance configuration object that
         # represents the example to test.
         lease_maintenance_configurations().flatmap(
-            # Then generate build a function that will get us a Tahoe
-            # configuration that includes at least that lease maintenance
-            # configuration.
+            # Then build a function that will get us a Tahoe configuration
+            # that includes at least that lease maintenance configuration.
             lambda lease_maint_config: tahoe_configs(
                 zkapauthz_v1_configuration=client_lease_maintenance_configurations(
                     just(lease_maint_config),
                 ),
             ).map(
                 # Then bundle up both pieces to pass to the function.  By
-                # preserving the simple lease maintenance configuration and
-                # making it available to the test, the test logic is much
+                # preserving the lease maintenance configuration model object
+                # and making it available to the test, the test logic is much
                 # simplified (eg, we don't have to read values out of the
                 # Tahoe configuration to figure out what example we're working
                 # on).
