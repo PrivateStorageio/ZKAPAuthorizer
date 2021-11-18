@@ -357,8 +357,7 @@ def lease_maintenance_service(
     reactor,
     last_run_path,
     random,
-    interval_mean=None,
-    interval_range=None,
+    lease_maint_config,
 ):
     """
     Get an ``IService`` which will maintain leases on ``root_node`` and any
@@ -377,19 +376,15 @@ def lease_maintenance_service(
     :param random: An object like ``random.Random`` which can be used as a
         source of scheduling delay.
 
-    :param timedelta interval_mean: The mean time between lease renewal checks.
-
-    :param timedelta interval_range: The range of the uniform distribution of
-        lease renewal checks (centered on ``interval_mean``).
+    :param lease_maint_config: Configuration for the tweakable lease
+        maintenance parameters.
 
     :param maintain_leases: A no-argument callable which performs a round of
         lease-maintenance.  The resulting service calls this periodically.
     """
-    if interval_mean is None:
-        interval_mean = timedelta(days=26)
-    if interval_range is None:
-        interval_range = timedelta(days=4)
-    halfrange = interval_range / 2
+    interval_mean = lease_maint_config.crawl_interval_mean
+    interval_range = lease_maint_config.crawl_interval_range
+    halfrange = lease_maint_config.crawl_interval_range / 2
 
     def sample_interval_distribution():
         return timedelta(
@@ -419,11 +414,8 @@ def lease_maintenance_service(
             timedelta(0),
         )
 
-    def get_config():
-        return LeaseMaintenanceConfig(
-            crawl_interval_mean=interval_mean,
-            crawl_interval_range=interval_range,
-        )
+    def get_lease_maint_config():
+        return lease_maint_config
 
     return _FuzzyTimerService(
         SERVICE_NAME,
@@ -437,7 +429,7 @@ def lease_maintenance_service(
         ),
         initial_interval,
         sample_interval_distribution,
-        get_config,
+        get_lease_maint_config,
         reactor,
     )
 
@@ -446,10 +438,19 @@ def lease_maintenance_service(
 class LeaseMaintenanceConfig(object):
     """
     Represent the configuration for a lease maintenance service.
+
+    :ivar crawl_interval_mean: The mean time between lease renewal checks.
+
+    :ivar crawl_interval_range: The range of the uniform distribution of lease
+        renewal checks (centered on ``interval_mean``).
+
+    :ivar min_lease_remaining: The minimum amount of time remaining to allow
+        on a lease without renewing it.
     """
 
     crawl_interval_mean = attr.ib()  # type: datetime.timedelta
     crawl_interval_range = attr.ib()  # type: datetime.timedelta
+    min_lease_remaining = attr.ib()  # type: datetime.timedelta
 
 
 def lease_maintenance_config_to_dict(lease_maint_config):
@@ -461,6 +462,9 @@ def lease_maintenance_config_to_dict(lease_maint_config):
         "lease.crawl-interval.range": duration_isoformat(
             lease_maint_config.crawl_interval_range,
         ),
+        "lease.min-time-remaining": duration_isoformat(
+            lease_maint_config.min_lease_remaining,
+        ),
     }
 
 
@@ -469,6 +473,7 @@ def lease_maintenance_config_from_dict(d):
     return LeaseMaintenanceConfig(
         crawl_interval_mean=parse_duration(d["lease.crawl-interval.mean"]),
         crawl_interval_range=parse_duration(d["lease.crawl-interval.range"]),
+        min_lease_remaining=parse_duration(d["lease.min-time-remaining"]),
     )
 
 

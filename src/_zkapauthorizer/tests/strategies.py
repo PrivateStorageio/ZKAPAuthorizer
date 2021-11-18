@@ -379,6 +379,7 @@ def lease_maintenance_configurations():
         LeaseMaintenanceConfig,
         interval_means(),
         timedeltas(min_value=timedelta(0)),
+        timedeltas(min_value=timedelta(0)),
     )
 
 

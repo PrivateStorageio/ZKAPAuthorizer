@@ -57,7 +57,9 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from ..foolscap import ShareStat
+from ..config import lease_maintenance_from_tahoe_config, empty_config
 from ..lease_maintenance import (
+    LeaseMaintenanceConfig,
     MemoryMaintenanceObserver,
     NoopMaintenanceObserver,
     lease_maintenance_config_from_dict,
@@ -78,6 +80,7 @@ from .strategies import (
     storage_indexes,
 )
 
+default_lease_maint_config = lease_maintenance_from_tahoe_config(empty_config)
 
 def dummy_maintain_leases():
     pass
@@ -237,6 +240,7 @@ class LeaseMaintenanceServiceTests(TestCase):
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
+            lease_maint_config=default_lease_maint_config,
         )
         self.assertThat(
             service,
@@ -265,8 +269,11 @@ class LeaseMaintenanceServiceTests(TestCase):
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
-            mean,
-            range_,
+            LeaseMaintenanceConfig(
+                mean,
+                range_,
+                timedelta(0),
+            ),
         )
         service.startService()
         [maintenance_call] = clock.getDelayedCalls()
@@ -308,8 +315,11 @@ class LeaseMaintenanceServiceTests(TestCase):
             clock,
             last_run_path,
             random,
-            mean,
-            range_,
+            LeaseMaintenanceConfig(
+                mean,
+                range_,
+                timedelta(0),
+            ),
         )
         service.startService()
         [maintenance_call] = clock.getDelayedCalls()
@@ -355,6 +365,7 @@ class LeaseMaintenanceServiceTests(TestCase):
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
+            lease_maint_config=default_lease_maint_config,
         )
         service.startService()
         self.assertThat(
@@ -388,6 +399,7 @@ class LeaseMaintenanceServiceTests(TestCase):
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
+            lease_maint_config=default_lease_maint_config,
         )
         service.startService()
         [maintenance_call] = clock.getDelayedCalls()

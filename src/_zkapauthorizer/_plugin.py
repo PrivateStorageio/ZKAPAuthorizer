@@ -18,7 +18,7 @@ Tahoe-LAFS.
 """
 
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import partial
 from weakref import WeakValueDictionary
 
@@ -27,13 +27,13 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
-from isodate import parse_duration
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
+from .config import lease_maintenance_from_tahoe_config
 from .controller import get_redeemer
 from .lease_maintenance import (
     SERVICE_NAME,
@@ -230,20 +230,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         get_root_nodes=partial(get_root_nodes, client_node, node_config),
         storage_broker=client_node.get_storage_broker(),
         secret_holder=client_node._secret_holder,
-        # The greater the min lease remaining time, the more of each lease
-        # period is "wasted" by renewing the lease before it has expired.  The
-        # premise of ZKAPAuthorizer's use of leases is that if they expire,
-        # the storage server is free to reclaim the storage by forgetting
-        # about the share.  However, since we do not know of any
-        # ZKAPAuthorizer-enabled storage grids which will garbage collect
-        # shares when leases expire, we have no reason not to use a zero
-        # duration here - for now.
-        #
-        # In the long run, storage servers must run with garbage collection
-        # enabled.  Ideally, before that happens, we will have a system that
-        # doesn't involve trading of wasted lease time against reliability of
-        # leases being renewed before the shares are garbage collected.
-        min_lease_remaining=timedelta(seconds=0),
+        min_lease_remaining=maint_config.min_lease_remaining,
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
@@ -256,44 +243,8 @@ def _create_maintenance_service(reactor, node_config, client_node):
         reactor,
         last_run_path,
         random,
-        interval_mean=maint_config.crawl_interval_mean,
-        interval_range=maint_config.crawl_interval_range,
+        lease_maint_config=maint_config,
     )
-
-
-def lease_maintenance_from_tahoe_config(node_config):
-    # type: (_Config) -> LeaseMaintenanceConfig
-    """
-    Return a ``LeaseMaintenanceConfig`` representing the values from the given
-    configuration object.
-    """
-    return LeaseMaintenanceConfig(
-        crawl_interval_mean=_read_duration(node_config, u"lease.crawl-interval.mean"),
-        crawl_interval_range=_read_duration(node_config, u"lease.crawl-interval.range"),
-    )
-
-
-def _read_duration(cfg, option):
-    """
-    Read an ISO8601 "duration" from the ZKAPAuthorizer section of a Tahoe-LAFS
-    config.
-
-    :param cfg: The Tahoe-LAFS config object to consult.
-    :param option: The name of the option to read.
-
-    :return: ``None`` if the option is missing, otherwise the parsed duration
-        as a ``timedelta``.
-    """
-    # type: (_Config, str) -> Optional[timedelta]
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
-    value_str = cfg.get_config(
-        section=section_name,
-        option=option,
-        default=None,
-    )
-    if value_str is None:
-        return None
-    return parse_duration(value_str)
 
 
 def get_root_nodes(client_node, node_config):
