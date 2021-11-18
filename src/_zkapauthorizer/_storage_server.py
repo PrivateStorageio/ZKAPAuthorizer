@@ -412,23 +412,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         return self._original.remote_slot_readv(*a, **kw)
 
 
-def has_active_lease(storage_server, storage_index, now):
-    """
-    :param allmydata.storage.server.StorageServer storage_server: A storage
-        server to use to look up lease information.
-
-    :param bytes storage_index: A storage index to use to look up lease
-        information.
-
-    :param float now: The current time as a POSIX timestamp.
-
-    :return bool: ``True`` if any only if the given storage index has a lease
-        with an expiration time after ``now``.
-    """
-    leases = storage_server.get_slot_leases(storage_index)
-    return any(lease.get_expiration_time() > now for lease in leases)
-
-
 def check_pass_quantity(pass_value, validation, share_sizes):
     """
     Check that the given number of passes is sufficient to cover leases for
