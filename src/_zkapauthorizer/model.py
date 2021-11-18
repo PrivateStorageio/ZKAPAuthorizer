@@ -24,7 +24,7 @@ from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 
 import attr
-from isodate import parse_datetime
+from isodate import parse_datetime as _parse_datetime
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -37,6 +37,14 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
+
+def parse_datetime(s):
+    # type: (str) -> datetime
+    """
+    Parse an ISO8601 datetime, even if it uses a space separator instead of a
+    T separator.
+    """
+    return _parse_datetime(s.replace(u" ", u"T"))
 
 
 class ILeaseMaintenanceObserver(Interface):
@@ -692,9 +700,9 @@ class VoucherStore(object):
             return None
         [(started, count, finished)] = activity
         return LeaseMaintenanceActivity(
-            parse_datetime(started, delimiter=u" "),
+            parse_datetime(started),
             count,
-            parse_datetime(finished, delimiter=u" "),
+            parse_datetime(finished),
         )
 
 
@@ -1061,11 +1069,11 @@ class Voucher(object):
                 return Pending(counter=row[3])
             if state == u"double-spend":
                 return DoubleSpend(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0]),
                 )
             if state == u"redeemed":
                 return Redeemed(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0]),
                     row[1],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
@@ -1080,7 +1088,7 @@ class Voucher(object):
             # value represents a leap second.  However, since we also use
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
-            created=parse_datetime(created, delimiter=u" "),
+            created=parse_datetime(created),
             state=state_from_row(state, row[4:]),
         )
 
