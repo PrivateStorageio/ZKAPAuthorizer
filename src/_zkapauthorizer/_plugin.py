@@ -27,6 +27,7 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
+from prometheus_client import CollectorRegistry
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -94,8 +95,17 @@ class ZKAPAuthorizer(object):
         """
         return get_redeemer(self.name, node_config, announcement, reactor)
 
-    def get_storage_server(self, configuration, get_anonymous_storage_server):
+    def get_storage_server(
+        self, configuration, get_anonymous_storage_server, reactor=None
+    ):
+        if reactor is None:
+            from twisted.internet import reactor
+        registry = CollectorRegistry()
+        # schedule_writing(registry)
         kwargs = configuration.copy()
+
+        kwargs.pop(u"prometheus-metrics-path", None)
+        kwargs.pop(u"prometheus-metrics-interval", None)
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
         pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
         signing_key = load_signing_key(
@@ -110,6 +120,7 @@ class ZKAPAuthorizer(object):
             get_anonymous_storage_server(),
             pass_value=pass_value,
             signing_key=signing_key,
+            registry=registry,
             **kwargs
         )
         return succeed(

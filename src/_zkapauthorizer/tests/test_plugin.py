@@ -19,6 +19,7 @@ Tests for the Tahoe-LAFS plugin.
 from __future__ import absolute_import
 
 import tempfile
+from datetime import timedelta
 from functools import partial
 from os import makedirs
 
@@ -36,7 +37,9 @@ from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
-from hypothesis.strategies import datetimes, just, sampled_from
+from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
+from isodate import duration_isoformat
+from prometheus_client import CollectorRegistry, Gauge
 from StringIO import StringIO
 from testtools import TestCase
 from testtools.content import text_content
@@ -47,12 +50,14 @@ from testtools.matchers import (
     Contains,
     ContainsDict,
     Equals,
+    FileContains,
     HasLength,
     IsInstance,
     MatchesAll,
     MatchesStructure,
 )
 from testtools.twistedsupport import succeeded
+from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
@@ -74,6 +79,7 @@ from .matchers import Provides, raises
 from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
+    clocks,
     dummy_ristretto_keys,
     lease_cancel_secrets,
     lease_renew_secrets,
@@ -261,6 +267,33 @@ class ServerPluginTests(TestCase):
                 ),
             ),
         )
+
+    @given(timedeltas(min_value=timedelta(seconds=1)), clocks())
+    def test_metrics_written(self, metrics_interval, clock):
+        """
+        When the configuration tells us where to put a metrics .prom file
+        and an interval how often to do so, test that metrics are actually
+        written there after the configured interval.
+        """
+        metrics_path = self.useFixture(TempDir()).join(u"metrics")
+        configuration = {
+            u"prometheus-metrics-path": metrics_path,
+            u"prometheus-metrics-interval": duration_isoformat(metrics_interval),
+            u"ristretto-issuer-root-url": "foo",
+            u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
+        }
+        announceable = extract_result(
+            storage_server.get_storage_server(
+                configuration,
+                get_anonymous_storage_server,
+                reactor=clock,
+            )
+        )
+        registry = announceable.storage_server._registry
+        Gauge("foo", "bar", registry=registry).set(1)
+
+        clock.advance(metrics_interval.total_seconds())
+        self.assertThat(metrics_path, FileContains("foo 1"))
 
 
 tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
