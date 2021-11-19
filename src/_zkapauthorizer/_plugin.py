@@ -27,7 +27,9 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
-from prometheus_client import CollectorRegistry
+from isodate import parse_duration
+from prometheus_client import CollectorRegistry, write_to_textfile
+from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -101,11 +103,16 @@ class ZKAPAuthorizer(object):
         if reactor is None:
             from twisted.internet import reactor
         registry = CollectorRegistry()
-        # schedule_writing(registry)
         kwargs = configuration.copy()
 
-        kwargs.pop(u"prometheus-metrics-path", None)
-        kwargs.pop(u"prometheus-metrics-interval", None)
+        # If metrics are desired, schedule their writing to disk.
+        metrics_interval = kwargs.pop(u"prometheus-metrics-interval", None)
+        metrics_path = kwargs.pop(u"prometheus-metrics-path", None)
+        if metrics_interval is not None and metrics_path is not None:
+            t = task.LoopingCall(lambda: write_to_textfile(metrics_path, registry))
+            t.clock = reactor
+            t.start(parse_duration(metrics_interval).total_seconds())
+
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
         pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
         signing_key = load_signing_key(

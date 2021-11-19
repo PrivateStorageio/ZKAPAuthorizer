@@ -290,10 +290,15 @@ class ServerPluginTests(TestCase):
             )
         )
         registry = announceable.storage_server._registry
-        Gauge("foo", "bar", registry=registry).set(1)
 
-        clock.advance(metrics_interval.total_seconds())
-        self.assertThat(metrics_path, FileContains("foo 1"))
+        g = Gauge("foo", "bar", registry=registry)
+        for i in range(2):
+            g.set(i)
+
+            clock.advance(metrics_interval.total_seconds())
+            self.assertThat(
+                metrics_path, FileContains(matcher=Contains("foo {}".format(i)))
+            )
 
 
 tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
