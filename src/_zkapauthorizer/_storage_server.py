@@ -41,6 +41,7 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import start_action
 from foolscap.api import Referenceable
+from prometheus_client import CollectorRegistry
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
@@ -171,7 +172,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     _original = attr.ib(validator=provides(RIStorageServer))
     _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
-    _registry = attr.ib()
+    _registry = attr.ib(default=attr.Factory(CollectorRegistry))
     _clock = attr.ib(
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
