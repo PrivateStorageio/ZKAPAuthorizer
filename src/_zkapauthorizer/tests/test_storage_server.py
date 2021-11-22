@@ -162,7 +162,7 @@ class PassValidationTests(TestCase):
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
-            self.clock,
+            clock=self.clock,
         )
 
     def setup_example(self):
@@ -558,4 +558,48 @@ class PassValidationTests(TestCase):
         self.assertThat(
             actual_sizes,
             Equals(expected_sizes),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_immutable_spending_metrics(
+        self, storage_index, renew_secret, cancel_secret, sharenums, size
+    ):
+        """
+        When ZKAPs are spent to call *allocate_buckets* the number of passes spent is recorded as a metric.
+        """
+        expected = required_passes(
+            self.storage_server._pass_value, [size] * len(sharenums)
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            allocate_buckets_message(storage_index),
+            list(RandomToken.create() for i in range(expected)),
+        )
+
+        before_count = self.storage_server._metric_spending_successes._value.get()
+        alreadygot, allocated = self.storage_server.doRemoteCall(
+            "allocate_buckets",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                renew_secret=renew_secret,
+                cancel_secret=cancel_secret,
+                sharenums=sharenums,
+                allocated_size=size,
+                canary=LocalReferenceable(None),
+            ),
+        )
+
+        after_count = self.storage_server._metric_spending_successes._value.get()
+
+        self.assertThat(
+            after_count - before_count,
+            Equals(expected),
         )

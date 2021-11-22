@@ -41,7 +41,7 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import start_action
 from foolscap.api import Referenceable
-from prometheus_client import CollectorRegistry
+from prometheus_client import CollectorRegistry, Counter
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
@@ -172,11 +172,22 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     _original = attr.ib(validator=provides(RIStorageServer))
     _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
-    _registry = attr.ib(default=attr.Factory(CollectorRegistry))
+    _registry = attr.ib(
+        default=attr.Factory(CollectorRegistry),
+        validator=attr.validators.instance_of(CollectorRegistry),
+    )
     _clock = attr.ib(
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
+    _metric_spending_successes = attr.ib(init=False)
+
+    def __attrs_post_init__(self):
+        self._metric_spending_successes = Counter(
+            "zkapauthorizer_server_spending_successes",
+            "ZKAP Spending Successes Counter",
+            registry=self._registry,
+        )
 
     def remote_get_version(self):
         """
@@ -204,6 +215,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+        self._metric_spending_successes.inc(len(validation.valid))
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
