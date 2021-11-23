@@ -13,7 +13,7 @@ A storage server must hold ciphertext from the time it is uploaded until the las
 
 The unit of cost ZKAPAuthorizer imposes is storage × time.
 The currency used by ZKAPAuthorizer is a (Z)ero (K)nowledge (A)ccess (P)ass -- a ZKAP.
-If a ZKAP is worth 1 MB × 1 month (configurable per-grid) then a client must spend 1 ZKAP to storage up to 1 MB for up to 1 month.
+If a ZKAP is worth 1 MB × 1 month (configurable per-grid) then a client must spend 1 ZKAP to store up to 1 MB for up to 1 month.
 To store up to 1 MB for up to 2 months a client spends 2 ZKAPs.
 To store up to 2 MB for up to 1 month a client spends 2 ZKAPs.
 
