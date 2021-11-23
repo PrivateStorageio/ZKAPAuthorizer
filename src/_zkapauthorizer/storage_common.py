@@ -211,6 +211,10 @@ def get_sharenums(tw_vectors):
     :return set[int]: The share numbers which the given test/write vectors would write to.
     """
     return set(
+        # This misses cases where `data` is empty but `new_length` is
+        # non-None, non-0.
+        #
+        # Related to #222.
         sharenum for (sharenum, (test, data, new_length)) in tw_vectors.items() if data
     )
 
