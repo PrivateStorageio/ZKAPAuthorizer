@@ -27,6 +27,7 @@ from hypothesis import assume, given
 from hypothesis.strategies import data as data_strategy
 from hypothesis.strategies import integers, lists, sets, tuples
 from testtools import TestCase
+from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
     Always,
@@ -449,20 +450,6 @@ class ShareTests(TestCase):
             ),
         )
 
-        def get_lease_grant_times(storage_server, storage_index):
-            """
-            Get the grant times for all of the leases for all of the shares at the
-            given storage index.
-            """
-            shares = storage_server._get_bucket_shares(storage_index)
-            for sharenum, sharepath in shares:
-                sharefile = get_share_file(sharepath)
-                leases = sharefile.get_leases()
-                grant_times = list(
-                    lease.get_grant_renew_time_time() for lease in leases
-                )
-                yield sharenum, grant_times
-
         expected_leases = {}
         # Chop off the non-integer part of the expected values because share
         # files only keep integer precision.
@@ -849,45 +836,84 @@ class ShareTests(TestCase):
             lease_renew_secrets(),
             lease_cancel_secrets(),
         ),
-        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+        share_vectors=lists(slot_test_and_write_vectors_for_shares(), min_size=1),
+        now=posix_timestamps(),
     )
-    def test_create_mutable(
-        self, storage_index, secrets, test_and_write_vectors_for_shares
-    ):
+    def test_create_mutable(self, storage_index, secrets, share_vectors, now):
         """
         Mutable share data written using *slot_testv_and_readv_and_writev* can be
         read back as-written and without spending any more passes.
         """
-        wrote, read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
+        self.clock.advance(now)
+
+        def write(vector):
+            return self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v) in test_and_write_vectors_for_shares.items()
-                },
+                tw_vectors={k: v.for_call() for (k, v) in vector.items()},
                 r_vector=[],
-            ),
-        )
-        self.assertThat(
-            wrote,
-            Equals(True),
-            u"Server rejected a write to a new mutable slot",
-        )
-        self.assertThat(
-            read,
-            Equals({}),
-            u"Server gave back read results when we asked for none.",
-        )
-        # Now we can read it back without spending any more passes.
+            )
+
+        grant_times = {}
+        for n, vector in enumerate(share_vectors):
+            # Execute one of the write operations.  It might write to multiple
+            # shares.
+            self.assertThat(
+                write(vector),
+                is_successful_write(),
+            )
+
+            # Track our progress through the list of write vectors for
+            # testtools failure reporting.  Each call overwrites the previous
+            # detail so we can see how far we got, if we happen to fail
+            # somewhere in this loop.
+            self.addDetail("writev-progress", text_content("{}".format(n)))
+
+            # Track the simulated time when each lease receives its lease.
+            # This scenario is constructed so that only the first write to any
+            # given share will result in a lease so we do not allow the grant
+            # time for a given share number to be updated here.  Only
+            # sharenums being written for the first time will capture the time
+            # here.
+            grant_times.update(
+                {
+                    # The time is in a list to make it easier to compare the
+                    # result with the return value of `get_lease_grant_times`
+                    # later.  The time is truncated to the integer portion
+                    # because that is how much precision leases keep.
+                    sharenum: [int(self.clock.seconds())]
+                    for sharenum in vector
+                    if sharenum not in grant_times
+                }
+            )
+
+            # Advance time so the grant times will be distinct.
+            self.clock.advance(1)
+
+        # Now we can read back the last data written without spending any more
+        # passes.
         before_passes = len(self.pass_factory.issued)
         assert_read_back_data(
-            self, storage_index, secrets, test_and_write_vectors_for_shares
+            self,
+            storage_index,
+            secrets,
+            share_vectors[-1],
         )
         after_passes = len(self.pass_factory.issued)
         self.assertThat(
             before_passes,
             Equals(after_passes),
+        )
+
+        # And the lease we paid for on every share is present.
+        self.assertThat(
+            dict(
+                get_lease_grant_times(
+                    self.anonymous_storage_server,
+                    storage_index,
+                )
+            ),
+            Equals(grant_times),
         )
 
     @given(
@@ -1028,85 +1054,6 @@ class ShareTests(TestCase):
             ),
         )
 
-    @given(
-        storage_index=storage_indexes(),
-        secrets=tuples(
-            write_enabler_secrets(),
-            lease_renew_secrets(),
-            lease_cancel_secrets(),
-        ),
-        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
-    )
-    def test_client_cannot_control_lease_behavior(
-        self, storage_index, secrets, test_and_write_vectors_for_shares
-    ):
-        """
-        If the client passes ``renew_leases`` to *slot_testv_and_readv_and_writev*
-        it fails with ``TypeError``, no lease is updated, and no share data is
-        written.
-        """
-        # First, tell the client to let us violate the protocol.  It is the
-        # server's responsibility to defend against this attack.
-        self.local_remote_server.check_args = False
-
-        # The nice Python API doesn't let you do this so we drop down to
-        # the layer below.  We also use positional arguments because they
-        # transit the network differently from keyword arguments.  Yay.
-        d = self.local_remote_server.callRemote(
-            "slot_testv_and_readv_and_writev",
-            # passes
-            _encode_passes(
-                self.pass_factory.get(
-                    slot_testv_and_readv_and_writev_message(storage_index),
-                    1,
-                ),
-            ),
-            # storage_index
-            storage_index,
-            # secrets
-            secrets,
-            # tw_vectors
-            {k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()},
-            # r_vector
-            [],
-            # add_leases
-            True,
-        )
-
-        # The operation should fail.
-        self.expectThat(
-            d,
-            failed(
-                AfterPreprocessing(
-                    lambda f: f.value,
-                    IsInstance(TypeError),
-                ),
-            ),
-        )
-
-        # There should be no shares at the given storage index.
-        d = self.client.slot_readv(
-            storage_index,
-            # Surprise.  shares=None means all shares.
-            shares=None,
-            r_vector=list(
-                list(map(write_vector_to_read_vector, vector.write_vector))
-                for vector in test_and_write_vectors_for_shares.values()
-            ),
-        )
-        self.expectThat(
-            d,
-            succeeded(
-                Equals({}),
-            ),
-        )
-
-        # And there should be no leases on those non-shares.
-        self.expectThat(
-            list(self.anonymous_storage_server.get_slot_leases(storage_index)),
-            Equals([]),
-        )
-
 
 def assert_read_back_data(
     self, storage_index, secrets, test_and_write_vectors_for_shares
@@ -1161,3 +1108,16 @@ def write_vector_to_read_vector(write_vector):
     write vector.
     """
     return (write_vector[0], len(write_vector[1]))
+
+
+def get_lease_grant_times(storage_server, storage_index):
+    """
+    Get the grant times for all of the leases for all of the shares at the
+    given storage index.
+    """
+    shares = storage_server._get_bucket_shares(storage_index)
+    for sharenum, sharepath in shares:
+        sharefile = get_share_file(sharepath)
+        leases = sharefile.get_leases()
+        grant_times = list(lease.get_grant_renew_time_time() for lease in leases)
+        yield sharenum, grant_times

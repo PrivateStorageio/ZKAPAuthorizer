@@ -809,7 +809,10 @@ def slot_test_and_write_vectors():
         slot_test_vectors(),
         slot_data_vectors(),
         one_of(
+            # The new length might be omitted completely.
             just(None),
+            # Or it might be given as an integer.  Allow a zero size which
+            # means "delete this share" in this context.
             sizes(),
         ),
     )
