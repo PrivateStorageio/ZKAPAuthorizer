@@ -56,6 +56,7 @@ from .storage_common import (
     get_required_new_passes_for_mutable_write,
     pass_value_attribute,
     required_passes,
+    get_write_sharenums,
     slot_testv_and_readv_and_writev_message,
 )
 
@@ -763,25 +764,8 @@ def get_writev_price(storage_server, pass_value, storage_index, tw_vectors, now)
         get_share_sizes(
             storage_server,
             storage_index,
-            # Consider the size of *all* shares even if they're not being
-            # written.  If they have an unexpired lease then we can apply some
-            # or all of the remainder of the value of that lease towards this
-            # operation.
-            #
-            # For example, if there are 5 0.5 MB shares already present then 5
-            # ZKAPs (assuming a ZKAP value of 1 MB-month) have been spent to
-            # store them while only 2.5 MB of storage has been allocated.
-            # This means we could accept another 2.5 MB of data for storage at
-            # no cost to the client while still having been completely paid
-            # for the storage committed.
-            #
-            # This is sort of a weird trick to try to reduce the impact of
-            # ZKAP value lost to the rounding scheme in use.  There's a good
-            # chance there are better solutions waiting to be discovered that
-            # would obsolete this logic.  Note that whatever the logic here,
-            # it must agree with the client-side logic so that both server and
-            # client come to the same conclusion regarding price.
-            sharenums=None,
+            # Here's how we restrict the result to only written shares.
+            sharenums=get_write_sharenums(tw_vectors),
         ),
     )
 

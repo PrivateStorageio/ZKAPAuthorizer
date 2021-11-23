@@ -203,7 +203,7 @@ def has_writes(tw_vectors):
     )
 
 
-def get_sharenums(tw_vectors):
+def get_write_sharenums(tw_vectors):
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
