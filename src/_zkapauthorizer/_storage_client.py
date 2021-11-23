@@ -40,9 +40,9 @@ from .storage_common import (
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
+    get_write_sharenums,
     pass_value_attribute,
     required_passes,
-    get_write_sharenums,
     slot_testv_and_readv_and_writev_message,
 )
 

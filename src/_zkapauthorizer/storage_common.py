@@ -215,7 +215,9 @@ def get_write_sharenums(tw_vectors):
         # non-None, non-0.
         #
         # Related to #222.
-        sharenum for (sharenum, (test, data, new_length)) in tw_vectors.items() if data
+        sharenum
+        for (sharenum, (test, data, new_length)) in tw_vectors.items()
+        if data
     )
 
 
