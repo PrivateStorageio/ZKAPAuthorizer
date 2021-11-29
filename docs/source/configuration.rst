@@ -89,7 +89,7 @@ The value is an integer number of seconds.
 For example to make all intervals fall within a 7 day period::
 
   [storageclient.plugins.privatestorageio-zkapauthz-v1]
-  lease.crawl-interval.mean = 302400
+  lease.crawl-interval.range = 302400
 
 
 lease.min-time-remaining
