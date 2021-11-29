@@ -355,7 +355,7 @@ def interval_means():
     Build timedeltas representing the mean time between lease maintenance
     runs.
     """
-    return floats(
+    return integers(
         # It doesn't make sense to have a negative check interval mean.
         min_value=0,
         # We can't make this value too large or it isn't convertable to a
@@ -363,10 +363,6 @@ def interval_means():
         # questionable value.
         max_value=60 * 60 * 24 * 365,
     ).map(
-        # By representing the result as a timedelta we avoid the cases where
-        # the lower precision of timedelta compared to float drops the whole
-        # value (anything between 0 and 1 microsecond).  This is just one
-        # example of how working with timedeltas is nicer, in general.
         lambda s: timedelta(seconds=s),
     )
 
@@ -378,8 +374,8 @@ def lease_maintenance_configurations():
     return builds(
         LeaseMaintenanceConfig,
         interval_means(),
-        timedeltas(min_value=timedelta(0)),
-        timedeltas(min_value=timedelta(0)),
+        integers(min_value=0, max_value=60 * 60 * 24 * 365).map(timedelta),
+        integers(min_value=0, max_value=60 * 60 * 24 * 365).map(timedelta),
     )
 
 

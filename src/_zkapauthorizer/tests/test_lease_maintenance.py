@@ -222,7 +222,7 @@ class LeaseMaintenanceConfigTests(TestCase):
         """
         dumped = lease_maintenance_config_to_dict(config)
         loaded = lease_maintenance_config_from_dict(dumped)
-        self.assertThat(config, Equals(loaded))
+        self.assertThat(loaded, Equals(config))
 
 
 class LeaseMaintenanceServiceTests(TestCase):

@@ -29,7 +29,7 @@ from allmydata.util.hashutil import (
     file_cancel_secret_hash,
     file_renewal_secret_hash,
 )
-from isodate import duration_isoformat, parse_datetime, parse_duration
+from aniso8601 import parse_datetime
 from twisted.application.service import Service
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python.log import err
@@ -456,24 +456,34 @@ class LeaseMaintenanceConfig(object):
 def lease_maintenance_config_to_dict(lease_maint_config):
     # type: (LeaseMaintenanceConfig) -> Dict[str, str]
     return {
-        "lease.crawl-interval.mean": duration_isoformat(
+        "lease.crawl-interval.mean": _format_duration(
             lease_maint_config.crawl_interval_mean,
         ),
-        "lease.crawl-interval.range": duration_isoformat(
+        "lease.crawl-interval.range": _format_duration(
             lease_maint_config.crawl_interval_range,
         ),
-        "lease.min-time-remaining": duration_isoformat(
+        "lease.min-time-remaining": _format_duration(
             lease_maint_config.min_lease_remaining,
         ),
     }
 
 
+def _format_duration(td):
+    # type: (timedelta) -> str
+    return str(int(td.total_seconds()))
+
+
+def _parse_duration(duration_str):
+    # type: (str) -> timedelta
+    return timedelta(seconds=int(duration_str))
+
+
 def lease_maintenance_config_from_dict(d):
     # type: (Dict[str, str]) -> LeaseMaintenanceConfig
     return LeaseMaintenanceConfig(
-        crawl_interval_mean=parse_duration(d["lease.crawl-interval.mean"]),
-        crawl_interval_range=parse_duration(d["lease.crawl-interval.range"]),
-        min_lease_remaining=parse_duration(d["lease.min-time-remaining"]),
+        crawl_interval_mean=_parse_duration(d["lease.crawl-interval.mean"]),
+        crawl_interval_range=_parse_duration(d["lease.crawl-interval.range"]),
+        min_lease_remaining=_parse_duration(d["lease.min-time-remaining"]),
     )
 
 

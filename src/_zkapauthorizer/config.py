@@ -18,8 +18,6 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 
 from datetime import timedelta
 
-from isodate import parse_duration
-
 from .lease_maintenance import LeaseMaintenanceConfig
 
 
@@ -79,8 +77,8 @@ def lease_maintenance_from_tahoe_config(node_config):
 
 def _read_duration(cfg, option, default):
     """
-    Read an ISO8601 "duration" from the ZKAPAuthorizer section of a Tahoe-LAFS
-    config.
+    Read an integer number of seconds from the ZKAPAuthorizer section of a
+    Tahoe-LAFS config.
 
     :param cfg: The Tahoe-LAFS config object to consult.
     :param option: The name of the option to read.
@@ -97,4 +95,4 @@ def _read_duration(cfg, option, default):
     )
     if value_str is None:
         return default
-    return parse_duration(value_str)
+    return timedelta(seconds=int(value_str))
