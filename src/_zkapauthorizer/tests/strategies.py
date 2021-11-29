@@ -350,19 +350,29 @@ def client_errorredeemer_configurations(details):
     )
 
 
+def integer_seconds_timedeltas(
+    # Our intervals mostly want to be non-negative.
+    min_value=0,
+    # We can't make this value too large or it isn't convertable to a
+    # timedelta.  Also, even values as large as this one are of
+    # questionable value for the durations we measure.
+    max_value=60 * 60 * 24 * 365,
+):
+    """
+    Build ``timedelta`` instances without a fractional seconds part.
+    """
+    return integers(
+        min_value=min_value,
+        max_value=max_value,
+    ).map(lambda n: timedelta(seconds=n))
+
+
 def interval_means():
     """
     Build timedeltas representing the mean time between lease maintenance
     runs.
     """
-    return integers(
-        # It doesn't make sense to have a negative check interval mean.
-        min_value=0,
-        # We can't make this value too large or it isn't convertable to a
-        # timedelta.  Also, even values as large as this one are of
-        # questionable value.
-        max_value=60 * 60 * 24 * 365,
-    ).map(timedelta)
+    return integer_seconds_timedeltas()
 
 
 def lease_maintenance_configurations():
@@ -372,8 +382,8 @@ def lease_maintenance_configurations():
     return builds(
         LeaseMaintenanceConfig,
         interval_means(),
-        integers(min_value=0, max_value=60 * 60 * 24 * 365).map(timedelta),
-        integers(min_value=0, max_value=60 * 60 * 24 * 365).map(timedelta),
+        integer_seconds_timedeltas(),
+        integer_seconds_timedeltas(),
     )
 
 
