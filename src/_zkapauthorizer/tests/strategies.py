@@ -362,9 +362,7 @@ def interval_means():
         # timedelta.  Also, even values as large as this one are of
         # questionable value.
         max_value=60 * 60 * 24 * 365,
-    ).map(
-        lambda s: timedelta(seconds=s),
-    )
+    ).map(timedelta)
 
 
 def lease_maintenance_configurations():
