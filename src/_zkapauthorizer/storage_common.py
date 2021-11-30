@@ -203,7 +203,7 @@ def has_writes(tw_vectors):
     )
 
 
-def get_sharenums(tw_vectors):
+def get_write_sharenums(tw_vectors):
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
@@ -211,7 +211,13 @@ def get_sharenums(tw_vectors):
     :return set[int]: The share numbers which the given test/write vectors would write to.
     """
     return set(
-        sharenum for (sharenum, (test, data, new_length)) in tw_vectors.items() if data
+        # This misses cases where `data` is empty but `new_length` is
+        # non-None, non-0.
+        #
+        # Related to #222.
+        sharenum
+        for (sharenum, (test, data, new_length)) in tw_vectors.items()
+        if data
     )
 
 
@@ -270,7 +276,6 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
         if size > new_sizes.get(sharenum, 0):
             new_sizes[sharenum] = size
 
-    new_sizes.update()
     new_passes = required_passes(
         pass_value,
         new_sizes.values(),
@@ -289,14 +294,14 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
 
 def summarize(tw_vectors):
     return {
-        sharenum: (
-            list(
+        sharenum: {
+            "testv": list(
                 (offset, length, operator, len(specimen))
                 for (offset, length, operator, specimen) in test_vector
             ),
-            list((offset, len(data)) for (offset, data) in data_vectors),
-            new_length,
-        )
+            "datav": list((offset, len(data)) for (offset, data) in data_vectors),
+            "new_length": new_length,
+        }
         for (sharenum, (test_vector, data_vectors, new_length)) in tw_vectors.items()
     }
 
