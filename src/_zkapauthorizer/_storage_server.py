@@ -41,7 +41,7 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import start_action
 from foolscap.api import Referenceable
-from prometheus_client import CollectorRegistry, Counter
+from prometheus_client import CollectorRegistry, Histogram
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
@@ -182,11 +182,44 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     )
     _metric_spending_successes = attr.ib(init=False)
 
+    def _get_buckets(self):
+        """
+        Create the upper bounds for the ZKAP spending histogram.  The bounds are
+        set as a function of the pass value.
+
+        For example, if the value of a pass is 1 MB then the upper bounds for
+        the buckets will be:
+
+            32 KB
+            64 KB
+            128 KB
+            256 KB
+            512 KB
+            1 MB
+            10 MB
+            100 MB
+            1 GB
+            INF
+        """
+        return (
+            self._pass_value / 32,
+            self._pass_value / 16,
+            self._pass_value / 8,
+            self._pass_value / 4,
+            self._pass_value / 2,
+            self._pass_value,
+            self._pass_value * 10,
+            self._pass_value * 100,
+            self._pass_value * 1000,
+            float("inf")
+        )
+
     def __attrs_post_init__(self):
-        self._metric_spending_successes = Counter(
+        self._metric_spending_successes = Histogram(
             "zkapauthorizer_server_spending_successes",
-            "ZKAP Spending Successes Counter",
+            "ZKAP Spending Successes histogram",
             registry=self._registry,
+            buckets=self._get_buckets(),
         )
 
     def remote_get_version(self):
@@ -215,7 +248,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
-        self._metric_spending_successes.inc(len(validation.valid))
+        for _ in range(len(validation.valid)):
+            self._metric_spending_successes.observe(allocated_size)
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the

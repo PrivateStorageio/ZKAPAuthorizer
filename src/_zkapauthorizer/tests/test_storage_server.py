@@ -582,7 +582,23 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(expected)),
         )
 
-        before_count = self.storage_server._metric_spending_successes._value.get()
+        buckets = self.storage_server._get_buckets()
+        for bucket_number, upper_bound in enumerate(buckets):
+            if size <= upper_bound:
+                break
+
+        def read_count():
+            buckets = self.storage_server._metric_spending_successes._buckets
+            return sum(b.get() for b in buckets)
+
+        def read_bucket():
+            buckets = self.storage_server._metric_spending_successes._buckets
+            note(list((n, b.get()) for n, b in enumerate(buckets)))
+            return buckets[bucket_number].get()
+
+        before_count = read_count()
+        before_bucket = read_bucket()
+
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
             (),
@@ -597,9 +613,20 @@ class PassValidationTests(TestCase):
             ),
         )
 
-        after_count = self.storage_server._metric_spending_successes._value.get()
+        after_count = read_count()
+        after_bucket = read_bucket()
 
-        self.assertThat(
+        note("bucket_number {}".format(bucket_number))
+
+        self.expectThat(
             after_count - before_count,
             Equals(expected),
+            "Unexpected histogram sum value",
         )
+        self.assertThat(
+            after_bucket - before_bucket,
+            Equals(expected),
+            "Unexpected histogram bucket value",
+        )
+
+# Counter of invalid ZKAP spend attempts
