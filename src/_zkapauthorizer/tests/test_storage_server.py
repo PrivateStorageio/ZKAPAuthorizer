@@ -575,6 +575,63 @@ class PassValidationTests(TestCase):
             Equals(expected_sizes),
         )
 
+    @skip("do it after #169")
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_spending_metrics(
+        self, storage_index, secrets, test_and_write_vectors_for_shares,
+    ):
+        tw_vectors = {
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+        }
+        expected = get_required_new_passes_for_mutable_write(
+            self.pass_value,
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(RandomToken.create() for i in range(expected)),
+        )
+
+        before_count = read_count(self.storage_server)
+        before_bucket = read_bucket(self.storage_server, 0)
+
+        # Create an initial share to toy with.
+        test, read = self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            ),
+        )
+
+        after_count = read_count(self.storage_server)
+        after_bucket = read_bucket(self.storage_server, 0)
+
+        self.expectThat(
+            after_count - before_count,
+            Equals(expected),
+            "Unexpected histogram sum value",
+        )
+        self.assertThat(
+            after_bucket - before_bucket,
+            Equals(expected),
+            "Unexpected histogram bucket value",
+        )
+
     @given(
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),

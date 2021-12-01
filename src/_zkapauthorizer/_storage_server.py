@@ -248,6 +248,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+        # xxx write a comment
         for _ in range(len(validation.valid)):
             self._metric_spending_successes.observe(allocated_size)
 
