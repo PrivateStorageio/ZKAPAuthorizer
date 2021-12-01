@@ -139,6 +139,21 @@ class ValidationResultTests(TestCase):
             )
 
 
+def read_count(storage_server):
+    buckets = storage_server._metric_spending_successes._buckets
+    return sum(b.get() for b in buckets)
+
+def read_bucket(storage_server, size):
+    bounds = self.storage_server._get_buckets()
+    for bucket_number, upper_bound in enumerate(bounds):
+        if size <= upper_bound:
+            break
+
+    buckets = storage_server._metric_spending_successes._buckets
+    note(list((n, b.get()) for n, b in enumerate(buckets)))
+    return buckets[bucket_number].get()
+
+
 class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
@@ -571,7 +586,8 @@ class PassValidationTests(TestCase):
         self, storage_index, renew_secret, cancel_secret, sharenums, size
     ):
         """
-        When ZKAPs are spent to call *allocate_buckets* the number of passes spent is recorded as a metric.
+        When ZKAPs are spent to call *allocate_buckets* the number of passes spent
+        is recorded as a metric.
         """
         expected = required_passes(
             self.storage_server._pass_value, [size] * len(sharenums)
@@ -582,22 +598,8 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(expected)),
         )
 
-        buckets = self.storage_server._get_buckets()
-        for bucket_number, upper_bound in enumerate(buckets):
-            if size <= upper_bound:
-                break
-
-        def read_count():
-            buckets = self.storage_server._metric_spending_successes._buckets
-            return sum(b.get() for b in buckets)
-
-        def read_bucket():
-            buckets = self.storage_server._metric_spending_successes._buckets
-            note(list((n, b.get()) for n, b in enumerate(buckets)))
-            return buckets[bucket_number].get()
-
-        before_count = read_count()
-        before_bucket = read_bucket()
+        before_count = read_count(self.storage_server)
+        before_bucket = read_bucket(self.storage_server, size)
 
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
@@ -613,8 +615,8 @@ class PassValidationTests(TestCase):
             ),
         )
 
-        after_count = read_count()
-        after_bucket = read_bucket()
+        after_count = read_count(self.storage_server)
+        after_bucket = read_bucket(self.storage_server)
 
         note("bucket_number {}".format(bucket_number))
 
