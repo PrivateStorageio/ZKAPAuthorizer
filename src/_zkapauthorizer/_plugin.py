@@ -27,7 +27,6 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
-from isodate import parse_duration
 from prometheus_client import CollectorRegistry, write_to_textfile
 from twisted.internet import task
 from twisted.internet.defer import succeed
@@ -111,7 +110,7 @@ class ZKAPAuthorizer(object):
         if metrics_interval is not None and metrics_path is not None:
             t = task.LoopingCall(lambda: write_to_textfile(metrics_path, registry))
             t.clock = reactor
-            t.start(parse_duration(metrics_interval).total_seconds())
+            t.start(int(metrics_interval))
 
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
         pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
