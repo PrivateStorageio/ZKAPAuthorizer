@@ -46,7 +46,6 @@ from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 
-from .._storage_client import _encode_passes
 from ..api import (
     MorePassesRequired,
     ZKAPAuthorizerStorageClient,
@@ -57,7 +56,6 @@ from ..storage_common import (
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
-    slot_testv_and_readv_and_writev_message,
 )
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
