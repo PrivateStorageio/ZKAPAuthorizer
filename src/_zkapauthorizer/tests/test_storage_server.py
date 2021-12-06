@@ -25,9 +25,9 @@ from prometheus_client import CollectorRegistry, Histogram
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
-from hypothesis.strategies import integers, just, lists, one_of, tuples, dictionaries
+from hypothesis.strategies import integers, just, lists, one_of, tuples
 from testtools import TestCase, skip
-from testtools.matchers import AfterPreprocessing, Not, Equals, MatchesAll, MatchesPredicate, AllMatch
+from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
@@ -51,7 +51,6 @@ from .strategies import (
     lease_cancel_secrets,
     lease_renew_secrets,
     sharenum_sets,
-    sharenums,
     sizes,
     slot_test_and_write_vectors_for_shares,
     storage_indexes,

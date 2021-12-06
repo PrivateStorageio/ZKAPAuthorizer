@@ -21,6 +21,11 @@ from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
 
+try:
+    from typing import Iterable
+except ImportError:
+    pass
+
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
@@ -37,6 +42,7 @@ from zope.interface import implementer
 
 from .controller import bracket
 from .model import ILeaseMaintenanceObserver
+from .foolscap import ShareStat
 
 SERVICE_NAME = u"lease maintenance service"
 

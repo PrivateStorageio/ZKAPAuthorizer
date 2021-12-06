@@ -38,8 +38,7 @@ from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
-from isodate import duration_isoformat
-from prometheus_client import CollectorRegistry, Gauge
+from prometheus_client import Gauge
 from StringIO import StringIO
 from testtools import TestCase
 from testtools.content import text_content
@@ -278,7 +277,7 @@ class ServerPluginTests(TestCase):
         metrics_path = self.useFixture(TempDir()).join(u"metrics")
         configuration = {
             u"prometheus-metrics-path": metrics_path,
-            u"prometheus-metrics-interval": duration_isoformat(metrics_interval),
+            u"prometheus-metrics-interval": str(metrics_interval.total_seconds()),
             u"ristretto-issuer-root-url": "foo",
             u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }

@@ -30,11 +30,14 @@ from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
 
+try:
+    from typing import Generator, Iterable, Tuple, List, Dict, Optional
+except ImportError:
+    pass
+
 import attr
 from allmydata.interfaces import RIStorageServer
 from allmydata.storage.common import storage_index_to_dir
-from allmydata.storage.immutable import ShareFile
-from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
