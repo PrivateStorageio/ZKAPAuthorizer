@@ -674,7 +674,7 @@ class PassValidationTests(TestCase):
         )
 
         after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server)
+        after_bucket = read_bucket(self.storage_server, size)
 
         note("bucket_number {}".format(bucket_number))
 
