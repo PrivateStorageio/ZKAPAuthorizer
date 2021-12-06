@@ -279,7 +279,7 @@ class ServerPluginTests(TestCase):
         metrics_path = self.useFixture(TempDir()).join(u"metrics")
         configuration = {
             u"prometheus-metrics-path": metrics_path,
-            u"prometheus-metrics-interval": str(metrics_interval.total_seconds()),
+            u"prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
             u"ristretto-issuer-root-url": "foo",
             u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }
