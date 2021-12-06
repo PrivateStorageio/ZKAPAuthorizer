@@ -23,9 +23,9 @@ try:
 except ImportError:
     pass
 
-from .lease_maintenance import LeaseMaintenanceConfig
-
 from allmydata.node import _Config
+
+from .lease_maintenance import LeaseMaintenanceConfig
 
 
 class _EmptyConfig(object):

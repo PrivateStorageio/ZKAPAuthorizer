@@ -48,9 +48,9 @@ from testtools.matchers import (
     Equals,
     HasLength,
     IsInstance,
+    Matcher,
     MatchesAll,
     MatchesStructure,
-    Matcher,
 )
 from testtools.twistedsupport import succeeded
 from twisted.internet.task import Clock
