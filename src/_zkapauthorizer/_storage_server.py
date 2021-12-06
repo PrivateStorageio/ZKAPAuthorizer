@@ -250,7 +250,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._signing_key,
         )
 
-
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
         # operation is based only on the shares which are really allocated
