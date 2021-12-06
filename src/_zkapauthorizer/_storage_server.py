@@ -265,7 +265,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._pass_value * 10,
             self._pass_value * 100,
             self._pass_value * 1000,
-            float("inf")
+            float("inf"),
         )
 
     def __attrs_post_init__(self):

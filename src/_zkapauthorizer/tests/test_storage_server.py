@@ -31,7 +31,11 @@ from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
-from .._storage_server import _ValidationResult, compute_spending_metrics, observe_spending_successes
+from .._storage_server import (
+    _ValidationResult,
+    compute_spending_metrics,
+    observe_spending_successes,
+)
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..storage_common import (
     add_lease_message,
@@ -144,6 +148,7 @@ def read_count(storage_server):
     buckets = storage_server._metric_spending_successes._buckets
     return sum(b.get() for b in buckets)
 
+
 def read_bucket(storage_server, size):
     bounds = storage_server._get_buckets()
     for bucket_number, upper_bound in enumerate(bounds):
@@ -152,7 +157,9 @@ def read_bucket(storage_server, size):
 
     note("bucket_number {}".format(bucket_number))
     buckets = storage_server._metric_spending_successes._buckets
-    note("bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets))))
+    note(
+        "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
+    )
     return buckets[bucket_number].get()
 
 
@@ -588,7 +595,10 @@ class PassValidationTests(TestCase):
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_spending_metrics(
-        self, storage_index, secrets, test_and_write_vectors_for_shares,
+        self,
+        storage_index,
+        secrets,
+        test_and_write_vectors_for_shares,
     ):
         tw_vectors = {
             k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
@@ -696,7 +706,12 @@ class PassValidationTests(TestCase):
         allocated_size=sizes(),
     )
     def test_add_lease_metrics(
-        self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size,
+        self,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        allocated_size,
     ):
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
@@ -745,7 +760,6 @@ class PassValidationTests(TestCase):
             Equals(expected),
             "Unexpected histogram bucket value",
         )
-
 
 
 class SpendingMetricTests(TestCase):
