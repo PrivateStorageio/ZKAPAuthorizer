@@ -20,11 +20,6 @@ from __future__ import absolute_import, unicode_literals
 
 from datetime import datetime, timedelta
 
-try:
-    from typing import Dict, List
-except ImportError:
-    pass
-
 import attr
 from allmydata.client import SecretHolder
 from allmydata.interfaces import IServer, IStorageBroker

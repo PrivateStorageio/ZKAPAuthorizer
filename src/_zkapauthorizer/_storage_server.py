@@ -30,11 +30,6 @@ from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
 
-try:
-    from typing import Dict, Generator, Iterable, List, Optional, Tuple
-except ImportError:
-    pass
-
 import attr
 from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
@@ -66,7 +61,7 @@ from .storage_common import (
 )
 
 try:
-    from typing import Dict, List, Optional
+    from typing import Dict, Generator, Iterable, List, Optional, Tuple
 except ImportError:
     pass
 
