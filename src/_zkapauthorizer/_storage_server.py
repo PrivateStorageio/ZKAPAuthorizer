@@ -150,6 +150,10 @@ class _ValidationResult(object):
         )
 
     def observe_error_metrics(self, error_metric):
+        # type: (Counter) -> None
+        """
+        Record any errors on the given metric object.
+        """
         num_signature_errors = len(self.signature_check_failed)
         if num_signature_errors > 0:
             error_metric.labels("signature").inc(1)
