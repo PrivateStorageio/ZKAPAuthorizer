@@ -61,7 +61,7 @@ from .storage_common import (
 )
 
 try:
-    from typing import Dict, Generator, Iterable, List, Optional, Tuple
+    from typing import Dict, List, Optional
 except ImportError:
     pass
 
@@ -156,63 +156,6 @@ class LeaseRenewalRequired(Exception):
     """
 
 
-def observe_spending_successes(metric, observations):
-    # type: (Histogram, Iterable[Tuple[int, int]]) -> None
-    """
-    Put some spending observations into a Histogram.
-
-    :param observations: The first element of each tuple is the size of a
-        share for which spending ocurred.  The second element of each tuple is
-        the number of passes spent on that share.
-    """
-    # After https://github.com/prometheus/client_python/pull/734 we can get
-    # rid of the inner loop.
-    for (size, count) in observations:
-        for _ in range(count):
-            metric.observe(size)
-
-
-def compute_spending_metrics(bytes_per_pass, sizes):
-    # type: (int, List[int]) -> Generator[Tuple[int, int]]
-    """
-    Attribute portions of a payment for one or more shares to the individual
-    shares.  This supports maintaining a histogram of spending where
-    information is placed in buckets by the size of the data is relates to.
-
-    This is somewhat less straightforward than one might hope because payment
-    for more than one share combines all of the share sizes for the purposes
-    of pricing.  We have to reverse engineer that combination to attribute
-    portions of the spending to each share.  We do this by noting that price
-    is proportional to size and by allowing for some imprecision when a share
-    size does not fall exactly on a multiple of pass value.
-
-    :param bytes_per_pass: The number of bytes one pass pays for for one
-        storage period.
-
-    :param sizes: The sizes of the shares that were paid for.
-
-    :return: A generator of tuples that describe a share size in bytes and a
-        number of passes spent to store the share of that size.  Each element
-        from ``sizes`` will be represented in this result.
-    """
-    if len(sizes) == 0:
-        return
-    overrun = 0
-    # Make a copy so we can pop one off.  Also sort the sizes so we have a
-    # consistent result for a given collection of sizes independent of the
-    # order they're considered.
-    values = sorted(list(sizes))
-    last_allocated_size = values.pop()
-    for allocated_size in values:
-        share_result, overrun = divmod(allocated_size + overrun, bytes_per_pass)
-        yield (allocated_size, share_result)
-
-    share_result, overrun = divmod(last_allocated_size + overrun, bytes_per_pass)
-    if overrun > 0:
-        share_result += 1
-    yield (last_allocated_size, share_result)
-
-
 @implementer(RIPrivacyPassAuthorizedStorageServer)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
@@ -247,35 +190,23 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def _get_buckets(self):
         """
-        Create the upper bounds for the ZKAP spending histogram.  The bounds are
-        set as a function of the pass value.
-
-        For example, if the value of a pass is 1 MB then the upper bounds for
-        the buckets will be:
-
-            32 KB
-            64 KB
-            128 KB
-            256 KB
-            512 KB
-            1 MB
-            10 MB
-            100 MB
-            1 GB
-            INF
+        Create the upper bounds for the ZKAP spending histogram.
         """
-        return (
-            self._pass_value / 32,
-            self._pass_value / 16,
-            self._pass_value / 8,
-            self._pass_value / 4,
-            self._pass_value / 2,
-            self._pass_value,
-            self._pass_value * 10,
-            self._pass_value * 100,
-            self._pass_value * 1000,
-            float("inf"),
-        )
+        # We want a lot of small buckets to be able to get an idea of how much
+        # spending is for tiny files where our billing system doesn't work
+        # extremely well.  We also want some large buckets so we have a point
+        # of comparison - is there a lot more or less spending on big files
+        # than small files?  Prometheus recommends a metric have a maximum
+        # cardinality below 10
+        # (<https://prometheus.io/docs/practices/instrumentation/#do-not-overuse-labels>).
+        # Histograms are implemented with labels so the cardinality is equal
+        # to the number of buckets.  We will push this a little bit so we can
+        # span a better range.  The good news is that this is a static
+        # cardinality (it does not change based on the data observed) so we
+        # are not at risk of blowing up the metrics overhead unboundedly.  11
+        # finite buckets + 1 infinite bucket covers 1 to 1024 ZKAPs (plus
+        # infinity) and only needs 12 buckets.
+        return list(2 ** n for n in range(11)) + [float("inf")]
 
     def __attrs_post_init__(self):
         self._metric_spending_successes = Histogram(
@@ -311,16 +242,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
-        observe_spending_successes(
-            self._metric_spending_successes,
-            # All immutable shares are the same size so the metrics system can
-            # observe a single event for that size and the total number of
-            # spent passes.
-            #
-            # XXX Some shares may exist already so those passes aren't
-            # necessarily spent...
-            [(allocated_size, len(validation.valid))],
-        )
+
+        # XXX Some shares may exist already so those passes aren't necessarily
+        # spent...
+        self._metric_spending_successes.observe(len(validation.valid))
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
@@ -384,26 +309,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
-        allocated_sizes = check_pass_quantity_for_lease(
+        check_pass_quantity_for_lease(
             self._pass_value,
             storage_index,
             validation,
             self._original,
         )
-        # siiiigh.  Tahoe doesn't guarantee that mutable shares in a single
-        # slot are all the same size.  They *probably* are.  The official
-        # (only) Tahoe client always makes them the same size.  The storage
-        # protocol allows a client to make them different sizes though.
-        #
-        # So ... deal with that here.  Attribute the ZKAPs being spent
-        # proportionally to the size of each share.
-        observe_spending_successes(
-            self._metric_spending_successes,
-            compute_spending_metrics(
-                self._pass_value,
-                allocated_sizes.values(),
-            ),
-        )
+        self._metric_spending_successes.observe(len(validation.valid))
 
         return self._original.remote_add_lease(storage_index, *a, **kw)
 
@@ -520,6 +432,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             # We'll add or renew leases based on our billing model.
             renew_leases=False,
         )
+
+        self._metric_spending_successes.observe(required_new_passes)
 
         # Add the leases that we charged the client for.  This includes:
         #

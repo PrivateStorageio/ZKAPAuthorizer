@@ -25,17 +25,12 @@ from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
-from prometheus_client import CollectorRegistry, Histogram
-from testtools import TestCase, skip
+from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
-from .._storage_server import (
-    _ValidationResult,
-    compute_spending_metrics,
-    observe_spending_successes,
-)
+from .._storage_server import _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..storage_common import (
     add_lease_message,
@@ -549,7 +544,6 @@ class PassValidationTests(TestCase):
             Equals(expected_sizes),
         )
 
-    @skip("do it after #169")
     @given(
         storage_index=storage_indexes(),
         secrets=tuples(
@@ -568,7 +562,7 @@ class PassValidationTests(TestCase):
         tw_vectors = {
             k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
         }
-        expected = get_required_new_passes_for_mutable_write(
+        num_passes = get_required_new_passes_for_mutable_write(
             self.pass_value,
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
@@ -576,11 +570,11 @@ class PassValidationTests(TestCase):
         valid_passes = make_passes(
             self.signing_key,
             slot_testv_and_readv_and_writev_message(storage_index),
-            list(RandomToken.create() for i in range(expected)),
+            list(RandomToken.create() for i in range(num_passes)),
         )
 
         before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, 0)
+        before_bucket = read_bucket(self.storage_server, num_passes)
 
         # Create an initial share to toy with.
         test, read = self.storage_server.doRemoteCall(
@@ -596,16 +590,16 @@ class PassValidationTests(TestCase):
         )
 
         after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, 0)
+        after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
             after_count - before_count,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
             after_bucket - before_bucket,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram bucket value",
         )
 
@@ -623,17 +617,17 @@ class PassValidationTests(TestCase):
         When ZKAPs are spent to call *allocate_buckets* the number of passes spent
         is recorded as a metric.
         """
-        expected = required_passes(
+        num_passes = required_passes(
             self.storage_server._pass_value, [size] * len(sharenums)
         )
         valid_passes = make_passes(
             self.signing_key,
             allocate_buckets_message(storage_index),
-            list(RandomToken.create() for i in range(expected)),
+            list(RandomToken.create() for i in range(num_passes)),
         )
 
         before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, size)
+        before_bucket = read_bucket(self.storage_server, num_passes)
 
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
@@ -650,16 +644,16 @@ class PassValidationTests(TestCase):
         )
 
         after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, size)
+        after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
             after_count - before_count,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
             after_bucket - before_bucket,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram bucket value",
         )
 
@@ -689,17 +683,17 @@ class PassValidationTests(TestCase):
             LocalReferenceable(None),
         )
 
-        expected = required_passes(
+        num_passes = required_passes(
             self.storage_server._pass_value, [allocated_size] * len(sharenums)
         )
         valid_passes = make_passes(
             self.signing_key,
             add_lease_message(storage_index),
-            list(RandomToken.create() for i in range(expected)),
+            list(RandomToken.create() for i in range(num_passes)),
         )
 
         before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, allocated_size)
+        before_bucket = read_bucket(self.storage_server, num_passes)
 
         self.storage_server.doRemoteCall(
             "add_lease",
@@ -713,77 +707,17 @@ class PassValidationTests(TestCase):
         )
 
         after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, allocated_size)
+        after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
             after_count - before_count,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
             after_bucket - before_bucket,
-            Equals(expected),
+            Equals(1),
             "Unexpected histogram bucket value",
-        )
-
-
-class SpendingMetricTests(TestCase):
-    @given(
-        integers(min_value=1),
-        lists(sizes()),
-    )
-    def test_total_passes_observed(self, bytes_per_pass, sizes):
-        """
-        The total number of spent passes reported by ``compute_spending_metrics``
-        equals the total number of passes it is called with.
-        """
-        num_passes = required_passes(bytes_per_pass, sizes)
-        observations = compute_spending_metrics(bytes_per_pass, sizes)
-        total_recorded = sum(count for (size, count) in observations)
-        self.assertThat(
-            total_recorded,
-            Equals(num_passes),
-            "expected {} passes but metrics only accounted for {}".format(
-                num_passes,
-                total_recorded,
-            ),
-        )
-
-    @given(
-        integers(min_value=1),
-        lists(sizes()),
-    )
-    def test_share_sizes_observed(self, bytes_per_pass, sizes):
-        """
-        Every size passed to ``compute_spending_metrics`` has a corresponding
-        element in the result.
-        """
-        observations = compute_spending_metrics(bytes_per_pass, sizes)
-        sizes_seen = list(size for (size, count) in observations)
-        self.assertThat(
-            sorted(sizes),
-            Equals(sorted(sizes_seen)),
-        )
-
-    def test_observe_spending(self):
-        """
-        ``observe_spending_successes`` adds observations to a Prometheus histogram
-        metric.
-        """
-        registry = CollectorRegistry()
-        metric = Histogram(
-            "zkapauthorizer_tests",
-            "",
-            registry=registry,
-            buckets=[1, 2, 3, float("inf")],
-        )
-        observe_spending_successes(
-            metric,
-            iter([(1, 3), (2, 5), (3, 7), (4, 11), (3, 13), (5, 17)]),
-        )
-        self.assertThat(
-            list(b.get() for b in metric._buckets),
-            Equals([3, 5, 20, 28]),
         )
 
 

@@ -78,8 +78,8 @@ from .matchers import Provides, raises
 from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
-    clocks,
     client_lease_maintenance_configurations,
+    clocks,
     dummy_ristretto_keys,
     lease_cancel_secrets,
     lease_maintenance_configurations,
