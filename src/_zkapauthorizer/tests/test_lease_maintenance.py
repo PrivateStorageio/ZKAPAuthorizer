@@ -78,6 +78,11 @@ from .strategies import (
     storage_indexes,
 )
 
+try:
+    from typing import Dict, List
+except ImportError:
+    pass
+
 
 def interval_means():
     return floats(

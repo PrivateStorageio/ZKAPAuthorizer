@@ -26,6 +26,7 @@ from functools import partial, wraps
 
 import attr
 from allmydata.interfaces import IStorageServer
+from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
 from eliot.twisted import inline_callbacks
 from twisted.internet.defer import returnValue
@@ -39,7 +40,7 @@ from .storage_common import (
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
-    has_writes,
+    get_write_sharenums,
     pass_value_attribute,
     required_passes,
     slot_testv_and_readv_and_writev_message,
@@ -411,6 +412,7 @@ class ZKAPAuthorizerStorageClient(object):
             reason,
         )
 
+    @log_call_deferred("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     @inline_callbacks
     @with_rref
     def slot_testv_and_readv_and_writev(
@@ -441,7 +443,8 @@ class ZKAPAuthorizerStorageClient(object):
             ) in tw_vectors.items()
         }
 
-        if has_writes(tw_vectors):
+        write_sharenums = get_write_sharenums(tw_vectors)
+        if len(write_sharenums) > 0:
             # When performing writes, if we're increasing the storage
             # requirement, we need to spend more passes.  Unfortunately we
             # don't know what the current storage requirements are at this
@@ -463,6 +466,9 @@ class ZKAPAuthorizerStorageClient(object):
                 sharenum: stat.size
                 for (sharenum, stat) in stats.items()
                 if stat.lease_expiration > now
+                # Also, the size of any share we're not writing to doesn't
+                # matter.
+                and sharenum in write_sharenums
             }
             # Determine the cost of the new storage for the operation.
             num_passes = get_required_new_passes_for_mutable_write(
