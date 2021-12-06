@@ -41,7 +41,7 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import log_call, start_action
 from foolscap.api import Referenceable
-from prometheus_client import CollectorRegistry, Histogram
+from prometheus_client import CollectorRegistry, Histogram, Counter
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.filepath import FilePath
@@ -149,6 +149,11 @@ class _ValidationResult(object):
             signature_check_failed=signature_check_failed,
         )
 
+    def observe_error_metrics(self, error_metric):
+        num_signature_errors = len(self.signature_check_failed)
+        if num_signature_errors > 0:
+            error_metric.labels("signature").inc(1)
+
     def raise_for(self, required_pass_count):
         """
         :raise MorePassesRequired: Always raised with fields populated from this
@@ -199,7 +204,17 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
+    # This histogram holds observations about the number of ZKAPs spent
+    # together on one operation.  Only ZKAPs for operations that succeed are
+    # accounted for. For example, if two immutable shares are uploaded
+    # together at a cost of 5 ZKAPs then the "5 ZKAPs" bucket observes one
+    # sample.
     _metric_spending_successes = attr.ib(init=False)
+
+    # This counter holds observations about spending attempts that included
+    # ZKAPs without an acceptable signature.  For each spending attempt that
+    # includes any such ZKAPs, this counter is incremented.
+    _metric_spending_errors = attr.ib(init=False)
 
     def _get_spending_histogram_buckets(self):
         """
@@ -222,12 +237,21 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         return list(2 ** n for n in range(11)) + [float("inf")]
 
     @_metric_spending_successes.default
-    def _make_histogram(self):
+    def _make_success_histogram(self):
         return Histogram(
             "zkapauthorizer_server_spending_successes",
             "ZKAP Spending Successes histogram",
             registry=self._registry,
             buckets=self._get_spending_histogram_buckets(),
+        )
+
+    @_metric_spending_errors.default
+    def _make_error_metric(self):
+        return Counter(
+            "zkapauthorizer_server_spending_errors",
+            "ZKAP Spending Errors",
+            labelnames=["signature"],
+            registry=self._registry,
         )
 
     def _clear_metrics(self):
@@ -237,6 +261,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # There is also a `clear` method it's for something else.  See
         # https://github.com/prometheus/client_python/issues/707
         self._metric_spending_successes._metric_init()
+
+        # It works on this one though.
+        self._metric_spending_errors.clear()
 
     def remote_get_version(self):
         """
@@ -264,6 +291,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+
+        # Observe error metrics before blowing up the operation.
+        validation.observe_error_metrics(self._metric_spending_errors)
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
@@ -344,6 +374,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+        # Observe error metrics before blowing up the operation.
+        validation.observe_error_metrics(self._metric_spending_errors)
+
         check_pass_quantity_for_lease(
             self._pass_value,
             storage_index,
@@ -441,6 +474,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
+
+        # Observe error metrics before blowing up the operation.
+        validation.observe_error_metrics(self._metric_spending_errors)
 
         # Inspect the operation to determine its price based on any
         # allocations.

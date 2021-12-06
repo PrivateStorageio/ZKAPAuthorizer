@@ -152,6 +152,9 @@ def read_spending_success_histogram_total(storage_server):
     return sum(b.get() for b in buckets)
 
 
+def read_invalid_count(storage_server, label):
+    return storage_server._metric_spending_errors.labels(label)._value.get()
+
 def read_spending_success_histogram_bucket(storage_server, num_passes):
     # type: (ZKAPAuthorizerStorageServer, int) -> int
     """
@@ -195,6 +198,7 @@ class PassValidationTests(TestCase):
             AnonymousStorageServer(self.clock),
         ).storage_server
         self.signing_key = random_signing_key()
+        self.unrelated_signing_key = random_signing_key()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
@@ -580,12 +584,14 @@ class PassValidationTests(TestCase):
             lease_cancel_secrets(),
         ),
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+        num_invalid_passes=integers(min_value=0, max_value=10),
     )
     def test_mutable_spending_metrics(
         self,
         storage_index,
         secrets,
         test_and_write_vectors_for_shares,
+        num_invalid_passes,
     ):
         tw_vectors = {
             k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
@@ -600,12 +606,17 @@ class PassValidationTests(TestCase):
             slot_testv_and_readv_and_writev_message(storage_index),
             list(RandomToken.create() for i in range(num_passes)),
         )
+        invalid_passes = make_passes(
+            self.unrelated_signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(RandomToken.create() for i in range(num_invalid_passes)),
+        )
 
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
             (),
             dict(
-                passes=valid_passes,
+                passes=valid_passes + invalid_passes,
                 storage_index=storage_index,
                 secrets=secrets,
                 tw_vectors=tw_vectors,
@@ -617,11 +628,17 @@ class PassValidationTests(TestCase):
         after_bucket = read_spending_success_histogram_bucket(
             self.storage_server, num_passes
         )
+        after_invalid_count = read_invalid_count(self.storage_server, "signature")
 
         self.expectThat(
             after_count,
             Equals(1),
             "Unexpected histogram sum value",
+        )
+        self.expectThat(
+            after_invalid_count,
+            Equals(1 if invalid_passes else 0),
+            "Unexpected invalid passes counter value",
         )
         self.assertThat(
             after_bucket,
@@ -703,6 +720,7 @@ class PassValidationTests(TestCase):
         existing_sharenums=sharenum_sets(),
         new_sharenums=sharenum_sets(),
         size=sizes(),
+        num_invalid_passes=integers(min_value=0, max_value=10),
     )
     def test_immutable_spending_metrics(
         self,
@@ -712,10 +730,15 @@ class PassValidationTests(TestCase):
         existing_sharenums,
         new_sharenums,
         size,
+        num_invalid_passes,
     ):
         """
         When ZKAPs are spent to call *allocate_buckets* the number of passes spent
         is recorded as a metric.
+
+        :param num_invalid_passes: A number of additional passes to supply
+            with the operation.  These passes will not be considered valid by
+            the server and should be recorded as such.
         """
         # maybe create some existing shares that won't need to be paid for by
         # the subsequent `allocate_buckets` operation - but of which the
@@ -742,12 +765,17 @@ class PassValidationTests(TestCase):
             allocate_buckets_message(storage_index),
             list(RandomToken.create() for i in range(num_passes)),
         )
+        invalid_passes = make_passes(
+            self.unrelated_signing_key,
+            allocate_buckets_message(storage_index),
+            list(RandomToken.create() for i in range(num_invalid_passes)),
+        )
 
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
             (),
             dict(
-                passes=valid_passes,
+                passes=valid_passes + invalid_passes,
                 storage_index=storage_index,
                 renew_secret=renew_secret,
                 cancel_secret=cancel_secret,
@@ -761,6 +789,7 @@ class PassValidationTests(TestCase):
         after_bucket = read_spending_success_histogram_bucket(
             self.storage_server, num_spent_passes
         )
+        after_invalid_count = read_invalid_count(self.storage_server, "signature")
 
         self.expectThat(
             after_count,
@@ -769,6 +798,11 @@ class PassValidationTests(TestCase):
         )
         # If this bucket is 1 then all the other buckets must be 0, otherwise
         # the sum above will be greater than 1.
+        self.expectThat(
+            after_invalid_count,
+            Equals(1 if invalid_passes else 0),
+            "Unexpected invalid passes counter value",
+        )
         self.assertThat(
             after_bucket,
             Equals(1),
@@ -781,6 +815,7 @@ class PassValidationTests(TestCase):
         cancel_secret=lease_cancel_secrets(),
         sharenums=sharenum_sets(),
         allocated_size=sizes(),
+        num_invalid_passes=integers(min_value=0, max_value=10),
     )
     def test_add_lease_metrics(
         self,
@@ -789,6 +824,7 @@ class PassValidationTests(TestCase):
         cancel_secret,
         sharenums,
         allocated_size,
+        num_invalid_passes,
     ):
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
@@ -809,12 +845,17 @@ class PassValidationTests(TestCase):
             add_lease_message(storage_index),
             list(RandomToken.create() for i in range(num_passes)),
         )
+        invalid_passes = make_passes(
+            self.unrelated_signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(num_invalid_passes)),
+        )
 
         self.storage_server.doRemoteCall(
             "add_lease",
             (),
             dict(
-                passes=valid_passes,
+                passes=valid_passes + invalid_passes,
                 storage_index=storage_index,
                 renew_secret=renew_secret,
                 cancel_secret=cancel_secret,
@@ -825,11 +866,17 @@ class PassValidationTests(TestCase):
         after_bucket = read_spending_success_histogram_bucket(
             self.storage_server, num_passes
         )
+        after_invalid_count = read_invalid_count(self.storage_server, "signature")
 
         self.expectThat(
             after_count,
             Equals(1),
             "Unexpected histogram sum value",
+        )
+        self.expectThat(
+            after_invalid_count,
+            Equals(1 if invalid_passes else 0),
+            "Unexpected invalid passes counter value",
         )
         self.assertThat(
             after_bucket,
