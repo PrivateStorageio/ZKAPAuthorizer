@@ -150,6 +150,57 @@ class LeaseRenewalRequired(Exception):
     """
 
 
+def observe_spending_successes(metric, observations):
+    # type: (Histogram, Iterable[Tuple[int, int]]) -> None
+    """
+    Put some spending observations into a Histogram.
+    """
+    for (size, count) in observations:
+        for _ in range(count):
+            metric.observe(size)
+
+
+def compute_spending_metrics(bytes_per_pass, sizes):
+    # type: (int, List[int]) -> Generator[Tuple[int, int]]
+    """
+    Attribute portions of a payment for one or more shares to the individual
+    shares.  This supports maintaining a histogram of spending where
+    information is placed in buckets by the size of the data is relates to.
+
+    This is somewhat less straightforward than one might hope because payment
+    for more than one share combines all of the share sizes for the purposes
+    of pricing.  We have to reverse engineer that combination to attribute
+    portions of the spending to each share.  We do this by noting that price
+    is proportional to size and by allowing for some imprecision when a share
+    size does not fall exactly on a multiple of pass value.
+
+    :param bytes_per_pass: The number of bytes one pass pays for for one
+        storage period.
+
+    :param sizes: The sizes of the shares that were paid for.
+
+    :return: A generator of tuples that describe a share size in bytes and a
+        number of passes spent to store the share of that size.  Each element
+        from ``sizes`` will be represented in this result.
+    """
+    if len(sizes) == 0:
+        return
+    overrun = 0
+    # Make a copy so we can pop one off.  Also sort the sizes so we have a
+    # consistent result for a given collection of sizes independent of the
+    # order they're considered.
+    values = sorted(list(sizes))
+    last_allocated_size = values.pop()
+    for allocated_size in values:
+        share_result, overrun = divmod(allocated_size + overrun, bytes_per_pass)
+        yield (allocated_size, share_result)
+
+    share_result, overrun = divmod(last_allocated_size + overrun, bytes_per_pass)
+    if overrun > 0:
+        share_result += 1
+    yield (last_allocated_size, share_result)
+
+
 @implementer(RIPrivacyPassAuthorizedStorageServer)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some

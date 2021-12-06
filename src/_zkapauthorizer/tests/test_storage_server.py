@@ -21,6 +21,7 @@ from __future__ import absolute_import, division
 from random import shuffle
 from time import time
 
+from prometheus_client import CollectorRegistry, Histogram
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
@@ -30,7 +31,7 @@ from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
-from .._storage_server import _ValidationResult
+from .._storage_server import _ValidationResult, compute_spending_metrics, observe_spending_successes
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..storage_common import (
     add_lease_message,
@@ -144,7 +145,7 @@ def read_count(storage_server):
     return sum(b.get() for b in buckets)
 
 def read_bucket(storage_server, size):
-    bounds = self.storage_server._get_buckets()
+    bounds = storage_server._get_buckets()
     for bucket_number, upper_bound in enumerate(bounds):
         if size <= upper_bound:
             break
@@ -687,5 +688,67 @@ class PassValidationTests(TestCase):
             Equals(expected),
             "Unexpected histogram bucket value",
         )
+
+
+
+class SpendingMetricTests(TestCase):
+    @given(
+        integers(min_value=1),
+        lists(sizes()),
+    )
+    def test_total_passes_observed(self, bytes_per_pass, sizes):
+        """
+        The total number of spent passes reported by ``compute_spending_metrics``
+        equals the total number of passes it is called with.
+        """
+        num_passes = required_passes(bytes_per_pass, sizes)
+        observations = compute_spending_metrics(bytes_per_pass, sizes)
+        total_recorded = sum(count for (size, count) in observations)
+        self.assertThat(
+            total_recorded,
+            Equals(num_passes),
+            "expected {} passes but metrics only accounted for {}".format(
+                num_passes,
+                total_recorded,
+            ),
+        )
+
+    @given(
+        integers(min_value=1),
+        lists(sizes()),
+    )
+    def test_share_sizes_observed(self, bytes_per_pass, sizes):
+        """
+        Every size passed to ``compute_spending_metrics`` has a corresponding
+        element in the result.
+        """
+        observations = compute_spending_metrics(bytes_per_pass, sizes)
+        sizes_seen = list(size for (size, count) in observations)
+        self.assertThat(
+            sorted(sizes),
+            Equals(sorted(sizes_seen)),
+        )
+
+    def test_observe_spending(self):
+        """
+        ``observe_spending_successes`` adds observations to a Prometheus histogram
+        metric.
+        """
+        registry = CollectorRegistry()
+        metric = Histogram(
+            "zkapauthorizer_tests",
+            "",
+            registry=registry,
+            buckets=[1, 2, 3, float("inf")],
+        )
+        observe_spending_successes(
+            metric,
+            iter([(1, 3), (2, 5), (3, 7), (4, 11), (3, 13), (5, 17)]),
+        )
+        self.assertThat(
+            list(b.get() for b in metric._buckets),
+            Equals([3, 5, 20, 28]),
+        )
+
 
 # Counter of invalid ZKAP spend attempts
