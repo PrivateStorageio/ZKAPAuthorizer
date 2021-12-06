@@ -66,6 +66,44 @@ When tokens are received from an issuer during redemption,
 these are the only public keys which will satisfy the redeemer and cause the tokens to be made available to the client to be spent.
 Tokens received with any other public key will be sequestered and will *not* be spent until some further action is taken.
 
+lease.crawl-interval.mean
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This item controls the frequency at which the lease maintenance crawler runs.
+The lease maintenance crawler visits all shares and renews their leases if necessary.
+The crawler will run at random intervals.
+The client will try to make the average (mean) interval between runs equal to this setting.
+The value is an integer number of seconds.
+For example to run on average every 26 days::
+
+  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  lease.crawl-interval.mean = 2246400
+
+
+lease.crawl-interval.range
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This item also controls the frequency of lease maintenance crawler runs.
+The random intervals between runs have a uniform distribution with this item's value as its range.
+The value is an integer number of seconds.
+For example to make all intervals fall within a 7 day period::
+
+  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  lease.crawl-interval.range = 302400
+
+
+lease.min-time-remaining
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+This item controls the lease renewal behavior of the lease maintenance crawler.
+It specifies an amount of time left on a lease.
+If the crawler encounters a lease with less time left than this then it will renew the lease.
+The value is an integer number of seconds.
+For example to renew leases on all shares which will expire in less than one week::
+
+  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  lease.min-time-remaining = 604800
+
 Server
 ------
 
