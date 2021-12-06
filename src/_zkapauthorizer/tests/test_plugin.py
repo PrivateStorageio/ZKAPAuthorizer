@@ -18,7 +18,6 @@ Tests for the Tahoe-LAFS plugin.
 
 from __future__ import absolute_import
 
-import tempfile
 from functools import partial
 from os import makedirs
 
@@ -49,6 +48,7 @@ from testtools.matchers import (
     Equals,
     HasLength,
     IsInstance,
+    Matcher,
     MatchesAll,
     MatchesStructure,
 )
@@ -65,7 +65,7 @@ from .._plugin import load_signing_key
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
-from ..lease_maintenance import SERVICE_NAME
+from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
 from .eliot import capture_logging
@@ -74,8 +74,10 @@ from .matchers import Provides, raises
 from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
+    client_lease_maintenance_configurations,
     dummy_ristretto_keys,
     lease_cancel_secrets,
+    lease_maintenance_configurations,
     lease_renew_secrets,
     minimal_tahoe_configs,
     pass_counts,
@@ -537,44 +539,38 @@ class LeaseMaintenanceServiceTests(TestCase):
     Tests for the plugin's initialization of the lease maintenance service.
     """
 
-    def _created_test(self, get_config, servers_yaml, rootcap):
-        original_tempdir = tempfile.tempdir
+    def _create(self, get_config, servers_yaml, rootcap):
+        """
+        Create a client node using ``create_client_from_config``.
 
+        :param get_config: A function to call to get a Tahoe-LAFS config
+            object.
+
+        :param servers_yaml: ``None`` or a string giving the contents for the
+            node's ``servers.yaml`` file.
+
+        :param rootcap: ``True`` to write some bytes to the node's ``rootcap``
+            file, ``False`` otherwise.
+        """
         tempdir = self.useFixture(TempDir())
         nodedir = tempdir.join(b"node")
         privatedir = tempdir.join(b"node", b"private")
         makedirs(privatedir)
         config = get_config(nodedir, b"tub.port")
 
-        # Provide it a statically configured server to connect to.
-        config.write_private_config(
-            b"servers.yaml",
-            servers_yaml,
-        )
+        if servers_yaml is not None:
+            # Provide it a statically configured server to connect to.
+            config.write_private_config(
+                b"servers.yaml",
+                servers_yaml,
+            )
         if rootcap:
             config.write_private_config(
                 b"rootcap",
                 b"dddddddd",
             )
 
-        try:
-            d = create_client_from_config(config)
-            self.assertThat(
-                d,
-                succeeded(
-                    AfterPreprocessing(
-                        lambda client: client.getServiceNamed(SERVICE_NAME),
-                        Always(),
-                    ),
-                ),
-            )
-        finally:
-            # create_client_from_config (indirectly) rewrites tempfile.tempdir
-            # in a destructive manner that fails most of the rest of the test
-            # suite if we don't clean it up.  We can't do this with a tearDown
-            # or a fixture or an addCleanup because hypothesis doesn't run any
-            # of those at the right time. :/
-            tempfile.tempdir = original_tempdir
+        return create_client_from_config(config)
 
     @settings(
         deadline=None,
@@ -589,7 +585,8 @@ class LeaseMaintenanceServiceTests(TestCase):
         maintenance service after it has at least one storage server to
         connect to.
         """
-        return self._created_test(get_config, servers_yaml, rootcap=True)
+        d = self._create(get_config, servers_yaml, rootcap=True)
+        self.assertThat(d, succeeded(has_lease_maintenance_service()))
 
     @settings(
         deadline=None,
@@ -603,7 +600,71 @@ class LeaseMaintenanceServiceTests(TestCase):
         The lease maintenance service can be created even if no rootcap has yet
         been written to the client's configuration directory.
         """
-        return self._created_test(get_config, servers_yaml, rootcap=False)
+        d = self._create(get_config, servers_yaml, rootcap=False)
+        self.assertThat(d, succeeded(has_lease_maintenance_service()))
+
+    @given(
+        # First build the simple lease maintenance configuration object that
+        # represents the example to test.
+        lease_maintenance_configurations().flatmap(
+            # Then build a function that will get us a Tahoe configuration
+            # that includes at least that lease maintenance configuration.
+            lambda lease_maint_config: tahoe_configs(
+                zkapauthz_v1_configuration=client_lease_maintenance_configurations(
+                    just(lease_maint_config),
+                ),
+            ).map(
+                # Then bundle up both pieces to pass to the function.  By
+                # preserving the lease maintenance configuration model object
+                # and making it available to the test, the test logic is much
+                # simplified (eg, we don't have to read values out of the
+                # Tahoe configuration to figure out what example we're working
+                # on).
+                lambda get_config: (lease_maint_config, get_config),
+            ),
+        ),
+    )
+    def test_values_from_configuration(self, config_objs):
+        """
+        If values for lease maintenance parameters are supplied in the
+        configuration file then the lease maintenance service is created with
+        those values.
+        """
+        lease_maint_config, get_config = config_objs
+        d = self._create(get_config, servers_yaml=None, rootcap=False)
+        self.assertThat(
+            d,
+            succeeded(has_lease_maintenance_configuration(lease_maint_config)),
+        )
+
+
+def has_lease_maintenance_service():
+    """
+    Return a matcher for a Tahoe-LAFS client object that has a lease
+    maintenance service.
+    """
+    # type: () -> Matcher
+    return AfterPreprocessing(
+        lambda client: client.getServiceNamed(SERVICE_NAME),
+        Always(),
+    )
+
+
+def has_lease_maintenance_configuration(lease_maint_config):
+    """
+    Return a matcher for a Tahoe-LAFS client object that has a lease
+    maintenance service with the given configuration.
+    """
+    # type: (LeaseMaintenanceConfig) -> Matcher
+    def get_lease_maintenance_config(lease_maint_service):
+        return lease_maint_service.get_config()
+
+    return AfterPreprocessing(
+        lambda client: get_lease_maintenance_config(
+            client.getServiceNamed(SERVICE_NAME),
+        ),
+        Equals(lease_maint_config),
+    )
 
 
 class LoadSigningKeyTests(TestCase):

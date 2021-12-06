@@ -17,7 +17,7 @@ Hypothesis strategies for property testing.
 """
 
 from base64 import b64encode, urlsafe_b64encode
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib import quote
 
 import attr
@@ -47,6 +47,7 @@ from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
 from ..configutil import config_string_from_sections
+from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (
     DoubleSpend,
     Error,
@@ -344,6 +345,55 @@ def client_errorredeemer_configurations(details):
                 u"details": details,
             }
         )
+    )
+
+
+def integer_seconds_timedeltas(
+    # Our intervals mostly want to be non-negative.
+    min_value=0,
+    # We can't make this value too large or it isn't convertable to a
+    # timedelta.  Also, even values as large as this one are of
+    # questionable value for the durations we measure.
+    max_value=60 * 60 * 24 * 365,
+):
+    """
+    Build ``timedelta`` instances without a fractional seconds part.
+    """
+    return integers(
+        min_value=min_value,
+        max_value=max_value,
+    ).map(lambda n: timedelta(seconds=n))
+
+
+def interval_means():
+    """
+    Build timedeltas representing the mean time between lease maintenance
+    runs.
+    """
+    return integer_seconds_timedeltas()
+
+
+def lease_maintenance_configurations():
+    """
+    Build LeaseMaintenanceConfig instances.
+    """
+    return builds(
+        LeaseMaintenanceConfig,
+        interval_means(),
+        integer_seconds_timedeltas(),
+        integer_seconds_timedeltas(),
+    )
+
+
+def client_lease_maintenance_configurations(maint_configs=None):
+    """
+    Build dictionaries representing the lease maintenance options that go into
+    the ZKAPAuthorizer client plugin section.
+    """
+    if maint_configs is None:
+        maint_configs = lease_maintenance_configurations()
+    return maint_configs.map(
+        lambda lease_maint_config: lease_maintenance_config_to_dict(lease_maint_config),
     )
 
 
