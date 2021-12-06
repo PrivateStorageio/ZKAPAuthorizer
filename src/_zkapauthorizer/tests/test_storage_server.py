@@ -199,6 +199,10 @@ class PassValidationTests(TestCase):
         # method.
         cleanup_storage_server(self.anonymous_storage_server)
 
+        # Reset all of the metrics, too, so the individual tests have a
+        # simpler job (can compare values relative to 0).
+        self.storage_server._clear_metrics()
+
     def test_allocate_buckets_fails_without_enough_passes(self):
         """
         ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
@@ -573,9 +577,6 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(num_passes)),
         )
 
-        before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, num_passes)
-
         # Create an initial share to toy with.
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
@@ -593,12 +594,12 @@ class PassValidationTests(TestCase):
         after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
-            after_count - before_count,
+            after_count,
             Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
-            after_bucket - before_bucket,
+            after_bucket,
             Equals(1),
             "Unexpected histogram bucket value",
         )
@@ -626,9 +627,6 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(num_passes)),
         )
 
-        before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, num_passes)
-
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
             (),
@@ -647,12 +645,12 @@ class PassValidationTests(TestCase):
         after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
-            after_count - before_count,
+            after_count,
             Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
-            after_bucket - before_bucket,
+            after_bucket,
             Equals(1),
             "Unexpected histogram bucket value",
         )
@@ -692,9 +690,6 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(num_passes)),
         )
 
-        before_count = read_count(self.storage_server)
-        before_bucket = read_bucket(self.storage_server, num_passes)
-
         self.storage_server.doRemoteCall(
             "add_lease",
             (),
@@ -710,12 +705,12 @@ class PassValidationTests(TestCase):
         after_bucket = read_bucket(self.storage_server, num_passes)
 
         self.expectThat(
-            after_count - before_count,
+            after_count,
             Equals(1),
             "Unexpected histogram sum value",
         )
         self.assertThat(
-            after_bucket - before_bucket,
+            after_bucket,
             Equals(1),
             "Unexpected histogram bucket value",
         )

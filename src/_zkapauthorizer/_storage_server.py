@@ -216,6 +216,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             buckets=self._get_buckets(),
         )
 
+    def _clear_metrics(self):
+        """
+        Forget all recorded metrics.
+        """
+        # There is also a `clear` method but it raises an AttributeError.
+        self._metric_spending_successes._metric_init()
+
     def remote_get_version(self):
         """
         Pass-through without pass check to allow clients to learn about our
