@@ -37,7 +37,6 @@ from hypothesis.strategies import (
     lists,
     randoms,
     sets,
-    tuples,
 )
 from testtools import TestCase
 from testtools.matchers import (
@@ -51,7 +50,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from twisted.application.service import IService
-from twisted.internet.defer import maybeDeferred, succeed
+from twisted.internet.defer import Deferred, maybeDeferred, succeed
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
@@ -73,6 +72,11 @@ from .strategies import (
     sharenums,
     storage_indexes,
 )
+
+try:
+    from typing import Dict, List
+except ImportError:
+    pass
 
 
 def interval_means():
@@ -460,7 +464,6 @@ def lists_of_buckets():
             min_size=count,
             max_size=count,
         )
-        expiration_strategy = lists
         return builds(
             zip,
             si_strategy,
