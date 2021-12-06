@@ -21,6 +21,11 @@ from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
 
+try:
+    from typing import Any, Dict
+except ImportError:
+    pass
+
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
@@ -390,7 +395,7 @@ def lease_maintenance_service(
     """
     interval_mean = lease_maint_config.crawl_interval_mean
     interval_range = lease_maint_config.crawl_interval_range
-    halfrange = lease_maint_config.crawl_interval_range / 2
+    halfrange = interval_range / 2
 
     def sample_interval_distribution():
         return timedelta(

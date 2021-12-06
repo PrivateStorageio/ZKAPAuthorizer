@@ -37,7 +37,6 @@ from .config import lease_maintenance_from_tahoe_config
 from .controller import get_redeemer
 from .lease_maintenance import (
     SERVICE_NAME,
-    LeaseMaintenanceConfig,
     lease_maintenance_service,
     maintain_leases_from_root,
 )

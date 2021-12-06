@@ -18,7 +18,6 @@ Tests for the Tahoe-LAFS plugin.
 
 from __future__ import absolute_import
 
-import tempfile
 from functools import partial
 from os import makedirs
 
@@ -51,6 +50,7 @@ from testtools.matchers import (
     IsInstance,
     MatchesAll,
     MatchesStructure,
+    Matcher,
 )
 from testtools.twistedsupport import succeeded
 from twisted.internet.task import Clock
@@ -65,7 +65,7 @@ from .._plugin import load_signing_key
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
-from ..lease_maintenance import SERVICE_NAME
+from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
 from .eliot import capture_logging
@@ -655,7 +655,7 @@ def has_lease_maintenance_configuration(lease_maint_config):
     Return a matcher for a Tahoe-LAFS client object that has a lease
     maintenance service with the given configuration.
     """
-    # type: (_LeaseMaintenanceConfig) -> Matcher
+    # type: (LeaseMaintenanceConfig) -> Matcher
     def get_lease_maintenance_config(lease_maint_service):
         return lease_maint_service.get_config()
 

@@ -18,8 +18,14 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 
 from datetime import timedelta
 
+try:
+    from typing import Optional
+except ImportError:
+    pass
+
 from .lease_maintenance import LeaseMaintenanceConfig
 
+from allmydata.node import _Config
 
 class _EmptyConfig(object):
     """

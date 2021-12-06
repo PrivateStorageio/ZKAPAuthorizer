@@ -30,7 +30,6 @@ from hypothesis.strategies import (
     datetimes,
     dictionaries,
     fixed_dictionaries,
-    floats,
     integers,
     just,
     lists,
@@ -40,7 +39,6 @@ from hypothesis.strategies import (
     sampled_from,
     sets,
     text,
-    timedeltas,
     tuples,
 )
 from twisted.internet.defer import succeed
