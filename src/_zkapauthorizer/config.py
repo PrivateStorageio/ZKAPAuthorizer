@@ -27,6 +27,7 @@ from .lease_maintenance import LeaseMaintenanceConfig
 
 from allmydata.node import _Config
 
+
 class _EmptyConfig(object):
     """
     Weakly pretend to be a Tahoe-LAFS configuration object with no
