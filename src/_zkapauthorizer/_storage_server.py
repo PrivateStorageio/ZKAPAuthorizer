@@ -250,9 +250,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._signing_key,
         )
 
-        # XXX Some shares may exist already so those passes aren't necessarily
-        # spent...
-        self._metric_spending_successes.observe(len(validation.valid))
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
@@ -280,6 +277,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             sharenums,
             allocated_size,
         )
+
+        # XXX Some shares may exist already so those passes aren't necessarily
+        # spent...
+        self._metric_spending_successes.observe(len(validation.valid))
 
         alreadygot, bucketwriters = self._original._allocate_buckets(
             storage_index,
