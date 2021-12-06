@@ -25,9 +25,9 @@ from prometheus_client import CollectorRegistry, Histogram
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
-from hypothesis.strategies import integers, just, lists, one_of, tuples
-from testtools import TestCase
-from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
+from hypothesis.strategies import integers, just, lists, one_of, tuples, dictionaries
+from testtools import TestCase, skip
+from testtools.matchers import AfterPreprocessing, Not, Equals, MatchesAll, MatchesPredicate, AllMatch
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
@@ -51,6 +51,7 @@ from .strategies import (
     lease_cancel_secrets,
     lease_renew_secrets,
     sharenum_sets,
+    sharenums,
     sizes,
     slot_test_and_write_vectors_for_shares,
     storage_indexes,
@@ -150,8 +151,9 @@ def read_bucket(storage_server, size):
         if size <= upper_bound:
             break
 
+    note("bucket_number {}".format(bucket_number))
     buckets = storage_server._metric_spending_successes._buckets
-    note(list((n, b.get()) for n, b in enumerate(buckets)))
+    note("bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets))))
     return buckets[bucket_number].get()
 
 
@@ -676,7 +678,63 @@ class PassValidationTests(TestCase):
         after_count = read_count(self.storage_server)
         after_bucket = read_bucket(self.storage_server, size)
 
-        note("bucket_number {}".format(bucket_number))
+        self.expectThat(
+            after_count - before_count,
+            Equals(expected),
+            "Unexpected histogram sum value",
+        )
+        self.assertThat(
+            after_bucket - before_bucket,
+            Equals(expected),
+            "Unexpected histogram bucket value",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_metrics(
+        self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size,
+    ):
+        # Create some shares at a slot which will require lease renewal.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
+
+        expected = required_passes(
+            self.storage_server._pass_value, [allocated_size] * len(sharenums)
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(expected)),
+        )
+
+        before_count = read_count(self.storage_server)
+        before_bucket = read_bucket(self.storage_server, allocated_size)
+
+        self.storage_server.doRemoteCall(
+            "add_lease",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                renew_secret=renew_secret,
+                cancel_secret=cancel_secret,
+            ),
+        )
+
+        after_count = read_count(self.storage_server)
+        after_bucket = read_bucket(self.storage_server, allocated_size)
 
         self.expectThat(
             after_count - before_count,

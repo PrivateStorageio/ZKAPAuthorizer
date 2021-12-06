@@ -365,12 +365,27 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
-        check_pass_quantity_for_lease(
+        allocated_sizes = check_pass_quantity_for_lease(
             self._pass_value,
             storage_index,
             validation,
             self._original,
         )
+        # siiiigh.  Tahoe doesn't guarantee that mutable shares in a single
+        # slot are all the same size.  They *probably* are.  The official
+        # (only) Tahoe client always makes them the same size.  The storage
+        # protocol allows a client to make them different sizes though.
+        #
+        # So ... deal with that here.  Attribute the ZKAPs being spent
+        # proportionally to the size of each share.
+        observe_spending_successes(
+            self._metric_spending_successes,
+            compute_spending_metrics(
+                self._pass_value,
+                allocated_sizes.values(),
+            ),
+        )
+
         return self._original.remote_add_lease(storage_index, *a, **kw)
 
     def remote_advise_corrupt_share(self, *a, **kw):
@@ -534,6 +549,7 @@ def check_pass_quantity(pass_value, validation, share_sizes):
 def check_pass_quantity_for_lease(
     pass_value, storage_index, validation, storage_server
 ):
+    # type: (int, bytes, _ValidationResult, ZKAPAuthorizerStorageServer) -> Dict[int, int]
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
@@ -545,7 +561,8 @@ def check_pass_quantity_for_lease(
     :raise MorePassesRequired: If the given number of passes is too few for
         the share sizes at the given storage index.
 
-    :return: ``None`` if the given number of passes is sufficient.
+    :return: A mapping from share number to share size on the server if the
+        number of passes given is sufficient.
     """
     allocated_sizes = dict(
         get_share_sizes(
@@ -553,8 +570,9 @@ def check_pass_quantity_for_lease(
             storage_index,
             list(get_all_share_numbers(storage_server, storage_index)),
         ),
-    ).values()
-    check_pass_quantity(pass_value, validation, allocated_sizes)
+    )
+    check_pass_quantity(pass_value, validation, allocated_sizes.values())
+    return allocated_sizes
 
 
 def check_pass_quantity_for_write(pass_value, validation, sharenums, allocated_size):
