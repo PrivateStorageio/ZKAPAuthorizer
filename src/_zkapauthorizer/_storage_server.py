@@ -158,6 +158,8 @@ def observe_spending_successes(metric, observations):
     """
     Put some spending observations into a Histogram.
     """
+    # After https://github.com/prometheus/client_python/pull/734 we can get
+    # rid of the inner loop.
     for (size, count) in observations:
         for _ in range(count):
             metric.observe(size)
