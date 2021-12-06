@@ -160,6 +160,10 @@ def observe_spending_successes(metric, observations):
     # type: (Histogram, Iterable[Tuple[int, int]]) -> None
     """
     Put some spending observations into a Histogram.
+
+    :param observations: The first element of each tuple is the size of a
+        share for which spending ocurred.  The second element of each tuple is
+        the number of passes spent on that share.
     """
     # After https://github.com/prometheus/client_python/pull/734 we can get
     # rid of the inner loop.
@@ -307,9 +311,16 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             passes,
             self._signing_key,
         )
-        # xxx write a comment
-        for _ in range(len(validation.valid)):
-            self._metric_spending_successes.observe(allocated_size)
+        observe_spending_successes(
+            self._metric_spending_successes,
+            # All immutable shares are the same size so the metrics system can
+            # observe a single event for that size and the total number of
+            # spent passes.
+            #
+            # XXX Some shares may exist already so those passes aren't
+            # necessarily spent...
+            [(allocated_size, len(validation.valid))],
+        )
 
         # Note: The *allocate_buckets* protocol allows for some shares to
         # already exist on the server.  When this is the case, the cost of the
