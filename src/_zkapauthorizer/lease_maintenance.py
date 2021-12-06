@@ -36,7 +36,13 @@ from twisted.python.log import err
 from zope.interface import implementer
 
 from .controller import bracket
+from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
+
+try:
+    from typing import Iterable
+except ImportError:
+    pass
 
 SERVICE_NAME = u"lease maintenance service"
 

@@ -37,7 +37,6 @@ from hypothesis.strategies import (
     lists,
     randoms,
     sets,
-    tuples,
 )
 from testtools import TestCase
 from testtools.matchers import (
@@ -51,7 +50,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from twisted.application.service import IService
-from twisted.internet.defer import maybeDeferred, succeed
+from twisted.internet.defer import Deferred, maybeDeferred, succeed
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
@@ -80,7 +79,29 @@ from .strategies import (
     storage_indexes,
 )
 
+try:
+    from typing import Dict, List
+except ImportError:
+    pass
+
+
 default_lease_maint_config = lease_maintenance_from_tahoe_config(empty_config)
+
+def interval_means():
+    return floats(
+        # It doesn't make sense to have a negative check interval mean.
+        min_value=0,
+        # We can't make this value too large or it isn't convertable to a
+        # timedelta.  Also, even values as large as this one are of
+        # questionable value.
+        max_value=60 * 60 * 24 * 365,
+    ).map(
+        # By representing the result as a timedelta we avoid the cases where
+        # the lower precision of timedelta compared to float drops the whole
+        # value (anything between 0 and 1 microsecond).  This is just one
+        # example of how working with timedeltas is nicer, in general.
+        lambda s: timedelta(seconds=s),
+    )
 
 
 def dummy_maintain_leases():
@@ -477,7 +498,6 @@ def lists_of_buckets():
             min_size=count,
             max_size=count,
         )
-        expiration_strategy = lists
         return builds(
             zip,
             si_strategy,

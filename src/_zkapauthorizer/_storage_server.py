@@ -31,11 +31,10 @@ from os.path import join
 from struct import calcsize, unpack
 
 import attr
-from allmydata.interfaces import RIStorageServer
+from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
-from allmydata.storage.immutable import ShareFile
 from allmydata.storage.lease import LeaseInfo
-from allmydata.storage.mutable import MutableShareFile
+from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
@@ -59,6 +58,11 @@ from .storage_common import (
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
+
+try:
+    from typing import Dict, List, Optional
+except ImportError:
+    pass
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
@@ -755,7 +759,7 @@ def share_has_active_leases(storage_server, storage_index, sharenum, now):
 
 
 def get_writev_price(storage_server, pass_value, storage_index, tw_vectors, now):
-    # type: (StorageServer, int, bytes, TestWriteVectors, float) -> int
+    # type: (StorageServer, int, bytes, TestAndWriteVectorsForShares, float) -> int
     """
     Determine the price to execute the given test/write vectors.
     """

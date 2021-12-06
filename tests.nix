@@ -49,7 +49,7 @@ in
       mkdir -p $out
 
       pushd ${zkapauthorizer.src}
-      ${python}/bin/pyflakes
+      ${python}/bin/pyflakes src
       ${lint-python}/bin/black --check src
       ${lint-python}/bin/isort --check src
       popd
