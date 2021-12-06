@@ -31,7 +31,7 @@ from os.path import join
 from struct import calcsize, unpack
 
 try:
-    from typing import Generator, Iterable, Tuple, List, Dict, Optional
+    from typing import Dict, Generator, Iterable, List, Optional, Tuple
 except ImportError:
     pass
 

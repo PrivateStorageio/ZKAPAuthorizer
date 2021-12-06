@@ -41,8 +41,8 @@ from twisted.python.log import err
 from zope.interface import implementer
 
 from .controller import bracket
-from .model import ILeaseMaintenanceObserver
 from .foolscap import ShareStat
+from .model import ILeaseMaintenanceObserver
 
 SERVICE_NAME = u"lease maintenance service"
 

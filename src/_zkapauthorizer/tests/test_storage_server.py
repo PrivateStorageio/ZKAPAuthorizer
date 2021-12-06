@@ -21,11 +21,11 @@ from __future__ import absolute_import, division
 from random import shuffle
 from time import time
 
-from prometheus_client import CollectorRegistry, Histogram
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
+from prometheus_client import CollectorRegistry, Histogram
 from testtools import TestCase, skip
 from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
