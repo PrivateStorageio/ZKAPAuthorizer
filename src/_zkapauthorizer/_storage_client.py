@@ -215,7 +215,7 @@ def _encode_passes(group):
 
     :return list[bytes]: The encoded form of the passes in the given group.
     """
-    return list(t.pass_text.encode("ascii") for t in group.passes)
+    return list(t.pass_bytes for t in group.passes)
 
 
 @implementer(IStorageServer)

@@ -493,7 +493,8 @@ class UnblindedTokenTests(TestCase):
             dumps(
                 {
                     u"unblinded-tokens": list(
-                        token.unblinded_token for token in unblinded_tokens
+                        token.unblinded_token.decode("ascii")
+                        for token in unblinded_tokens
                     )
                 }
             )
@@ -941,7 +942,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        data = BytesIO(dumps({u"voucher": voucher}))
+        data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
         requesting = authorized_request(
             api_auth_token,
             agent,
@@ -1234,7 +1235,7 @@ class VoucherTests(TestCase):
             agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            data=BytesIO(dumps({u"voucher": voucher})),
+            data=BytesIO(dumps({u"voucher": voucher.decode("ascii")})),
         )
         self.assertThat(
             putting,
@@ -1361,7 +1362,7 @@ class VoucherTests(TestCase):
         note("{} vouchers".format(len(vouchers)))
 
         for voucher in vouchers:
-            data = BytesIO(dumps({u"voucher": voucher}))
+            data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
             putting = authorized_request(
                 api_auth_token,
                 agent,

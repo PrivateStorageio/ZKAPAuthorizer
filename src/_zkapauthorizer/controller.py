@@ -318,7 +318,7 @@ class RecordingRedeemer(object):
 
 
 def dummy_random_tokens(voucher, counter, count):
-    v = urlsafe_b64decode(voucher.number.encode("ascii"))
+    v = urlsafe_b64decode(voucher.number)
 
     def dummy_random_token(n):
         return RandomToken(
@@ -326,7 +326,7 @@ def dummy_random_tokens(voucher, counter, count):
             # length) - 4 (fixed-width counter)
             b64encode(
                 v + u"{:0>4}{:0>60}".format(counter, n).encode("ascii"),
-            ).decode("ascii"),
+            ),
         )
 
     return list(dummy_random_token(n) for n in range(count))
@@ -380,9 +380,9 @@ class DummyRedeemer(object):
             )
 
         def dummy_unblinded_token(random_token):
-            random_value = b64decode(random_token.token_value.encode("ascii"))
+            random_value = b64decode(random_token.token_value)
             unblinded_value = random_value + b"x" * (96 - len(random_value))
-            return UnblindedToken(b64encode(unblinded_value).decode("ascii"))
+            return UnblindedToken(b64encode(unblinded_value))
 
         return succeed(
             RedemptionResult(
@@ -397,17 +397,13 @@ class DummyRedeemer(object):
             # can include in the resulting Pass.  This ensures the pass values
             # will be unique if and only if the unblinded tokens were unique
             # (barring improbable hash collisions).
-            token_digest = (
-                sha256(token.unblinded_token.encode("ascii"))
-                .hexdigest()
-                .encode("ascii")
-            )
+            token_digest = sha256(token.unblinded_token).hexdigest().encode("ascii")
 
             preimage = b"preimage-" + token_digest[len(b"preimage-") :]
             signature = b"signature-" + token_digest[len(b"signature-") :]
             return Pass(
-                b64encode(preimage).decode("ascii"),
-                b64encode(signature).decode("ascii"),
+                b64encode(preimage),
+                b64encode(signature),
             )
 
         return list(token_to_pass(token) for token in unblinded_tokens)
@@ -489,9 +485,7 @@ class RistrettoRedeemer(object):
     def random_tokens_for_voucher(self, voucher, counter, count):
         return list(
             RandomToken(
-                challenge_bypass_ristretto.RandomToken.create()
-                .encode_base64()
-                .decode("ascii"),
+                challenge_bypass_ristretto.RandomToken.create().encode_base64(),
             )
             for n in range(count)
         )
@@ -499,9 +493,7 @@ class RistrettoRedeemer(object):
     @inlineCallbacks
     def redeemWithCounter(self, voucher, counter, encoded_random_tokens):
         random_tokens = list(
-            challenge_bypass_ristretto.RandomToken.decode_base64(
-                token.token_value.encode("ascii")
-            )
+            challenge_bypass_ristretto.RandomToken.decode_base64(token.token_value)
             for token in encoded_random_tokens
         )
         blinded_tokens = list(token.blind() for token in random_tokens)
@@ -509,7 +501,7 @@ class RistrettoRedeemer(object):
             self._api_root.child(u"v1", u"redeem").to_text(),
             dumps(
                 {
-                    u"redeemVoucher": voucher.number,
+                    u"redeemVoucher": voucher.number.decode("ascii"),
                     u"redeemCounter": counter,
                     u"redeemTokens": list(
                         token.encode_base64() for token in blinded_tokens
@@ -570,8 +562,7 @@ class RistrettoRedeemer(object):
             )
         self._log.info("Validated proof")
         unblinded_tokens = list(
-            UnblindedToken(token.encode_base64().decode("ascii"))
-            for token in clients_unblinded_tokens
+            UnblindedToken(token.encode_base64()) for token in clients_unblinded_tokens
         )
         returnValue(
             RedemptionResult(
@@ -586,7 +577,7 @@ class RistrettoRedeemer(object):
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
         unblinded_tokens = list(
             challenge_bypass_ristretto.UnblindedToken.decode_base64(
-                token.unblinded_token.encode("ascii")
+                token.unblinded_token
             )
             for token in unblinded_tokens
         )
@@ -600,8 +591,8 @@ class RistrettoRedeemer(object):
         clients_preimages = list(token.preimage() for token in unblinded_tokens)
         passes = list(
             Pass(
-                preimage.encode_base64().decode("ascii"),
-                signature.encode_base64().decode("ascii"),
+                preimage.encode_base64(),
+                signature.encode_base64(),
             )
             for (preimage, signature) in zip(clients_preimages, clients_signatures)
         )
@@ -805,7 +796,7 @@ class PaymentController(object):
     @inlineCallbacks
     def redeem(self, voucher, num_tokens=None):
         """
-        :param unicode voucher: A voucher to redeem.
+        :param bytes voucher: A voucher to redeem.
 
         :param int num_tokens: A number of tokens to redeem.
         """

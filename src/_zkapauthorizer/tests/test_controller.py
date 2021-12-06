@@ -1016,14 +1016,14 @@ def ristretto_verify(signing_key, message, marshaled_passes):
     """
 
     def decode(marshaled_pass):
-        t, s = marshaled_pass.split(u" ")
+        t, s = marshaled_pass.split(b" ")
         return (
-            TokenPreimage.decode_base64(t.encode("ascii")),
-            VerificationSignature.decode_base64(s.encode("ascii")),
+            TokenPreimage.decode_base64(t),
+            VerificationSignature.decode_base64(s),
         )
 
     servers_passes = list(
-        decode(marshaled_pass.pass_text) for marshaled_pass in marshaled_passes
+        decode(marshaled_pass.pass_bytes) for marshaled_pass in marshaled_passes
     )
     servers_unblinded_tokens = list(
         signing_key.rederive_unblinded_token(token_preimage)

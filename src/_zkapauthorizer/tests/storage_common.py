@@ -164,7 +164,7 @@ def get_passes(message, count, signing_key):
         and bound to the given message.
     """
     return list(
-        Pass(*pass_.split(u" "))
+        Pass(*pass_.split(b" "))
         for pass_ in make_passes(
             signing_key,
             message,

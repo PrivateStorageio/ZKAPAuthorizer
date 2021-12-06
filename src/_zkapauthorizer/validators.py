@@ -20,12 +20,17 @@ from base64 import b64decode
 
 
 def is_base64_encoded(b64decode=b64decode):
+    """
+    Return a a attrs validator that verifies that the attributes is a base64
+    encoded byte string.
+    """
+
     def validate_is_base64_encoded(inst, attr, value):
         try:
-            b64decode(value.encode("ascii"))
+            b64decode(value)
         except TypeError:
             raise TypeError(
-                "{name!r} must be base64 encoded unicode, (got {value!r})".format(
+                "{name!r} must be base64 encoded bytes, (got {value!r})".format(
                     name=attr.name,
                     value=value,
                 ),

@@ -256,7 +256,7 @@ class ShareTests(TestCase):
             # it.
             self.local_remote_server.callRemote(
                 "allocate_buckets",
-                list(pass_.pass_text.encode("ascii") for pass_ in all_passes),
+                list(pass_.pass_bytes for pass_ in all_passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,

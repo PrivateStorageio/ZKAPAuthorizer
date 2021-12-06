@@ -415,7 +415,7 @@ class _VoucherCollection(Resource):
         self._log.info(
             "Accepting a voucher ({voucher}) for redemption.", voucher=voucher
         )
-        self._controller.redeem(voucher)
+        self._controller.redeem(voucher.encode("ascii"))
         return b""
 
     def render_GET(self, request):
@@ -434,7 +434,7 @@ class _VoucherCollection(Resource):
         if not is_syntactic_voucher(voucher):
             return bad_request()
         try:
-            voucher = self._store.get(voucher)
+            voucher = self._store.get(voucher.encode("ascii"))
         except KeyError:
             return NoResource()
         return VoucherView(self._controller.incorporate_transient_state(voucher))
