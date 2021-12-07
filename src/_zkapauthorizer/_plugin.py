@@ -22,6 +22,11 @@ from datetime import datetime
 from functools import partial
 from weakref import WeakValueDictionary
 
+try:
+    from typing import Callable
+except ImportError:
+    pass
+
 import attr
 from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
