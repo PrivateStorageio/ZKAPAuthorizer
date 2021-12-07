@@ -20,7 +20,7 @@ from __future__ import absolute_import
 
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
-from challenge_bypass_ristretto import random_signing_key
+from challenge_bypass_ristretto import PublicKey, random_signing_key
 from fixtures import MonkeyPatch
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import assume, given
@@ -52,6 +52,7 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
 )
 from ..foolscap import ShareStat
+from ..server.spending import RecordingSpender
 from ..storage_common import (
     allocate_buckets_message,
     get_implied_data_length,
@@ -60,7 +61,7 @@ from ..storage_common import (
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
 from .foolscap import LocalRemote
-from .matchers import matches_version_dictionary
+from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
     LEASE_INTERVAL,
     cleanup_storage_server,
@@ -146,6 +147,9 @@ class ShareTests(TestCase):
         super(ShareTests, self).setUp()
         self.canary = LocalReferenceable(None)
         self.signing_key = random_signing_key()
+        self.public_key_hash = PublicKey.from_signing_key(
+            self.signing_key
+        ).encode_base64()
         self.pass_factory = pass_factory(
             get_passes=privacypass_passes(self.signing_key)
         )
@@ -155,10 +159,12 @@ class ShareTests(TestCase):
             AnonymousStorageServer(self.clock),
         ).storage_server
 
+        self.spending_recorder, spender = RecordingSpender.make()
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
+            spender,
             clock=self.clock,
         )
         self.local_remote_server = LocalRemote(self.server)
@@ -181,6 +187,9 @@ class ShareTests(TestCase):
 
         # Reset the state of any passes in our pass factory.
         self.pass_factory._clear()
+
+        # Reset any record of spent tokens.
+        self.spending_recorder.reset()
 
         # And clean out any shares that might confuse things.
         cleanup_storage_server(self.anonymous_storage_server)
@@ -312,6 +321,10 @@ class ShareTests(TestCase):
             set(allocated.keys()),
             Equals(sharenums),
             u"fresh server refused to allocate all requested buckets",
+        )
+        self.expectThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
         )
 
         for sharenum, bucket in allocated.items():
@@ -448,6 +461,12 @@ class ShareTests(TestCase):
             ),
         )
 
+        # The spent passes have been reported to the spending service.
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+        )
+
         expected_leases = {}
         # Chop off the non-integer part of the expected values because share
         # files only keep integer precision.
@@ -503,6 +522,13 @@ class ShareTests(TestCase):
             ),
             succeeded(Always()),
         )
+
+        # The spent passes have been reported to the spending service.
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+        )
+
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
@@ -768,6 +794,12 @@ class ShareTests(TestCase):
             u"Server rejected a write to a new mutable slot",
         )
 
+        # The spent passes have been reported to the spending service.
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+        )
+
         expected = [
             {
                 sharenum: ShareStat(
@@ -903,6 +935,12 @@ class ShareTests(TestCase):
             Equals(after_passes),
         )
 
+        # The spent passes have been reported to the spending service.
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+        )
+
         # And the lease we paid for on every share is present.
         self.assertThat(
             dict(
@@ -1028,6 +1066,12 @@ class ShareTests(TestCase):
             self.assertThat(write(), is_successful_write())
         finally:
             patch.cleanUp()
+
+        # The spent passes have been reported to the spending service.
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+        )
 
         # Not only should the write above succeed but the lease should now be
         # marked as expiring one additional lease period into the future.

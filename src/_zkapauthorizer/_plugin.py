@@ -33,7 +33,7 @@ import attr
 from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
-from challenge_bypass_ristretto import SigningKey
+from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
 from twisted.internet import task
@@ -52,6 +52,7 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore
 from .resource import from_configuration as resource_from_configuration
+from .server.spending import get_spender
 from .spending import SpendingController
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 
@@ -129,13 +130,22 @@ class ZKAPAuthorizer(object):
                 kwargs.pop(u"ristretto-signing-key-path"),
             ),
         )
+        public_key = PublicKey.from_signing_key(signing_key)
         announcement = {
             u"ristretto-issuer-root-url": root_url,
+            u"ristretto-public-keys": [public_key.encode_base64()],
         }
+        anonymous_storage_server = get_anonymous_storage_server()
+        spender = get_spender(
+            config=kwargs,
+            reactor=reactor,
+            registry=registry,
+        )
         storage_server = ZKAPAuthorizerStorageServer(
-            get_anonymous_storage_server(),
+            anonymous_storage_server,
             pass_value=pass_value,
             signing_key=signing_key,
+            spender=spender,
             registry=registry,
             **kwargs
         )

@@ -38,7 +38,12 @@ from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
-from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
+from challenge_bypass_ristretto import (
+    PublicKey,
+    SigningKey,
+    TokenPreimage,
+    VerificationSignature,
+)
 from eliot import log_call, start_action
 from foolscap.api import Referenceable
 from prometheus_client import CollectorRegistry, Histogram
@@ -50,6 +55,7 @@ from zope.interface import implementer
 
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
+from .server.spending import ISpender
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
@@ -89,8 +95,7 @@ class _ValidationResult(object):
     """
     The result of validating a list of passes.
 
-    :ivar list[int] valid: A list of indexes (into the validated list) of which
-        are acceptable.
+    :ivar list[bytes] valid: A list of valid token preimages.
 
     :ivar list[int] signature_check_failed: A list of indexes (into the
         validated list) of passes which did not have a correct signature.
@@ -105,19 +110,16 @@ class _ValidationResult(object):
         Cryptographically check the validity of a single pass.
 
         :param unicode message: The shared message for pass validation.
-        :param bytes pass_: The encoded pass to validate.
+        :param Pass pass_: The pass to validate.
 
         :return bool: ``False`` (invalid) if the pass includes a valid
             signature, ``True`` (valid) otherwise.
         """
         assert isinstance(message, unicode), "message %r not unicode" % (message,)
-        assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
+        assert isinstance(pass_, Pass), "pass %r not a Pass" % (pass_,)
         try:
-            parsed_pass = Pass.from_bytes(pass_)
-            preimage = TokenPreimage.decode_base64(parsed_pass.preimage)
-            proposed_signature = VerificationSignature.decode_base64(
-                parsed_pass.signature
-            )
+            preimage = TokenPreimage.decode_base64(pass_.preimage)
+            proposed_signature = VerificationSignature.decode_base64(pass_.signature)
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
             invalid_pass = verification_key.invalid_sha512(
@@ -143,10 +145,11 @@ class _ValidationResult(object):
         valid = []
         signature_check_failed = []
         for idx, pass_ in enumerate(passes):
+            pass_ = Pass.from_bytes(pass_)
             if cls._is_invalid_pass(message, pass_, signing_key):
                 signature_check_failed.append(idx)
             else:
-                valid.append(idx)
+                valid.append(pass_.preimage)
         return cls(
             valid=valid,
             signature_check_failed=signature_check_failed,
@@ -194,6 +197,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     _original = attr.ib(validator=provides(RIStorageServer))
     _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
+    _spender = attr.ib(validator=provides(ISpender))
     _registry = attr.ib(
         default=attr.Factory(CollectorRegistry),
         validator=attr.validators.instance_of(CollectorRegistry),
@@ -202,7 +206,15 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
+    _public_key = attr.ib(init=False)
     _metric_spending_successes = attr.ib(init=False)
+
+    @_public_key.default
+    def _get_public_key(self):
+        # attrs evaluates defaults (whether specified inline or via decorator)
+        # in the order the attributes were defined in the class definition,
+        # so that `self._signing_key` will be assigned when this runs.
+        return PublicKey.from_signing_key(self._signing_key)
 
     def _get_spending_histogram_buckets(self):
         """
@@ -327,7 +339,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 canary,
                 disconnect_marker,
             )
-
+        self._spender.mark_as_spent(
+            self._public_key,
+            validation.valid[:spent_passes],
+        )
         return alreadygot, bucketwriters
 
     def remote_get_buckets(self, storage_index):
@@ -354,6 +369,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._original,
         )
         result = self._original.remote_add_lease(storage_index, *a, **kw)
+        self._spender.mark_as_spent(
+            self._public_key,
+            validation.valid,
+        )
         self._metric_spending_successes.observe(len(validation.valid))
         return result
 
@@ -483,6 +502,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # existing lease period.  This results in the client being overcharged
         # somewhat.
         add_leases_for_writev(self._original, storage_index, secrets, tw_vectors, now)
+
+        self._spender.mark_as_spent(
+            self._public_key,
+            validation.valid,
+        )
 
         # The operation has fully succeeded.
         self._metric_spending_successes.observe(required_new_passes)

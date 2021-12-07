@@ -39,12 +39,16 @@ from testtools.matchers import (
     Matcher,
     MatchesAll,
     MatchesAny,
+    MatchesDict,
+    MatchesSetwise,
     MatchesStructure,
     Mismatch,
 )
 from testtools.twistedsupport import succeeded
 from treq import content
 
+from ..model import Pass
+from ..server.spending import _SpendingData
 from ._exception import raises
 
 
@@ -204,5 +208,23 @@ def matches_response(
         AfterPreprocessing(
             lambda response: content(response),
             succeeded(body_matcher),
+        ),
+    )
+
+
+def matches_spent_passes(public_key_hash, spent_passes):
+    # type: (bytes, list[Pass]) -> Matcher[_SpendingData]
+    """
+    Returns a matcher for _SpendingData that checks whether the
+    spent pass match the given public key and passes.
+    """
+    return AfterPreprocessing(
+        lambda spending_recorder: spending_recorder.spent_tokens,
+        MatchesDict(
+            {
+                public_key_hash: MatchesSetwise(
+                    *[Equals(pass_.preimage) for pass_ in spent_passes]
+                )
+            }
         ),
     )
