@@ -202,6 +202,8 @@ def make_safe_writer(metrics_path, registry):
         except Exception:
             pass
 
+    return safe_writer
+
 
 _init_storage = _Client.__dict__["init_storage"]
 
