@@ -17,6 +17,8 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
+from __future__ import absolute_import
+
 import random
 from datetime import datetime
 from functools import partial
