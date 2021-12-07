@@ -82,6 +82,40 @@ def lease_maintenance_from_tahoe_config(node_config):
     )
 
 
+def get_configured_lease_duration(node_config):
+    """
+    Return the minimum amount of time for which a newly granted lease will
+    ensure data is stored.
+
+    The actual lease duration is hard-coded in Tahoe-LAFS in many places.
+    However, we have local configuration that tells us when to renew a lease.
+    Since lease renewal discards any remaining time on a current lease and
+    puts a new lease period in its place, starting from the time of the
+    operation, the amount of time we effectively get from a lease is based on
+    Tahoe-LAFS' hard-coded lease duration and our own lease renewal
+    configuration.
+
+    Since this function only promises to return the *minimum* time a client
+    can expect a lease to last, we respond with a lease time shortened by our
+    configuration.
+
+    An excellent goal to pursue in the future would be to change the lease
+    renewal behavior in Tahoe-LAFS so that we can control the length of leases
+    and/or add to an existing lease instead of replacing it.  The former
+    option would let us really configure lease durations.  The latter would
+    let us stop worrying so much about what is lost by renewing a lease before
+    the last second of its validity period.
+
+    :return int: The minimum number of seconds for which a newly acquired
+        lease will be valid.
+    """
+    # See lots of places in Tahoe-LAFS, eg src/allmydata/storage/server.py
+    upper_bound = 31 * 24 * 60 * 60
+    lease_maint_config = lease_maintenance_from_tahoe_config(node_config)
+    min_time_remaining = lease_maint_config.min_lease_remaining.total_seconds()
+    return int(upper_bound - min_time_remaining)
+
+
 def _read_duration(cfg, option, default):
     """
     Read an integer number of seconds from the ZKAPAuthorizer section of a

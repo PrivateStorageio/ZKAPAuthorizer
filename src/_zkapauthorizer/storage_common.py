@@ -121,17 +121,6 @@ def get_configured_pass_value(node_config):
     )
 
 
-def get_configured_lease_duration(node_config):
-    """
-    Just kidding.  Lease duration is hard-coded.
-
-    :return int: The number of seconds after which a newly acquired lease will
-        be valid.
-    """
-    # See lots of places in Tahoe-LAFS, eg src/allmydata/storage/server.py
-    return 31 * 24 * 60 * 60
-
-
 def get_configured_allowed_public_keys(node_config):
     """
     Read the set of allowed issuer public keys from the given configuration.

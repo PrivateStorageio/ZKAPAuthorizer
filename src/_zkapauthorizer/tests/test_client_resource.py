@@ -73,6 +73,7 @@ from twisted.web.resource import IResource, getChildForRequest
 
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
+from ..config import get_configured_lease_duration
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -88,7 +89,6 @@ from ..pricecalculator import PriceCalculator
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
-    get_configured_lease_duration,
     get_configured_pass_value,
     required_passes,
 )
