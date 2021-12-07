@@ -60,6 +60,7 @@ from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
+from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
 from twisted.web.resource import IResource
 
@@ -72,6 +73,7 @@ from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
+from .common import skipIf
 from .eliot import capture_logging
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, raises
@@ -179,6 +181,7 @@ class PluginTests(TestCase):
         )
 
 
+@skipIf(platform.isWindows(), "Storage server is not supported on Windows")
 class ServerPluginTests(TestCase):
     """
     Tests for the plugin's implementation of
