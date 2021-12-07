@@ -68,7 +68,10 @@ except ImportError:
 # Hack around a bug in prometheus_client
 def _prometheus_client_fix():
     import prometheus_client.exposition
+
     prometheus_client.exposition.FileNotFoundError = IOError
+
+
 _prometheus_client_fix()
 
 # See allmydata/storage/mutable.py
