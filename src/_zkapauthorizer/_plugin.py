@@ -27,6 +27,7 @@ from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
+from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
 from twisted.internet import task
 from twisted.internet.defer import succeed
@@ -109,7 +110,8 @@ class ZKAPAuthorizer(object):
         metrics_interval = kwargs.pop(u"prometheus-metrics-interval", None)
         metrics_path = kwargs.pop(u"prometheus-metrics-path", None)
         if metrics_interval is not None and metrics_path is not None:
-            t = task.LoopingCall(lambda: write_to_textfile(metrics_path, registry))
+            FilePath(metrics_path).parent().makedirs(ignoreExistingDirectory=True)
+            t = task.LoopingCall(make_safe_writer(metrics_path, registry))
             t.clock = reactor
             t.start(int(metrics_interval))
 
@@ -173,6 +175,25 @@ class ZKAPAuthorizer(object):
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
         )
+
+
+def make_safe_writer(metrics_path, registry):
+    # type: (str, CollectorRegistry) -> Callable[[], None]
+    """
+    Make a no-argument callable that writes metrics from the given registry to
+    the given path.  The callable will log errors writing to the path and not
+    raise exceptions.
+    """
+
+    def safe_writer():
+        try:
+            with start_action(
+                action_type=u"zkapauthorizer:metrics:write-to-textfile",
+                metrics_path=metrics_path,
+            ):
+                write_to_textfile(metrics_path, registry)
+        except Exception:
+            pass
 
 
 _init_storage = _Client.__dict__["init_storage"]
