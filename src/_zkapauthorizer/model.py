@@ -877,6 +877,10 @@ class Pass(object):
     def pass_bytes(self):
         return b" ".join((self.preimage, self.signature))
 
+    @classmethod
+    def from_bytes(cls, pass_):
+        return cls(*pass_.split(b" "))
+
 
 @attr.s(frozen=True)
 class RandomToken(object):

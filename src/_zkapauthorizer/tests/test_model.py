@@ -61,6 +61,7 @@ from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
     NotEnoughTokens,
+    Pass,
     Pending,
     Redeemed,
     StoreOpenError,
@@ -80,6 +81,7 @@ from .strategies import (
     voucher_counters,
     voucher_objects,
     vouchers,
+    zkaps,
 )
 
 
@@ -951,3 +953,19 @@ def store_for_test(testcase, get_config, get_now):
         memory_connect,
     )
     return store
+
+
+class PassTests(TestCase):
+    """
+    Tests for ``Pass``.
+    """
+
+    @given(zkaps())
+    def test_roundtrip(self, pass_):
+        """
+        ``Pass`` round-trips through ``Pass.from_bytes`` and ``Pass.pass_bytes``.
+        """
+        self.assertThat(
+            Pass.from_bytes(pass_.pass_bytes),
+            Equals(pass_),
+        )
