@@ -145,7 +145,7 @@ def read_count(storage_server):
 
 
 def read_bucket(storage_server, size):
-    bounds = storage_server._get_buckets()
+    bounds = storage_server._get_spending_histogram_buckets()
     for bucket_number, upper_bound in enumerate(bounds):
         if size <= upper_bound:
             break

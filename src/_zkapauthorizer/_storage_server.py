@@ -201,7 +201,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     )
     _metric_spending_successes = attr.ib(init=False)
 
-    def _get_buckets(self):
+    def _get_spending_histogram_buckets(self):
         """
         Create the upper bounds for the ZKAP spending histogram.
         """
@@ -227,7 +227,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             "zkapauthorizer_server_spending_successes",
             "ZKAP Spending Successes histogram",
             registry=self._registry,
-            buckets=self._get_buckets(),
+            buckets=self._get_spending_histogram_buckets(),
         )
 
     def _clear_metrics(self):
