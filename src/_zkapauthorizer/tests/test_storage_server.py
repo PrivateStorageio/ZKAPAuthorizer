@@ -649,6 +649,8 @@ class PassValidationTests(TestCase):
             Equals(1),
             "Unexpected histogram sum value",
         )
+        # If this bucket is 1 then all the other buckets must be 0, otherwise
+        # the sum above will be greater than 1.
         self.assertThat(
             after_bucket,
             Equals(1),
