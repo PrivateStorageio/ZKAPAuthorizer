@@ -234,7 +234,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         """
         Forget all recorded metrics.
         """
-        # There is also a `clear` method but it raises an AttributeError.
+        # There is also a `clear` method it's for something else.  See
+        # https://github.com/prometheus/client_python/issues/707
         self._metric_spending_successes._metric_init()
 
     def remote_get_version(self):
