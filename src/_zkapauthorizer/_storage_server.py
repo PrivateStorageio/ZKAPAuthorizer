@@ -65,7 +65,11 @@ try:
 except ImportError:
     pass
 
-# Hack around a bug in prometheus_client
+# The last Python 2-supporting prometheus_client nevertheless tries to use
+# FileNotFoundError, an exception type from Python 3.  Since that release,
+# prometheus_client has dropped Python 2 support entirely so there is little
+# hope of ever having this fixed upstream.  When ZKAPAuthorizer is ported to
+# Python 3, this should no longer be necessary.
 def _prometheus_client_fix():
     import prometheus_client.exposition
 
