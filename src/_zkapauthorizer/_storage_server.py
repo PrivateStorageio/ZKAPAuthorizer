@@ -217,8 +217,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # infinity) and only needs 12 buckets.
         return list(2 ** n for n in range(11)) + [float("inf")]
 
-    def __attrs_post_init__(self):
-        self._metric_spending_successes = Histogram(
+    @_metric_spending_successes.default
+    def _make_histogram(self):
+        return Histogram(
             "zkapauthorizer_server_spending_successes",
             "ZKAP Spending Successes histogram",
             registry=self._registry,
