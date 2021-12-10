@@ -73,7 +73,6 @@ from twisted.web.resource import IResource, getChildForRequest
 
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
-from ..config import get_configured_lease_duration
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
