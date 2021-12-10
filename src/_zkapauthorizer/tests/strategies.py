@@ -61,6 +61,58 @@ from ..model import (
     Voucher,
 )
 
+_POSIX_EPOCH = datetime.utcfromtimestamp(0)
+
+
+def posix_safe_datetimes():
+    """
+    Build datetime instances in a range that can be represented as floats
+    without losing microsecond precision.
+    """
+    return datetimes(
+        # I don't know that time-based parts of the system break down
+        # before the POSIX epoch but I don't know that they work, either.
+        # Don't time travel with this code.
+        min_value=_POSIX_EPOCH,
+        # Once we get far enough into the future we lose the ability to
+        # represent a timestamp with microsecond precision in a floating point
+        # number, which we do with any POSIX timestamp-like API (eg
+        # twisted.internet.task.Clock).  So don't go far enough into the
+        # future.  Furthermore, once we don't fit into an unsigned 4 byte
+        # integers, we can't round-trip through all the things that expect a
+        # time_t.  Stay back from the absolute top to give tests a little
+        # space to advance time, too.
+        max_value=datetime.utcfromtimestamp(2 ** 31),
+    )
+
+
+def posix_timestamps():
+    """
+    Build floats in a range that can represent time without losing microsecond
+    precision.
+    """
+    return posix_safe_datetimes().map(
+        lambda when: (when - _POSIX_EPOCH).total_seconds(),
+    )
+
+
+def clocks(now=posix_timestamps()):
+    """
+    Build ``twisted.internet.task.Clock`` instances set to a time built by
+    ``now``.
+
+    :param now: A strategy that builds POSIX timestamps (ie, ints or floats in
+        the range of time_t).
+    """
+
+    def clock_at_time(when):
+        c = Clock()
+        c.advance(when)
+        return c
+
+    return now.map(clock_at_time)
+
+
 # Sizes informed by
 # https://github.com/brave-intl/challenge-bypass-ristretto/blob/2f98b057d7f353c12b2b12d0f5ae9ad115f1d0ba/src/oprf.rs#L18-L33
 
@@ -237,7 +289,10 @@ def zkapauthz_configuration(
         ``extra_configurations``.
     """
 
-    def merge(extra_configuration, allowed_public_keys):
+    def merge(
+        extra_configuration,
+        allowed_public_keys,
+    ):
         config = {
             u"default-token-count": u"32",
             u"allowed-public-keys": u",".join(allowed_public_keys),
@@ -266,21 +321,46 @@ def client_ristrettoredeemer_configurations():
     )
 
 
-def client_dummyredeemer_configurations():
+def client_dummyredeemer_configurations(
+    crawl_means=one_of(none(), posix_timestamps()),
+    crawl_ranges=one_of(none(), posix_timestamps()),
+    min_times_remaining=one_of(none(), posix_timestamps()),
+):
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
 
+    def make_lease_config(crawl_mean, crawl_range, min_time_remaining):
+        config = {}
+        if crawl_mean is not None:
+            # Don't allow the mean to be 0
+            config["lease.crawl-interval.mean"] = str(int(crawl_mean) + 1)
+        if crawl_range is not None:
+            config["lease.crawl-interval.range"] = str(int(crawl_range))
+        if min_time_remaining is not None:
+            config["lease.min-time-remaining"] = str(int(min_time_remaining))
+        return config
+
     def share_a_key(allowed_keys):
-        return zkapauthz_configuration(
-            just(
+        lease_configs = builds(
+            make_lease_config,
+            crawl_means,
+            crawl_ranges,
+            min_times_remaining,
+        )
+        extra_config = lease_configs.map(
+            lambda config: config.update(
                 {
                     u"redeemer": u"dummy",
                     # Pick out one of the allowed public keys so that the dummy
                     # appears to produce usable tokens.
                     u"issuer-public-key": next(iter(allowed_keys)),
                 }
-            ),
+            )
+            or config,
+        )
+        return zkapauthz_configuration(
+            extra_config,
             allowed_public_keys=just(allowed_keys),
         )
 
@@ -893,58 +973,6 @@ def announcements():
             u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
         }
     )
-
-
-_POSIX_EPOCH = datetime.utcfromtimestamp(0)
-
-
-def posix_safe_datetimes():
-    """
-    Build datetime instances in a range that can be represented as floats
-    without losing microsecond precision.
-    """
-    return datetimes(
-        # I don't know that time-based parts of the system break down
-        # before the POSIX epoch but I don't know that they work, either.
-        # Don't time travel with this code.
-        min_value=_POSIX_EPOCH,
-        # Once we get far enough into the future we lose the ability to
-        # represent a timestamp with microsecond precision in a floating point
-        # number, which we do with any POSIX timestamp-like API (eg
-        # twisted.internet.task.Clock).  So don't go far enough into the
-        # future.  Furthermore, once we don't fit into an unsigned 4 byte
-        # integers, we can't round-trip through all the things that expect a
-        # time_t.  Stay back from the absolute top to give tests a little
-        # space to advance time, too.
-        max_value=datetime.utcfromtimestamp(2 ** 31),
-    )
-
-
-def posix_timestamps():
-    """
-    Build floats in a range that can represent time without losing microsecond
-    precision.
-    """
-    return posix_safe_datetimes().map(
-        lambda when: (when - _POSIX_EPOCH).total_seconds(),
-    )
-
-
-def clocks(now=posix_timestamps()):
-    """
-    Build ``twisted.internet.task.Clock`` instances set to a time built by
-    ``now``.
-
-    :param now: A strategy that builds POSIX timestamps (ie, ints or floats in
-        the range of time_t).
-    """
-
-    def clock_at_time(when):
-        c = Clock()
-        c.advance(when)
-        return c
-
-    return now.map(clock_at_time)
 
 
 @implementer(IFilesystemNode)
