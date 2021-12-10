@@ -95,13 +95,13 @@ from .json import loads
 from .matchers import Provides, between, matches_response
 from .strategies import (
     api_auth_tokens,
-    posix_timestamps,
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
     client_errorredeemer_configurations,
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    posix_timestamps,
     request_paths,
     requests,
     share_parameters,
