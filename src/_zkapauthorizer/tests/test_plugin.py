@@ -38,6 +38,7 @@ from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
 from prometheus_client import Gauge
+from prometheus_client.parser import text_string_to_metric_families
 from StringIO import StringIO
 from testtools import TestCase
 from testtools.content import text_content
@@ -45,6 +46,7 @@ from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
     Always,
+    AnyMatch,
     Contains,
     ContainsDict,
     Equals,
@@ -53,6 +55,7 @@ from testtools.matchers import (
     IsInstance,
     Matcher,
     MatchesAll,
+    MatchesListwise,
     MatchesStructure,
 )
 from testtools.twistedsupport import succeeded
@@ -301,8 +304,38 @@ class ServerPluginTests(TestCase):
 
             clock.advance(metrics_interval.total_seconds())
             self.assertThat(
-                metrics_path, FileContains(matcher=Contains("foo {}".format(i)))
+                metrics_path,
+                has_metric(Equals("foo"), Equals(i)),
             )
+
+
+def has_metric(name_matcher, value_matcher):
+    """
+    Create a matcher that matches a path that contains serialized metrics that
+    include at least a single metric that is matched by the given
+    ``name_matcher`` and ``value_matcher``.
+    """
+
+    def read_metrics(path):
+        with open(path) as f:
+            return list(text_string_to_metric_families(f.read()))
+
+    return AfterPreprocessing(
+        read_metrics,
+        AnyMatch(
+            MatchesStructure(
+                name=name_matcher,
+                samples=MatchesListwise(
+                    [
+                        MatchesStructure(
+                            name=name_matcher,
+                            value=value_matcher,
+                        ),
+                    ]
+                ),
+            ),
+        ),
+    )
 
 
 tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
