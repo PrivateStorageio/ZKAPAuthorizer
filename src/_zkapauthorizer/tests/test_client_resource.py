@@ -88,7 +88,6 @@ from ..pricecalculator import PriceCalculator
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
-    get_configured_lease_duration,
     get_configured_pass_value,
     required_passes,
 )
@@ -102,6 +101,7 @@ from .strategies import (
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    posix_timestamps,
     request_paths,
     requests,
     share_parameters,
@@ -746,12 +746,15 @@ class UnblindedTokenTests(TestCase):
         using_a_token = after(getting_initial_tokens, use_a_token)
         getting_tokens_after = after(using_a_token, get_tokens)
 
+        def check_tokens(before_and_after):
+            initial_tokens, tokens_after = before_and_after
+            return initial_tokens[1:] == tokens_after
+
         self.assertThat(
             gatherResults([getting_initial_tokens, getting_tokens_after]),
             succeeded(
                 MatchesPredicate(
-                    lambda (initial_tokens, tokens_after): initial_tokens[1:]
-                    == tokens_after,
+                    check_tokens,
                     u"initial, after (%s): initial[1:] != after",
                 ),
             ),
@@ -1586,30 +1589,36 @@ class CalculatePriceTests(TestCase):
         )
 
     @given(
-        # Make the share encoding parameters easily accessible without going
-        # through the Tahoe-LAFS configuration.
-        share_parameters().flatmap(
-            lambda params: tuples(
-                just(params),
-                tahoe_configs(shares=just(params)),
+        tuples(
+            # Make the share encoding parameters easily accessible without
+            # going through the Tahoe-LAFS configuration.
+            share_parameters(),
+            # Same goes for the minimum lease time remaining configuration.
+            posix_timestamps().map(int),
+        ).flatmap(
+            lambda share_and_lease_time: tuples(
+                just(share_and_lease_time),
+                direct_tahoe_configs(
+                    zkapauthz_v1_configuration=client_dummyredeemer_configurations(
+                        min_times_remaining=just(share_and_lease_time[1]),
+                    ),
+                    shares=just(share_and_lease_time[0]),
+                ),
             ),
         ),
         api_auth_tokens(),
         lists(integers(min_value=0)),
     )
-    def test_calculated_price(
-        self, encoding_params_and_get_config, api_auth_token, sizes
-    ):
+    def test_calculated_price(self, encoding_params_and_config, api_auth_token, sizes):
         """
         A well-formed request returns the price in ZKAPs as an integer and the
         storage period (the minimum allowed) that they pay for.
         """
-        encoding_params, get_config = encoding_params_and_get_config
+        (encoding_params, min_time_remaining), config = encoding_params_and_config
         shares_needed, shares_happy, shares_total = encoding_params
-
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
+        add_api_token_to_config(
+            self.useFixture(TempDir()).join(b"tahoe"),
+            config,
             api_auth_token,
         )
         root = root_from_config(config, datetime.now)
@@ -1639,7 +1648,7 @@ class CalculatePriceTests(TestCase):
                         Equals(
                             {
                                 u"price": expected_price,
-                                u"period": get_configured_lease_duration(config),
+                                u"period": 60 * 60 * 24 * 31 - min_time_remaining,
                             }
                         ),
                     ),

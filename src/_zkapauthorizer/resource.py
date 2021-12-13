@@ -33,12 +33,12 @@ from zope.interface import Attribute
 
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
+from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
 from .storage_common import (
     get_configured_allowed_public_keys,
-    get_configured_lease_duration,
     get_configured_pass_value,
     get_configured_shares_needed,
     get_configured_shares_total,
