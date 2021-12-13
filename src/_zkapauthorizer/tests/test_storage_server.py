@@ -477,6 +477,12 @@ class PassValidationTests(TestCase):
                     ),
                 ),
             )
+            # Since it was not successful, the successful spending metric
+            # hasn't changed.
+            self.assertThat(
+                read_count(self.storage_server),
+                Equals(0),
+            )
         else:
             self.fail("Expected MorePassesRequired, got {}".format(result))
 
