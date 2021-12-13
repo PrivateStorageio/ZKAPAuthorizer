@@ -50,7 +50,6 @@ from testtools.matchers import (
     Contains,
     ContainsDict,
     Equals,
-    FileContains,
     HasLength,
     IsInstance,
     Matcher,
