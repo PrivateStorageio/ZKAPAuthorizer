@@ -292,10 +292,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
         )
 
-        # XXX Some shares may exist already so those passes aren't necessarily
-        # spent...
-        self._metric_spending_successes.observe(len(validation.valid))
-
         alreadygot, bucketwriters = self._original._allocate_buckets(
             storage_index,
             renew_secret,
@@ -304,6 +300,22 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
             renew_leases=False,
         )
+
+        # We just committed to spending some of the presented passes.  If
+        # `alreadygot` is not empty then we didn't commit to spending *all* of
+        # them.  (Also, we didn't *accept* data for storage yet - but that's a
+        # defect in the spending protocol and metrics can't fix it so just
+        # ignore that for now.)
+        #
+        # This expression mirrors the expression the client uses to determine
+        # how many passes were spent when it processes the result we return to
+        # it.
+        spent_passes = required_passes(
+            self._pass_value,
+            [allocated_size] * len(bucketwriters),
+        )
+        self._metric_spending_successes.observe(spent_passes)
+
         # Copy/paste the disconnection handling logic from
         # StorageServer.remote_allocate_buckets.
         for bw in bucketwriters.values():
@@ -312,6 +324,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 canary,
                 disconnect_marker,
             )
+
         return alreadygot, bucketwriters
 
     def remote_get_buckets(self, storage_index):

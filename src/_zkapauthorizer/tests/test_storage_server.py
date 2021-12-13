@@ -608,18 +608,42 @@ class PassValidationTests(TestCase):
         storage_index=storage_indexes(),
         renew_secret=lease_renew_secrets(),
         cancel_secret=lease_cancel_secrets(),
-        sharenums=sharenum_sets(),
+        existing_sharenums=sharenum_sets(),
+        new_sharenums=sharenum_sets(),
         size=sizes(),
     )
     def test_immutable_spending_metrics(
-        self, storage_index, renew_secret, cancel_secret, sharenums, size
+        self,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        existing_sharenums,
+        new_sharenums,
+        size,
     ):
         """
         When ZKAPs are spent to call *allocate_buckets* the number of passes spent
         is recorded as a metric.
         """
-        num_passes = required_passes(
-            self.storage_server._pass_value, [size] * len(sharenums)
+        # maybe create some existing shares that won't need to be paid for by
+        # the subsequent `allocate_buckets` operation - but of which the
+        # client is unaware.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            size,
+            LocalReferenceable(None),
+        )
+
+        # The client will present this many passes.
+        num_passes = required_passes(self.pass_value, [size] * len(new_sharenums))
+        # But only this many need to be spent.
+        num_spent_passes = required_passes(
+            self.pass_value,
+            [size] * len(new_sharenums - existing_sharenums),
         )
         valid_passes = make_passes(
             self.signing_key,
@@ -635,14 +659,14 @@ class PassValidationTests(TestCase):
                 storage_index=storage_index,
                 renew_secret=renew_secret,
                 cancel_secret=cancel_secret,
-                sharenums=sharenums,
+                sharenums=new_sharenums,
                 allocated_size=size,
                 canary=LocalReferenceable(None),
             ),
         )
 
         after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, num_passes)
+        after_bucket = read_bucket(self.storage_server, num_spent_passes)
 
         self.expectThat(
             after_count,
