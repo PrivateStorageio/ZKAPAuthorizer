@@ -21,6 +21,7 @@ from __future__ import absolute_import, division
 from random import shuffle
 from time import time
 
+from allmydata.storage.mutable import MutableShareFile
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
@@ -139,6 +140,42 @@ class ValidationResultTests(TestCase):
             )
 
 
+def read_spending_success_histogram_total(storage_server):
+    # type: (ZKAPAuthorizerStorageServer) -> int
+    """
+    Read the total number of values across all buckets of the spending success
+    metric histogram.
+    """
+    # Reading _buckets seems like the least bad option for now.  See
+    # https://github.com/prometheus/client_python/issues/736 though.
+    buckets = storage_server._metric_spending_successes._buckets
+    return sum(b.get() for b in buckets)
+
+
+def read_spending_success_histogram_bucket(storage_server, num_passes):
+    # type: (ZKAPAuthorizerStorageServer, int) -> int
+    """
+    Read the value of a single bucket of the spending success metric
+    histogram.
+
+    :param num_passes: A pass spending count which determines which bucket to
+        read.  Whichever bucket holds values for the quantized pass count is
+        the bucket to be read.
+    """
+    bounds = storage_server._get_spending_histogram_buckets()
+    for bucket_number, upper_bound in enumerate(bounds):
+        if num_passes <= upper_bound:
+            break
+
+    note("bucket_number {}".format(bucket_number))
+    # See note above about reading private _buckets attribute.
+    buckets = storage_server._metric_spending_successes._buckets
+    note(
+        "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
+    )
+    return buckets[bucket_number].get()
+
+
 class PassValidationTests(TestCase):
     """
     Tests for pass validation performed by ``ZKAPAuthorizerStorageServer``.
@@ -162,7 +199,7 @@ class PassValidationTests(TestCase):
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
-            self.clock,
+            clock=self.clock,
         )
 
     def setup_example(self):
@@ -179,6 +216,10 @@ class PassValidationTests(TestCase):
         # way that allows us to just move everything from `setUp` into this
         # method.
         cleanup_storage_server(self.anonymous_storage_server)
+
+        # Reset all of the metrics, too, so the individual tests have a
+        # simpler job (can compare values relative to 0).
+        self.storage_server._clear_metrics()
 
     def test_allocate_buckets_fails_without_enough_passes(self):
         """
@@ -454,6 +495,12 @@ class PassValidationTests(TestCase):
                     ),
                 ),
             )
+            # Since it was not successful, the successful spending metric
+            # hasn't changed.
+            self.assertThat(
+                read_spending_success_histogram_total(self.storage_server),
+                Equals(0),
+            )
         else:
             self.fail("Expected MorePassesRequired, got {}".format(result))
 
@@ -523,4 +570,333 @@ class PassValidationTests(TestCase):
         self.assertThat(
             actual_sizes,
             Equals(expected_sizes),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_spending_metrics(
+        self,
+        storage_index,
+        secrets,
+        test_and_write_vectors_for_shares,
+    ):
+        tw_vectors = {
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+        }
+        num_passes = get_required_new_passes_for_mutable_write(
+            self.pass_value,
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        test, read = self.storage_server.doRemoteCall(
+            "slot_testv_and_readv_and_writev",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            ),
+        )
+
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_passes
+        )
+
+        self.expectThat(
+            after_count,
+            Equals(1),
+            "Unexpected histogram sum value",
+        )
+        self.assertThat(
+            after_bucket,
+            Equals(1),
+            "Unexpected histogram bucket value",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_failure_spending_metrics(
+        self,
+        storage_index,
+        secrets,
+        test_and_write_vectors_for_shares,
+    ):
+        """
+        If a mutable storage operation fails then the successful pass spending
+        metric is not incremented.
+        """
+        tw_vectors = {
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+        }
+        num_passes = get_required_new_passes_for_mutable_write(
+            self.pass_value,
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        # The very last step of a mutable write is the lease renewal step.
+        # We'll break that part to be sure metrics are only recorded after
+        # that (ie, after the operation has completely succeeded).  It's not
+        # easy to break that operation so we reach into some private guts to
+        # do so...  After we upgrade to Tahoe 1.17.0 then we can mess around
+        # with `reserved_space` to make Tahoe think there's no room for the
+        # leases and fail the operation, perhaps (but how to do that without
+        # making the earlier storage-allocating part of the operation fail?).
+        self.patch(MutableShareFile, "add_or_renew_lease", lambda *a, **kw: 1 / 0)
+
+        try:
+            test, read = self.storage_server.doRemoteCall(
+                "slot_testv_and_readv_and_writev",
+                (),
+                dict(
+                    passes=valid_passes,
+                    storage_index=storage_index,
+                    secrets=secrets,
+                    tw_vectors=tw_vectors,
+                    r_vector=[],
+                ),
+            )
+        except ZeroDivisionError:
+            pass
+        else:
+            self.fail("expected our ZeroDivisionError to be raised")
+
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        self.expectThat(
+            after_count,
+            Equals(0),
+            "Expected no successful spending to be recorded in error case",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        existing_sharenums=sharenum_sets(),
+        new_sharenums=sharenum_sets(),
+        size=sizes(),
+    )
+    def test_immutable_spending_metrics(
+        self,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        existing_sharenums,
+        new_sharenums,
+        size,
+    ):
+        """
+        When ZKAPs are spent to call *allocate_buckets* the number of passes spent
+        is recorded as a metric.
+        """
+        # maybe create some existing shares that won't need to be paid for by
+        # the subsequent `allocate_buckets` operation - but of which the
+        # client is unaware.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            existing_sharenums,
+            size,
+            LocalReferenceable(None),
+        )
+
+        # The client will present this many passes.
+        num_passes = required_passes(self.pass_value, [size] * len(new_sharenums))
+        # But only this many need to be spent.
+        num_spent_passes = required_passes(
+            self.pass_value,
+            [size] * len(new_sharenums - existing_sharenums),
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            allocate_buckets_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        alreadygot, allocated = self.storage_server.doRemoteCall(
+            "allocate_buckets",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                renew_secret=renew_secret,
+                cancel_secret=cancel_secret,
+                sharenums=new_sharenums,
+                allocated_size=size,
+                canary=LocalReferenceable(None),
+            ),
+        )
+
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_spent_passes
+        )
+
+        self.expectThat(
+            after_count,
+            Equals(1),
+            "Unexpected histogram sum value",
+        )
+        # If this bucket is 1 then all the other buckets must be 0, otherwise
+        # the sum above will be greater than 1.
+        self.assertThat(
+            after_bucket,
+            Equals(1),
+            "Unexpected histogram bucket value",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_metrics(
+        self,
+        storage_index,
+        renew_secret,
+        cancel_secret,
+        sharenums,
+        allocated_size,
+    ):
+        # Create some shares at a slot which will require lease renewal.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
+
+        num_passes = required_passes(
+            self.storage_server._pass_value, [allocated_size] * len(sharenums)
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        self.storage_server.doRemoteCall(
+            "add_lease",
+            (),
+            dict(
+                passes=valid_passes,
+                storage_index=storage_index,
+                renew_secret=renew_secret,
+                cancel_secret=cancel_secret,
+            ),
+        )
+
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_passes
+        )
+
+        self.expectThat(
+            after_count,
+            Equals(1),
+            "Unexpected histogram sum value",
+        )
+        self.assertThat(
+            after_bucket,
+            Equals(1),
+            "Unexpected histogram bucket value",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_metrics_on_failure(
+        self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size
+    ):
+        """
+        If the ``add_lease`` operation fails then the successful pass spending
+        metric is not incremented.
+        """
+        # Put some shares up there to target with the add_lease operation.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
+
+        num_passes = required_passes(
+            self.storage_server._pass_value, [allocated_size] * len(sharenums)
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        # Tahoe doesn't make it very easy to make an add_lease operation fail
+        # so monkey-patch something broken in.  After 1.17.0 we can set
+        # `reserved_space` on StorageServer to a very large number and the
+        # server should refuse to allocate space for a *new* lease (which
+        # means we need to use a different renew secret for the next step.
+        self.anonymous_storage_server.remote_add_lease = lambda *a, **kw: 1 / 0
+
+        try:
+            self.storage_server.doRemoteCall(
+                "add_lease",
+                (),
+                dict(
+                    passes=valid_passes,
+                    storage_index=storage_index,
+                    renew_secret=renew_secret,
+                    cancel_secret=cancel_secret,
+                ),
+            )
+        except ZeroDivisionError:
+            pass
+        else:
+            self.fail("expected our ZeroDivisionError to be raised")
+
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        self.expectThat(
+            after_count,
+            Equals(0),
+            "Expected no successful spending to be recorded in error case",
         )

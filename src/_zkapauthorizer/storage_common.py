@@ -155,7 +155,7 @@ def required_passes(bytes_per_pass, share_sizes):
             ),
         )
     result, b = divmod(sum(share_sizes, 0), bytes_per_pass)
-    if b:
+    if b > 0:
         result += 1
 
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))

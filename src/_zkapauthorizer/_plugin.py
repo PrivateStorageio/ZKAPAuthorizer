@@ -17,16 +17,26 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
+from __future__ import absolute_import
+
 import random
 from datetime import datetime
 from functools import partial
 from weakref import WeakValueDictionary
+
+try:
+    from typing import Callable
+except ImportError:
+    pass
 
 import attr
 from allmydata.client import _Client
 from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import SigningKey
+from eliot import start_action
+from prometheus_client import CollectorRegistry, write_to_textfile
+from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -95,8 +105,23 @@ class ZKAPAuthorizer(object):
         """
         return get_redeemer(self.name, node_config, announcement, reactor)
 
-    def get_storage_server(self, configuration, get_anonymous_storage_server):
+    def get_storage_server(
+        self, configuration, get_anonymous_storage_server, reactor=None
+    ):
+        if reactor is None:
+            from twisted.internet import reactor
+        registry = CollectorRegistry()
         kwargs = configuration.copy()
+
+        # If metrics are desired, schedule their writing to disk.
+        metrics_interval = kwargs.pop(u"prometheus-metrics-interval", None)
+        metrics_path = kwargs.pop(u"prometheus-metrics-path", None)
+        if metrics_interval is not None and metrics_path is not None:
+            FilePath(metrics_path).parent().makedirs(ignoreExistingDirectory=True)
+            t = task.LoopingCall(make_safe_writer(metrics_path, registry))
+            t.clock = reactor
+            t.start(int(metrics_interval))
+
         root_url = kwargs.pop(u"ristretto-issuer-root-url")
         pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
         signing_key = load_signing_key(
@@ -111,6 +136,7 @@ class ZKAPAuthorizer(object):
             get_anonymous_storage_server(),
             pass_value=pass_value,
             signing_key=signing_key,
+            registry=registry,
             **kwargs
         )
         return succeed(
@@ -156,6 +182,27 @@ class ZKAPAuthorizer(object):
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
         )
+
+
+def make_safe_writer(metrics_path, registry):
+    # type: (str, CollectorRegistry) -> Callable[[], None]
+    """
+    Make a no-argument callable that writes metrics from the given registry to
+    the given path.  The callable will log errors writing to the path and not
+    raise exceptions.
+    """
+
+    def safe_writer():
+        try:
+            with start_action(
+                action_type=u"zkapauthorizer:metrics:write-to-textfile",
+                metrics_path=metrics_path,
+            ):
+                write_to_textfile(metrics_path, registry)
+        except Exception:
+            pass
+
+    return safe_writer
 
 
 _init_storage = _Client.__dict__["init_storage"]

@@ -41,6 +41,7 @@ from attr.validators import instance_of, provides
 from challenge_bypass_ristretto import SigningKey, TokenPreimage, VerificationSignature
 from eliot import log_call, start_action
 from foolscap.api import Referenceable
+from prometheus_client import CollectorRegistry, Histogram
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.filepath import FilePath
@@ -63,6 +64,19 @@ try:
     from typing import Dict, List, Optional
 except ImportError:
     pass
+
+# The last Python 2-supporting prometheus_client nevertheless tries to use
+# FileNotFoundError, an exception type from Python 3.  Since that release,
+# prometheus_client has dropped Python 2 support entirely so there is little
+# hope of ever having this fixed upstream.  When ZKAPAuthorizer is ported to
+# Python 3, this should no longer be necessary.
+def _prometheus_client_fix():
+    import prometheus_client.exposition
+
+    prometheus_client.exposition.FileNotFoundError = IOError
+
+
+_prometheus_client_fix()
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
@@ -177,10 +191,52 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     _original = attr.ib(validator=provides(RIStorageServer))
     _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
+    _registry = attr.ib(
+        default=attr.Factory(CollectorRegistry),
+        validator=attr.validators.instance_of(CollectorRegistry),
+    )
     _clock = attr.ib(
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
+    _metric_spending_successes = attr.ib(init=False)
+
+    def _get_spending_histogram_buckets(self):
+        """
+        Create the upper bounds for the ZKAP spending histogram.
+        """
+        # We want a lot of small buckets to be able to get an idea of how much
+        # spending is for tiny files where our billing system doesn't work
+        # extremely well.  We also want some large buckets so we have a point
+        # of comparison - is there a lot more or less spending on big files
+        # than small files?  Prometheus recommends a metric have a maximum
+        # cardinality below 10
+        # (<https://prometheus.io/docs/practices/instrumentation/#do-not-overuse-labels>).
+        # Histograms are implemented with labels so the cardinality is equal
+        # to the number of buckets.  We will push this a little bit so we can
+        # span a better range.  The good news is that this is a static
+        # cardinality (it does not change based on the data observed) so we
+        # are not at risk of blowing up the metrics overhead unboundedly.  11
+        # finite buckets + 1 infinite bucket covers 1 to 1024 ZKAPs (plus
+        # infinity) and only needs 12 buckets.
+        return list(2 ** n for n in range(11)) + [float("inf")]
+
+    @_metric_spending_successes.default
+    def _make_histogram(self):
+        return Histogram(
+            "zkapauthorizer_server_spending_successes",
+            "ZKAP Spending Successes histogram",
+            registry=self._registry,
+            buckets=self._get_spending_histogram_buckets(),
+        )
+
+    def _clear_metrics(self):
+        """
+        Forget all recorded metrics.
+        """
+        # There is also a `clear` method it's for something else.  See
+        # https://github.com/prometheus/client_python/issues/707
+        self._metric_spending_successes._metric_init()
 
     def remote_get_version(self):
         """
@@ -244,6 +300,22 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
             renew_leases=False,
         )
+
+        # We just committed to spending some of the presented passes.  If
+        # `alreadygot` is not empty then we didn't commit to spending *all* of
+        # them.  (Also, we didn't *accept* data for storage yet - but that's a
+        # defect in the spending protocol and metrics can't fix it so just
+        # ignore that for now.)
+        #
+        # This expression mirrors the expression the client uses to determine
+        # how many passes were spent when it processes the result we return to
+        # it.
+        spent_passes = required_passes(
+            self._pass_value,
+            [allocated_size] * len(bucketwriters),
+        )
+        self._metric_spending_successes.observe(spent_passes)
+
         # Copy/paste the disconnection handling logic from
         # StorageServer.remote_allocate_buckets.
         for bw in bucketwriters.values():
@@ -252,6 +324,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 canary,
                 disconnect_marker,
             )
+
         return alreadygot, bucketwriters
 
     def remote_get_buckets(self, storage_index):
@@ -277,7 +350,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation,
             self._original,
         )
-        return self._original.remote_add_lease(storage_index, *a, **kw)
+        result = self._original.remote_add_lease(storage_index, *a, **kw)
+        self._metric_spending_successes.observe(len(validation.valid))
+        return result
 
     def remote_advise_corrupt_share(self, *a, **kw):
         """
@@ -406,6 +481,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # somewhat.
         add_leases_for_writev(self._original, storage_index, secrets, tw_vectors, now)
 
+        # The operation has fully succeeded.
+        self._metric_spending_successes.observe(required_new_passes)
+
         # Propagate the result of the operation.
         return result
 
@@ -442,6 +520,7 @@ def check_pass_quantity(pass_value, validation, share_sizes):
 def check_pass_quantity_for_lease(
     pass_value, storage_index, validation, storage_server
 ):
+    # type: (int, bytes, _ValidationResult, ZKAPAuthorizerStorageServer) -> Dict[int, int]
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
@@ -453,7 +532,8 @@ def check_pass_quantity_for_lease(
     :raise MorePassesRequired: If the given number of passes is too few for
         the share sizes at the given storage index.
 
-    :return: ``None`` if the given number of passes is sufficient.
+    :return: A mapping from share number to share size on the server if the
+        number of passes given is sufficient.
     """
     allocated_sizes = dict(
         get_share_sizes(
@@ -461,8 +541,9 @@ def check_pass_quantity_for_lease(
             storage_index,
             list(get_all_share_numbers(storage_server, storage_index)),
         ),
-    ).values()
-    check_pass_quantity(pass_value, validation, allocated_sizes)
+    )
+    check_pass_quantity(pass_value, validation, allocated_sizes.values())
+    return allocated_sizes
 
 
 def check_pass_quantity_for_write(pass_value, validation, sharenums, allocated_size):

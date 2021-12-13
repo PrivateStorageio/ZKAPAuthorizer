@@ -18,6 +18,7 @@ Tests for the Tahoe-LAFS plugin.
 
 from __future__ import absolute_import
 
+from datetime import timedelta
 from functools import partial
 from os import makedirs
 
@@ -35,7 +36,9 @@ from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
-from hypothesis.strategies import datetimes, just, sampled_from
+from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
+from prometheus_client import Gauge
+from prometheus_client.parser import text_string_to_metric_families
 from StringIO import StringIO
 from testtools import TestCase
 from testtools.content import text_content
@@ -43,6 +46,7 @@ from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
     Always,
+    AnyMatch,
     Contains,
     ContainsDict,
     Equals,
@@ -50,12 +54,15 @@ from testtools.matchers import (
     IsInstance,
     Matcher,
     MatchesAll,
+    MatchesListwise,
     MatchesStructure,
 )
 from testtools.twistedsupport import succeeded
+from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
+from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
 from twisted.web.resource import IResource
 
@@ -68,6 +75,7 @@ from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
+from .common import skipIf
 from .eliot import capture_logging
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, raises
@@ -75,6 +83,7 @@ from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
     client_lease_maintenance_configurations,
+    clocks,
     dummy_ristretto_keys,
     lease_cancel_secrets,
     lease_maintenance_configurations,
@@ -174,6 +183,7 @@ class PluginTests(TestCase):
         )
 
 
+@skipIf(platform.isWindows(), "Storage server is not supported on Windows")
 class ServerPluginTests(TestCase):
     """
     Tests for the plugin's implementation of
@@ -263,6 +273,68 @@ class ServerPluginTests(TestCase):
                 ),
             ),
         )
+
+    @given(timedeltas(min_value=timedelta(seconds=1)), clocks())
+    def test_metrics_written(self, metrics_interval, clock):
+        """
+        When the configuration tells us where to put a metrics .prom file
+        and an interval how often to do so, test that metrics are actually
+        written there after the configured interval.
+        """
+        metrics_path = self.useFixture(TempDir()).join(u"metrics")
+        configuration = {
+            u"prometheus-metrics-path": metrics_path,
+            u"prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
+            u"ristretto-issuer-root-url": "foo",
+            u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
+        }
+        announceable = extract_result(
+            storage_server.get_storage_server(
+                configuration,
+                get_anonymous_storage_server,
+                reactor=clock,
+            )
+        )
+        registry = announceable.storage_server._registry
+
+        g = Gauge("foo", "bar", registry=registry)
+        for i in range(2):
+            g.set(i)
+
+            clock.advance(metrics_interval.total_seconds())
+            self.assertThat(
+                metrics_path,
+                has_metric(Equals("foo"), Equals(i)),
+            )
+
+
+def has_metric(name_matcher, value_matcher):
+    """
+    Create a matcher that matches a path that contains serialized metrics that
+    include at least a single metric that is matched by the given
+    ``name_matcher`` and ``value_matcher``.
+    """
+
+    def read_metrics(path):
+        with open(path) as f:
+            return list(text_string_to_metric_families(f.read()))
+
+    return AfterPreprocessing(
+        read_metrics,
+        AnyMatch(
+            MatchesStructure(
+                name=name_matcher,
+                samples=MatchesListwise(
+                    [
+                        MatchesStructure(
+                            name=name_matcher,
+                            value=value_matcher,
+                        ),
+                    ]
+                ),
+            ),
+        ),
+    )
 
 
 tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configurations())
