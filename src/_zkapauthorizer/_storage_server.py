@@ -468,8 +468,6 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             renew_leases=False,
         )
 
-        self._metric_spending_successes.observe(required_new_passes)
-
         # Add the leases that we charged the client for.  This includes:
         #
         #  - leases on newly created shares
@@ -482,6 +480,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # existing lease period.  This results in the client being overcharged
         # somewhat.
         add_leases_for_writev(self._original, storage_index, secrets, tw_vectors, now)
+
+        # The operation has fully succeeded.
+        self._metric_spending_successes.observe(required_new_passes)
 
         # Propagate the result of the operation.
         return result

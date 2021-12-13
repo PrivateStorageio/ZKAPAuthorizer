@@ -21,6 +21,7 @@ from __future__ import absolute_import, division
 from random import shuffle
 from time import time
 
+from allmydata.storage.mutable import MutableShareFile
 from challenge_bypass_ristretto import RandomToken, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
@@ -583,7 +584,6 @@ class PassValidationTests(TestCase):
             list(RandomToken.create() for i in range(num_passes)),
         )
 
-        # Create an initial share to toy with.
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
             (),
@@ -608,6 +608,73 @@ class PassValidationTests(TestCase):
             after_bucket,
             Equals(1),
             "Unexpected histogram bucket value",
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+    )
+    def test_mutable_failure_spending_metrics(
+        self,
+        storage_index,
+        secrets,
+        test_and_write_vectors_for_shares,
+    ):
+        """
+        If a mutable storage operation fails then the successful pass spending
+        metric is not incremented.
+        """
+        tw_vectors = {
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+        }
+        num_passes = get_required_new_passes_for_mutable_write(
+            self.pass_value,
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            slot_testv_and_readv_and_writev_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        # The very last step of a mutable write is the lease renewal step.
+        # We'll break that part to be sure metrics are only recorded after
+        # that (ie, after the operation has completely succeeded).  It's not
+        # easy to break that operation so we reach into some private guts to
+        # do so...  After we upgrade to Tahoe 1.17.0 then we can mess around
+        # with `reserved_space` to make Tahoe think there's no room for the
+        # leases and fail the operation, perhaps (but how to do that without
+        # making the earlier storage-allocating part of the operation fail?).
+        self.patch(MutableShareFile, "add_or_renew_lease", lambda *a, **kw: 1 / 0)
+
+        try:
+            test, read = self.storage_server.doRemoteCall(
+                "slot_testv_and_readv_and_writev",
+                (),
+                dict(
+                    passes=valid_passes,
+                    storage_index=storage_index,
+                    secrets=secrets,
+                    tw_vectors=tw_vectors,
+                    r_vector=[],
+                ),
+            )
+        except ZeroDivisionError:
+            pass
+        else:
+            self.fail("expected our ZeroDivisionError to be raised")
+
+        after_count = read_count(self.storage_server)
+        self.expectThat(
+            after_count,
+            Equals(0),
+            "Expected no successful spending to be recorded in error case",
         )
 
     @given(
@@ -754,7 +821,9 @@ class PassValidationTests(TestCase):
         sharenums=sharenum_sets(),
         allocated_size=sizes(),
     )
-    def test_add_lease_metrics_on_failure(self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size):
+    def test_add_lease_metrics_on_failure(
+        self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size
+    ):
         """
         If the ``add_lease`` operation fails then the successful pass spending
         metric is not incremented.
