@@ -350,9 +350,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation,
             self._original,
         )
+        result = self._original.remote_add_lease(storage_index, *a, **kw)
         self._metric_spending_successes.observe(len(validation.valid))
-
-        return self._original.remote_add_lease(storage_index, *a, **kw)
+        return result
 
     def remote_advise_corrupt_share(self, *a, **kw):
         """

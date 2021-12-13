@@ -747,5 +747,64 @@ class PassValidationTests(TestCase):
             "Unexpected histogram bucket value",
         )
 
+    @given(
+        storage_index=storage_indexes(),
+        renew_secret=lease_renew_secrets(),
+        cancel_secret=lease_cancel_secrets(),
+        sharenums=sharenum_sets(),
+        allocated_size=sizes(),
+    )
+    def test_add_lease_metrics_on_failure(self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size):
+        """
+        If the ``add_lease`` operation fails then the successful pass spending
+        metric is not incremented.
+        """
+        # Put some shares up there to target with the add_lease operation.
+        write_toy_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            renew_secret,
+            cancel_secret,
+            sharenums,
+            allocated_size,
+            LocalReferenceable(None),
+        )
 
-# Counter of invalid ZKAP spend attempts
+        num_passes = required_passes(
+            self.storage_server._pass_value, [allocated_size] * len(sharenums)
+        )
+        valid_passes = make_passes(
+            self.signing_key,
+            add_lease_message(storage_index),
+            list(RandomToken.create() for i in range(num_passes)),
+        )
+
+        # Tahoe doesn't make it very easy to make an add_lease operation fail
+        # so monkey-patch something broken in.  After 1.17.0 we can set
+        # `reserved_space` on StorageServer to a very large number and the
+        # server should refuse to allocate space for a *new* lease (which
+        # means we need to use a different renew secret for the next step.
+        self.anonymous_storage_server.remote_add_lease = lambda *a, **kw: 1 / 0
+
+        try:
+            self.storage_server.doRemoteCall(
+                "add_lease",
+                (),
+                dict(
+                    passes=valid_passes,
+                    storage_index=storage_index,
+                    renew_secret=renew_secret,
+                    cancel_secret=cancel_secret,
+                ),
+            )
+        except ZeroDivisionError:
+            pass
+        else:
+            self.fail("expected our ZeroDivisionError to be raised")
+
+        after_count = read_count(self.storage_server)
+        self.expectThat(
+            after_count,
+            Equals(0),
+            "Expected no successful spending to be recorded in error case",
+        )
