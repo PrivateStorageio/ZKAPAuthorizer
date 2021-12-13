@@ -140,15 +140,29 @@ class ValidationResultTests(TestCase):
             )
 
 
-def read_count(storage_server):
+def read_spending_success_histogram_total(storage_server):
+    # type: (ZKAPAuthorizerStorageServer) -> int
+    """
+    Read the total number of values across all buckets of the spending success
+    metric histogram.
+    """
     buckets = storage_server._metric_spending_successes._buckets
     return sum(b.get() for b in buckets)
 
 
-def read_bucket(storage_server, size):
+def read_spending_success_histogram_bucket(storage_server, num_passes):
+    # type: (ZKAPAuthorizerStorageServer, int) -> int
+    """
+    Read the value of a single bucket of the spending success metric
+    histogram.
+
+    :param num_passes: A pass spending count which determines which bucket to
+        read.  Whichever bucket holds values for the quantized pass count is
+        the bucket to be read.
+    """
     bounds = storage_server._get_spending_histogram_buckets()
     for bucket_number, upper_bound in enumerate(bounds):
-        if size <= upper_bound:
+        if num_passes <= upper_bound:
             break
 
     note("bucket_number {}".format(bucket_number))
@@ -481,7 +495,7 @@ class PassValidationTests(TestCase):
             # Since it was not successful, the successful spending metric
             # hasn't changed.
             self.assertThat(
-                read_count(self.storage_server),
+                read_spending_success_histogram_total(self.storage_server),
                 Equals(0),
             )
         else:
@@ -596,8 +610,10 @@ class PassValidationTests(TestCase):
             ),
         )
 
-        after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, num_passes)
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_passes
+        )
 
         self.expectThat(
             after_count,
@@ -670,7 +686,7 @@ class PassValidationTests(TestCase):
         else:
             self.fail("expected our ZeroDivisionError to be raised")
 
-        after_count = read_count(self.storage_server)
+        after_count = read_spending_success_histogram_total(self.storage_server)
         self.expectThat(
             after_count,
             Equals(0),
@@ -738,8 +754,10 @@ class PassValidationTests(TestCase):
             ),
         )
 
-        after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, num_spent_passes)
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_spent_passes
+        )
 
         self.expectThat(
             after_count,
@@ -800,8 +818,10 @@ class PassValidationTests(TestCase):
             ),
         )
 
-        after_count = read_count(self.storage_server)
-        after_bucket = read_bucket(self.storage_server, num_passes)
+        after_count = read_spending_success_histogram_total(self.storage_server)
+        after_bucket = read_spending_success_histogram_bucket(
+            self.storage_server, num_passes
+        )
 
         self.expectThat(
             after_count,
@@ -871,7 +891,7 @@ class PassValidationTests(TestCase):
         else:
             self.fail("expected our ZeroDivisionError to be raised")
 
-        after_count = read_count(self.storage_server)
+        after_count = read_spending_success_histogram_total(self.storage_server)
         self.expectThat(
             after_count,
             Equals(0),
