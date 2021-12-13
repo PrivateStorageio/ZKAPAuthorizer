@@ -146,6 +146,8 @@ def read_spending_success_histogram_total(storage_server):
     Read the total number of values across all buckets of the spending success
     metric histogram.
     """
+    # Reading _buckets seems like the least bad option for now.  See
+    # https://github.com/prometheus/client_python/issues/736 though.
     buckets = storage_server._metric_spending_successes._buckets
     return sum(b.get() for b in buckets)
 
@@ -166,6 +168,7 @@ def read_spending_success_histogram_bucket(storage_server, num_passes):
             break
 
     note("bucket_number {}".format(bucket_number))
+    # See note above about reading private _buckets attribute.
     buckets = storage_server._metric_spending_successes._buckets
     note(
         "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
