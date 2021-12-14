@@ -22,7 +22,7 @@ from random import shuffle
 from time import time
 
 from allmydata.storage.mutable import MutableShareFile
-from challenge_bypass_ristretto import RandomToken, random_signing_key
+from challenge_bypass_ristretto import random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
@@ -45,8 +45,7 @@ from ..storage_common import (
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
 from .matchers import raises
-from .privacypass import make_passes
-from .storage_common import cleanup_storage_server, write_toy_shares
+from .storage_common import cleanup_storage_server, get_passes, write_toy_shares
 from .strategies import (
     lease_cancel_secrets,
     lease_renew_secrets,
@@ -57,6 +56,13 @@ from .strategies import (
     write_enabler_secrets,
     zkaps,
 )
+
+
+def _encode_passes(passes):
+    """
+    :return list[bytes]: The encoded form of the passes in the given group.
+    """
+    return list(t.pass_bytes for t in passes)
 
 
 class ValidationResultTests(TestCase):
@@ -75,18 +81,18 @@ class ValidationResultTests(TestCase):
         describes the valid and invalid passes.
         """
         message = u"hello world"
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             message,
-            list(RandomToken.create() for i in range(valid_count)),
+            valid_count,
+            self.signing_key,
         )
-        all_passes = valid_passes + list(pass_.pass_bytes for pass_ in invalid_passes)
+        all_passes = valid_passes + invalid_passes
         shuffle(all_passes)
 
         self.assertThat(
             _ValidationResult.validate_passes(
                 message,
-                all_passes,
+                _encode_passes(all_passes),
                 self.signing_key,
             ),
             Equals(
@@ -231,16 +237,16 @@ class PassValidationTests(TestCase):
         storage_index = b"0123456789"
         renew_secret = b"x" * 32
         cancel_secret = b"y" * 32
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             allocate_buckets_message(storage_index),
-            list(RandomToken.create() for i in range(required_passes - 1)),
+            required_passes - 1,
+            self.signing_key,
         )
 
         allocate_buckets = lambda: self.storage_server.doRemoteCall(
             "allocate_buckets",
             (
-                valid_passes,
+                _encode_passes(valid_passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -331,10 +337,10 @@ class PassValidationTests(TestCase):
             tw_vectors,
         )
 
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             slot_testv_and_readv_and_writev_message(storage_index),
-            list(RandomToken.create() for i in range(required_pass_count)),
+            required_pass_count,
+            self.signing_key,
         )
 
         # Create an initial share to toy with.
@@ -342,7 +348,7 @@ class PassValidationTests(TestCase):
             "slot_testv_and_readv_and_writev",
             (),
             dict(
-                passes=valid_passes,
+                passes=_encode_passes(valid_passes),
                 storage_index=storage_index,
                 secrets=secrets,
                 tw_vectors=tw_vectors,
@@ -466,16 +472,16 @@ class PassValidationTests(TestCase):
         self.clock.advance(self.storage_server.LEASE_PERIOD.total_seconds() + 10.0)
 
         # Attempt the lease operation with one fewer pass than is required.
-        passes = make_passes(
-            self.signing_key,
+        passes = get_passes(
             add_lease_message(storage_index),
-            list(RandomToken.create() for i in range(required_count - 1)),
+            required_count - 1,
+            self.signing_key,
         )
         try:
             result = self.storage_server.doRemoteCall(
                 "add_lease",
                 (
-                    passes,
+                    _encode_passes(passes),
                     storage_index,
                     renew_secret,
                     cancel_secret,
@@ -529,16 +535,16 @@ class PassValidationTests(TestCase):
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             slot_testv_and_readv_and_writev_message(slot),
-            list(RandomToken.create() for i in range(required_pass_count)),
+            required_pass_count,
+            self.signing_key,
         )
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
             (),
             dict(
-                passes=valid_passes,
+                passes=_encode_passes(valid_passes),
                 storage_index=slot,
                 secrets=secrets,
                 tw_vectors=tw_vectors,
@@ -593,17 +599,17 @@ class PassValidationTests(TestCase):
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             slot_testv_and_readv_and_writev_message(storage_index),
-            list(RandomToken.create() for i in range(num_passes)),
+            num_passes,
+            self.signing_key,
         )
 
         test, read = self.storage_server.doRemoteCall(
             "slot_testv_and_readv_and_writev",
             (),
             dict(
-                passes=valid_passes,
+                passes=_encode_passes(valid_passes),
                 storage_index=storage_index,
                 secrets=secrets,
                 tw_vectors=tw_vectors,
@@ -654,10 +660,10 @@ class PassValidationTests(TestCase):
             dict.fromkeys(tw_vectors.keys(), 0),
             tw_vectors,
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             slot_testv_and_readv_and_writev_message(storage_index),
-            list(RandomToken.create() for i in range(num_passes)),
+            num_passes,
+            self.signing_key,
         )
 
         # The very last step of a mutable write is the lease renewal step.
@@ -675,7 +681,7 @@ class PassValidationTests(TestCase):
                 "slot_testv_and_readv_and_writev",
                 (),
                 dict(
-                    passes=valid_passes,
+                    passes=_encode_passes(valid_passes),
                     storage_index=storage_index,
                     secrets=secrets,
                     tw_vectors=tw_vectors,
@@ -735,17 +741,17 @@ class PassValidationTests(TestCase):
             self.pass_value,
             [size] * len(new_sharenums - existing_sharenums),
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             allocate_buckets_message(storage_index),
-            list(RandomToken.create() for i in range(num_passes)),
+            num_passes,
+            self.signing_key,
         )
 
         alreadygot, allocated = self.storage_server.doRemoteCall(
             "allocate_buckets",
             (),
             dict(
-                passes=valid_passes,
+                passes=_encode_passes(valid_passes),
                 storage_index=storage_index,
                 renew_secret=renew_secret,
                 cancel_secret=cancel_secret,
@@ -802,17 +808,17 @@ class PassValidationTests(TestCase):
         num_passes = required_passes(
             self.storage_server._pass_value, [allocated_size] * len(sharenums)
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             add_lease_message(storage_index),
-            list(RandomToken.create() for i in range(num_passes)),
+            num_passes,
+            self.signing_key,
         )
 
         self.storage_server.doRemoteCall(
             "add_lease",
             (),
             dict(
-                passes=valid_passes,
+                passes=_encode_passes(valid_passes),
                 storage_index=storage_index,
                 renew_secret=renew_secret,
                 cancel_secret=cancel_secret,
@@ -863,10 +869,10 @@ class PassValidationTests(TestCase):
         num_passes = required_passes(
             self.storage_server._pass_value, [allocated_size] * len(sharenums)
         )
-        valid_passes = make_passes(
-            self.signing_key,
+        valid_passes = get_passes(
             add_lease_message(storage_index),
-            list(RandomToken.create() for i in range(num_passes)),
+            num_passes,
+            self.signing_key,
         )
 
         # Tahoe doesn't make it very easy to make an add_lease operation fail
@@ -881,7 +887,7 @@ class PassValidationTests(TestCase):
                 "add_lease",
                 (),
                 dict(
-                    passes=valid_passes,
+                    passes=_encode_passes(valid_passes),
                     storage_index=storage_index,
                     renew_secret=renew_secret,
                     cancel_secret=cancel_secret,
