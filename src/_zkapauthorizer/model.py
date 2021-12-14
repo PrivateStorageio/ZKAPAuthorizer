@@ -247,7 +247,7 @@ class VoucherStore(object):
     @with_cursor
     def get(self, cursor, voucher):
         """
-        :param unicode voucher: The text value of a voucher to retrieve.
+        :param bytes voucher: The text value of a voucher to retrieve.
 
         :return Voucher: The voucher object that matches the given value.
         """
@@ -260,7 +260,7 @@ class VoucherStore(object):
             WHERE
                 [number] = ?
             """,
-            (voucher,),
+            (voucher.decode("ascii"),),
         )
         refs = cursor.fetchall()
         if len(refs) == 0:
@@ -274,7 +274,7 @@ class VoucherStore(object):
         existing) to the database.  If the (voucher, counter) pair is already
         present, do nothing.
 
-        :param unicode voucher: The text value of a voucher with which to
+        :param bytes voucher: The text value of a voucher with which to
             associate the tokens.
 
         :param int expected_tokens: The total number of tokens for which this
@@ -302,7 +302,7 @@ class VoucherStore(object):
             FROM [tokens]
             WHERE [voucher] = ? AND [counter] = ?
             """,
-            (voucher, counter),
+            (voucher.decode("ascii"), counter),
         )
         rows = cursor.fetchall()
         if len(rows) > 0:
@@ -312,26 +312,35 @@ class VoucherStore(object):
                 voucher=voucher,
                 counter=counter,
             )
-            tokens = list(RandomToken(token_value) for (token_value,) in rows)
+            tokens = list(
+                RandomToken(token_value.encode("ascii")) for (token_value,) in rows
+            )
         else:
             tokens = get_tokens()
             self._log.info(
                 "Persisting {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(tokens),
-                voucher=voucher,
+                voucher=voucher.decode("ascii"),
                 counter=counter,
             )
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
                 """,
-                (voucher, expected_tokens, self.now()),
+                (voucher.decode("ascii"), expected_tokens, self.now()),
             )
             cursor.executemany(
                 """
                 INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
                 """,
-                list((voucher, counter, token.token_value) for token in tokens),
+                list(
+                    (
+                        voucher.decode("ascii"),
+                        counter,
+                        token.token_value.decode("ascii"),
+                    )
+                    for token in tokens
+                ),
             )
         return tokens
 
@@ -385,7 +394,7 @@ class VoucherStore(object):
         """
         Store some unblinded tokens received from redemption of a voucher.
 
-        :param unicode voucher: The voucher associated with the unblinded
+        :param bytes voucher: The voucher associated with the unblinded
             tokens.  This voucher will be marked as redeemed to indicate it
             has fulfilled its purpose and has no further use for us.
 
@@ -417,7 +426,7 @@ class VoucherStore(object):
             """
             INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
             """,
-            (voucher, public_key, spendable),
+            (voucher.decode("ascii"), public_key, spendable),
         )
         group_id = cursor.lastrowid
 
@@ -443,7 +452,7 @@ class VoucherStore(object):
                 token_count_increase,
                 sequestered_count_increase,
                 self.now(),
-                voucher,
+                voucher.decode("ascii"),
             ),
         )
         if cursor.rowcount == 0:
@@ -453,7 +462,7 @@ class VoucherStore(object):
 
         self._insert_unblinded_tokens(
             cursor,
-            list(t.unblinded_token for t in unblinded_tokens),
+            list(t.unblinded_token.decode("ascii") for t in unblinded_tokens),
             group_id,
         )
 
@@ -471,7 +480,7 @@ class VoucherStore(object):
             WHERE [number] = ?
               AND [state] = "pending"
             """,
-            (self.now(), voucher),
+            (self.now(), voucher.decode("ascii")),
         )
         if cursor.rowcount == 0:
             # Was there no matching voucher or was it in the wrong state?
@@ -481,7 +490,7 @@ class VoucherStore(object):
                 FROM [vouchers]
                 WHERE [number] = ?
                 """,
-                (voucher,),
+                (voucher.decode("ascii"),),
             )
             rows = cursor.fetchall()
             if len(rows) == 0:
@@ -541,7 +550,7 @@ class VoucherStore(object):
             """,
             texts,
         )
-        return list(UnblindedToken(t) for (t,) in texts)
+        return list(UnblindedToken(t.encode("ascii")) for (t,) in texts)
 
     @with_cursor
     def count_unblinded_tokens(self, cursor):
@@ -577,7 +586,9 @@ class VoucherStore(object):
             """
             INSERT INTO [to-discard] VALUES (?)
             """,
-            list((token.unblinded_token,) for token in unblinded_tokens),
+            list(
+                (token.unblinded_token.decode("ascii"),) for token in unblinded_tokens
+            ),
         )
         cursor.execute(
             """
@@ -614,7 +625,10 @@ class VoucherStore(object):
             """
             INSERT INTO [invalid-unblinded-tokens] VALUES (?, ?)
             """,
-            list((token.unblinded_token, reason) for token in unblinded_tokens),
+            list(
+                (token.unblinded_token.decode("ascii"), reason)
+                for token in unblinded_tokens
+            ),
         )
         cursor.execute(
             """
@@ -640,7 +654,9 @@ class VoucherStore(object):
             """
             INSERT INTO [to-reset] VALUES (?)
             """,
-            list((token.unblinded_token,) for token in unblinded_tokens),
+            list(
+                (token.unblinded_token.decode("ascii"),) for token in unblinded_tokens
+            ),
         )
         cursor.execute(
             """
@@ -813,7 +829,7 @@ class UnblindedToken(object):
     and can be used to construct a privacy-preserving pass which can be
     exchanged for service.
 
-    :ivar unicode unblinded_token: The base64 encoded serialized form of the
+    :ivar bytes unblinded_token: The base64 encoded serialized form of the
         unblinded token.  This can be used to reconstruct a
         ``challenge_bypass_ristretto.UnblindedToken`` using that class's
         ``decode_base64`` method.
@@ -821,7 +837,7 @@ class UnblindedToken(object):
 
     unblinded_token = attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of(unicode),
+            attr.validators.instance_of(bytes),
             is_base64_encoded(),
             has_length(128),
         ),
@@ -833,7 +849,7 @@ class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar unicode pass_text: The text value of the pass.  This can be sent to
+    :ivar bytes pass_bytes: The text value of the pass.  This can be sent to
         a service provider one time to anonymously prove a prior voucher
         redemption.  If it is sent more than once the service provider may
         choose to reject it and the anonymity property is compromised.  Pass
@@ -843,7 +859,7 @@ class Pass(object):
 
     preimage = attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of(unicode),
+            attr.validators.instance_of(bytes),
             is_base64_encoded(),
             has_length(88),
         ),
@@ -851,27 +867,31 @@ class Pass(object):
 
     signature = attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of(unicode),
+            attr.validators.instance_of(bytes),
             is_base64_encoded(),
             has_length(88),
         ),
     )
 
     @property
-    def pass_text(self):
-        return u"{} {}".format(self.preimage, self.signature)
+    def pass_bytes(self):
+        return b" ".join((self.preimage, self.signature))
+
+    @classmethod
+    def from_bytes(cls, pass_):
+        return cls(*pass_.split(b" "))
 
 
 @attr.s(frozen=True)
 class RandomToken(object):
     """
-    :ivar unicode token_value: The base64-encoded representation of the random
+    :ivar bytes token_value: The base64-encoded representation of the random
         token.
     """
 
     token_value = attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of(unicode),
+            attr.validators.instance_of(bytes),
             is_base64_encoded(),
             has_length(128),
         ),
@@ -1014,7 +1034,7 @@ class Error(object):
 @attr.s(frozen=True)
 class Voucher(object):
     """
-    :ivar unicode number: The text string which gives this voucher its
+    :ivar bytes number: The byte string which gives this voucher its
         identity.
 
     :ivar datetime created: The time at which this voucher was added to this
@@ -1032,7 +1052,7 @@ class Voucher(object):
 
     number = attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of(unicode),
+            attr.validators.instance_of(bytes),
             is_base64_encoded(urlsafe_b64decode),
             has_length(44),
         ),
@@ -1085,7 +1105,7 @@ class Voucher(object):
         number, created, expected_tokens, state = row[:4]
 
         return cls(
-            number=number,
+            number=number.encode("ascii"),
             expected_tokens=expected_tokens,
             # All Python datetime-based date/time libraries fail to handle
             # leap seconds.  This parse call might raise an exception of the
@@ -1135,7 +1155,7 @@ class Voucher(object):
             raise ValueError("Unrecognized state {!r}".format(state_json))
 
         return cls(
-            number=values[u"number"],
+            number=values[u"number"].encode("ascii"),
             expected_tokens=values[u"expected-tokens"],
             created=None
             if values[u"created"] is None
@@ -1152,7 +1172,7 @@ class Voucher(object):
     def to_json_v1(self):
         state = self.state.to_json_v1()
         return {
-            u"number": self.number,
+            u"number": self.number.decode("ascii"),
             u"expected-tokens": self.expected_tokens,
             u"created": None if self.created is None else self.created.isoformat(),
             u"state": state,

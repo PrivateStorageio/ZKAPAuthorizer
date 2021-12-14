@@ -49,6 +49,7 @@ from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
+from .model import Pass
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
@@ -112,9 +113,11 @@ class _ValidationResult(object):
         assert isinstance(message, unicode), "message %r not unicode" % (message,)
         assert isinstance(pass_, bytes), "pass %r not bytes" % (pass_,)
         try:
-            preimage_base64, signature_base64 = pass_.split(b" ")
-            preimage = TokenPreimage.decode_base64(preimage_base64)
-            proposed_signature = VerificationSignature.decode_base64(signature_base64)
+            parsed_pass = Pass.from_bytes(pass_)
+            preimage = TokenPreimage.decode_base64(parsed_pass.preimage)
+            proposed_signature = VerificationSignature.decode_base64(
+                parsed_pass.signature
+            )
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
             invalid_pass = verification_key.invalid_sha512(

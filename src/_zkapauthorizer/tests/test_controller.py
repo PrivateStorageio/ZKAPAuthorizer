@@ -76,6 +76,7 @@ from ..controller import (
 )
 from ..model import DoubleSpend as model_DoubleSpend
 from ..model import Error as model_Error
+from ..model import Pass
 from ..model import Pending as model_Pending
 from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
@@ -1016,14 +1017,14 @@ def ristretto_verify(signing_key, message, marshaled_passes):
     """
 
     def decode(marshaled_pass):
-        t, s = marshaled_pass.split(u" ")
+        pass_ = Pass.from_bytes(marshaled_pass)
         return (
-            TokenPreimage.decode_base64(t.encode("ascii")),
-            VerificationSignature.decode_base64(s.encode("ascii")),
+            TokenPreimage.decode_base64(pass_.preimage),
+            VerificationSignature.decode_base64(pass_.signature),
         )
 
     servers_passes = list(
-        decode(marshaled_pass.pass_text) for marshaled_pass in marshaled_passes
+        decode(marshaled_pass.pass_bytes) for marshaled_pass in marshaled_passes
     )
     servers_unblinded_tokens = list(
         signing_key.rederive_unblinded_token(token_preimage)

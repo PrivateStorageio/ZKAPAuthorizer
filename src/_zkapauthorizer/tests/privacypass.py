@@ -34,7 +34,7 @@ def make_passes(signing_key, for_message, random_tokens):
     :param list[challenge_bypass_ristretto.RandomToken] random_tokens: The
         random tokens to feed in to the pass generation process.
 
-    :return list[unicode]: The privacy passes.  The returned list has one
+    :return list[Pass]: The privacy passes.  The returned list has one
         element for each element of ``random_tokens``.
     """
     blinded_tokens = list(token.blind() for token in random_tokens)
@@ -64,10 +64,12 @@ def make_passes(signing_key, for_message, random_tokens):
         for verification_key in verification_keys
     )
     passes = list(
-        u"{} {}".format(
-            preimage.encode_base64().decode("ascii"),
-            signature.encode_base64().decode("ascii"),
-        ).encode("ascii")
+        b" ".join(
+            (
+                preimage.encode_base64(),
+                signature.encode_base64(),
+            )
+        )
         for (preimage, signature) in zip(preimages, message_signatures)
     )
     return passes

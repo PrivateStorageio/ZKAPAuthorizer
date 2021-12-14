@@ -548,19 +548,10 @@ def share_parameters():
 
 def vouchers():
     """
-    Build unicode strings in the format of vouchers.
+    Build byte strings in the format of vouchers.
     """
-    return (
-        binary(
-            min_size=32,
-            max_size=32,
-        )
-        .map(
-            urlsafe_b64encode,
-        )
-        .map(
-            lambda voucher: voucher.decode("ascii"),
-        )
+    return binary(min_size=32, max_size=32,).map(
+        urlsafe_b64encode,
     )
 
 
@@ -674,40 +665,32 @@ def random_tokens():
             length=_TOKEN_LENGTH,
             entropy=4,
         )
-        .map(
-            b64encode,
-        )
-        .map(
-            lambda token: RandomToken(token.decode("ascii")),
-        )
+        .map(b64encode)
+        .map(RandomToken)
     )
 
 
 def token_preimages():
     """
-    Build ``unicode`` strings representing base64-encoded token preimages.
+    Build ``bytes`` strings representing base64-encoded token preimages.
     """
     return byte_strings(
         label=b"token-preimage",
         length=_TOKEN_PREIMAGE_LENGTH,
         entropy=4,
-    ).map(
-        lambda bs: b64encode(bs).decode("ascii"),
-    )
+    ).map(b64encode)
 
 
 def verification_signatures():
     """
-    Build ``unicode`` strings representing base64-encoded verification
+    Build ``bytes`` strings representing base64-encoded verification
     signatures.
     """
     return byte_strings(
         label=b"verification-signature",
         length=_VERIFICATION_SIGNATURE_LENGTH,
         entropy=4,
-    ).map(
-        lambda bs: b64encode(bs).decode("ascii"),
-    )
+    ).map(b64encode)
 
 
 def zkaps():
@@ -733,12 +716,8 @@ def unblinded_tokens():
             length=_UNBLINDED_TOKEN_LENGTH,
             entropy=4,
         )
-        .map(
-            b64encode,
-        )
-        .map(
-            lambda zkap: UnblindedToken(zkap.decode("ascii")),
-        )
+        .map(b64encode)
+        .map(UnblindedToken)
     )
 
 
