@@ -20,6 +20,8 @@ from __future__ import absolute_import
 
 from challenge_bypass_ristretto import BatchDLEQProof, PublicKey
 
+from ..model import Pass
+
 
 def make_passes(signing_key, for_message, random_tokens):
     """
@@ -64,11 +66,9 @@ def make_passes(signing_key, for_message, random_tokens):
         for verification_key in verification_keys
     )
     passes = list(
-        b" ".join(
-            (
-                preimage.encode_base64(),
-                signature.encode_base64(),
-            )
+        Pass(
+            preimage.encode_base64(),
+            signature.encode_base64(),
         )
         for (preimage, signature) in zip(preimages, message_signatures)
     )

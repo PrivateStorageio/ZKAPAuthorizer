@@ -26,7 +26,7 @@ from challenge_bypass_ristretto import RandomToken
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
-from ..model import NotEnoughTokens, Pass
+from ..model import NotEnoughTokens
 from ..spending import IPassFactory, PassGroup
 from .privacypass import make_passes
 from .strategies import bytes_for_share  # Not really a strategy...
@@ -163,13 +163,10 @@ def get_passes(message, count, signing_key):
     :return list[Pass]: ``count`` new random passes signed with the given key
         and bound to the given message.
     """
-    return list(
-        Pass.from_bytes(pass_)
-        for pass_ in make_passes(
-            signing_key,
-            message,
-            list(RandomToken.create() for n in range(count)),
-        )
+    return make_passes(
+        signing_key,
+        message,
+        [RandomToken.create() for n in range(count)],
     )
 
 
