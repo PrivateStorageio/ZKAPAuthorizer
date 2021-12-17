@@ -22,7 +22,7 @@ from random import shuffle
 from time import time
 
 from allmydata.storage.mutable import MutableShareFile
-from challenge_bypass_ristretto import random_signing_key
+from challenge_bypass_ristretto import PublicKey, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
@@ -33,6 +33,7 @@ from twisted.python.runtime import platform
 
 from .._storage_server import _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
+from ..server.spending import RecordingSpender
 from ..storage_common import (
     add_lease_message,
     allocate_buckets_message,
@@ -44,7 +45,7 @@ from ..storage_common import (
 )
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
-from .matchers import raises
+from .matchers import matches_spent_passes, raises
 from .storage_common import cleanup_storage_server, get_passes, write_toy_shares
 from .strategies import (
     lease_cancel_secrets,
@@ -97,11 +98,9 @@ class ValidationResultTests(TestCase):
             ),
             Equals(
                 _ValidationResult(
-                    valid=list(
-                        idx
-                        for (idx, pass_) in enumerate(all_passes)
-                        if pass_ in valid_passes
-                    ),
+                    valid=[
+                        pass_.preimage for pass_ in all_passes if pass_ in valid_passes
+                    ],
                     signature_check_failed=list(
                         idx
                         for (idx, pass_) in enumerate(all_passes)
@@ -191,6 +190,7 @@ class PassValidationTests(TestCase):
     def setUp(self):
         super(PassValidationTests, self).setUp()
         self.clock = Clock()
+        self.spending_recorder, spender = RecordingSpender.make()
         # anonymous_storage_server uses time.time() so get our Clock close to
         # the same time so we can do lease expiration calculations more
         # easily.
@@ -199,10 +199,14 @@ class PassValidationTests(TestCase):
             AnonymousStorageServer(self.clock),
         ).storage_server
         self.signing_key = random_signing_key()
+        self.public_key_hash = PublicKey.from_signing_key(
+            self.signing_key
+        ).encode_base64()
         self.storage_server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
+            spender,
             clock=self.clock,
         )
 
@@ -220,6 +224,7 @@ class PassValidationTests(TestCase):
         # way that allows us to just move everything from `setUp` into this
         # method.
         cleanup_storage_server(self.anonymous_storage_server)
+        self.spending_recorder.reset()
 
         # Reset all of the metrics, too, so the individual tests have a
         # simpler job (can compare values relative to 0).
@@ -256,6 +261,7 @@ class PassValidationTests(TestCase):
             ),
             {},
         )
+        self.expectThat(self.spending_recorder.spent_tokens, Equals({}))
         self.assertThat(
             allocate_buckets,
             raises(MorePassesRequired),
@@ -295,6 +301,7 @@ class PassValidationTests(TestCase):
         try:
             result = mutable_write()
         except MorePassesRequired as e:
+            self.expectThat(self.spending_recorder.spent_tokens, Equals({}))
             self.assertThat(
                 e,
                 Equals(
@@ -361,6 +368,11 @@ class PassValidationTests(TestCase):
             "Server denied initial write.",
         )
 
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, valid_passes),
+        )
+
         # Pick any share to make larger.
         sharenum = next(iter(tw_vectors))
         _, data_vector, new_length = tw_vectors[sharenum]
@@ -399,6 +411,11 @@ class PassValidationTests(TestCase):
             )
         else:
             self.fail("expected MorePassesRequired, got {}".format(result))
+
+        self.assertThat(
+            self.spending_recorder,
+            matches_spent_passes(self.public_key_hash, valid_passes),
+        )
 
     @given(
         storage_index=storage_indexes(),
@@ -507,6 +524,7 @@ class PassValidationTests(TestCase):
             )
         else:
             self.fail("Expected MorePassesRequired, got {}".format(result))
+        self.assertThat(self.spending_recorder.spent_tokens, Equals({}))
 
     @given(
         slot=storage_indexes(),
