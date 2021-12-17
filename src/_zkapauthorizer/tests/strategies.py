@@ -917,13 +917,13 @@ def slot_test_and_write_vectors():
         TestAndWriteVectors,
         slot_test_vectors(),
         slot_data_vectors(),
-        one_of(
-            # The new length might be omitted completely.
-            just(None),
-            # Or it might be given as an integer.  Allow a zero size which
-            # means "delete this share" in this context.
-            sizes(),
-        ),
+        # The underlying Tahoe-LAFS storage protocol allows None or an integer
+        # here (new_length) to set the size of the mutable container.  The
+        # real Tahoe-LAFS storage client never uses this feature and always
+        # passes None.  There are undesirable interactions between non-None
+        # values for new_length and our spending protocol.  Therefore, we
+        # disable non-None values.  So don't generate any here.
+        just(None),
     )
 
 

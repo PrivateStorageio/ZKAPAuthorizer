@@ -84,6 +84,17 @@ SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
 
 
+class NewLengthRejected(Exception):
+    """
+    A non-None value for ``new_length`` was given to
+    ``slot_testv_and_readv_and_writev``.
+
+    This is disallowed by ZKAPAuthorizer because of the undesirable
+    interactions with the current spending protocol and because there are no
+    known real-world use-cases for this usage.
+    """
+
+
 @attr.s
 class _ValidationResult(object):
     """
@@ -437,6 +448,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Get a stable time to use for all lease expiration checks that are
         # part of this call.
         now = self._clock.seconds()
+
+        # We're not exactly sure what to do with mutable container truncations
+        # and the official client doesn't ever use that feature so just
+        # disable it by rejecting all attempts here.
+        for (testv, writev, new_length) in tw_vectors.values():
+            if new_length is not None:
+                raise NewLengthRejected(new_length)
 
         # Check passes for cryptographic validity.
         validation = _ValidationResult.validate_passes(
