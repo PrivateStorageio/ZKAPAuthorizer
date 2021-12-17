@@ -24,14 +24,14 @@ from time import time
 from allmydata.storage.mutable import MutableShareFile
 from challenge_bypass_ristretto import random_signing_key
 from foolscap.referenceable import LocalReferenceable
-from hypothesis import given, note, assume
+from hypothesis import assume, given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
-from .._storage_server import _ValidationResult, NewLengthRejected
+from .._storage_server import NewLengthRejected, _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..storage_common import (
     add_lease_message,
@@ -440,7 +440,12 @@ class PassValidationTests(TestCase):
         new_length=integers(),
     )
     def test_mutable_new_length_rejected(
-        self, storage_index, secrets, sharenums, test_and_write_vectors_for_shares, new_length,
+        self,
+        storage_index,
+        secrets,
+        sharenums,
+        test_and_write_vectors_for_shares,
+        new_length,
     ):
         """
         If ``new_length`` is not ``None`` then ``slot_testv_and_readv_and_writev``
@@ -482,7 +487,6 @@ class PassValidationTests(TestCase):
             pass
         else:
             self.fail("expected a failure but got {!r}".format(result))
-
 
     @given(
         storage_index=storage_indexes(),
