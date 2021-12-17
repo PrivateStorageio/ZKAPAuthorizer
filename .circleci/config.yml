@@ -169,8 +169,9 @@ jobs:
     steps:
       - run:
           name: "Set up Cachix"
+          shell: "nix-shell -p cachix bash"
           command: |
-            nix-env -iA nixpkgs.cachix nixpkgs.bash
+            set -eo pipefail
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
 
@@ -196,8 +197,11 @@ jobs:
 
       - run:
           name: "Push to Cachix"
+          shell: "nix-shell -p cachix bash"
           when: "always"
           command: |
+            set -eo pipefail
+
             # Cribbed from
             # https://circleci.com/blog/managing-secrets-when-you-have-pull-requests-from-outside-contributors/
             if [ -n "$CIRCLE_PR_NUMBER" ]; then
