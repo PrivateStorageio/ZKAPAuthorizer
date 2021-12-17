@@ -144,8 +144,11 @@ jobs:
         type: "string"
 
     docker:
-      # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:latest"
+      # Run in a highly Nix-capable environment.  We used to use `latest` but
+      # one day someone pushed a bad revision to it and our CI broke.  So now
+      # we just pin some recent version.  Who would have thought a floating
+      # dependency would cause build instability?
+      - image: "nixos/nix:2.3.16"
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
@@ -155,20 +158,19 @@ jobs:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
 
-      # Specify a revision of PrivateStorageio/nixpkgs to run against.  This
-      # essentially pins the majority of the software involved in the build.
-      # This revision is selected arbitrarily (it's just new enough to define
-      # all of the PrivateStorage stuff that ZKAPAuthorizer depends on).  It's
-      # somewhat current as of the time of this comment.  We can bump it to a
-      # newer version when that makes sense.  Meanwhile, the platform won't
-      # shift around beneath us unexpectedly.
-      NIX_PATH: "nixpkgs=https://github.com/PrivateStorageio/nixpkgs/archive/c12c213c1c96bd1fea9f83f9e9e1fea28d0eaec6.tar.gz"
+      # Pin a NixOS 21.11 revision.  Most of the software involved in the
+      # build process is pinned by nix/sources.json with niv but a few things
+      # need to work before we get that far.  This pin is for those things.
+      # This pin has no particular bearing on what version of our dependencies
+      # we are testing against, what version of Python we support, etc.  It is
+      # part of CI infrastructure.
+      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
       - run:
           name: "Set up Cachix"
           command: |
-            nix-env -iA nixpkgs.cachix nixpkgs.bash
+            nix-env -f $NIXPKGS -iA cachix bash
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
 
