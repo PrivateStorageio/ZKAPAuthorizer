@@ -164,14 +164,13 @@ jobs:
       # This pin has no particular bearing on what version of our dependencies
       # we are testing against, what version of Python we support, etc.  It is
       # part of CI infrastructure.
-      NIX_PATH: "nixpkgs=https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
+      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
       - run:
           name: "Set up Cachix"
-          shell: "nix-shell -p cachix bash"
           command: |
-            set -eo pipefail
+            nix-env -f $NIXPKGS -iA nixpkgs.cachix nixpkgs.bash
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
 
@@ -197,11 +196,8 @@ jobs:
 
       - run:
           name: "Push to Cachix"
-          shell: "nix-shell -p cachix bash"
           when: "always"
           command: |
-            set -eo pipefail
-
             # Cribbed from
             # https://circleci.com/blog/managing-secrets-when-you-have-pull-requests-from-outside-contributors/
             if [ -n "$CIRCLE_PR_NUMBER" ]; then
