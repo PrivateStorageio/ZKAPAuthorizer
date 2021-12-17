@@ -148,7 +148,7 @@ jobs:
       # one day someone pushed a bad revision to it and our CI broke.  So now
       # we just pin some recent version.  Who would have thought a floating
       # dependency would cause build instability?
-      - image: "nixos/nix:2.3"
+      - image: "nixos/nix:2.3.16"
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
