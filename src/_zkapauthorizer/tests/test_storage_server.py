@@ -24,7 +24,7 @@ from time import time
 from allmydata.storage.mutable import MutableShareFile
 from challenge_bypass_ristretto import random_signing_key
 from foolscap.referenceable import LocalReferenceable
-from hypothesis import assume, given, note
+from hypothesis import given, note
 from hypothesis.strategies import integers, just, lists, one_of, tuples
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
