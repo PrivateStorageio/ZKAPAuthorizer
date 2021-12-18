@@ -31,7 +31,7 @@ from testtools.matchers import AfterPreprocessing, Equals, MatchesAll
 from twisted.internet.task import Clock
 from twisted.python.runtime import platform
 
-from .._storage_server import _ValidationResult
+from .._storage_server import NewLengthRejected, _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
 from ..server.spending import RecordingSpender
 from ..storage_common import (
@@ -444,6 +444,66 @@ class PassValidationTests(TestCase):
                 None,
             ),
         )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenums=sharenum_sets(),
+        test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
+        new_length=integers(),
+    )
+    def test_mutable_new_length_rejected(
+        self,
+        storage_index,
+        secrets,
+        sharenums,
+        test_and_write_vectors_for_shares,
+        new_length,
+    ):
+        """
+        If ``new_length`` is not ``None`` then ``slot_testv_and_readv_and_writev``
+        rejects the operation.
+        """
+        tw_vectors = {
+            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+        }
+        # Change some tw_vector to have a non-None new_length.
+        sharenum, (testv, writev, ignored) = tw_vectors.popitem()
+        tw_vectors[sharenum] = (testv, writev, new_length)
+
+        required_pass_count = get_required_new_passes_for_mutable_write(
+            self.pass_value,
+            dict.fromkeys(tw_vectors.keys(), 0),
+            tw_vectors,
+        )
+        valid_passes = get_passes(
+            slot_testv_and_readv_and_writev_message(storage_index),
+            required_pass_count,
+            self.signing_key,
+        )
+
+        # Try to do a write with the non-None new_length and expect it to be
+        # rejected.
+        try:
+            result = self.storage_server.doRemoteCall(
+                "slot_testv_and_readv_and_writev",
+                (),
+                dict(
+                    passes=_encode_passes(valid_passes),
+                    storage_index=storage_index,
+                    secrets=secrets,
+                    tw_vectors=tw_vectors,
+                    r_vector=[],
+                ),
+            )
+        except NewLengthRejected:
+            pass
+        else:
+            self.fail("expected a failure but got {!r}".format(result))
 
     @given(
         storage_index=storage_indexes(),
