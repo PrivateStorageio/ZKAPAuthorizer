@@ -31,7 +31,11 @@ jobs:
 
     - name: "Upgrade Pip"
       run: |
+        echo "Before upgrade"
+        python -m pip --version
         python -m pip install -v --upgrade pip
+        echo "After upgrade"
+        python -m pip --version
 
     - name: "Install CI Dependencies"
       run: |
