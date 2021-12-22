@@ -35,7 +35,7 @@
         "url": "https://github.com/DavHau/pypi-deps-db/archive/96d01556b4597c022647acbf8c3b58d2a99bc963.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
-    "release2015": {
+    "release2105": {
         "sha256": "112drvixj81vscj8cncmks311rk2ik5gydpd03d3r0yc939zjskg",
         "type": "tarball",
         "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
