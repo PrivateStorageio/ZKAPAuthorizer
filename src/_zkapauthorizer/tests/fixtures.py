@@ -21,7 +21,6 @@ from __future__ import absolute_import
 from base64 import b64encode
 
 import attr
-from allmydata import __version__ as allmydata_version
 from allmydata.storage.server import StorageServer
 from fixtures import Fixture, TempDir
 from twisted.internet.task import Clock
@@ -51,18 +50,10 @@ class AnonymousStorageServer(Fixture):
 
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
-        if allmydata_version >= "1.16.":
-            # This version of Tahoe adds a new StorageServer argument for
-            # controlling time.
-            timeargs = {"get_current_time": self.clock.seconds}
-        else:
-            # Older versions just use time.time() and there's not much we can
-            # do _here_.  Code somewhere else will have to monkey-patch that
-            # to control things.
-            timeargs = {}
-
         self.storage_server = StorageServer(
-            self.tempdir.asBytesMode().path, b"x" * 20, **timeargs
+            self.tempdir.asBytesMode().path,
+            b"x" * 20,
+            clock=self.clock,
         )
 
 
