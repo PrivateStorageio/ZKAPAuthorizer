@@ -847,6 +847,7 @@ def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, no
             (write_enabler, renew_secret, cancel_secret) = secrets
             share = get_share_file(sharepath)
             share.add_or_renew_lease(
+                storage_server.get_available_space(),
                 LeaseInfo(
                     owner_num=1,
                     renew_secret=renew_secret,
