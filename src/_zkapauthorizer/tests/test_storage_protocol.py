@@ -617,7 +617,7 @@ class ShareTests(TestCase):
         If a share file with an unexpected version is found, ``stat_shares``
         declines to offer a result (by raising ``ValueError``).
         """
-        assume(version != 1)
+        assume(version not in (1, 2))
 
         sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
