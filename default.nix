@@ -4,7 +4,7 @@ in
 { pkgs ? import sources.release2105 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs-source ? "tahoe-lafs"
+, tahoe-lafs-source ? "tahoe-lafs-1.17.0"
 , tahoe-lafs-repo ? sources.${tahoe-lafs-source}
 }:
   let
@@ -36,7 +36,7 @@ in
       tahoe-lafs = mach-nix.buildPythonPackage rec {
         inherit python providers;
         name = "tahoe-lafs";
-        version = "1.16.post999";
+        version = "1.17.0";
         # See https://github.com/DavHau/mach-nix/issues/190
         requirementsExtra = ''
           pyrsistent < 0.17
@@ -53,6 +53,10 @@ in
           EOF
         '';
         src = tahoe-lafs-repo;
+
+        # The version of Klein we get doesn't need / can't have the patch that
+        # comes from the nixpkgs derivation mach-nix picks up from 21.05.
+        _.klein.patches = [];
       };
       zkapauthorizer = mach-nix.buildPythonApplication rec {
         inherit python providers;
@@ -73,6 +77,9 @@ in
         ];
         # Record some settings here, so downstream nix files can consume them.
         meta.mach-nix = { inherit python providers; };
+
+        # Annoyingly duplicate the Klein fix from the Tahoe-LAFS expression.
+        _.klein.patches = [];
       };
 
       privatestorage = let
