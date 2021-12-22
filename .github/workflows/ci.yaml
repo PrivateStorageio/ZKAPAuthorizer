@@ -39,6 +39,9 @@ jobs:
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
+        # Get a Python 2 compatible version of setuptools_scm so that pip
+        # doesn't install a Python 2 incompatible version for cbor2.
+        pip install setuptools_scm==1.17.0
         python -m pip install -v ./[test]
 
     - name: "Dump Python Environment"
