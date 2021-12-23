@@ -39,12 +39,6 @@ jobs:
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
-        # Get a Python 2 compatible version of setuptools_scm so that pip
-        # doesn't install a Python 2 incompatible version for cbor2.  There's
-        # always a chance cbor2 will help us out with a 5.2.1 that declares
-        # the constraint for us:
-        # https://github.com/agronholm/cbor2/issues/124
-        pip install setuptools_scm<6
         python -m pip install -v ./[test]
 
     - name: "Dump Python Environment"
