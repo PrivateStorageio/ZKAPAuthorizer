@@ -1,17 +1,31 @@
 let
   sources = import nix/sources.nix;
+
+  # nixpkgs 21.11 packages a version of pkgconfig that is broken on Python 2.7
+  # so supply our own.  mach-nix depends on this to set up its own build
+  # environment and cannot discover a working version from pypi the way it
+  # works for other dependencies.
+  fixPkgconfig = self: super: {
+    python27 = super.python27.override {
+      packageOverrides = python-self: python-super: {
+        pkgconfig = python-super.pythonPackages.callPackage ./pkgconfig.nix {};
+      };
+    };
+  };
 in
-{ pkgs ? import sources.release2111 {}
+{ pkgs ? import sources.release2111 { overlays = [ fixPkgconfig ]; }
 , pypiData ? sources.pypi-deps-db
-, mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
+, python ? "python27"
+, mach-nix ? import sources.mach-nix { inherit pkgs pypiData python; }
 , tahoe-lafs-source ? "tahoe-lafs"
 , tahoe-lafs-repo ? sources.${tahoe-lafs-source}
-, python ? "python27"
+, ...
 }:
   let
     lib = pkgs.lib;
     providers = {
       _default = "sdist,nixpkgs,wheel";
+
       # mach-nix doesn't provide a good way to depend on mach-nix packages,
       # so we get it as a nixpkgs dependency from an overlay. See below for
       # details.
