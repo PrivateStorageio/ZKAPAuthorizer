@@ -1297,6 +1297,7 @@ class BracketTests(TestCase):
     """
     Tests for ``bracket``.
     """
+
     def test_success(self):
         """
         ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
@@ -1305,9 +1306,11 @@ class BracketTests(TestCase):
         result = object()
         actions = []
         first = partial(actions.append, "first")
+
         def between():
             actions.append("between")
             return result
+
         last = partial(actions.append, "last")
         self.assertThat(
             bracket(first, last, between),
@@ -1325,13 +1328,17 @@ class BracketTests(TestCase):
         ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
         ``Deferred`` that fires with the failure result of ``between``.
         """
+
         class SomeException(Exception):
             pass
+
         actions = []
         first = partial(actions.append, "first")
+
         def between():
             actions.append("between")
             raise SomeException()
+
         last = partial(actions.append, "last")
         self.assertThat(
             bracket(first, last, between),

@@ -22,8 +22,31 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from future.utils import PY2
+
 if PY2:
-    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+    from future.builtins import (
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )  # noqa: F401
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
@@ -258,7 +281,7 @@ def server_configurations(signing_key_path):
             {
                 "pass-value":
                 # The configuration is ini so everything is always a byte string!
-                integers(min_value=1).map(lambda v: u"{}".format(v).encode("ascii")),
+                integers(min_value=1).map(lambda v: "{}".format(v).encode("ascii")),
             }
         ),
         just({}),

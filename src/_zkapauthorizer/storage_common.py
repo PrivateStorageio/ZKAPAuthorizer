@@ -22,8 +22,31 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from future.utils import PY2
+
 if PY2:
-    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+    from future.builtins import (
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )  # noqa: F401
 from past.builtins import long
 
 from base64 import b64encode
@@ -145,6 +168,7 @@ def get_configured_allowed_public_keys(node_config):
 
 
 _dict_values = type(dict().values())
+
 
 def required_passes(bytes_per_pass, share_sizes):
     """
