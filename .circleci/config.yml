@@ -209,7 +209,8 @@ jobs:
             nix-build tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >>
+              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
+              --argstr python python<< parameters.py-version >>
 
       - run:
           name: "Push to Cachix"
@@ -251,6 +252,7 @@ workflows:
           parameters:
             py-version:
             - "2.7"
+            - "3.9"
 
             xcode-version:
             # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
