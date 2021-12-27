@@ -6,10 +6,10 @@ in
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , tahoe-lafs-source ? "tahoe-lafs"
 , tahoe-lafs-repo ? sources.${tahoe-lafs-source}
+, python ? "python27"
 }:
   let
     lib = pkgs.lib;
-    python = "python27";
     providers = {
       _default = "sdist,nixpkgs,wheel";
       # mach-nix doesn't provide a good way to depend on mach-nix packages,
