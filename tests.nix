@@ -35,7 +35,7 @@ let
     };
 
     lint-python = mach-nix.mkPython {
-      inherit (zkapauthorizer.meta.mach-nix) python;
+      python = "python39";
       requirements = ''
         isort
         black
