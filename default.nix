@@ -1,7 +1,7 @@
 let
   sources = import nix/sources.nix;
 in
-{ pkgs ? import sources.release2105 {}
+{ pkgs ? import sources.release2111 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , tahoe-lafs-source ? "tahoe-lafs"
