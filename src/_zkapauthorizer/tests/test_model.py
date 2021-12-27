@@ -269,7 +269,7 @@ class VoucherStoreTests(TestCase):
             ),
             Raises(
                 AfterPreprocessing(
-                    lambda (type, exc, tb): exc,
+                    lambda exc_info: exc_info[1],
                     MatchesAll(
                         IsInstance(StoreOpenError),
                         MatchesStructure(

@@ -373,7 +373,7 @@ class ZKAPAuthorizerStorageClient(object):
                 None,
             )
         ).values()
-        num_passes = required_passes(self._pass_value, share_sizes)
+        num_passes = required_passes(self._pass_value, list(share_sizes))
 
         result = yield call_with_passes(
             lambda passes: rref.callRemote(

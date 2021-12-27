@@ -22,6 +22,13 @@ implemented in ``_storage_client.py``.
 """
 
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
 
 from datetime import timedelta
 from errno import ENOENT
@@ -122,13 +129,13 @@ class _ValidationResult(object):
         """
         Cryptographically check the validity of a single pass.
 
-        :param unicode message: The shared message for pass validation.
+        :param str message: The shared message for pass validation.
         :param Pass pass_: The pass to validate.
 
         :return bool: ``False`` (invalid) if the pass includes a valid
             signature, ``True`` (valid) otherwise.
         """
-        assert isinstance(message, unicode), "message %r not unicode" % (message,)
+        assert isinstance(message, str), "message %r not str" % (message,)
         assert isinstance(pass_, Pass), "pass %r not a Pass" % (pass_,)
         try:
             preimage = TokenPreimage.decode_base64(pass_.preimage)
@@ -148,7 +155,7 @@ class _ValidationResult(object):
         """
         Check all of the given passes for validity.
 
-        :param unicode message: The shared message for pass validation.
+        :param str message: The shared message for pass validation.
         :param list[bytes] passes: The encoded passes to validate.
         :param SigningKey signing_key: The signing key to use to check the passes.
 
@@ -398,7 +405,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         with start_action(
-            action_type=u"zkapauthorizer:storage-server:remote:share-sizes",
+            action_type="zkapauthorizer:storage-server:remote:share-sizes",
             storage_index_or_slot=storage_index_or_slot,
         ):
             return dict(
@@ -443,7 +450,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
           Note that the lease is *not* renewed in this case (see #254).
         """
         with start_action(
-            action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
+            action_type="zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
             storage_index=b2a(storage_index),
             path=storage_index_to_dir(storage_index),
         ):
@@ -877,7 +884,7 @@ def get_share_path(storage_server, storage_index, sharenum):
     return (
         FilePath(storage_server.sharedir)
         .preauthChild(storage_index_to_dir(storage_index))
-        .child(u"{}".format(sharenum))
+        .child("{}".format(sharenum))
     )
 
 

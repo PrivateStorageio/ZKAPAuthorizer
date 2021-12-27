@@ -18,6 +18,13 @@ plugin.
 """
 
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
 
 from datetime import datetime
 from io import BytesIO
@@ -110,7 +117,7 @@ from .strategies import (
     vouchers,
 )
 
-TRANSIENT_ERROR = u"something went wrong, who knows what"
+TRANSIENT_ERROR = "something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
@@ -137,7 +144,7 @@ def is_not_json(bytestring):
 
 def not_vouchers():
     """
-    Builds unicode strings which are not legal vouchers.
+    Builds text strings which are not legal vouchers.
     """
     return one_of(
         text().filter(
@@ -147,7 +154,7 @@ def not_vouchers():
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
             # from the urlsafe-base64 alphabet.
-            lambda voucher: u"/"
+            lambda voucher: "/"
             + voucher[1:],
         ),
     )
@@ -155,7 +162,7 @@ def not_vouchers():
 
 def is_urlsafe_base64(text):
     """
-    :param unicode text: A candidate unicode string to inspect.
+    :param str text: A candidate text string to inspect.
 
     :return bool: ``True`` if and only if ``text`` is urlsafe-base64 encoded
     """
@@ -174,13 +181,13 @@ def invalid_bodies():
         # The wrong key but the right kind of value.
         fixed_dictionaries(
             {
-                u"some-key": vouchers(),
+                "some-key": vouchers(),
             }
         ).map(dumps),
         # The right key but the wrong kind of value.
         fixed_dictionaries(
             {
-                u"voucher": one_of(
+                "voucher": one_of(
                     integers(),
                     not_vouchers(),
                 ),
@@ -242,7 +249,7 @@ def authorized_request(api_auth_token, agent, method, uri, headers=None, data=No
     else:
         headers = Headers(headers)
     headers.setRawHeaders(
-        u"authorization",
+        "authorization",
         [b"tahoe-lafs {}".format(api_auth_token)],
     )
     return agent.request(
@@ -323,24 +330,24 @@ class GetTokenCountTests(TestCase):
         ``get_token_count`` returns the integer value of the
         ``default-token-count`` item from the given configuration object.
         """
-        plugin_name = u"hello-world"
+        plugin_name = "hello-world"
         if token_count is None:
             expected_count = NUM_TOKENS
             token_config = {}
         else:
             expected_count = token_count
-            token_config = {u"default-token-count": u"{}".format(expected_count)}
+            token_config = {"default-token-count": "{}".format(expected_count)}
 
         config_text = config_string_from_sections(
             [
                 {
-                    u"storageclient.plugins." + plugin_name: token_config,
+                    "storageclient.plugins." + plugin_name: token_config,
                 }
             ]
         )
         node_config = config_from_string(
             self.useFixture(TempDir()).join(b"tahoe"),
-            u"tub.port",
+            "tub.port",
             config_text.encode("utf-8"),
         )
         self.assertThat(
@@ -492,7 +499,7 @@ class UnblindedTokenTests(TestCase):
         data = BytesIO(
             dumps(
                 {
-                    u"unblinded-tokens": list(
+                    "unblinded-tokens": list(
                         token.unblinded_token.decode("ascii")
                         for token in unblinded_tokens
                     )
@@ -514,7 +521,7 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-        stored_tokens = root.controller.store.backup()[u"unblinded-tokens"]
+        stored_tokens = root.controller.store.backup()["unblinded-tokens"]
 
         self.assertThat(
             stored_tokens,
@@ -560,8 +567,8 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/unblinded-token",
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content("{}".format(vars(requesting.result))),
         )
         self.assertThat(
             requesting,
@@ -608,8 +615,8 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/unblinded-token?limit={}".format(limit),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content("{}".format(vars(requesting.result))),
         )
         self.assertThat(
             requesting,
@@ -663,8 +670,8 @@ class UnblindedTokenTests(TestCase):
             ),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content("{}".format(vars(requesting.result))),
         )
         self.assertThat(
             requesting,
@@ -674,7 +681,7 @@ class UnblindedTokenTests(TestCase):
                 AllMatch(
                     MatchesAll(
                         GreaterThan(position),
-                        IsInstance(unicode),
+                        IsInstance(str),
                     ),
                 ),
                 matches_lease_maintenance_spending(),
@@ -715,7 +722,7 @@ class UnblindedTokenTests(TestCase):
             )
             d.addCallback(readBody)
             d.addCallback(
-                lambda body: loads(body)[u"unblinded-tokens"],
+                lambda body: loads(body)["unblinded-tokens"],
             )
             return d
 
@@ -756,7 +763,7 @@ class UnblindedTokenTests(TestCase):
             succeeded(
                 MatchesPredicate(
                     check_tokens,
-                    u"initial, after (%s): initial[1:] != after",
+                    "initial, after (%s): initial[1:] != after",
                 ),
             ),
         )
@@ -803,7 +810,7 @@ class UnblindedTokenTests(TestCase):
         )
         d.addCallback(readBody)
         d.addCallback(
-            lambda body: loads(body)[u"lease-maintenance-spending"],
+            lambda body: loads(body)["lease-maintenance-spending"],
         )
         self.assertThat(
             d,
@@ -845,10 +852,10 @@ def succeeded_with_unblinded_tokens_with_matcher(
                 succeeded(
                     ContainsDict(
                         {
-                            u"total": Equals(all_token_count),
-                            u"spendable": match_spendable_token_count,
-                            u"unblinded-tokens": match_unblinded_tokens,
-                            u"lease-maintenance-spending": match_lease_maint_spending,
+                            "total": Equals(all_token_count),
+                            "spendable": match_spendable_token_count,
+                            "unblinded-tokens": match_unblinded_tokens,
+                            "lease-maintenance-spending": match_lease_maint_spending,
                         }
                     ),
                 ),
@@ -873,7 +880,7 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
         match_spendable_token_count=Equals(all_token_count),
         match_unblinded_tokens=MatchesAll(
             HasLength(returned_token_count),
-            AllMatch(IsInstance(unicode)),
+            AllMatch(IsInstance(str)),
         ),
         match_lease_maint_spending=matches_lease_maintenance_spending(),
     )
@@ -889,8 +896,8 @@ def matches_lease_maintenance_spending():
         Is(None),
         ContainsDict(
             {
-                u"when": matches_iso8601_datetime(),
-                u"amount": matches_positive_integer(),
+                "when": matches_iso8601_datetime(),
+                "amount": matches_positive_integer(),
             }
         ),
     )
@@ -905,11 +912,11 @@ def matches_positive_integer():
 
 def matches_iso8601_datetime():
     """
-    :return: A matcher which matches unicode strings which can be parsed as an
+    :return: A matcher which matches text strings which can be parsed as an
         ISO8601 datetime string.
     """
     return MatchesAll(
-        IsInstance(unicode),
+        IsInstance(str),
         AfterPreprocessing(
             parse_datetime,
             lambda d: Always(),
@@ -942,7 +949,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
+        data = BytesIO(dumps({"voucher": voucher.decode("ascii")}))
         requesting = authorized_request(
             api_auth_token,
             agent,
@@ -951,8 +958,8 @@ class VoucherTests(TestCase):
             data=data,
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content("{}".format(vars(requesting.result))),
         )
         self.assertThat(
             requesting,
@@ -983,8 +990,8 @@ class VoucherTests(TestCase):
             data=BytesIO(body),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content("{}".format(vars(requesting.result))),
         )
         self.assertThat(
             requesting,
@@ -1006,7 +1013,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        url = u"http://127.0.0.1/voucher/{}".format(
+        url = "http://127.0.0.1/voucher/{}".format(
             quote(
                 not_voucher.encode("utf-8"),
                 safe=b"",
@@ -1043,7 +1050,7 @@ class VoucherTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/voucher/{}".format(voucher).encode("ascii"),
+            "http://127.0.0.1/voucher/{}".format(voucher).encode("ascii"),
         )
         self.assertThat(
             requesting,
@@ -1235,7 +1242,7 @@ class VoucherTests(TestCase):
             agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            data=BytesIO(dumps({u"voucher": voucher.decode("ascii")})),
+            data=BytesIO(dumps({"voucher": voucher.decode("ascii")})),
         )
         self.assertThat(
             putting,
@@ -1248,7 +1255,7 @@ class VoucherTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/voucher/{}".format(
+            "http://127.0.0.1/voucher/{}".format(
                 quote(
                     voucher.encode("utf-8"),
                     safe=b"",
@@ -1292,7 +1299,7 @@ class VoucherTests(TestCase):
             vouchers,
             Equals(
                 {
-                    u"vouchers": list(
+                    "vouchers": list(
                         Voucher(
                             number=voucher,
                             expected_tokens=count,
@@ -1329,7 +1336,7 @@ class VoucherTests(TestCase):
             vouchers,
             Equals(
                 {
-                    u"vouchers": list(
+                    "vouchers": list(
                         Voucher(
                             number=voucher,
                             expected_tokens=count,
@@ -1362,7 +1369,7 @@ class VoucherTests(TestCase):
         note("{} vouchers".format(len(vouchers)))
 
         for voucher in vouchers:
-            data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
+            data = BytesIO(dumps({"voucher": voucher.decode("ascii")}))
             putting = authorized_request(
                 api_auth_token,
                 agent,
@@ -1479,22 +1486,22 @@ def bad_calculate_price_requests():
 
     good_data = fixed_dictionaries(
         {
-            u"version": good_version,
-            u"sizes": good_sizes,
+            "version": good_version,
+            "sizes": good_sizes,
         }
     ).map(dumps)
 
     bad_data_version = fixed_dictionaries(
         {
-            u"version": bad_version,
-            u"sizes": good_sizes,
+            "version": bad_version,
+            "sizes": good_sizes,
         }
     ).map(dumps)
 
     bad_data_sizes = fixed_dictionaries(
         {
-            u"version": good_version,
-            u"sizes": bad_sizes,
+            "version": good_version,
+            "sizes": bad_sizes,
         }
     ).map(dumps)
 
@@ -1638,7 +1645,7 @@ class CalculatePriceTests(TestCase):
                 b"POST",
                 self.url,
                 headers={b"content-type": [b"application/json"]},
-                data=BytesIO(dumps({u"version": 1, u"sizes": sizes})),
+                data=BytesIO(dumps({"version": 1, "sizes": sizes})),
             ),
             succeeded(
                 matches_response(
@@ -1648,8 +1655,8 @@ class CalculatePriceTests(TestCase):
                         loads,
                         Equals(
                             {
-                                u"price": expected_price,
-                                u"period": 60 * 60 * 24 * 31 - min_time_remaining,
+                                "price": expected_price,
+                                "period": 60 * 60 * 24 * 31 - min_time_remaining,
                             }
                         ),
                     ),
@@ -1660,8 +1667,8 @@ class CalculatePriceTests(TestCase):
 
 def application_json():
     return AfterPreprocessing(
-        lambda h: h.getRawHeaders(u"content-type"),
-        Equals([u"application/json"]),
+        lambda h: h.getRawHeaders("content-type"),
+        Equals(["application/json"]),
     )
 
 
@@ -1701,8 +1708,8 @@ class _MatchResponse(object):
     def match(self, response):
         self._details.update(
             {
-                u"code": response.code,
-                u"headers": response.headers.getAllRawHeaders(),
+                "code": response.code,
+                "headers": response.headers.getAllRawHeaders(),
             }
         )
         return MatchesStructure(

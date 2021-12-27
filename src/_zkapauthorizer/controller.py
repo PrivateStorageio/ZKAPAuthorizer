@@ -18,6 +18,13 @@ for the client side of the storage plugin.
 """
 
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
@@ -97,7 +104,7 @@ class RedemptionResult(object):
     :ivar list[UnblindedToken] unblinded_tokens: The tokens which resulted
         from the redemption.
 
-    :ivar unicode public_key: The public key which the server proved was
+    :ivar str public_key: The public key which the server proved was
         involved in the redemption process.
     """
 
@@ -238,13 +245,13 @@ class ErrorRedeemer(object):
     configured error.
     """
 
-    details = attr.ib(validator=attr.validators.instance_of(unicode))
+    details = attr.ib(validator=attr.validators.instance_of(str))
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
         details = node_config.get_config(
             section=section_name,
-            option=u"details",
+            option="details",
         ).decode("ascii")
         return cls(details)
 
@@ -325,7 +332,7 @@ def dummy_random_tokens(voucher, counter, count):
             # Padding is 96 (random token length) - 32 (decoded voucher
             # length) - 4 (fixed-width counter)
             b64encode(
-                v + u"{:0>4}{:0>60}".format(counter, n).encode("ascii"),
+                v + "{:0>4}{:0>60}".format(counter, n).encode("ascii"),
             ),
         )
 
@@ -340,7 +347,7 @@ class DummyRedeemer(object):
     really redeeming them, it makes up some fake ZKAPs and pretends those are
     the result.
 
-    :ivar unicode _public_key: The base64-encoded public key to return with
+    :ivar str _public_key: The base64-encoded public key to return with
         all successful redemption results.  As with the tokens returned by
         this redeemer, chances are this is not actually a valid public key.
         Its corresponding private key certainly has not been used to sign
@@ -348,7 +355,7 @@ class DummyRedeemer(object):
     """
 
     _public_key = attr.ib(
-        validator=attr.validators.instance_of(unicode),
+        validator=attr.validators.instance_of(str),
     )
 
     @classmethod
@@ -356,8 +363,8 @@ class DummyRedeemer(object):
         return cls(
             node_config.get_config(
                 section=section_name,
-                option=u"issuer-public-key",
-            ).decode(u"utf-8"),
+                option="issuer-public-key",
+            ).decode("utf-8"),
         )
 
     def random_tokens_for_voucher(self, voucher, counter, count):
@@ -461,7 +468,7 @@ class RistrettoRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         configured_issuer = node_config.get_config(
             section=section_name,
-            option=u"ristretto-issuer-root-url",
+            option="ristretto-issuer-root-url",
         ).decode("ascii")
         if announcement is not None:
             # Don't let us talk to a storage server that has a different idea
@@ -473,7 +480,7 @@ class RistrettoRedeemer(object):
             # If we aren't given an announcement then we're not being used in
             # the context of a specific storage server so the check is
             # unnecessary and impossible.
-            announced_issuer = announcement[u"ristretto-issuer-root-url"]
+            announced_issuer = announcement["ristretto-issuer-root-url"]
             if announced_issuer != configured_issuer:
                 raise IssuerConfigurationMismatch(announced_issuer, configured_issuer)
 
@@ -498,12 +505,12 @@ class RistrettoRedeemer(object):
         )
         blinded_tokens = list(token.blind() for token in random_tokens)
         response = yield self._treq.post(
-            self._api_root.child(u"v1", u"redeem").to_text(),
+            self._api_root.child("v1", "redeem").to_text(),
             dumps(
                 {
-                    u"redeemVoucher": voucher.number.decode("ascii"),
-                    u"redeemCounter": counter,
-                    u"redeemTokens": list(
+                    "redeemVoucher": voucher.number.decode("ascii"),
+                    "redeemCounter": counter,
+                    "redeemTokens": list(
                         token.encode_base64() for token in blinded_tokens
                     ),
                 }
@@ -517,26 +524,26 @@ class RistrettoRedeemer(object):
         except ValueError:
             raise UnexpectedResponse(response.code, response_body)
 
-        success = result.get(u"success", False)
+        success = result.get("success", False)
         if not success:
-            reason = result.get(u"reason", None)
-            if reason == u"double-spend":
+            reason = result.get("reason", None)
+            if reason == "double-spend":
                 raise AlreadySpent(voucher)
-            elif reason == u"unpaid":
+            elif reason == "unpaid":
                 raise Unpaid(voucher)
 
             raise UnrecognizedFailureReason(result)
 
         self._log.info(
             "Redeemed: {public_key} {proof} {count}",
-            public_key=result[u"public-key"],
-            proof=result[u"proof"],
-            count=len(result[u"signatures"]),
+            public_key=result["public-key"],
+            proof=result["proof"],
+            count=len(result["signatures"]),
         )
 
-        marshaled_signed_tokens = result[u"signatures"]
-        marshaled_proof = result[u"proof"]
-        marshaled_public_key = result[u"public-key"]
+        marshaled_signed_tokens = result["signatures"]
+        marshaled_proof = result["proof"]
+        marshaled_public_key = result["public-key"]
 
         public_key = challenge_bypass_ristretto.PublicKey.decode_base64(
             marshaled_public_key.encode("ascii"),
@@ -660,17 +667,17 @@ class PaymentController(object):
         redeeming a voucher, if no other count is given when the redemption is
         started.
 
-    :ivar set[unicode] allowed_public_keys: The base64-encoded public keys for
+    :ivar set[str] allowed_public_keys: The base64-encoded public keys for
         which to accept tokens.
 
-    :ivar dict[unicode, Redeeming] _active: A mapping from voucher identifiers
+    :ivar dict[str, Redeeming] _active: A mapping from voucher identifiers
         which currently have redemption attempts in progress to a
         ``Redeeming`` state representing the attempt.
 
-    :ivar dict[unicode, datetime] _error: A mapping from voucher identifiers
+    :ivar dict[str, datetime] _error: A mapping from voucher identifiers
         which have recently failed with an unrecognized, transient error.
 
-    :ivar dict[unicode, datetime] _unpaid: A mapping from voucher identifiers
+    :ivar dict[str, datetime] _unpaid: A mapping from voucher identifiers
         which have recently failed a redemption attempt due to an unpaid
         response from the redemption server to timestamps when the failure was
         observed.
@@ -732,7 +739,7 @@ class PaymentController(object):
         )
 
     def _retry_redemption(self):
-        for voucher in self._error.keys() + self._unpaid.keys():
+        for voucher in list(self._error.keys()) + list(self._unpaid.keys()):
             if voucher in self._active:
                 continue
             if self.get_voucher(voucher).state.should_start_redemption():
@@ -982,22 +989,22 @@ class PaymentController(object):
 
 
 def get_redeemer(plugin_name, node_config, announcement, reactor):
-    section_name = u"storageclient.plugins.{}".format(plugin_name)
+    section_name = "storageclient.plugins.{}".format(plugin_name)
     redeemer_kind = node_config.get_config(
         section=section_name,
-        option=u"redeemer",
-        default=u"ristretto",
+        option="redeemer",
+        default="ristretto",
     )
     return _REDEEMERS[redeemer_kind](section_name, node_config, announcement, reactor)
 
 
 _REDEEMERS = {
-    u"non": NonRedeemer.make,
-    u"dummy": DummyRedeemer.make,
-    u"double-spend": DoubleSpendRedeemer.make,
-    u"unpaid": UnpaidRedeemer.make,
-    u"error": ErrorRedeemer.make,
-    u"ristretto": RistrettoRedeemer.make,
+    "non": NonRedeemer.make,
+    "dummy": DummyRedeemer.make,
+    "double-spend": DoubleSpendRedeemer.make,
+    "unpaid": UnpaidRedeemer.make,
+    "error": ErrorRedeemer.make,
+    "ristretto": RistrettoRedeemer.make,
 }
 
 

@@ -16,7 +16,15 @@
 Functionality shared between the storage client and server.
 """
 
+from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+from past.builtins import long
 
 from base64 import b64encode
 
@@ -50,7 +58,7 @@ class MorePassesRequired(Exception):
 
 def _message_maker(label):
     def make_message(storage_index):
-        return u"{label} {storage_index}".format(
+        return "{label} {storage_index}".format(
             label=label,
             storage_index=b64encode(storage_index),
         )
@@ -60,10 +68,10 @@ def _message_maker(label):
 
 # Functions to construct the PrivacyPass request-binding message for pass
 # construction for different Tahoe-LAFS storage operations.
-allocate_buckets_message = _message_maker(u"allocate_buckets")
-add_lease_message = _message_maker(u"add_lease")
+allocate_buckets_message = _message_maker("allocate_buckets")
+add_lease_message = _message_maker("add_lease")
 slot_testv_and_readv_and_writev_message = _message_maker(
-    u"slot_testv_and_readv_and_writev"
+    "slot_testv_and_readv_and_writev"
 )
 
 # The number of bytes we're willing to store for a lease period for each pass
@@ -80,8 +88,8 @@ def get_configured_shares_needed(node_config):
     """
     return int(
         node_config.get_config(
-            section=u"client",
-            option=u"shares.needed",
+            section="client",
+            option="shares.needed",
             default=3,
         )
     )
@@ -96,8 +104,8 @@ def get_configured_shares_total(node_config):
     """
     return int(
         node_config.get_config(
-            section=u"client",
-            option=u"shares.total",
+            section="client",
+            option="shares.total",
             default=10,
         )
     )
@@ -111,11 +119,11 @@ def get_configured_pass_value(node_config):
     value is read from the **pass-value** option of the ZKAPAuthorizer plugin
     client section.
     """
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
     return int(
         node_config.get_config(
             section=section_name,
-            option=u"pass-value",
+            option="pass-value",
             default=BYTES_PER_PASS,
         )
     )
@@ -125,16 +133,18 @@ def get_configured_allowed_public_keys(node_config):
     """
     Read the set of allowed issuer public keys from the given configuration.
     """
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
     return set(
         node_config.get_config(
             section=section_name,
-            option=u"allowed-public-keys",
+            option="allowed-public-keys",
         )
         .strip()
         .split(",")
     )
 
+
+_dict_values = type(dict().values())
 
 def required_passes(bytes_per_pass, share_sizes):
     """
@@ -148,9 +158,9 @@ def required_passes(bytes_per_pass, share_sizes):
 
     :return int: The number of passes required to cover the storage cost.
     """
-    if not isinstance(share_sizes, list):
+    if not isinstance(share_sizes, (list, _dict_values)):
         raise TypeError(
-            "Share sizes must be a list of integers, got {!r} instead".format(
+            "Share sizes must be a list (or dict_values) of integers, got {!r} instead".format(
                 share_sizes,
             ),
         )
@@ -253,7 +263,7 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     """
     current_passes = required_passes(
         pass_value,
-        current_sizes.values(),
+        list(current_sizes.values()),
     )
 
     new_sizes = current_sizes.copy()

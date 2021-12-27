@@ -21,6 +21,16 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+from past.builtins import long
+
 from itertools import islice
 from json import dumps, load, loads
 from sys import maxint
@@ -65,18 +75,18 @@ def get_token_count(
     Retrieve the configured voucher value, in number of tokens, from the given
     configuration.
 
-    :param unicode plugin_name: The plugin name to use to choose a
+    :param str plugin_name: The plugin name to use to choose a
         configuration section.
 
     :param _Config node_config: See ``from_configuration``.
 
     :param int default: The value to return if none is configured.
     """
-    section_name = u"storageclient.plugins.{}".format(plugin_name)
+    section_name = "storageclient.plugins.{}".format(plugin_name)
     return int(
         node_config.get_config(
             section=section_name,
-            option=u"default-token-count",
+            option="default-token-count",
             default=NUM_TOKENS,
         )
     )
@@ -109,7 +119,7 @@ def from_configuration(
     :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    plugin_name = u"privatestorageio-zkapauthz-v1"
+    plugin_name = "privatestorageio-zkapauthz-v1"
     if redeemer is None:
         redeemer = get_redeemer(
             plugin_name,
@@ -219,7 +229,7 @@ class _CalculatePrice(Resource):
         Calculate the price in ZKAPs to store or continue storing files specified
         sizes.
         """
-        if wrong_content_type(request, u"application/json"):
+        if wrong_content_type(request, "application/json"):
             return NOT_DONE_YET
 
         application_json(request)
@@ -235,8 +245,8 @@ class _CalculatePrice(Resource):
             )
 
         try:
-            version = body_object[u"version"]
-            sizes = body_object[u"sizes"]
+            version = body_object["version"]
+            sizes = body_object["sizes"]
         except (TypeError, KeyError):
             request.setResponseCode(BAD_REQUEST)
             return dumps(
@@ -268,8 +278,8 @@ class _CalculatePrice(Resource):
         price = self._price_calculator.calculate(sizes)
         return dumps(
             {
-                u"price": price,
-                u"period": self._lease_period,
+                "price": price,
+                "period": self._lease_period,
             }
         )
 
@@ -280,14 +290,14 @@ def wrong_content_type(request, required_type):
 
     :param request: The request object to check.
 
-    :param unicode required_type: The required content-type (eg
-        ``u"application/json"``).
+    :param str required_type: The required content-type (eg
+        ``"application/json"``).
 
     :return bool: ``True`` if the content-type is wrong and an error response
         has been generated.  ``False`` otherwise.
     """
     actual_type = request.requestHeaders.getRawHeaders(
-        u"content-type",
+        "content-type",
         [None],
     )[0]
     if actual_type != required_type:
@@ -303,7 +313,7 @@ def application_json(request):
 
     :param twisted.web.iweb.IRequest request: The request to modify.
     """
-    request.responseHeaders.setRawHeaders(u"content-type", [u"application/json"])
+    request.responseHeaders.setRawHeaders("content-type", ["application/json"])
 
 
 class _ProjectVersion(Resource):
@@ -339,7 +349,7 @@ class _UnblindedTokenCollection(Resource):
         """
         application_json(request)
         state = self._store.backup()
-        unblinded_tokens = state[u"unblinded-tokens"]
+        unblinded_tokens = state["unblinded-tokens"]
 
         limit = request.args.get(b"limit", [None])[0]
         if limit is not None:
@@ -349,14 +359,14 @@ class _UnblindedTokenCollection(Resource):
 
         return dumps(
             {
-                u"total": len(unblinded_tokens),
-                u"spendable": self._store.count_unblinded_tokens(),
-                u"unblinded-tokens": list(
+                "total": len(unblinded_tokens),
+                "spendable": self._store.count_unblinded_tokens(),
+                "unblinded-tokens": list(
                     islice(
                         (token for token in unblinded_tokens if token > position), limit
                     )
                 ),
-                u"lease-maintenance-spending": self._lease_maintenance_activity(),
+                "lease-maintenance-spending": self._lease_maintenance_activity(),
             }
         )
 
@@ -365,7 +375,7 @@ class _UnblindedTokenCollection(Resource):
         Store some unblinded tokens.
         """
         application_json(request)
-        unblinded_tokens = load(request.content)[u"unblinded-tokens"]
+        unblinded_tokens = load(request.content)["unblinded-tokens"]
         self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
         return dumps({})
 
@@ -374,8 +384,8 @@ class _UnblindedTokenCollection(Resource):
         if activity is None:
             return activity
         return {
-            u"when": activity.finished.isoformat(),
-            u"count": activity.passes_required,
+            "when": activity.finished.isoformat(),
+            "count": activity.passes_required,
         }
 
 
@@ -401,14 +411,14 @@ class _VoucherCollection(Resource):
         try:
             payload = loads(request.content.read())
         except Exception:
-            return bad_request(u"json request body required").render(request)
-        if payload.keys() != [u"voucher"]:
+            return bad_request("json request body required").render(request)
+        if payload.keys() != ["voucher"]:
             return bad_request(
-                u"request object must have exactly one key: 'voucher'"
+                "request object must have exactly one key: 'voucher'"
             ).render(request)
-        voucher = payload[u"voucher"]
+        voucher = payload["voucher"]
         if not is_syntactic_voucher(voucher):
-            return bad_request(u"submitted voucher is syntactically invalid").render(
+            return bad_request("submitted voucher is syntactically invalid").render(
                 request
             )
 
@@ -422,7 +432,7 @@ class _VoucherCollection(Resource):
         application_json(request)
         return dumps(
             {
-                u"vouchers": list(
+                "vouchers": list(
                     self._controller.incorporate_transient_state(voucher).marshal()
                     for voucher in self._store.list()
                 ),
@@ -444,12 +454,12 @@ def is_syntactic_voucher(voucher):
     """
     :param voucher: A candidate object to inspect.
 
-    :return bool: ``True`` if and only if ``voucher`` is a unicode string
+    :return bool: ``True`` if and only if ``voucher`` is a text string
         containing a syntactically valid voucher.  This says **nothing** about
         the validity of the represented voucher itself.  A ``True`` result
-        only means the unicode string can be **interpreted** as a voucher.
+        only means the string can be **interpreted** as a voucher.
     """
-    if not isinstance(voucher, unicode):
+    if not isinstance(voucher, str):
         return False
     if len(voucher) != 44:
         # TODO.  44 is the length of 32 bytes base64 encoded.  This model
@@ -480,7 +490,7 @@ class VoucherView(Resource):
         return self._voucher.to_json()
 
 
-def bad_request(reason=u"Bad Request"):
+def bad_request(reason="Bad Request"):
     """
     :return IResource: A resource which can be rendered to produce a **BAD
         REQUEST** response.

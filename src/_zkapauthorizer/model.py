@@ -17,6 +17,16 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+from past.builtins import long
+
 from datetime import datetime
 from functools import wraps
 from json import dumps, loads
@@ -41,12 +51,12 @@ from .validators import greater_than, has_length, is_base64_encoded
 
 def parse_datetime(s, **kw):
     """
-    Like ``aniso8601.parse_datetime`` but accept unicode as well.
+    Like ``aniso8601.parse_datetime`` but accept str as well.
     """
-    if isinstance(s, unicode):
+    if isinstance(s, str):
         s = s.encode("utf-8")
     assert isinstance(s, bytes)
-    if "delimiter" in kw and isinstance(kw["delimiter"], unicode):
+    if "delimiter" in kw and isinstance(kw["delimiter"], str):
         kw["delimiter"] = kw["delimiter"].encode("utf-8")
     return _parse_datetime(s, **kw)
 
@@ -86,7 +96,7 @@ class NotEnoughTokens(Exception):
     """
 
 
-CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
+CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
 
 def open_and_initialize(path, connect=None):
@@ -380,7 +390,7 @@ class VoucherStore(object):
         Store some unblinded tokens, for example as part of a backup-restore
         process.
 
-        :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+        :param list[str] unblinded_tokens: The unblinded tokens to store.
 
         :param int group_id: The unique identifier of the redemption group to
             which these tokens belong.
@@ -398,7 +408,7 @@ class VoucherStore(object):
             tokens.  This voucher will be marked as redeemed to indicate it
             has fulfilled its purpose and has no further use for us.
 
-        :param unicode public_key: The encoded public key for the private key
+        :param str public_key: The encoded public key for the private key
             which was used to sign these tokens.
 
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
@@ -411,9 +421,9 @@ class VoucherStore(object):
             inserted tokens, ``False`` otherwise.
         """
         if completed:
-            voucher_state = u"redeemed"
+            voucher_state = "redeemed"
         else:
-            voucher_state = u"pending"
+            voucher_state = "pending"
 
         if spendable:
             token_count_increase = len(unblinded_tokens)
@@ -683,7 +693,7 @@ class VoucherStore(object):
         )
         tokens = cursor.fetchall()
         return {
-            u"unblinded-tokens": list(token for (token,) in tokens),
+            "unblinded-tokens": list(token for (token,) in tokens),
         }
 
     def start_lease_maintenance(self):
@@ -720,9 +730,9 @@ class VoucherStore(object):
             return None
         [(started, count, finished)] = activity
         return LeaseMaintenanceActivity(
-            parse_datetime(started, delimiter=u" "),
+            parse_datetime(started, delimiter=" "),
             count,
-            parse_datetime(finished, delimiter=u" "),
+            parse_datetime(finished, delimiter=" "),
         )
 
 
@@ -923,8 +933,8 @@ class Pending(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"pending",
-            u"counter": self.counter,
+            "name": "pending",
+            "counter": self.counter,
         }
 
 
@@ -944,9 +954,9 @@ class Redeeming(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"redeeming",
-            u"started": self.started.isoformat(),
-            u"counter": self.counter,
+            "name": "redeeming",
+            "started": self.started.isoformat(),
+            "counter": self.counter,
         }
 
 
@@ -969,9 +979,9 @@ class Redeemed(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"redeemed",
-            u"finished": self.finished.isoformat(),
-            u"token-count": self.token_count,
+            "name": "redeemed",
+            "finished": self.finished.isoformat(),
+            "token-count": self.token_count,
         }
 
 
@@ -984,8 +994,8 @@ class DoubleSpend(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"double-spend",
-            u"finished": self.finished.isoformat(),
+            "name": "double-spend",
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -1004,8 +1014,8 @@ class Unpaid(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"unpaid",
-            u"finished": self.finished.isoformat(),
+            "name": "unpaid",
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -1018,16 +1028,16 @@ class Error(object):
     """
 
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    details = attr.ib(validator=attr.validators.instance_of(unicode))
+    details = attr.ib(validator=attr.validators.instance_of(str))
 
     def should_start_redemption(self):
         return True
 
     def to_json_v1(self):
         return {
-            u"name": u"error",
-            u"finished": self.finished.isoformat(),
-            u"details": self.details,
+            "name": "error",
+            "finished": self.finished.isoformat(),
+            "details": self.details,
         }
 
 
@@ -1089,15 +1099,15 @@ class Voucher(object):
     @classmethod
     def from_row(cls, row):
         def state_from_row(state, row):
-            if state == u"pending":
+            if state == "pending":
                 return Pending(counter=row[3])
-            if state == u"double-spend":
+            if state == "double-spend":
                 return DoubleSpend(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0], delimiter=" "),
                 )
-            if state == u"redeemed":
+            if state == "redeemed":
                 return Redeemed(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0], delimiter=" "),
                     row[1],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
@@ -1112,54 +1122,54 @@ class Voucher(object):
             # value represents a leap second.  However, since we also use
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
-            created=parse_datetime(created, delimiter=u" "),
+            created=parse_datetime(created, delimiter=" "),
             state=state_from_row(state, row[4:]),
         )
 
     @classmethod
     def from_json(cls, json):
         values = loads(json)
-        version = values.pop(u"version")
+        version = values.pop("version")
         return getattr(cls, "from_json_v{}".format(version))(values)
 
     @classmethod
     def from_json_v1(cls, values):
-        state_json = values[u"state"]
-        state_name = state_json[u"name"]
-        if state_name == u"pending":
-            state = Pending(counter=state_json[u"counter"])
-        elif state_name == u"redeeming":
+        state_json = values["state"]
+        state_name = state_json["name"]
+        if state_name == "pending":
+            state = Pending(counter=state_json["counter"])
+        elif state_name == "redeeming":
             state = Redeeming(
-                started=parse_datetime(state_json[u"started"]),
-                counter=state_json[u"counter"],
+                started=parse_datetime(state_json["started"]),
+                counter=state_json["counter"],
             )
-        elif state_name == u"double-spend":
+        elif state_name == "double-spend":
             state = DoubleSpend(
-                finished=parse_datetime(state_json[u"finished"]),
+                finished=parse_datetime(state_json["finished"]),
             )
-        elif state_name == u"redeemed":
+        elif state_name == "redeemed":
             state = Redeemed(
-                finished=parse_datetime(state_json[u"finished"]),
-                token_count=state_json[u"token-count"],
+                finished=parse_datetime(state_json["finished"]),
+                token_count=state_json["token-count"],
             )
-        elif state_name == u"unpaid":
+        elif state_name == "unpaid":
             state = Unpaid(
-                finished=parse_datetime(state_json[u"finished"]),
+                finished=parse_datetime(state_json["finished"]),
             )
-        elif state_name == u"error":
+        elif state_name == "error":
             state = Error(
-                finished=parse_datetime(state_json[u"finished"]),
-                details=state_json[u"details"],
+                finished=parse_datetime(state_json["finished"]),
+                details=state_json["details"],
             )
         else:
             raise ValueError("Unrecognized state {!r}".format(state_json))
 
         return cls(
-            number=values[u"number"].encode("ascii"),
-            expected_tokens=values[u"expected-tokens"],
+            number=values["number"].encode("ascii"),
+            expected_tokens=values["expected-tokens"],
             created=None
-            if values[u"created"] is None
-            else parse_datetime(values[u"created"]),
+            if values["created"] is None
+            else parse_datetime(values["created"]),
             state=state,
         )
 
@@ -1172,9 +1182,9 @@ class Voucher(object):
     def to_json_v1(self):
         state = self.state.to_json_v1()
         return {
-            u"number": self.number.decode("ascii"),
-            u"expected-tokens": self.expected_tokens,
-            u"created": None if self.created is None else self.created.isoformat(),
-            u"state": state,
-            u"version": 1,
+            "number": self.number.decode("ascii"),
+            "expected-tokens": self.expected_tokens,
+            "created": None if self.created is None else self.created.isoformat(),
+            "state": state,
+            "version": 1,
         }

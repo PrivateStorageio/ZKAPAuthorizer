@@ -17,6 +17,13 @@ Tests for the Tahoe-LAFS plugin.
 """
 
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+from __future__ import unicode_literals
+
+from future.utils import PY2
+if PY2:
+    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
 
 from datetime import timedelta
 from functools import partial
@@ -99,7 +106,7 @@ from .strategies import (
     vouchers,
 )
 
-SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
+SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
 
 def get_rref(interface=None):
@@ -281,12 +288,12 @@ class ServerPluginTests(TestCase):
         and an interval how often to do so, test that metrics are actually
         written there after the configured interval.
         """
-        metrics_path = self.useFixture(TempDir()).join(u"metrics")
+        metrics_path = self.useFixture(TempDir()).join("metrics")
         configuration = {
-            u"prometheus-metrics-path": metrics_path,
-            u"prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
-            u"ristretto-issuer-root-url": "foo",
-            u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
+            "prometheus-metrics-path": metrics_path,
+            "prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
+            "ristretto-issuer-root-url": "foo",
+            "ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }
         announceable = extract_result(
             storage_server.get_storage_server(
@@ -341,8 +348,8 @@ tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configura
 
 tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs(
     {
-        u"privatestorageio-zkapauthz-v1": just(
-            {u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}
+        "privatestorageio-zkapauthz-v1": just(
+            {"ristretto-issuer-root-url": "https://another-issuer.example.invalid/"}
         ),
     }
 )
@@ -401,8 +408,8 @@ class ClientPluginTests(TestCase):
         # switch to an io.StringIO here.
         config_text = StringIO()
         node_config.config.write(config_text)
-        self.addDetail(u"config", text_content(config_text.getvalue()))
-        self.addDetail(u"announcement", text_content(unicode(announcement)))
+        self.addDetail("config", text_content(config_text.getvalue()))
+        self.addDetail("announcement", text_content(str(announcement)))
         self.assertThat(
             lambda: storage_server.get_storage_client(
                 node_config,
@@ -521,12 +528,12 @@ class ClientPluginTests(TestCase):
         # tests, at least until creating a real server doesn't involve so much
         # complex setup.  So avoid using any of the client APIs that make a
         # remote call ... which is all of them.
-        pass_group = storage_client._get_passes(u"request binding message", num_passes)
+        pass_group = storage_client._get_passes("request binding message", num_passes)
         pass_group.mark_spent()
 
         # There should be no unblinded tokens left to extract.
         self.assertThat(
-            lambda: storage_client._get_passes(u"request binding message", 1),
+            lambda: storage_client._get_passes("request binding message", 1),
             raises(NotEnoughTokens),
         )
 
@@ -540,8 +547,8 @@ class ClientPluginTests(TestCase):
                         lambda logged_message: logged_message.message,
                         ContainsDict(
                             {
-                                u"message": Equals(u"request binding message"),
-                                u"count": Equals(num_passes),
+                                "message": Equals("request binding message"),
+                                "count": Equals(num_passes),
                             }
                         ),
                     ),

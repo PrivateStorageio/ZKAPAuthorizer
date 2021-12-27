@@ -43,6 +43,7 @@ from testtools.matchers import (
     Equals,
     HasLength,
     IsInstance,
+    Is,
     MatchesAll,
     MatchesStructure,
 )
@@ -73,6 +74,7 @@ from ..controller import (
     UnpaidRedeemer,
     UnrecognizedFailureReason,
     token_count_for_group,
+    bracket,
 )
 from ..model import DoubleSpend as model_DoubleSpend
 from ..model import Error as model_Error
@@ -1289,3 +1291,54 @@ def bad_content_type(request):
         b"Unsupported media type",
         b"Unsupported media type",
     ).render(request)
+
+
+class BracketTests(TestCase):
+    """
+    Tests for ``bracket``.
+    """
+    def test_success(self):
+        """
+        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
+        ``Deferred`` that fires with the result of ``between``.
+        """
+        result = object()
+        actions = []
+        first = partial(actions.append, "first")
+        def between():
+            actions.append("between")
+            return result
+        last = partial(actions.append, "last")
+        self.assertThat(
+            bracket(first, last, between),
+            succeeded(
+                Is(result),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first", "between", "last"]),
+        )
+
+    def test_failure(self):
+        """
+        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
+        ``Deferred`` that fires with the failure result of ``between``.
+        """
+        class SomeException(Exception):
+            pass
+        actions = []
+        first = partial(actions.append, "first")
+        def between():
+            actions.append("between")
+            raise SomeException()
+        last = partial(actions.append, "last")
+        self.assertThat(
+            bracket(first, last, between),
+            failed(
+                AfterPreprocessing(
+                    lambda failure: failure.value,
+                    IsInstance(SomeException),
+                ),
+            ),
+        )
