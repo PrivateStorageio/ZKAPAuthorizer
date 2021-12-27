@@ -39,6 +39,11 @@ in
       #   this another way, dependencies have undetected dependencies, easier
       #   to just use the wheel.
       collections-extended = "wheel";
+
+      # From nixpkgs or sdist, fails with
+      # cp: cannot stat 'benchmark/': No such file or directory
+      # cp: cannot stat 'tests/': No such file or directory
+      tomli = "wheel";
     };
   in
     rec {
@@ -62,6 +67,12 @@ in
           foolscap == 0.13.1
           configparser
           eliot
+          # undetected cryptography build dependency
+          # https://github.com/DavHau/mach-nix/issues/305
+          setuptools_rust
+          # undetected tomli build dependency
+          # probably same underlying cause as cryptography issue
+          flit_core
         '';
         postPatch = ''
           cat > src/allmydata/_version.py <<EOF
