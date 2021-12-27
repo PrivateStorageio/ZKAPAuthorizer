@@ -26,7 +26,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from future.utils import PY2
 
 if PY2:
-    from future.builtins import (
+    from future.builtins import (  # noqa: F401
         filter,
         map,
         zip,
@@ -48,7 +48,7 @@ if PY2:
         str,
         max,
         min,
-    )  # noqa: F401
+    )
 
 from datetime import timedelta
 from errno import ENOENT

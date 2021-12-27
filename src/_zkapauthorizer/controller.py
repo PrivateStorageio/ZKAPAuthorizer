@@ -22,7 +22,29 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from future.utils import PY2
 
 if PY2:
-    from future.builtins import filter, map, zip, ascii, chr, hex, input, next, oct, open, pow, round, super, bytes, dict, list, object, range, str, max, min  # noqa: F401
+    from future.builtins import (
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )  # noqa: F401
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
