@@ -34,6 +34,11 @@ in
       # The version of Klein we get doesn't need / can't have the patch that
       # comes from the nixpkgs derivation mach-nix picks up from 21.05.
       klein = "wheel";
+
+      # - has an undetected poetry dependency and when trying to work around
+      #   this another way, dependencies have undetected dependencies, easier
+      #   to just use the wheel.
+      collections-extended = "wheel";
     };
   in
     rec {
