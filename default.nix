@@ -62,11 +62,20 @@ in
         # going on and discover the real version specified by `src` below.
         version = "1.17.0.post999";
         # See https://github.com/DavHau/mach-nix/issues/190
-        requirementsExtra = ''
+        requirementsExtra =
+          let
+            foolscap-version =
+              if python <= "python30"
+              then "foolscap == 0.13.1"
+              else "foolscap >= 21.7.0";
+          in
+            ''
+          # See https://github.com/DavHau/mach-nix/issues/190
           pyrsistent < 0.17
-          foolscap == 0.13.1
           configparser
           eliot
+          ${foolscap-version}
+
           # undetected cryptography build dependency
           # https://github.com/DavHau/mach-nix/issues/305
           setuptools_rust
