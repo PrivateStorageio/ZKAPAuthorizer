@@ -21,10 +21,7 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 from future.utils import PY2
 
@@ -52,12 +49,12 @@ if PY2:
         max,
         min,
     )  # noqa: F401
-from past.builtins import long
 
 from itertools import islice
 from json import dumps, load, loads
 from sys import maxint
 
+from past.builtins import long
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource

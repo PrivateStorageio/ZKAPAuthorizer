@@ -42,8 +42,8 @@ from testtools.matchers import (
     Always,
     Equals,
     HasLength,
-    IsInstance,
     Is,
+    IsInstance,
     MatchesAll,
     MatchesStructure,
 )
@@ -73,8 +73,8 @@ from ..controller import (
     Unpaid,
     UnpaidRedeemer,
     UnrecognizedFailureReason,
-    token_count_for_group,
     bracket,
+    token_count_for_group,
 )
 from ..model import DoubleSpend as model_DoubleSpend
 from ..model import Error as model_Error

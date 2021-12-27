@@ -17,10 +17,7 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 from future.utils import PY2
 
@@ -48,7 +45,6 @@ if PY2:
         max,
         min,
     )  # noqa: F401
-from past.builtins import long
 
 from datetime import datetime
 from functools import wraps
@@ -58,6 +54,7 @@ from sqlite3 import connect as _connect
 
 import attr
 from aniso8601 import parse_datetime as _parse_datetime
+from past.builtins import long
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
