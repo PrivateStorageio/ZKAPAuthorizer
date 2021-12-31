@@ -4,7 +4,7 @@ in
 { pkgs ? import sources.release2105 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs-source ? "tahoe-lafs-1.17.0"
+, tahoe-lafs-source ? "tahoe-lafs"
 , tahoe-lafs-repo ? sources.${tahoe-lafs-source}
 , privatestorage ? import ./. {
     inherit pkgs pypiData mach-nix;

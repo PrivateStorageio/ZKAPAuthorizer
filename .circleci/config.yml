@@ -227,7 +227,7 @@ workflows:
         matrix:
           parameters:
             tahoe-lafs-source:
-            - "tahoe-lafs-1.17.0"
+            - "tahoe-lafs"
 
     - "macos-tests":
         matrix:

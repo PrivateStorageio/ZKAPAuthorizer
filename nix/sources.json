@@ -41,7 +41,7 @@
         "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
         "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
     },
-    "tahoe-lafs-1.17.0": {
+    "tahoe-lafs": {
         "branch": "master",
         "description": "The Tahoe-LAFS decentralized secure filesystem.",
         "homepage": "https://tahoe-lafs.org/",
