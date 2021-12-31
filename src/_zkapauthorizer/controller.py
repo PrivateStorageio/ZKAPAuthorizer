@@ -22,7 +22,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from future.utils import PY2
 
 if PY2:
-    from future.builtins import (
+    from future.builtins import (  # noqa: F401
         filter,
         map,
         zip,
@@ -44,7 +44,7 @@ if PY2:
         str,
         max,
         min,
-    )  # noqa: F401
+    )
 
 from base64 import b64decode, b64encode
 from datetime import timedelta
@@ -54,6 +54,7 @@ from json import dumps, loads
 from operator import delitem, setitem
 from sys import exc_info
 
+from six import ensure_text
 import attr
 import challenge_bypass_ristretto
 from treq import content
@@ -105,7 +106,7 @@ class Unpaid(Exception):
     """
 
 
-@attr.s(frozen=True)
+@attr.s
 class UnrecognizedFailureReason(Exception):
     """
     An attempt was made to redeem a voucher and the response contained an unknown reason.
@@ -121,15 +122,18 @@ class RedemptionResult(object):
     """
     Contain the results of an attempt to redeem a voucher for ZKAP material.
 
-    :ivar list[UnblindedToken] unblinded_tokens: The tokens which resulted
-        from the redemption.
+    :ivar unblinded_tokens: The tokens which resulted from the redemption.
 
-    :ivar str public_key: The public key which the server proved was
-        involved in the redemption process.
+    :ivar public_key: The public key which the server proved was involved in
+        the redemption process.
     """
 
-    unblinded_tokens = attr.ib()
-    public_key = attr.ib()
+    unblinded_tokens = attr.ib(  # type: List[UnblindedToken]
+        validator=attr.validators.instance_of(list),
+    )
+    public_key = attr.ib(  # type: str
+        validator=attr.validators.instance_of(str),
+    )
 
 
 class IRedeemer(Interface):
@@ -269,10 +273,10 @@ class ErrorRedeemer(object):
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
-        details = node_config.get_config(
+        details = ensure_text(node_config.get_config(
             section=section_name,
             option="details",
-        ).decode("ascii")
+        ))
         return cls(details)
 
     def random_tokens_for_voucher(self, voucher, counter, count):
@@ -384,7 +388,7 @@ class DummyRedeemer(object):
             node_config.get_config(
                 section=section_name,
                 option="issuer-public-key",
-            ).decode("utf-8"),
+            ),
         )
 
     def random_tokens_for_voucher(self, voucher, counter, count):
@@ -486,10 +490,10 @@ class RistrettoRedeemer(object):
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
-        configured_issuer = node_config.get_config(
+        configured_issuer = ensure_text(node_config.get_config(
             section=section_name,
             option="ristretto-issuer-root-url",
-        ).decode("ascii")
+        ))
         if announcement is not None:
             # Don't let us talk to a storage server that has a different idea
             # about who issues ZKAPs.  We should lift this limitation (that is, we
@@ -531,7 +535,7 @@ class RistrettoRedeemer(object):
                     "redeemVoucher": voucher.number.decode("ascii"),
                     "redeemCounter": counter,
                     "redeemTokens": list(
-                        token.encode_base64() for token in blinded_tokens
+                        ensure_text(token.encode_base64()) for token in blinded_tokens
                     ),
                 }
             ),
@@ -965,7 +969,7 @@ class PaymentController(object):
             )
             self._error[voucher] = model_Error(
                 finished=self.store.now(),
-                details=reason.getErrorMessage().decode("utf-8", "replace"),
+                details=ensure_text(reason.getErrorMessage()),
             )
         return False
 
@@ -1053,7 +1057,9 @@ def bracket(first, last, between):
     except:
         info = exc_info()
         yield last()
-        raise info[0], info[1], info[2]
+        if PY2:
+            exec("raise info[0], info[1], info[2]")
+        raise
     else:
         yield last()
         returnValue(result)

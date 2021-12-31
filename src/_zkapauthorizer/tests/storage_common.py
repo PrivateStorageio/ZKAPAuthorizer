@@ -154,7 +154,7 @@ def integer_passes(limit):
 
 def get_passes(message, count, signing_key):
     """
-    :param unicode message: Request-binding message for PrivacyPass.
+    :param bytes message: Request-binding message for PrivacyPass.
 
     :param int count: The number of passes to get.
 
@@ -163,6 +163,7 @@ def get_passes(message, count, signing_key):
     :return list[Pass]: ``count`` new random passes signed with the given key
         and bound to the given message.
     """
+    assert isinstance(message, bytes)
     return make_passes(
         signing_key,
         message,
@@ -200,33 +201,33 @@ class _PassFactory(object):
     """
     A stateful pass issuer.
 
-    :ivar (unicode -> int -> [bytes]) _get_passes: A function for getting
-        passes.
+    :ivar _get_passes: A function for getting passes.
 
-    :ivar set[int] in_use: All of the passes given out without a confirmed
+    :ivar in_use: All of the passes given out without a confirmed
         terminal state.
 
-    :ivar dict[int, unicode] invalid: All of the passes given out and returned
-        using ``IPassGroup.invalid`` mapped to the reason given.
+    :ivar invalid: All of the passes given out and returned using
+        ``IPassGroup.invalid`` mapped to the reason given.
 
-    :ivar set[int] spent: All of the passes given out and returned via
+    :ivar spent: All of the passes given out and returned via
         ``IPassGroup.mark_spent``.
 
-    :ivar set[int] issued: All of the passes ever given out.
+    :ivar issued: All of the passes ever given out.
 
-    :ivar list[int] returned: A list of passes which were given out but then
-        returned via ``IPassGroup.reset``.
+    :ivar returned: A list of passes which were given out but then returned
+        via ``IPassGroup.reset``.
     """
 
-    _get_passes = attr.ib()
+    _get_passes = attr.ib()  # type: (bytes, int) -> List[bytes]
 
-    returned = attr.ib(default=attr.Factory(list), init=False)
-    in_use = attr.ib(default=attr.Factory(set), init=False)
-    invalid = attr.ib(default=attr.Factory(dict), init=False)
-    spent = attr.ib(default=attr.Factory(set), init=False)
-    issued = attr.ib(default=attr.Factory(set), init=False)
+    returned = attr.ib(default=attr.Factory(list), init=False)  # type: List[int]
+    in_use = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
+    invalid = attr.ib(default=attr.Factory(dict), init=False)  # type: Dict[int, unicode]
+    spent = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
+    issued = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
 
     def get(self, message, num_passes):
+        # type: (bytes, int) -> PassGroup
         passes = []
         if self.returned:
             passes.extend(self.returned[:num_passes])
@@ -235,7 +236,7 @@ class _PassFactory(object):
         passes.extend(self._get_passes(message, num_passes))
         self.issued.update(passes)
         self.in_use.update(passes)
-        return PassGroup(message, self, zip(passes, passes))
+        return PassGroup(message, self, list(zip(passes, passes)))
 
     def _clear(self):
         """

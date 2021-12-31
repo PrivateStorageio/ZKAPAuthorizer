@@ -48,6 +48,7 @@ if PY2:
 from datetime import timedelta
 from functools import partial
 from os import makedirs
+import os.path
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
@@ -66,7 +67,8 @@ from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
-from StringIO import StringIO
+from six.moves import StringIO
+from six import ensure_binary
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -389,8 +391,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         storage_client = storage_server.get_storage_client(
@@ -412,8 +414,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = config_from_string(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
             config_text.encode("utf-8"),
         )
         # On Tahoe-LAFS <1.16, the config is written as bytes.
@@ -466,8 +468,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         storage_client = storage_server.get_storage_client(
@@ -516,8 +518,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
@@ -548,12 +550,12 @@ class ClientPluginTests(TestCase):
         # tests, at least until creating a real server doesn't involve so much
         # complex setup.  So avoid using any of the client APIs that make a
         # remote call ... which is all of them.
-        pass_group = storage_client._get_passes("request binding message", num_passes)
+        pass_group = storage_client._get_passes(b"request binding message", num_passes)
         pass_group.mark_spent()
 
         # There should be no unblinded tokens left to extract.
         self.assertThat(
-            lambda: storage_client._get_passes("request binding message", 1),
+            lambda: storage_client._get_passes(b"request binding message", 1),
             raises(NotEnoughTokens),
         )
 
@@ -567,7 +569,7 @@ class ClientPluginTests(TestCase):
                         lambda logged_message: logged_message.message,
                         ContainsDict(
                             {
-                                "message": Equals("request binding message"),
+                                "message": Equals(u"request binding message"),
                                 "count": Equals(num_passes),
                             }
                         ),
@@ -589,8 +591,8 @@ class ClientResourceTests(TestCase):
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        config = get_config(nodedir, b"tub.port")
+        nodedir = tempdir.join(u"node")
+        config = get_config(nodedir, u"tub.port")
         self.assertThat(
             storage_server.get_client_resource(
                 config,
@@ -652,20 +654,28 @@ class LeaseMaintenanceServiceTests(TestCase):
             file, ``False`` otherwise.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        privatedir = tempdir.join(b"node", b"private")
+        nodedir = tempdir.join(u"node")
+        privatedir = tempdir.join(u"node", u"private")
         makedirs(privatedir)
-        config = get_config(nodedir, b"tub.port")
+        config = get_config(nodedir, u"tub.port")
+
+        # In Tahoe-LAFS 1.17 write_private_config is broken.  It mixes bytes
+        # and unicode in an os.path.join() call that always fails with a
+        # TypeError.
+        def write_private_config(name, value):
+            privname = os.path.join(config._basedir, u"private", name)
+            with open(privname, "wb") as f:
+                f.write(value)
 
         if servers_yaml is not None:
             # Provide it a statically configured server to connect to.
-            config.write_private_config(
-                b"servers.yaml",
+            write_private_config(
+                u"servers.yaml",
                 servers_yaml,
             )
         if rootcap:
             config.write_private_config(
-                b"rootcap",
+                u"rootcap",
                 b"dddddddd",
             )
 
@@ -780,7 +790,7 @@ class LoadSigningKeyTests(TestCase):
 
         :param bytes key: A base64-encoded Ristretto signing key.
         """
-        p = FilePath(self.useFixture(TempDir()).join(b"key"))
+        p = FilePath(self.useFixture(TempDir()).join(u"key"))
         p.setContent(key_bytes)
         key = load_signing_key(p)
         self.assertThat(key, IsInstance(SigningKey))

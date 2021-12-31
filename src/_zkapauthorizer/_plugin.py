@@ -291,7 +291,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         get_now=get_now,
     )
     last_run_path = FilePath(
-        node_config.get_private_path(b"last-lease-maintenance-run")
+        node_config.get_private_path(u"last-lease-maintenance-run")
     )
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(

@@ -16,8 +16,36 @@
 Tests for Foolscap-related test helpers.
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function, unicode_literals
 
+from future.utils import PY2
+
+# if PY2:
+#     from future.builtins import (  # noqa: F401
+#         filter,
+#         map,
+#         zip,
+#         ascii,
+#         chr,
+#         hex,
+#         input,
+#         next,
+#         oct,
+#         open,
+#         pow,
+#         round,
+#         super,
+#         bytes,
+#         dict,
+#         list,
+#         object,
+#         range,
+#         str,
+#         max,
+#         min,
+#     )
+
+from six import ensure_str
 from fixtures import Fixture
 from foolscap.api import Any, RemoteInterface, Violation
 from foolscap.furl import decode_furl
@@ -55,7 +83,7 @@ class IHasSchema(RemoteInterface):
 def remote_reference():
     tub = Tub()
     tub.setLocation("127.0.0.1:12345")
-    url = tub.buildURL(b"efgh")
+    url = tub.buildURL(ensure_str("efgh"))
 
     # Ugh ugh ugh.  Skip over the extra correctness checking in
     # RemoteReferenceTracker.__init__ that requires having a broker by passing
@@ -85,12 +113,9 @@ class LocalRemoteTests(TestCase):
         """
         self.assertThat(
             ref.tracker.getURL(),
-            MatchesAll(
-                IsInstance(bytes),
-                AfterPreprocessing(
-                    decode_furl,
-                    Always(),
-                ),
+            AfterPreprocessing(
+                decode_furl,
+                Always(),
             ),
         )
 

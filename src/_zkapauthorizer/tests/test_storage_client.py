@@ -16,7 +16,34 @@
 Tests for ``_zkapauthorizer._storage_client``.
 """
 
-from __future__ import division
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if  PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
 
 from functools import partial
 
@@ -180,7 +207,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: succeed(result),
                 num_passes,
-                partial(pass_factory(integer_passes(num_passes)).get, u"message"),
+                partial(pass_factory(integer_passes(num_passes)).get, b"message"),
             ),
             succeeded(Is(result)),
         )
@@ -197,7 +224,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: fail(result),
                 num_passes,
-                partial(pass_factory(integer_passes(num_passes)).get, u"message"),
+                partial(pass_factory(integer_passes(num_passes)).get, b"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -220,7 +247,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: succeed(group.passes),
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             succeeded(
                 Equals(
@@ -241,7 +268,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: None,
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             succeeded(Always()),
         )
@@ -261,7 +288,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: fail(Exception("Anything")),
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             failed(Always()),
         )
@@ -301,7 +328,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 reject_even_pass_values,
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             succeeded(Always()),
         )
@@ -342,7 +369,7 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 reject_passes,
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -406,7 +433,7 @@ class CallWithPassesTests(TestCase):
                 # out of passes no matter how many we start with.
                 reject_half_passes,
                 num_passes,
-                partial(passes.get, u"message"),
+                partial(passes.get, b"message"),
             ),
             failed(
                 AfterPreprocessing(
@@ -458,7 +485,7 @@ class PassFactoryTests(TestCase):
         ``IPassGroup.reset`` makes passes available to be returned by
         ``IPassGroup.get`` again.
         """
-        message = u"message"
+        message = b"message"
         min_passes = min(num_passes_a, num_passes_b)
         max_passes = max(num_passes_a, num_passes_b)
 
@@ -486,7 +513,7 @@ class PassFactoryTests(TestCase):
         :param (IPassGroup -> None) invalid_op: Some follow-up operation to
             perform with the pass group and to assert raises an exception.
         """
-        message = u"message"
+        message = b"message"
         factory = pass_factory(integer_passes(num_passes))
         group = factory.get(message, num_passes)
         setup_op(group)

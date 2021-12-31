@@ -149,13 +149,13 @@ class _ValidationResult(object):
         """
         Cryptographically check the validity of a single pass.
 
-        :param str message: The shared message for pass validation.
+        :param bytes message: The shared message for pass validation.
         :param Pass pass_: The pass to validate.
 
         :return bool: ``False`` (invalid) if the pass includes a valid
             signature, ``True`` (valid) otherwise.
         """
-        assert isinstance(message, str), "message %r not str" % (message,)
+        assert isinstance(message, bytes), "message %r not bytes" % (message,)
         assert isinstance(pass_, Pass), "pass %r not a Pass" % (pass_,)
         try:
             preimage = TokenPreimage.decode_base64(pass_.preimage)
@@ -163,7 +163,7 @@ class _ValidationResult(object):
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
             invalid_pass = verification_key.invalid_sha512(
-                proposed_signature, message.encode("utf-8")
+                proposed_signature, message,
             )
             return invalid_pass
         except Exception:
@@ -175,7 +175,7 @@ class _ValidationResult(object):
         """
         Check all of the given passes for validity.
 
-        :param str message: The shared message for pass validation.
+        :param bytes message: The shared message for pass validation.
         :param list[bytes] passes: The encoded passes to validate.
         :param SigningKey signing_key: The signing key to use to check the passes.
 
@@ -315,7 +315,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         storage for immutable shares if they present valid passes.
         """
         validation = _ValidationResult.validate_passes(
-            allocate_buckets_message(storage_index),
+            allocate_buckets_message(storage_index).encode("utf-8"),
             passes,
             self._signing_key,
         )
@@ -398,7 +398,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         duration of share storage if they present valid passes.
         """
         validation = _ValidationResult.validate_passes(
-            add_lease_message(storage_index),
+            add_lease_message(storage_index).encode("utf-8"),
             passes,
             self._signing_key,
         )
@@ -506,7 +506,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
         # Check passes for cryptographic validity.
         validation = _ValidationResult.validate_passes(
-            slot_testv_and_readv_and_writev_message(storage_index),
+            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
             passes,
             self._signing_key,
         )

@@ -30,7 +30,7 @@ def make_passes(signing_key, for_message, random_tokens):
     :param challenge_bypass_ristretto.SigningKey signing_key: The key to use
         to sign the passes.
 
-    :param unicode for_message: The request-binding message with which to
+    :param bytes for_message: The request-binding message with which to
         associate the passes.
 
     :param list[challenge_bypass_ristretto.RandomToken] random_tokens: The
@@ -62,7 +62,7 @@ def make_passes(signing_key, for_message, random_tokens):
         for unblinded_signature in unblinded_signatures
     )
     message_signatures = list(
-        verification_key.sign_sha512(for_message.encode("utf-8"))
+        verification_key.sign_sha512(for_message)
         for verification_key in verification_keys
     )
     passes = list(

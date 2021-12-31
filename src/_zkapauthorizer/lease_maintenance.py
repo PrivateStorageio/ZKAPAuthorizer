@@ -17,6 +17,35 @@ This module implements a service which periodically spends ZKAPs to
 refresh leases on all shares reachable from a root.
 """
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if  PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
+
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
@@ -26,6 +55,7 @@ try:
 except ImportError:
     pass
 
+from six import ensure_binary
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
@@ -395,7 +425,7 @@ def lease_maintenance_service(
     """
     interval_mean = lease_maint_config.crawl_interval_mean
     interval_range = lease_maint_config.crawl_interval_range
-    halfrange = interval_range / 2
+    halfrange = interval_range // 2
 
     def sample_interval_distribution():
         return timedelta(
@@ -507,7 +537,7 @@ def write_time_to_path(path, when):
 
     :param datetime when: The datetime to write.
     """
-    path.setContent(when.isoformat())
+    path.setContent(ensure_binary(when.isoformat()))
 
 
 def read_time_from_path(path):
@@ -526,7 +556,7 @@ def read_time_from_path(path):
             return None
         raise
     else:
-        return parse_datetime(when)
+        return parse_datetime(when.decode("ascii"))
 
 
 def visit_storage_indexes_from_root(visitor, get_root_nodes):

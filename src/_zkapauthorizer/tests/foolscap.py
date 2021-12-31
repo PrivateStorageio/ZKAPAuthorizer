@@ -121,7 +121,7 @@ class LocalRemote(object):
             schema = self._referenceable.getInterface()[methname]
             if self.check_args:
                 schema.checkAllArgs(args, kwargs, inbound=True)
-            _check_copyables(list(args) + kwargs.values())
+            _check_copyables(list(args) + list(kwargs.values()))
             result = self._referenceable.doRemoteCall(
                 methname,
                 args,

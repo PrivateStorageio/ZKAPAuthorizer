@@ -47,7 +47,6 @@ if PY2:
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
-from urllib import quote
 
 import attr
 from allmydata.client import config_from_string
@@ -70,6 +69,8 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
+from six.moves.urllib.parse import quote
+from six import ensure_binary
 from twisted.internet.defer import succeed
 from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
@@ -554,7 +555,7 @@ def tahoe_configs(
 
     def path_setter(config):
         def set_paths(basedir, portnumfile):
-            config._basedir = basedir.decode("ascii")
+            config._basedir = basedir
             config.portnum_fname = portnumfile
             return config
 
@@ -757,7 +758,13 @@ def request_paths():
 
     :see: ``requests``
     """
-    return lists(text().map(lambda x: quote(x.encode("utf-8"), safe=b"")))
+    def quote_segment(seg):
+        if PY2:
+            return quote(seg.encode("utf-8"), safe=b"")
+        else:
+            return quote(seg, safe="").encode("utf-8")
+
+    return lists(text().map(quote_segment))
 
 
 def requests(paths=request_paths()):

@@ -16,6 +16,35 @@
 Tests for ``_zkapauthorizer.spending``.
 """
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if  PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
+
 from hypothesis import given
 from hypothesis.strategies import data, integers, randoms
 from testtools import TestCase
@@ -62,7 +91,7 @@ class PassGroupTests(TestCase):
             store=configless.store,
         )
 
-        group = pass_factory.get(u"message", num_passes)
+        group = pass_factory.get(b"message", num_passes)
         self.assertThat(
             group,
             MatchesAll(
@@ -97,7 +126,7 @@ class PassGroupTests(TestCase):
         # Figure out some subset, maybe empty, of passes from the group that
         # we will try to operate on.
         group_size = data.draw(integers(min_value=0, max_value=num_passes))
-        indices = range(num_passes)
+        indices = list(range(num_passes))
         random.shuffle(indices)
         spent_indices = indices[:group_size]
 
@@ -106,7 +135,7 @@ class PassGroupTests(TestCase):
             tokens_to_passes=configless.redeemer.tokens_to_passes,
             store=configless.store,
         )
-        group = pass_factory.get(u"message", num_passes)
+        group = pass_factory.get(b"message", num_passes)
         spent, rest = group.split(spent_indices)
         operation(spent)
 

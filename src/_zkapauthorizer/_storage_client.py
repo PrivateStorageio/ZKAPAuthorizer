@@ -20,7 +20,34 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if  PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
 
 from functools import partial, wraps
 

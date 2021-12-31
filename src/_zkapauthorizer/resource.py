@@ -51,9 +51,10 @@ if PY2:
     )
 
 from itertools import islice
-from json import dumps, load, loads
-from sys import maxint
+from json import load, loads
+from sys import maxsize
 
+from six import ensure_str, ensure_binary
 from past.builtins import long
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
@@ -61,6 +62,7 @@ from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
 
+from ._json import dumps
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from .config import get_configured_lease_duration
@@ -170,7 +172,7 @@ def from_configuration(
     )
 
     root = create_private_tree(
-        lambda: node_config.get_private_config(b"api_auth_token"),
+        lambda: ensure_binary(node_config.get_private_config(ensure_str("api_auth_token"))),
         authorizationless_resource_tree(
             store,
             controller,
@@ -373,7 +375,7 @@ class _UnblindedTokenCollection(Resource):
 
         limit = request.args.get(b"limit", [None])[0]
         if limit is not None:
-            limit = min(maxint, int(limit))
+            limit = min(maxsize, int(limit))
 
         position = request.args.get(b"position", [b""])[0].decode("utf-8")
 
@@ -432,7 +434,7 @@ class _VoucherCollection(Resource):
             payload = loads(request.content.read())
         except Exception:
             return bad_request("json request body required").render(request)
-        if payload.keys() != ["voucher"]:
+        if set(payload) != {"voucher"}:
             return bad_request(
                 "request object must have exactly one key: 'voucher'"
             ).render(request)

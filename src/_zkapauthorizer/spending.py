@@ -16,6 +16,35 @@
 A module for logic controlling the manner in which ZKAPs are spent.
 """
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if  PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
+
 import attr
 from zope.interface import Attribute, Interface, implementer
 
@@ -101,7 +130,7 @@ class PassGroup(object):
     """
     Track the state of a group of passes intended as payment for an operation.
 
-    :ivar unicode _message: The request binding message for this group of
+    :ivar _message: The request binding message for this group of
         passes.
 
     :ivar IPassFactory _factory: The factory which created this pass group.
@@ -109,19 +138,22 @@ class PassGroup(object):
     :ivar list[Pass] passes: The passes of which this group consists.
     """
 
-    _message = attr.ib()
-    _factory = attr.ib()
-    _tokens = attr.ib()
+    _message = attr.ib(validator=attr.validators.instance_of(bytes))  # type: bytes
+    _factory = attr.ib(validator=attr.validators.provides(IPassFactory))  # type: IPassFactory
+    _tokens = attr.ib(validator=attr.validators.instance_of(list))  # type: List[(UnblinidedToken, Pass)]
 
     @property
     def passes(self):
+        # type: () -> List[Pass]
         return list(pass_ for (unblinded_token, pass_) in self._tokens)
 
     @property
     def unblinded_tokens(self):
+        # type: () -> List[UnblindedToken]
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
     def split(self, select_indices):
+        # type: (List[int]) -> (PassGroup, PassGroup)
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
@@ -135,18 +167,22 @@ class PassGroup(object):
         )
 
     def expand(self, by_amount):
+        # type: (int) -> PassGroup
         return attr.evolve(
             self,
             tokens=self._tokens + self._factory.get(self._message, by_amount)._tokens,
         )
 
     def mark_spent(self):
+        # type: () -> None
         self._factory._mark_spent(self.unblinded_tokens)
 
     def mark_invalid(self, reason):
+        # type: () -> None
         self._factory._mark_invalid(reason, self.unblinded_tokens)
 
     def reset(self):
+        # tye: () -> None
         self._factory._reset(self.unblinded_tokens)
 
 
@@ -158,12 +194,12 @@ class SpendingController(object):
     attempts when necessary.
     """
 
-    get_unblinded_tokens = attr.ib()
-    discard_unblinded_tokens = attr.ib()
-    invalidate_unblinded_tokens = attr.ib()
-    reset_unblinded_tokens = attr.ib()
+    get_unblinded_tokens = attr.ib()  # type: (int) -> [UnblindedToken]
+    discard_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
+    invalidate_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
+    reset_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
 
-    tokens_to_passes = attr.ib()
+    tokens_to_passes = attr.ib() # type: (bytes, [UnblindedTokens]) -> [Pass]
 
     @classmethod
     def for_store(cls, tokens_to_passes, store):
@@ -179,10 +215,10 @@ class SpendingController(object):
         unblinded_tokens = self.get_unblinded_tokens(num_passes)
         passes = self.tokens_to_passes(message, unblinded_tokens)
         GET_PASSES.log(
-            message=message,
+            message=message.decode("utf-8"),
             count=num_passes,
         )
-        return PassGroup(message, self, zip(unblinded_tokens, passes))
+        return PassGroup(message, self, list(zip(unblinded_tokens, passes)))
 
     def _mark_spent(self, unblinded_tokens):
         SPENT_PASSES.log(

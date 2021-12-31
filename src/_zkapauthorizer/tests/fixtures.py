@@ -16,7 +16,34 @@
 Common fixtures to let the test suite focus on application logic.
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+from future.utils import PY2
+
+if PY2:
+    from future.builtins import (  # noqa: F401
+        filter,
+        map,
+        zip,
+        ascii,
+        chr,
+        hex,
+        input,
+        next,
+        oct,
+        open,
+        pow,
+        round,
+        super,
+        bytes,
+        dict,
+        list,
+        object,
+        range,
+        str,
+        max,
+        min,
+    )
 
 from base64 import b64encode
 
@@ -49,9 +76,9 @@ class AnonymousStorageServer(Fixture):
     clock = attr.ib()
 
     def _setUp(self):
-        self.tempdir = FilePath(self.useFixture(TempDir()).join(b"storage"))
+        self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))
         self.storage_server = StorageServer(
-            self.tempdir.asBytesMode().path,
+            self.tempdir.asTextMode().path,
             b"x" * 20,
             clock=self.clock,
         )
@@ -75,7 +102,7 @@ class TemporaryVoucherStore(Fixture):
 
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
-        self.config = self.get_config(self.tempdir.join(b"node"), b"tub.port")
+        self.config = self.get_config(self.tempdir.join(u"node"), u"tub.port")
         self.store = VoucherStore.from_node_config(
             self.config,
             self.get_now,

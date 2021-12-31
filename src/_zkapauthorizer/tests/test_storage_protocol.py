@@ -235,14 +235,14 @@ class ShareTests(TestCase):
 
         # Make some passes with a key untrusted by the server.
         bad_passes = get_passes(
-            allocate_buckets_message(storage_index),
+            allocate_buckets_message(storage_index).encode("utf-8"),
             len(bad_pass_indexes),
             random_signing_key(),
         )
 
         # Make some passes with a key trusted by the server.
         good_passes = get_passes(
-            allocate_buckets_message(storage_index),
+            allocate_buckets_message(storage_index).encode("utf-8"),
             num_passes - len(bad_passes),
             self.signing_key,
         )

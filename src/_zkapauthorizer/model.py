@@ -48,7 +48,7 @@ if PY2:
 
 from datetime import datetime
 from functools import wraps
-from json import dumps, loads
+from json import loads
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 
@@ -58,7 +58,9 @@ from past.builtins import long
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
+from six import ensure_text
 
+from ._json import dumps
 from ._base64 import urlsafe_b64decode
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
@@ -69,16 +71,19 @@ from .storage_common import (
 from .validators import greater_than, has_length, is_base64_encoded
 
 
-def parse_datetime(s, **kw):
-    """
-    Like ``aniso8601.parse_datetime`` but accept str as well.
-    """
-    if isinstance(s, str):
-        s = s.encode("utf-8")
-    assert isinstance(s, bytes)
-    if "delimiter" in kw and isinstance(kw["delimiter"], str):
-        kw["delimiter"] = kw["delimiter"].encode("utf-8")
-    return _parse_datetime(s, **kw)
+if PY2:
+    def parse_datetime(s, **kw):
+        """
+        Like ``aniso8601.parse_datetime`` but accept str as well.
+        """
+        if isinstance(s, str):
+            s = s.encode("utf-8")
+        assert isinstance(s, bytes)
+        if "delimiter" in kw and isinstance(kw["delimiter"], str):
+            kw["delimiter"] = kw["delimiter"].encode("utf-8")
+        return _parse_datetime(s, **kw)
+else:
+    parse_datetime = _parse_datetime
 
 
 class ILeaseMaintenanceObserver(Interface):
@@ -975,7 +980,7 @@ class Redeeming(object):
     def to_json_v1(self):
         return {
             "name": "redeeming",
-            "started": self.started.isoformat(),
+            "started": ensure_text(self.started.isoformat()),
             "counter": self.counter,
         }
 
@@ -1000,7 +1005,7 @@ class Redeemed(object):
     def to_json_v1(self):
         return {
             "name": "redeemed",
-            "finished": self.finished.isoformat(),
+            "finished": ensure_text(self.finished.isoformat()),
             "token-count": self.token_count,
         }
 
@@ -1015,7 +1020,7 @@ class DoubleSpend(object):
     def to_json_v1(self):
         return {
             "name": "double-spend",
-            "finished": self.finished.isoformat(),
+            "finished": ensure_text(self.finished.isoformat()),
         }
 
 
@@ -1035,7 +1040,7 @@ class Unpaid(object):
     def to_json_v1(self):
         return {
             "name": "unpaid",
-            "finished": self.finished.isoformat(),
+            "finished": ensure_text(self.finished.isoformat()),
         }
 
 
@@ -1056,7 +1061,7 @@ class Error(object):
     def to_json_v1(self):
         return {
             "name": "error",
-            "finished": self.finished.isoformat(),
+            "finished": ensure_text(self.finished.isoformat()),
             "details": self.details,
         }
 
@@ -1204,7 +1209,7 @@ class Voucher(object):
         return {
             "number": self.number.decode("ascii"),
             "expected-tokens": self.expected_tokens,
-            "created": None if self.created is None else self.created.isoformat(),
+            "created": None if self.created is None else ensure_text(self.created.isoformat()),
             "state": state,
             "version": 1,
         }

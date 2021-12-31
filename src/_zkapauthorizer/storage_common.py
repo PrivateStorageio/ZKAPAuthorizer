@@ -55,7 +55,7 @@ from .eliot import MUTABLE_PASSES_REQUIRED
 from .validators import greater_than
 
 
-@attr.s(frozen=True, str=True)
+@attr.s(str=True)
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -80,7 +80,7 @@ def _message_maker(label):
     def make_message(storage_index):
         return "{label} {storage_index}".format(
             label=label,
-            storage_index=b64encode(storage_index),
+            storage_index=b64encode(storage_index).decode("utf-8"),
         )
 
     return make_message

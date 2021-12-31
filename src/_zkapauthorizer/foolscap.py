@@ -17,14 +17,15 @@ Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
 to communicate between storage clients and servers.
 """
 
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function, unicode_literals
 
+from future.utils import PY2
 import attr
 from allmydata.interfaces import Offset, RIStorageServer, StorageIndex
 from foolscap.api import Any, Copyable, DictOf, ListOf, RemoteCopy
 from foolscap.constraint import ByteStringConstraint
 from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
-
+from six import ensure_str
 
 @attr.s
 class ShareStat(Copyable, RemoteCopy):
@@ -37,7 +38,7 @@ class ShareStat(Copyable, RemoteCopy):
         lease on this share expires, or None if there is no lease.
     """
 
-    typeToCopy = copytype = "ShareStat"
+    typeToCopy = copytype = ensure_str("ShareStat")
 
     # To be a RemoteCopy it must be possible to instantiate this with no
     # arguments. :/ So supply defaults for these attributes.
@@ -90,7 +91,7 @@ def add_passes(schema):
     :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
         ``schema`` but with one additional required argument.
     """
-    return add_arguments(schema, [(b"passes", _PassList)])
+    return add_arguments(schema, [("passes", _PassList)])
 
 
 def add_arguments(schema, kwargs):
@@ -136,7 +137,9 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     validated is service provided.
     """
 
-    __remote_name__ = "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
+    __remote_name__ = ensure_str(
+        "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
+    )
 
     get_version = RIStorageServer["get_version"]
 
