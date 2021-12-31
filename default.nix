@@ -30,6 +30,10 @@ in
       traceback2 = "wheel";
       # - Incorrectly merged extras - https://github.com/DavHau/mach-nix/pull/334
       tqdm = "wheel";
+
+      # The version of Klein we get doesn't need / can't have the patch that
+      # comes from the nixpkgs derivation mach-nix picks up from 21.05.
+      klein = "wheel";
     };
   in
     rec {
@@ -53,10 +57,6 @@ in
           EOF
         '';
         src = tahoe-lafs-repo;
-
-        # The version of Klein we get doesn't need / can't have the patch that
-        # comes from the nixpkgs derivation mach-nix picks up from 21.05.
-        _.klein.patches = [];
       };
       zkapauthorizer = mach-nix.buildPythonApplication rec {
         inherit python providers;
