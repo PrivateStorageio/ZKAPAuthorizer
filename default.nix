@@ -53,11 +53,17 @@ in
       #   this another way, dependencies have undetected dependencies, easier
       #   to just use the wheel.
       collections-extended = "wheel";
+      # same as collections-extended
+      isort = "wheel";
 
       # From nixpkgs or sdist, fails with
       # cp: cannot stat 'benchmark/': No such file or directory
       # cp: cannot stat 'tests/': No such file or directory
       tomli = "wheel";
+
+      # repo re-org or something?
+      # find: ‘hypothesis-6.32.1/hypothesis-python’: No such file or directory
+      hypothesis = "wheel";
     };
   in
     rec {

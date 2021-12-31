@@ -6,7 +6,7 @@ let
   inherit (tests) pkgs;
 in
 pkgs.mkShell {
-  packages = [
+  buildInputs = [
     tests.python
     tests.lint-python
     pkgs.niv
