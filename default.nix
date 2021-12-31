@@ -77,9 +77,6 @@ in
         ];
         # Record some settings here, so downstream nix files can consume them.
         meta.mach-nix = { inherit python providers; };
-
-        # Annoyingly duplicate the Klein fix from the Tahoe-LAFS expression.
-        _.klein.patches = [];
       };
 
       privatestorage = let
