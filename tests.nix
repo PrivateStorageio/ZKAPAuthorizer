@@ -1,8 +1,20 @@
-{ privatestorage ? import ./. args
+let
+  fixArgs = a: builtins.removeAttrs a [
+    # Make sure all the args tests.nix accepts but default.nix does not are
+    # listed here so we don't try to forward them to default.nix
+    "privatestorage"
+    "hypothesisProfile"
+    "collectCoverage"
+    "testSuite"
+    "trialArgs"
+  ];
+in
+{ privatestorage ? import ./. (fixArgs args)
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
 , trialArgs ? null
+# accept any other arguments to be passed on to default.nix
 , ...
 }@args:
 let
