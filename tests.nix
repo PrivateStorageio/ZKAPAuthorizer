@@ -1,24 +1,25 @@
 let
-  sources = import nix/sources.nix;
+  fixArgs = a: builtins.removeAttrs a [
+    # Make sure all the args tests.nix accepts but default.nix does not are
+    # listed here so we don't try to forward them to default.nix
+    "privatestorage"
+    "hypothesisProfile"
+    "collectCoverage"
+    "testSuite"
+    "trialArgs"
+  ];
 in
-{ pkgs ? import sources.release2105 {}
-, pypiData ? sources.pypi-deps-db
-, mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs-source ? "tahoe-lafs"
-, tahoe-lafs-repo ? sources.${tahoe-lafs-source}
-, privatestorage ? import ./. {
-    inherit pkgs pypiData mach-nix;
-    inherit tahoe-lafs-repo;
-  }
+{ privatestorage ? import ./. (fixArgs args)
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
 , trialArgs ? null
-,
-}:
-  let
+# accept any other arguments to be passed on to default.nix
+, ...
+}@args:
+let
+    inherit (privatestorage) pkgs mach-nix zkapauthorizer;
     inherit (pkgs) lib;
-    inherit (privatestorage) zkapauthorizer;
     hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
     defaultTrialArgs = [ "--rterrors" ] ++ (lib.optional (! collectCoverage) "--jobs=$(($NIX_BUILD_CORES > 8 ? 8 : $NIX_BUILD_CORES))");
     trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
@@ -38,10 +39,11 @@ in
       requirements = ''
         isort
         black
+        flake8
       '';
     };
-  in
-    pkgs.runCommand "zkapauthorizer-tests" {
+
+    tests = pkgs.runCommand "zkapauthorizer-tests" {
       passthru = {
         inherit python;
       };
@@ -65,4 +67,8 @@ in
           cp -v .coverage.* "$out/coverage"
         ''
       }
-    ''
+    '';
+in
+{
+  inherit pkgs python lint-python tests;
+}

@@ -37,6 +37,8 @@ in
     };
   in
     rec {
+      inherit pkgs mach-nix;
+
       tahoe-lafs = mach-nix.buildPythonPackage rec {
         inherit python providers;
         name = "tahoe-lafs";
