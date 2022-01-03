@@ -179,6 +179,8 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
+            mkdir -p /etc/ssl/certs/
+            ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
             nix-env -f $NIXPKGS -iA cachix bash
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
