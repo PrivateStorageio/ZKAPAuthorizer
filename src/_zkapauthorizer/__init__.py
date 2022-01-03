@@ -14,9 +14,7 @@
 
 __all__ = [
     "__version__",
+    "__revision__",
 ]
 
-from ._version import get_versions
-
-__version__ = get_versions()["version"]
-del get_versions
+from ._version import __revision__, __version__
