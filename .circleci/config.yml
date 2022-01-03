@@ -162,6 +162,10 @@ jobs:
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
 
+      # Let us use features marked "experimental".  For example, most/all of
+      # the `nix <subcommand>` forms.
+      NIX_CONFIG: "experimental-features = nix-command"
+
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
       # need to work before we get that far.  This pin is for those things.
