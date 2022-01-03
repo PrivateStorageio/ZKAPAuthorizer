@@ -1,17 +1,14 @@
+# Note: Passing arguments through here to customize the environment does not
+# work on Nix 2.3.  It works with Nix 2.5.  I'm not sure about 2.4.
+{ ... }@args:
 let
-  sources = import nix/sources.nix;
+  tests = import ./tests.nix args;
+  inherit (tests) pkgs;
 in
-{ pkgs ? import sources.release2105 {}
-, tahoe-lafs-source ? "tahoe-lafs"
-}:
-  let
-    tests = pkgs.callPackage ./tests.nix {
-      inherit tahoe-lafs-source;
-    };
-  in
-    pkgs.mkShell {
-      packages = [
-        tests.python
-        pkgs.niv
-      ];
-    }
+pkgs.mkShell {
+  buildInputs = [
+    tests.python
+    tests.lint-python
+    pkgs.niv
+  ];
+}

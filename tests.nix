@@ -1,24 +1,13 @@
-let
-  sources = import nix/sources.nix;
-in
-{ pkgs ? import sources.release2105 {}
-, pypiData ? sources.pypi-deps-db
-, mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
-, tahoe-lafs-source ? "tahoe-lafs"
-, tahoe-lafs-repo ? sources.${tahoe-lafs-source}
-, privatestorage ? import ./. {
-    inherit pkgs pypiData mach-nix;
-    inherit tahoe-lafs-repo;
-  }
+{ privatestorage ? import ./. args
 , hypothesisProfile ? null
 , collectCoverage ? false
 , testSuite ? null
 , trialArgs ? null
-,
-}:
-  let
+, ...
+}@args:
+let
+    inherit (privatestorage) pkgs mach-nix zkapauthorizer;
     inherit (pkgs) lib;
-    inherit (privatestorage) zkapauthorizer;
     hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
     defaultTrialArgs = [ "--rterrors" ] ++ (lib.optional (! collectCoverage) "--jobs=$(($NIX_BUILD_CORES > 8 ? 8 : $NIX_BUILD_CORES))");
     trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
@@ -38,10 +27,11 @@ in
       requirements = ''
         isort
         black
+        flake8
       '';
     };
-  in
-    pkgs.runCommand "zkapauthorizer-tests" {
+
+    tests = pkgs.runCommand "zkapauthorizer-tests" {
       passthru = {
         inherit python;
       };
@@ -65,4 +55,8 @@ in
           cp -v .coverage.* "$out/coverage"
         ''
       }
-    ''
+    '';
+in
+{
+  inherit pkgs python lint-python tests;
+}
