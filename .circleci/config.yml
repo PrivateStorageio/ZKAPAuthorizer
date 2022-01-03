@@ -179,6 +179,7 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
+            find / -name ca-bundle.crt
             nix-env -f $NIXPKGS -iA cachix bash
             cachix use "${CACHIX_NAME}"
             nix path-info --all > /tmp/store-path-pre-build
