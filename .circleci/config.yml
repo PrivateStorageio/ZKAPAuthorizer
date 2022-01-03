@@ -165,7 +165,7 @@ jobs:
       # Let us use features marked "experimental".  For example, most/all of
       # the `nix <subcommand>` forms.
       NIX_CONFIG: "experimental-features = nix-command"
-      NIX_SSL_CERT_FILE: "/nix/store/dvcalma5h3wd8bbwhj7g9m3yswxm707c-nss-cacert-3.66/etc/ssl/certs/ca-bundle.crt"
+      # NIX_SSL_CERT_FILE: "/nix/store/dvcalma5h3wd8bbwhj7g9m3yswxm707c-nss-cacert-3.66/etc/ssl/certs/ca-bundle.crt"
 
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
@@ -179,6 +179,7 @@ jobs:
       - run:
           name: "Set up Cachix"
           command: |
+            env
             mkdir -p /etc/ssl/certs/
             ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
             nix-env -f $NIXPKGS -iA cachix bash
