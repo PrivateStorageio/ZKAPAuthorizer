@@ -6,6 +6,7 @@ in
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , tahoe-lafs-source ? "tahoe-lafs"
 , tahoe-lafs-repo ? sources.${tahoe-lafs-source}
+, ...
 }:
   let
     lib = pkgs.lib;
