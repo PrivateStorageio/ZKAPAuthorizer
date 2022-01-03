@@ -829,6 +829,8 @@ def get_stat(sharepath):
     with open(sharepath, "rb") as share_file:
         magic = share_file.read(32)
         if len(magic) < 32:
+            # Tahoe could check for this.
+            # https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3853
             raise ValueError("Share file has short header")
         if ShareFile.is_valid_header(magic):
             return stat_bucket
