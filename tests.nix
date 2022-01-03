@@ -1,7 +1,7 @@
 let
   sources = import nix/sources.nix;
 in
-{ pkgs ? import sources.release2015 {}
+{ pkgs ? import sources.release2105 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , tahoe-lafs-source ? "tahoe-lafs"
@@ -20,7 +20,7 @@ in
     inherit (pkgs) lib;
     inherit (privatestorage) zkapauthorizer;
     hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
-    defaultTrialArgs = [ "--rterrors" ] ++ (lib.optional (! collectCoverage) "--jobs=$NIX_BUILD_CORES");
+    defaultTrialArgs = [ "--rterrors" ] ++ (lib.optional (! collectCoverage) "--jobs=$(($NIX_BUILD_CORES > 8 ? 8 : $NIX_BUILD_CORES))");
     trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
     extraTrialArgs = builtins.concatStringsSep " " trialArgs';
     testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;

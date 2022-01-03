@@ -21,7 +21,6 @@ from __future__ import absolute_import
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
 from challenge_bypass_ristretto import PublicKey, random_signing_key
-from fixtures import MonkeyPatch
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import assume, given
 from hypothesis.strategies import data as data_strategy
@@ -540,33 +539,22 @@ class ShareTests(TestCase):
 
         self.clock.advance(when)
 
-        # anonymous_storage_server uses time.time() before Tahoe-LAFS 1.16,
-        # unfortunately.  For Tahoe-LAFS 1.16, AnonymousStorageServer will
-        # glue self.clock in for us.  For older versions we still need this
-        # monkey-patching.
-        #
-        # And useFixture does not interact very well with Hypothesis.
-        patch = MonkeyPatch("time.time", self.clock.seconds)
-        try:
-            patch.setUp()
-            # Create a share we can toy with.
-            write_shares(
-                self.anonymous_storage_server,
+        # Create a share we can toy with.
+        write_shares(
+            self.anonymous_storage_server,
+            storage_index,
+            {sharenum},
+            size,
+            canary=self.canary,
+        )
+        # Perhaps put some more leases on it.  Leases might impact our
+        # ability to determine share data size.
+        for renew_secret in leases:
+            self.anonymous_storage_server.remote_add_lease(
                 storage_index,
-                {sharenum},
-                size,
-                canary=self.canary,
+                renew_secret,
+                cancel_secret,
             )
-            # Perhaps put some more leases on it.  Leases might impact our
-            # ability to determine share data size.
-            for renew_secret in leases:
-                self.anonymous_storage_server.remote_add_lease(
-                    storage_index,
-                    renew_secret,
-                    cancel_secret,
-                )
-        finally:
-            patch.cleanUp()
 
         expected = [
             {
@@ -629,7 +617,7 @@ class ShareTests(TestCase):
         If a share file with an unexpected version is found, ``stat_shares``
         declines to offer a result (by raising ``ValueError``).
         """
-        assume(version != 1)
+        assume(version not in (1, 2))
 
         sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
@@ -771,23 +759,18 @@ class ShareTests(TestCase):
         """
         self.clock.advance(when)
 
-        patch = MonkeyPatch("time.time", self.clock.seconds)
-        try:
-            patch.setUp()
-            # Create a share we can toy with.
-            wrote, read = extract_result(
-                self.client.slot_testv_and_readv_and_writev(
-                    storage_index,
-                    secrets=secrets,
-                    tw_vectors={
-                        k: v.for_call()
-                        for (k, v) in test_and_write_vectors_for_shares.items()
-                    },
-                    r_vector=[],
-                ),
-            )
-        finally:
-            patch.cleanUp()
+        # Create a share we can toy with.
+        wrote, read = extract_result(
+            self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors={
+                    k: v.for_call()
+                    for (k, v) in test_and_write_vectors_for_shares.items()
+                },
+                r_vector=[],
+            ),
+        )
         self.assertThat(
             wrote,
             Equals(True),
@@ -1052,20 +1035,14 @@ class ShareTests(TestCase):
                 r_vector=[],
             )
 
-        patch = MonkeyPatch("time.time", self.clock.seconds)
-        try:
-            patch.setUp()
+        # Create a share we can toy with.
+        self.assertThat(write(), is_successful_write())
 
-            # Create a share we can toy with.
-            self.assertThat(write(), is_successful_write())
+        # Advance time by more than a lease period so the lease is no
+        # longer valid.
+        self.clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
 
-            # Advance time by more than a lease period so the lease is no
-            # longer valid.
-            self.clock.advance(self.server.LEASE_PERIOD.total_seconds() + 1)
-
-            self.assertThat(write(), is_successful_write())
-        finally:
-            patch.cleanUp()
+        self.assertThat(write(), is_successful_write())
 
         # The spent passes have been reported to the spending service.
         self.assertThat(

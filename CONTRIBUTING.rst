@@ -71,5 +71,5 @@ nixpkgs
 
 We pin to a nixos channel release, which isn't directly supported by niv (`issue <https://github.com/nmattia/niv/issues/225>`_).
 Thus, the pin needs to be update manually.
-To do this, copy the ``url`` and ``sha256`` values from PrivateStorageio's `nixpkgs-2105.json <https://whetstone.privatestorage.io/privatestorage/PrivateStorageio/-/blob/develop/nixpkgs-2105.json>`_ into the ``release2015`` entry in ``nix/sources.json``.
+To do this, copy the ``url`` and ``sha256`` values from PrivateStorageio's `nixpkgs-2105.json <https://whetstone.privatestorage.io/privatestorage/PrivateStorageio/-/blob/develop/nixpkgs-2105.json>`_ into the ``release2105`` entry in ``nix/sources.json``.
 When this is deployed as part of Privatestorageio, we use the value pinned there, rather than the pin in this repository.

@@ -1,7 +1,7 @@
 let
   sources = import nix/sources.nix;
 in
-{ pkgs ? import sources.release2015 {}
+{ pkgs ? import sources.release2105 {}
 , pypiData ? sources.pypi-deps-db
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData; }
 , tahoe-lafs-source ? "tahoe-lafs"
@@ -30,13 +30,25 @@ in
       traceback2 = "wheel";
       # - Incorrectly merged extras - https://github.com/DavHau/mach-nix/pull/334
       tqdm = "wheel";
+
+      # The version of Klein we get doesn't need / can't have the patch that
+      # comes from the nixpkgs derivation mach-nix picks up from 21.05.
+      klein = "wheel";
     };
   in
     rec {
       tahoe-lafs = mach-nix.buildPythonPackage rec {
         inherit python providers;
         name = "tahoe-lafs";
-        version = "1.16.post999";
+        # We add `.post999` here so that we don't accidentally *exactly* match
+        # the upstream Tahoe-LAFS version.  This avoids the misleading
+        # circumstance where the version in the Nix packaging *looks* like a
+        # real upstream Tahoe-LAFS revision but we have forgotten to update it
+        # so it is the *wrong* real upstream Tahoe-LAFS revision.  Hopefully
+        # the `.post999` looks weird enough that if someone really cares about
+        # the version in use they will notice it and go searching for what's
+        # going on and discover the real version specified by `src` below.
+        version = "1.17.0.post999";
         # See https://github.com/DavHau/mach-nix/issues/190
         requirementsExtra = ''
           pyrsistent < 0.17

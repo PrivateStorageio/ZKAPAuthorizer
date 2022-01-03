@@ -33,7 +33,9 @@ from struct import calcsize, unpack
 import attr
 from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
+from allmydata.storage.immutable import ShareFile
 from allmydata.storage.lease import LeaseInfo
+from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
@@ -721,7 +723,7 @@ def get_storage_index_share_size(sharepath):
     # From src/allmydata/storage/immutable.py
     #
     # The share file has the following layout:
-    #  0x00: share file version number, four bytes, current version is 1
+    #  0x00: share file version number, four bytes, current version is 2
     #  0x04: share data length, four bytes big-endian = A # See Footnote 1 below.
     #  0x08: number of leases, four bytes big-endian
     #  0x0c: beginning of share data (see immutable.layout.WriteBucketProxy)
@@ -756,12 +758,14 @@ def get_storage_index_share_size(sharepath):
 
     version, _, number_of_leases = unpack(header_format, header)
 
-    if version != 1:
-        raise ValueError(
-            "Cannot interpret version {} share file.".format(version),
-        )
+    if version in (1, 2):
+        # Version 1 and 2 don't differ in a way that changes the size
+        # calculation.
+        return share_file_size - header_size - (number_of_leases * (4 + 32 + 32 + 4))
 
-    return share_file_size - header_size - (number_of_leases * (4 + 32 + 32 + 4))
+    raise ValueError(
+        "Cannot interpret version {} share file.".format(version),
+    )
 
 
 def stat_bucket(storage_server, storage_index, sharepath):
@@ -824,10 +828,16 @@ def get_stat(sharepath):
     # Figure out if it is a storage index or a slot.
     with open(sharepath, "rb") as share_file:
         magic = share_file.read(32)
-        if magic == "Tahoe mutable container v1\n" + "\x75\x09\x44\x03\x8e":
+        if len(magic) < 32:
+            # Tahoe could check for this.
+            # https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3853
+            raise ValueError("Share file has short header")
+        if ShareFile.is_valid_header(magic):
+            return stat_bucket
+        elif MutableShareFile.is_valid_header(magic):
             return stat_slot
         else:
-            return stat_bucket
+            raise ValueError("Cannot interpret share header {!r}".format(magic))
 
 
 def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, now):
@@ -847,6 +857,7 @@ def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, no
             (write_enabler, renew_secret, cancel_secret) = secrets
             share = get_share_file(sharepath)
             share.add_or_renew_lease(
+                storage_server.get_available_space(),
                 LeaseInfo(
                     owner_num=1,
                     renew_secret=renew_secret,
