@@ -148,7 +148,7 @@ jobs:
       # one day someone pushed a bad revision to it and our CI broke.  So now
       # we just pin some recent version.  Who would have thought a floating
       # dependency would cause build instability?
-      - image: "nixos/nix:2.3.16"
+      - image: "nixos/nix:2.5.1"
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
@@ -167,6 +167,18 @@ jobs:
       NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
+      - run:
+          # Work around a bug in the 2.5.1 Docker image that prevents it from
+          # having any CA certificates to use to validate any certificates it
+          # encounters (and thus makes it incapable of talking to our binary
+          # caches).
+          #
+          # The work-around is from a comment on the issue
+          # https://github.com/NixOS/nix/issues/5797
+          name: "Fix CA Certificates"
+          command: |
+            ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
+
       - run:
           name: "Set up Cachix"
           command: |
