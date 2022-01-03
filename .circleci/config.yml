@@ -152,7 +152,7 @@ jobs:
       # This pre-release image in particular fixes a problem in the 2.5.1
       # image where no CA certificates are available.
       # https://github.com/NixOS/nix/issues/5797
-      - image: "nixos/nix:2.6.0pre20211228_f7d22f4-"
+      - image: "nixos/nix:2.5.1"
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
@@ -165,6 +165,7 @@ jobs:
       # Let us use features marked "experimental".  For example, most/all of
       # the `nix <subcommand>` forms.
       NIX_CONFIG: "experimental-features = nix-command"
+      NIX_SSL_CERT_FILE: "/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt"
 
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
