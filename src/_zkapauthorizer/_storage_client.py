@@ -450,6 +450,25 @@ class ZKAPAuthorizerStorageClient(object):
         tw_vectors,
         r_vector,
     ):
+        # type: (
+        #   Any,
+        #   bytes,
+        #   Tuple[bytes, bytes, bytes],
+        #   Dict[
+        #     int,
+        #     Tuple[
+        #       List[
+        #         Tuple[int, int, bytes, bytes],
+        #       ],
+        #       List[
+        #         Tuple[int, bytes],
+        #       ],
+        #       Optional[int],
+        #     ],
+        #   ],
+        #   List[Tuple[int, int]],
+        # ) -> Deferred
+
         # Read operations are free.
         num_passes = 0
 
@@ -458,7 +477,7 @@ class ZKAPAuthorizerStorageClient(object):
         tw_vectors = {
             sharenum: (
                 [
-                    (offset, length, "eq", specimen)
+                    (offset, length, b"eq", specimen)
                     for (offset, length, specimen) in test_vector
                 ],
                 data_vectors,
