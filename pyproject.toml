@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools", "wheel", "six"]
+build-backend = "setuptools.build_meta"
+
 [tool.towncrier]
     package = "_zkapauthorizer"
     package_dir = "src"
