@@ -62,7 +62,7 @@ from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
 
-from ._json import dumps
+from ._json import dumps_utf8
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from .config import get_configured_lease_duration
@@ -260,7 +260,7 @@ class _CalculatePrice(Resource):
             body_object = loads(payload)
         except ValueError:
             request.setResponseCode(BAD_REQUEST)
-            return dumps(
+            return dumps_utf8(
                 {
                     "error": "could not parse request body",
                 }
@@ -271,7 +271,7 @@ class _CalculatePrice(Resource):
             sizes = body_object["sizes"]
         except (TypeError, KeyError):
             request.setResponseCode(BAD_REQUEST)
-            return dumps(
+            return dumps_utf8(
                 {
                     "error": "could not read `version` and `sizes` properties",
                 }
@@ -279,7 +279,7 @@ class _CalculatePrice(Resource):
 
         if version != 1:
             request.setResponseCode(BAD_REQUEST)
-            return dumps(
+            return dumps_utf8(
                 {
                     "error": "did not find required version number 1 in request",
                 }
@@ -289,7 +289,7 @@ class _CalculatePrice(Resource):
             isinstance(size, (int, long)) and size >= 0 for size in sizes
         ):
             request.setResponseCode(BAD_REQUEST)
-            return dumps(
+            return dumps_utf8(
                 {
                     "error": "did not find required positive integer sizes list in request",
                 }
@@ -298,7 +298,7 @@ class _CalculatePrice(Resource):
         application_json(request)
 
         price = self._price_calculator.calculate(sizes)
-        return dumps(
+        return dumps_utf8(
             {
                 "price": price,
                 "period": self._lease_period,
@@ -345,7 +345,7 @@ class _ProjectVersion(Resource):
 
     def render_GET(self, request):
         application_json(request)
-        return dumps(
+        return dumps_utf8(
             {
                 "version": _zkapauthorizer_version,
             }
@@ -379,7 +379,7 @@ class _UnblindedTokenCollection(Resource):
 
         position = request.args.get(b"position", [b""])[0].decode("utf-8")
 
-        return dumps(
+        return dumps_utf8(
             {
                 "total": len(unblinded_tokens),
                 "spendable": self._store.count_unblinded_tokens(),
@@ -399,7 +399,7 @@ class _UnblindedTokenCollection(Resource):
         application_json(request)
         unblinded_tokens = load(request.content)["unblinded-tokens"]
         self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
-        return dumps({})
+        return dumps_utf8({})
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()
@@ -452,7 +452,7 @@ class _VoucherCollection(Resource):
 
     def render_GET(self, request):
         application_json(request)
-        return dumps(
+        return dumps_utf8(
             {
                 "vouchers": list(
                     self._controller.incorporate_transient_state(voucher).marshal()

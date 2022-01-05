@@ -50,7 +50,7 @@ from base64 import b64decode, b64encode
 from datetime import timedelta
 from functools import partial
 from hashlib import sha256
-from json import dumps, loads
+from json import loads
 from operator import delitem, setitem
 from sys import exc_info
 
@@ -67,6 +67,7 @@ from twisted.python.url import URL
 from twisted.web.client import Agent
 from zope.interface import Interface, implementer
 
+from ._json import dumps_utf8
 from ._base64 import urlsafe_b64decode
 from ._stack import less_limited_stack
 from .model import Error as model_Error
@@ -530,7 +531,7 @@ class RistrettoRedeemer(object):
         blinded_tokens = list(token.blind() for token in random_tokens)
         response = yield self._treq.post(
             self._api_root.child("v1", "redeem").to_text(),
-            dumps(
+            dumps_utf8(
                 {
                     "redeemVoucher": voucher.number.decode("ascii"),
                     "redeemCounter": counter,

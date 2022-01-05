@@ -98,7 +98,7 @@ from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTH
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource, getChildForRequest
 
-from .. _json import dumps
+from .. _json import dumps_utf8
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from ..configutil import config_string_from_sections
@@ -204,7 +204,7 @@ def invalid_bodies():
             {
                 "some-key": vouchers().map(ensure_text),
             }
-        ).map(dumps),
+        ).map(dumps_utf8),
         # The right key but the wrong kind of value.
         fixed_dictionaries(
             {
@@ -213,7 +213,7 @@ def invalid_bodies():
                     not_vouchers().map(ensure_text),
                 ),
             }
-        ).map(dumps),
+        ).map(dumps_utf8),
         # Not even JSON
         binary().filter(is_not_json),
     )
@@ -518,7 +518,7 @@ class UnblindedTokenTests(TestCase):
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         data = BytesIO(
-            dumps(
+            dumps_utf8(
                 {
                     "unblinded-tokens": list(
                         token.unblinded_token.decode("ascii")
@@ -970,7 +970,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        data = BytesIO(dumps({"voucher": voucher.decode("ascii")}))
+        data = BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")}))
         requesting = authorized_request(
             api_auth_token,
             agent,
@@ -1263,7 +1263,7 @@ class VoucherTests(TestCase):
             agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            data=BytesIO(dumps({"voucher": voucher.decode("ascii")})),
+            data=BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")})),
         )
         self.assertThat(
             putting,
@@ -1390,7 +1390,7 @@ class VoucherTests(TestCase):
         note("{} vouchers".format(len(vouchers)))
 
         for voucher in vouchers:
-            data = BytesIO(dumps({"voucher": voucher.decode("ascii")}))
+            data = BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")}))
             putting = authorized_request(
                 api_auth_token,
                 agent,
@@ -1511,26 +1511,26 @@ def bad_calculate_price_requests():
             "version": good_version,
             "sizes": good_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_version = fixed_dictionaries(
         {
             "version": bad_version,
             "sizes": good_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_sizes = fixed_dictionaries(
         {
             "version": good_version,
             "sizes": bad_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_other = dictionaries(
         text(),
         integers(),
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_junk = binary()
 
@@ -1667,7 +1667,7 @@ class CalculatePriceTests(TestCase):
                 b"POST",
                 self.url,
                 headers={b"content-type": [b"application/json"]},
-                data=BytesIO(dumps({"version": 1, "sizes": sizes})),
+                data=BytesIO(dumps_utf8({"version": 1, "sizes": sizes})),
             ),
             succeeded(
                 matches_response(

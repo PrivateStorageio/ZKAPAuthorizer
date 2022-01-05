@@ -60,7 +60,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
 from six import ensure_text
 
-from ._json import dumps
+from ._json import dumps_utf8
 from ._base64 import urlsafe_b64decode
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
@@ -1199,7 +1199,7 @@ class Voucher(object):
         )
 
     def to_json(self):
-        return dumps(self.marshal())
+        return dumps_utf8(self.marshal())
 
     def marshal(self):
         return self.to_json_v1()

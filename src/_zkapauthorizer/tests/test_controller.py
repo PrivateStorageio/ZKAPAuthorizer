@@ -59,7 +59,7 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
-from .._json import dumps
+from .._json import dumps_utf8
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
@@ -1155,7 +1155,7 @@ class RistrettoRedemption(Resource):
         finally:
             servers_proof.destroy()
 
-        return dumps(
+        return dumps_utf8(
             {
                 u"success": True,
                 u"public-key": ensure_text(self.public_key.encode_base64()),
@@ -1233,7 +1233,7 @@ class CheckRedemptionRequestTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
-            dumps(dict.fromkeys(properties)),
+            dumps_utf8(dict.fromkeys(properties)),
             headers=Headers({u"content-type": [u"application/json"]}),
         )
         self.assertThat(
@@ -1283,7 +1283,7 @@ def check_redemption_request(request):
 def bad_request(request, body_object):
     request.setResponseCode(BAD_REQUEST)
     request.setHeader(b"content-type", b"application/json")
-    request.write(dumps(body_object))
+    request.write(dumps_utf8(body_object))
     return b""
 
 
