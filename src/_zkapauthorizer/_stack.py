@@ -36,7 +36,12 @@ def less_limited_stack():
     More precisely, the soft stack limit is raised to the hard limit.
     """
     soft, hard = getrlimit(RLIMIT_STACK)
-    # We can raise the soft limit to the hard limit and no higher.
-    setrlimit(RLIMIT_STACK, (hard, hard))
-    yield
-    setrlimit(RLIMIT_STACK, (soft, hard))
+    try:
+        # We can raise the soft limit to the hard limit and no higher.
+        setrlimit(RLIMIT_STACK, (hard, hard))
+    except ValueError:
+        # Well, not on macOS: https://bugs.python.org/issue34602
+        yield
+    else:
+        yield
+        setrlimit(RLIMIT_STACK, (soft, hard))
