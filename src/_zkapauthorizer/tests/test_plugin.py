@@ -30,7 +30,7 @@ from allmydata.interfaces import (
     RIStorageServer,
 )
 from challenge_bypass_ristretto import SigningKey
-from eliot.testing import LoggedMessage
+from eliot.testing import LoggedMessage, capture_logging
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
@@ -75,7 +75,6 @@ from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
 from .common import skipIf
-from .eliot import capture_logging
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, raises
 from .strategies import (
