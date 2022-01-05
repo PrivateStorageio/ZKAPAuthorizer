@@ -240,7 +240,7 @@ workflows:
         matrix:
           parameters:
             py-version:
-            - "3.9"
+            - "39"
             tahoe-lafs-source:
             - "tahoe-lafs"
 
