@@ -17,15 +17,14 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
-from typing import List
 from base64 import b64decode, b64encode
 from datetime import timedelta
 from functools import partial
 from hashlib import sha256
 from json import loads
 from operator import delitem, setitem
+from typing import List
 
-from six import ensure_text
 import attr
 import challenge_bypass_ristretto
 from treq import content
@@ -38,8 +37,8 @@ from twisted.python.url import URL
 from twisted.web.client import Agent
 from zope.interface import Interface, implementer
 
-from ._json import dumps_utf8
 from ._base64 import urlsafe_b64decode
+from ._json import dumps_utf8
 from ._stack import less_limited_stack
 from .model import Error as model_Error
 from .model import Pass
@@ -245,10 +244,10 @@ class ErrorRedeemer(object):
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
-        details = ensure_text(node_config.get_config(
+        details = node_config.get_config(
             section=section_name,
             option="details",
-        ))
+        )
         return cls(details)
 
     def random_tokens_for_voucher(self, voucher, counter, count):
@@ -462,10 +461,10 @@ class RistrettoRedeemer(object):
 
     @classmethod
     def make(cls, section_name, node_config, announcement, reactor):
-        configured_issuer = ensure_text(node_config.get_config(
+        configured_issuer = node_config.get_config(
             section=section_name,
             option="ristretto-issuer-root-url",
-        ))
+        )
         if announcement is not None:
             # Don't let us talk to a storage server that has a different idea
             # about who issues ZKAPs.  We should lift this limitation (that is, we
@@ -507,7 +506,8 @@ class RistrettoRedeemer(object):
                     "redeemVoucher": voucher.number.decode("ascii"),
                     "redeemCounter": counter,
                     "redeemTokens": list(
-                        ensure_text(token.encode_base64()) for token in blinded_tokens
+                        token.encode_base64().decode("utf-8")
+                        for token in blinded_tokens
                     ),
                 }
             ),
@@ -941,7 +941,7 @@ class PaymentController(object):
             )
             self._error[voucher] = model_Error(
                 finished=self.store.now(),
-                details=ensure_text(reason.getErrorMessage()),
+                details=reason.getErrorMessage(),
             )
         return False
 

@@ -19,9 +19,8 @@ plugin.
 
 from datetime import datetime
 from io import BytesIO
+from typing import Optional, Set
 from urllib.parse import quote
-from six import ensure_text
-from typing import Set, TypeVar, Optional
 
 import attr
 from allmydata.client import config_from_string
@@ -29,6 +28,7 @@ from aniso8601 import parse_datetime
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
     datetimes,
@@ -70,9 +70,9 @@ from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTH
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource, getChildForRequest
 
-from .. _json import dumps_utf8
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
+from .._json import dumps_utf8
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -110,8 +110,6 @@ from .strategies import (
     vouchers,
 )
 
-Strategy = TypeVar()
-
 TRANSIENT_ERROR = "something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
@@ -142,9 +140,11 @@ def not_vouchers():
     Builds byte strings which are not legal vouchers.
     """
     return one_of(
-        text().filter(
+        text()
+        .filter(
             lambda t: (not is_urlsafe_base64(t)),
-        ).map(lambda t: t.encode("utf-8")),
+        )
+        .map(lambda t: t.encode("utf-8")),
         vouchers().map(
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
@@ -176,7 +176,7 @@ def invalid_bodies():
         # The wrong key but the right kind of value.
         fixed_dictionaries(
             {
-                "some-key": vouchers().map(ensure_text),
+                "some-key": vouchers().map(lambda v: v.decode("utf-8")),
             }
         ).map(dumps_utf8),
         # The right key but the wrong kind of value.
@@ -184,7 +184,7 @@ def invalid_bodies():
             {
                 "voucher": one_of(
                     integers(),
-                    not_vouchers().map(ensure_text),
+                    not_vouchers().map(lambda v: v.decode("utf-8")),
                 ),
             }
         ).map(dumps_utf8),
@@ -456,7 +456,7 @@ def maybe_extra_tokens():
     return one_of(
         just(None),
         # If we do, we can't have fewer than the number of redemption groups
-        # which we don't know until we're further inside the test.  So supply
+        # which we don't know until we're further inside the test.  oSo supply
         # an amount to add to that, in the case where we have tokens at all.
         integers(min_value=0, max_value=100),
     )
@@ -520,7 +520,11 @@ class UnblindedTokenTests(TestCase):
 
         self.assertThat(
             stored_tokens,
-            Equals(list(token.unblinded_token.decode("ascii") for token in unblinded_tokens)),
+            Equals(
+                list(
+                    token.unblinded_token.decode("ascii") for token in unblinded_tokens
+                )
+            ),
         )
 
     @given(
@@ -1401,7 +1405,8 @@ class VoucherTests(TestCase):
             ),
         )
 
-def mime_types(blacklist: Optional[Set[str]] = None) -> Strategy[str]:
+
+def mime_types(blacklist: Optional[Set[str]] = None) -> SearchStrategy[str]:
     """
     Build MIME types as b"major/minor" byte strings.
 

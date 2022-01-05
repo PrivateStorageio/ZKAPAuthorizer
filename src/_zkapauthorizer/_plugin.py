@@ -20,8 +20,8 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from weakref import WeakValueDictionary
 from typing import Callable
+from weakref import WeakValueDictionary
 
 import attr
 from allmydata.client import _Client

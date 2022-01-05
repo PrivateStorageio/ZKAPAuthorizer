@@ -18,6 +18,7 @@ Hypothesis strategies for property testing.
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
@@ -40,7 +41,6 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
-from urllib.parse import quote
 from twisted.internet.defer import succeed
 from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
@@ -728,6 +728,7 @@ def request_paths():
 
     :see: ``requests``
     """
+
     def quote_segment(seg):
         return quote(seg, safe="").encode("utf-8")
 

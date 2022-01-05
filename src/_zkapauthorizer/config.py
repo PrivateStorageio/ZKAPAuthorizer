@@ -17,11 +17,7 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 """
 
 from datetime import timedelta
-
-try:
-    from typing import Optional
-except ImportError:
-    pass
+from typing import Optional
 
 from allmydata.node import _Config
 

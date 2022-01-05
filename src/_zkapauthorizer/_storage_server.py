@@ -131,7 +131,8 @@ class _ValidationResult(object):
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
             invalid_pass = verification_key.invalid_sha512(
-                proposed_signature, message,
+                proposed_signature,
+                message,
             )
             return invalid_pass
         except Exception:

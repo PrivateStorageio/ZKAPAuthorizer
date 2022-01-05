@@ -16,10 +16,11 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+import os.path
 from datetime import timedelta
 from functools import partial
+from io import StringIO
 from os import makedirs
-import os.path
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
@@ -38,7 +39,6 @@ from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
-from io import StringIO
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (

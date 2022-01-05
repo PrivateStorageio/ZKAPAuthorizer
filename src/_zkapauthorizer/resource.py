@@ -25,7 +25,6 @@ from itertools import islice
 from json import load, loads
 from sys import maxsize
 
-from six import ensure_binary
 from past.builtins import long
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
@@ -33,9 +32,9 @@ from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
 
-from ._json import dumps_utf8
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
+from ._json import dumps_utf8
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
 from .pricecalculator import PriceCalculator
@@ -143,7 +142,7 @@ def from_configuration(
     )
 
     root = create_private_tree(
-        lambda: ensure_binary(node_config.get_private_config("api_auth_token")),
+        lambda: node_config.get_private_config("api_auth_token").encode("utf-8"),
         authorizationless_resource_tree(
             store,
             controller,

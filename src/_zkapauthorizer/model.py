@@ -29,10 +29,9 @@ from past.builtins import long
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
-from six import ensure_text
 
-from ._json import dumps_utf8
 from ._base64 import urlsafe_b64decode
+from ._json import dumps_utf8
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -936,7 +935,7 @@ class Redeeming(object):
     def to_json_v1(self):
         return {
             "name": "redeeming",
-            "started": ensure_text(self.started.isoformat()),
+            "started": self.started.isoformat(),
             "counter": self.counter,
         }
 
@@ -961,7 +960,7 @@ class Redeemed(object):
     def to_json_v1(self):
         return {
             "name": "redeemed",
-            "finished": ensure_text(self.finished.isoformat()),
+            "finished": self.finished.isoformat(),
             "token-count": self.token_count,
         }
 
@@ -976,7 +975,7 @@ class DoubleSpend(object):
     def to_json_v1(self):
         return {
             "name": "double-spend",
-            "finished": ensure_text(self.finished.isoformat()),
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -996,7 +995,7 @@ class Unpaid(object):
     def to_json_v1(self):
         return {
             "name": "unpaid",
-            "finished": ensure_text(self.finished.isoformat()),
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -1017,7 +1016,7 @@ class Error(object):
     def to_json_v1(self):
         return {
             "name": "error",
-            "finished": ensure_text(self.finished.isoformat()),
+            "finished": self.finished.isoformat(),
             "details": self.details,
         }
 
@@ -1165,7 +1164,7 @@ class Voucher(object):
         return {
             "number": self.number.decode("ascii"),
             "expected-tokens": self.expected_tokens,
-            "created": None if self.created is None else ensure_text(self.created.isoformat()),
+            "created": None if self.created is None else self.created.isoformat(),
             "state": state,
             "version": 1,
         }

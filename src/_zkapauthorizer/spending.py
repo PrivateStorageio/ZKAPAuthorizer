@@ -22,7 +22,8 @@ import attr
 from zope.interface import Attribute, Interface, implementer
 
 from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
-from .model import UnblindedToken, Pass
+from .model import Pass, UnblindedToken
+
 
 class IPassGroup(Interface):
     """
@@ -112,8 +113,12 @@ class PassGroup(object):
     """
 
     _message = attr.ib(validator=attr.validators.instance_of(bytes))  # type: bytes
-    _factory = attr.ib(validator=attr.validators.provides(IPassFactory))  # type: IPassFactory
-    _tokens = attr.ib(validator=attr.validators.instance_of(list))  # type: List[Tuple[UnblindedToken, Pass]]
+    _factory = attr.ib(
+        validator=attr.validators.provides(IPassFactory)
+    )  # type: IPassFactory
+    _tokens = attr.ib(
+        validator=attr.validators.instance_of(list)
+    )  # type: List[Tuple[UnblindedToken, Pass]]
 
     @property
     def passes(self):
@@ -172,7 +177,7 @@ class SpendingController(object):
     invalidate_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
     reset_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
 
-    tokens_to_passes = attr.ib() # type: (bytes, [UnblindedToken]) -> [Pass]
+    tokens_to_passes = attr.ib()  # type: (bytes, [UnblindedToken]) -> [Pass]
 
     @classmethod
     def for_store(cls, tokens_to_passes, store):

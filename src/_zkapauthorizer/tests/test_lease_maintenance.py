@@ -17,6 +17,7 @@ Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
 from datetime import datetime, timedelta
+from typing import Dict, List
 
 import attr
 from allmydata.client import SecretHolder
@@ -35,7 +36,6 @@ from hypothesis.strategies import (
     randoms,
     sets,
 )
-from six import ensure_binary
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -76,12 +76,6 @@ from .strategies import (
     sharenums,
     storage_indexes,
 )
-
-try:
-    from typing import Dict, List
-except ImportError:
-    pass
-
 
 default_lease_maint_config = lease_maintenance_from_tahoe_config(empty_config)
 
@@ -312,7 +306,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         # Figure out the absolute last run time.
         last_run = datetime_now - since_last_run
         last_run_path = FilePath(self.useFixture(TempDir()).join("last-run"))
-        last_run_path.setContent(ensure_binary(last_run.isoformat()))
+        last_run_path.setContent(last_run.isoformat().encode("utf-8"))
 
         service = lease_maintenance_service(
             dummy_maintain_leases,

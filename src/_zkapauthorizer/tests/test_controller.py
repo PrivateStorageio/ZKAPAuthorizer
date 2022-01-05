@@ -21,7 +21,6 @@ from functools import partial
 from json import loads
 
 import attr
-from six import ensure_text
 from challenge_bypass_ristretto import (
     BatchDLEQProof,
     BlindedToken,
@@ -794,7 +793,9 @@ class RistrettoRedeemerTests(TestCase):
                         HasLength(num_tokens),
                     ),
                     public_key=Equals(
-                        ensure_text(PublicKey.from_signing_key(signing_key).encode_base64()),
+                        PublicKey.from_signing_key(signing_key)
+                        .encode_base64()
+                        .decode("utf-8"),
                     ),
                 ),
             ),
@@ -1156,9 +1157,9 @@ class RistrettoRedemption(Resource):
         return dumps_utf8(
             {
                 u"success": True,
-                u"public-key": ensure_text(self.public_key.encode_base64()),
-                u"signatures": list(ensure_text(t) for t in marshaled_signed_tokens),
-                u"proof": ensure_text(marshaled_proof),
+                u"public-key": self.public_key.encode_base64().decode("utf-8"),
+                u"signatures": list(t.decode("utf-8") for t in marshaled_signed_tokens),
+                u"proof": marshaled_proof.decode("utf-8"),
             }
         )
 
@@ -1297,6 +1298,7 @@ class _BracketTestMixin:
     """
     Tests for ``bracket``.
     """
+
     def wrap_success(self, result):
         raise NotImplementedError()
 
@@ -1370,6 +1372,7 @@ class _BracketTestMixin:
 
         actions = []
         first = partial(actions.append, "first")
+
         def between():
             actions.append("between")
             return self.wrap_success(None)
@@ -1461,14 +1464,18 @@ class _BracketTestMixin:
             Equals(["first"]),
         )
 
+
 class BracketTests(_BracketTestMixin, TestCase):
     def wrap_success(self, result):
         return result
+
     def wrap_failure(self, exception):
         raise exception
+
 
 class SynchronousDeferredBracketTests(_BracketTestMixin, TestCase):
     def wrap_success(self, result):
         return succeed(result)
+
     def wrap_failure(self, exception):
         return fail(exception)

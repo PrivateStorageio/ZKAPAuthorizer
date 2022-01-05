@@ -16,6 +16,7 @@
 Basic utilities related to the Tahoe configuration file.
 """
 
+
 def _merge_dictionaries(dictionaries):
     """
     Collapse a sequence of dictionaries into one, with collisions resolved by

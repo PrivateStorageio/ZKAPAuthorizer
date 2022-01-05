@@ -382,7 +382,8 @@ class VoucherStoreTests(TestCase):
         while tokens_remaining > 0:
             to_spend = data.draw(integers(min_value=1, max_value=tokens_remaining))
             extracted_tokens.extend(
-                token.unblinded_token.decode("ascii") for token in store.get_unblinded_tokens(to_spend)
+                token.unblinded_token.decode("ascii")
+                for token in store.get_unblinded_tokens(to_spend)
             )
             tokens_remaining -= to_spend
 

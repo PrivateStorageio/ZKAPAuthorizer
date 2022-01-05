@@ -23,6 +23,7 @@ from foolscap.api import Any, Copyable, DictOf, ListOf, RemoteCopy
 from foolscap.constraint import ByteStringConstraint
 from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
 
+
 @attr.s
 class ShareStat(Copyable, RemoteCopy):
     """
@@ -133,9 +134,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
     validated is service provided.
     """
 
-    __remote_name__ = (
-        "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
-    )
+    __remote_name__ = "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
 
     get_version = RIStorageServer["get_version"]
 

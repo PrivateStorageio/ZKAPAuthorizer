@@ -21,14 +21,14 @@ implemented in ``_storage_server.py``.
 """
 
 from functools import partial, wraps
-from typing import Any, Tuple, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import attr
 from allmydata.interfaces import IStorageServer
 from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
 from eliot.twisted import inline_callbacks
-from twisted.internet.defer import returnValue, Deferred
+from twisted.internet.defer import Deferred, returnValue
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
@@ -59,6 +59,7 @@ TestWriteVectors = Dict[
     ],
 ]
 ReadVector = List[Tuple[int, int]]
+
 
 class IncorrectStorageServerReference(Exception):
     """

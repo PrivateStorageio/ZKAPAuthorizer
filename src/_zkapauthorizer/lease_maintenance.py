@@ -20,13 +20,8 @@ refresh leases on all shares reachable from a root.
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
+from typing import Any, Dict, Iterable
 
-try:
-    from typing import Any, Dict
-except ImportError:
-    pass
-
-from six import ensure_binary
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
@@ -44,11 +39,6 @@ from zope.interface import implementer
 from .controller import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
-
-try:
-    from typing import Iterable
-except ImportError:
-    pass
 
 SERVICE_NAME = u"lease maintenance service"
 
@@ -508,7 +498,7 @@ def write_time_to_path(path, when):
 
     :param datetime when: The datetime to write.
     """
-    path.setContent(ensure_binary(when.isoformat()))
+    path.setContent(when.isoformat().encode("utf-8"))
 
 
 def read_time_from_path(path):

@@ -1084,7 +1084,9 @@ class ShareTests(TestCase):
         data_vector=slot_data_vectors(),
         replacement_data_vector=slot_data_vectors(),
     )
-    def test_test_vectors_match(self, storage_index, secrets, sharenum, data_vector, replacement_data_vector):
+    def test_test_vectors_match(
+        self, storage_index, secrets, sharenum, data_vector, replacement_data_vector
+    ):
         """
         If test vectors are given then the write is allowed if they match the
         existing data.
@@ -1105,28 +1107,37 @@ class ShareTests(TestCase):
             return d
 
         def equal_test_vector(data_vector):
-            return list(
-                (offset, len(data), data)
-                for (offset, data)
-                in data_vector
-            )
+            return list((offset, len(data), data) for (offset, data) in data_vector)
 
         # Create the share
-        d = write({
-            sharenum: (empty_test_vector, data_vector, None),
-        })
+        d = write(
+            {
+                sharenum: (empty_test_vector, data_vector, None),
+            }
+        )
         self.assertThat(d, is_successful_write())
 
         # Write some new data to with a correct test vector.  We can only be
         # sure we know data from the last element of the test vector since
         # earlier elements may have been overwritten.
-        d = write({
-            sharenum: (equal_test_vector(data_vector)[-1:], replacement_data_vector, None),
-        })
+        d = write(
+            {
+                sharenum: (
+                    equal_test_vector(data_vector)[-1:],
+                    replacement_data_vector,
+                    None,
+                ),
+            }
+        )
         self.assertThat(d, is_successful_write())
 
         # Check that the new data is present
-        assert_read_back_data(self, storage_index, secrets, {sharenum: TestAndWriteVectors(None, replacement_data_vector, None)})
+        assert_read_back_data(
+            self,
+            storage_index,
+            secrets,
+            {sharenum: TestAndWriteVectors(None, replacement_data_vector, None)},
+        )
 
 
 def assert_read_back_data(

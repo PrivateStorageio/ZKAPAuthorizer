@@ -15,6 +15,7 @@
 from json import dumps as _dumps
 from typing import Any
 
+
 def dumps_utf8(o: Any) -> bytes:
     """
     Serialize an object to a UTF-8-encoded JSON byte string.

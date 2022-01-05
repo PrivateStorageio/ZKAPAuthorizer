@@ -20,7 +20,7 @@ from functools import partial
 from itertools import islice
 from os import SEEK_CUR
 from struct import pack
-from typing import List, Set, Dict
+from typing import Dict, List, Set
 
 import attr
 from challenge_bypass_ristretto import RandomToken
