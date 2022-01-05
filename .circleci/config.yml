@@ -251,7 +251,6 @@ workflows:
         matrix:
           parameters:
             py-version:
-            - "2.7"
             - "3.9"
 
             xcode-version:
