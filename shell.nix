@@ -2,14 +2,12 @@
 # work on Nix 2.3.  It works with Nix 2.5.  I'm not sure about 2.4.
 { ... }@args:
 let
-  privatestorage = import ./. args;
+  tests = import ./tests.nix args;
+  inherit (tests) privatestorage lint-python;
   inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
 
-  pythonVersion = zkapauthorizer.meta.mach-nix.python;
-
-  python = mach-nix.mkPython {
-    inherit (zkapauthorizer.meta.mach-nix) providers;
-    python = pythonVersion;
+  python-env = mach-nix.mkPython {
+    inherit (zkapauthorizer.meta.mach-nix) python providers;
     overridesPre = [
       (
         self: super: {
@@ -17,40 +15,22 @@ let
         }
       )
     ];
-
-    requirements = let
-      py3 = pythonVersion > "python3";
-      lint = pkgs.lib.optionalString (builtins.trace py3 py3) ''
-# lint
-black
-isort
-flake8
-'';
-      workarounds = ''
-# Mitigate for undetected cryptography dependency
-setuptools_rust
-# And for tomli
-flit_core
-'';
-      testing = ''
-coverage
-fixtures
-testtools
-hypothesis
-'';
-    in
+    requirements =
       ''
-${lint}
-${workarounds}
-${testing}
-${zkapauthorizer.requirements}
-'';
+      ${builtins.readFile ./requirements/test.in}
+      ${zkapauthorizer.requirements}
+      '';
   };
 in
 pkgs.mkShell {
+  # Avoid leaving .pyc all over the source tree when manually triggering tests
+  # runs.
   PYTHONDONTWRITEBYTECODE = "1";
 
   buildInputs = [
-    python
+    # Provide the linting tools for interactive usage.
+    lint-python
+    # Supply all of the runtime and testing dependencies.
+    python-env
   ];
 }

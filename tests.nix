@@ -70,5 +70,5 @@ let
     '';
 in
 {
-  inherit pkgs python lint-python tests;
+  inherit privatestorage lint-python tests;
 }
