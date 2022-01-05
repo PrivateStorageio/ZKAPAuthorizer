@@ -20,12 +20,12 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from typing import Callable
+from typing import Callable, List
 from weakref import WeakValueDictionary
 
 import attr
 from allmydata.client import _Client
-from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
+from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin, IFilesystemNode
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
@@ -297,13 +297,16 @@ def _create_maintenance_service(reactor, node_config, client_node):
     )
 
 
-def get_root_nodes(client_node, node_config):
+def get_root_nodes(client_node, node_config) -> List[IFilesystemNode]:
+    """
+    Get the configured starting points for lease maintenance traversal.
+    """
     try:
-        rootcap = node_config.get_private_config(b"rootcap")
+        rootcap = node_config.get_private_config("rootcap")
     except MissingConfigEntry:
         return []
     else:
-        return [client_node.create_node_from_uri(rootcap)]
+        return [client_node.create_node_from_uri(rootcap.encode("utf-8"))]
 
 
 def load_signing_key(path):

@@ -28,6 +28,7 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IStorageServer,
     RIStorageServer,
+    IFilesystemNode,
 )
 from challenge_bypass_ristretto import SigningKey
 from eliot.testing import LoggedMessage, capture_logging
@@ -55,6 +56,7 @@ from testtools.matchers import (
     MatchesAll,
     MatchesListwise,
     MatchesStructure,
+    Not,
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
@@ -67,7 +69,7 @@ from twisted.web.resource import IResource
 
 from twisted.plugins.zkapauthorizer import storage_server
 
-from .._plugin import load_signing_key
+from .._plugin import load_signing_key, get_root_nodes
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
@@ -351,7 +353,6 @@ class ClientPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
-
     @given(tahoe_configs(), announcements())
     def test_interface(self, get_config, announcement):
         """
@@ -639,6 +640,37 @@ class LeaseMaintenanceServiceTests(TestCase):
             )
 
         return create_client_from_config(config)
+
+    @given(tahoe_configs())
+    def test_get_root_nodes_rootcap_present(self, get_config):
+        """
+        ``get_root_nodes`` returns a ``list`` of one ``IFilesystemNode`` provider
+        derived from the contents of the *rootcap* private configuration.
+        """
+        d = self._create(get_config, servers_yaml=None, rootcap=True)
+        client_node = extract_result(d)
+        roots = get_root_nodes(client_node, client_node.config)
+        self.assertThat(
+            roots,
+            MatchesAll(
+                Not(HasLength(0)),
+                AllMatch(Provides([IFilesystemNode])),
+            ),
+        )
+
+    @given(tahoe_configs())
+    def test_get_root_nodes_rootcap_missing(self, get_config):
+        """
+        ``get_root_nodes`` returns an empty ``list`` if there is no private
+        *rootcap* configuration.
+        """
+        d = self._create(get_config, servers_yaml=None, rootcap=False)
+        client_node = extract_result(d)
+        roots = get_root_nodes(client_node, client_node.config)
+        self.assertThat(
+            roots,
+            Equals([]),
+        )
 
     @settings(
         deadline=None,
