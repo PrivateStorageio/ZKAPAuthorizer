@@ -129,6 +129,8 @@ jobs:
 
   linux-tests: &LINUX_TESTS
     parameters:
+      py-version:
+        type: "string"
       tahoe-lafs-source:
         # The name of a niv source in nix/sources.json which corresponds to
         # a Tahoe-LAFS version. This is the version that will be declared as a
@@ -237,6 +239,8 @@ workflows:
     - "linux-tests":
         matrix:
           parameters:
+            py-version:
+            - "3.9"
             tahoe-lafs-source:
             - "tahoe-lafs"
 
