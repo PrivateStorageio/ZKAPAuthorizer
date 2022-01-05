@@ -68,20 +68,6 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
-
-# The last Python 2-supporting prometheus_client nevertheless tries to use
-# FileNotFoundError, an exception type from Python 3.  Since that release,
-# prometheus_client has dropped Python 2 support entirely so there is little
-# hope of ever having this fixed upstream.  When ZKAPAuthorizer is ported to
-# Python 3, this should no longer be necessary.
-def _prometheus_client_fix():
-    import prometheus_client.exposition
-
-    prometheus_client.exposition.FileNotFoundError = IOError
-
-
-_prometheus_client_fix()
-
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
