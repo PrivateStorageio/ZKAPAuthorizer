@@ -17,8 +17,6 @@
 Tests for ``_zkapauthorizer.schema``.
 """
 
-from __future__ import absolute_import
-
 from testtools import TestCase
 from testtools.matchers import Equals
 

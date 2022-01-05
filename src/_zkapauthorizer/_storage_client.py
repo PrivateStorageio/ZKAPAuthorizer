@@ -20,43 +20,15 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if  PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from functools import partial, wraps
+from typing import Any, Tuple, Dict, List, Optional
 
 import attr
 from allmydata.interfaces import IStorageServer
 from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
 from eliot.twisted import inline_callbacks
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import returnValue, Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
@@ -73,6 +45,20 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
+Secrets = Tuple[bytes, bytes, bytes]
+TestWriteVectors = Dict[
+    int,
+    Tuple[
+        List[
+            Tuple[int, int, bytes, bytes],
+        ],
+        List[
+            Tuple[int, bytes],
+        ],
+        Optional[int],
+    ],
+]
+ReadVector = List[Tuple[int, int]]
 
 class IncorrectStorageServerReference(Exception):
     """
@@ -444,31 +430,12 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     def slot_testv_and_readv_and_writev(
         self,
-        rref,
-        storage_index,
-        secrets,
-        tw_vectors,
-        r_vector,
-    ):
-        # type: (
-        #   Any,
-        #   bytes,
-        #   Tuple[bytes, bytes, bytes],
-        #   Dict[
-        #     int,
-        #     Tuple[
-        #       List[
-        #         Tuple[int, int, bytes, bytes],
-        #       ],
-        #       List[
-        #         Tuple[int, bytes],
-        #       ],
-        #       Optional[int],
-        #     ],
-        #   ],
-        #   List[Tuple[int, int]],
-        # ) -> Deferred
-
+        rref: Any,
+        storage_index: bytes,
+        secrets: Secrets,
+        tw_vectors: TestWriteVectors,
+        r_vector: ReadVector,
+    ) -> Deferred:
         # Read operations are free.
         num_passes = 0
 

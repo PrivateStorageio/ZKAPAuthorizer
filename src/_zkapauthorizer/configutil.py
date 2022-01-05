@@ -16,9 +16,6 @@
 Basic utilities related to the Tahoe configuration file.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-
 def _merge_dictionaries(dictionaries):
     """
     Collapse a sequence of dictionaries into one, with collisions resolved by

@@ -16,8 +16,6 @@
 Testing helpers related to Foolscap.
 """
 
-from __future__ import absolute_import
-
 import attr
 from allmydata.interfaces import RIStorageServer
 from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
@@ -80,7 +78,7 @@ class LocalTracker(object):
         self.interfaceName = self.interface.__remote_name__
 
     def getURL(self):
-        return b"pb://abcd@127.0.0.1:12345/efgh"
+        return "pb://abcd@127.0.0.1:12345/efgh"
 
 
 @attr.s

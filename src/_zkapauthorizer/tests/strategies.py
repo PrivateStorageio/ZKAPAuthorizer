@@ -16,35 +16,6 @@
 Hypothesis strategies for property testing.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
 
@@ -69,8 +40,7 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
-from six.moves.urllib.parse import quote
-from six import ensure_binary
+from urllib.parse import quote
 from twisted.internet.defer import succeed
 from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
@@ -759,10 +729,7 @@ def request_paths():
     :see: ``requests``
     """
     def quote_segment(seg):
-        if PY2:
-            return quote(seg.encode("utf-8"), safe=b"")
-        else:
-            return quote(seg, safe="").encode("utf-8")
+        return quote(seg, safe="").encode("utf-8")
 
     return lists(text().map(quote_segment))
 

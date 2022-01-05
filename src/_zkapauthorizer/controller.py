@@ -17,42 +17,13 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
+from typing import List
 from base64 import b64decode, b64encode
 from datetime import timedelta
 from functools import partial
 from hashlib import sha256
 from json import loads
 from operator import delitem, setitem
-from sys import exc_info
 
 from six import ensure_text
 import attr
@@ -1056,10 +1027,7 @@ def bracket(first, last, between):
     except GeneratorExit:
         raise
     except:
-        info = exc_info()
         yield last()
-        if PY2:
-            exec("raise info[0], info[1], info[2]")
         raise
     else:
         yield last()

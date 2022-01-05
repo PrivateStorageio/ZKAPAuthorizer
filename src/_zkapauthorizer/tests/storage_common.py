@@ -20,6 +20,7 @@ from functools import partial
 from itertools import islice
 from os import SEEK_CUR
 from struct import pack
+from typing import List, Set, Dict
 
 import attr
 from challenge_bypass_ristretto import RandomToken
@@ -222,7 +223,7 @@ class _PassFactory(object):
 
     returned = attr.ib(default=attr.Factory(list), init=False)  # type: List[int]
     in_use = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
-    invalid = attr.ib(default=attr.Factory(dict), init=False)  # type: Dict[int, unicode]
+    invalid = attr.ib(default=attr.Factory(dict), init=False)  # type: Dict[int, str]
     spent = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
     issued = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
 

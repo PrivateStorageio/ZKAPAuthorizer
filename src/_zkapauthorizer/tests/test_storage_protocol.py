@@ -16,8 +16,6 @@
 Tests for communication between the client and server components.
 """
 
-from __future__ import absolute_import
-
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
 from challenge_bypass_ristretto import PublicKey, random_signing_key

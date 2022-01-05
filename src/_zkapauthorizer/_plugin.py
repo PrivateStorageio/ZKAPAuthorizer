@@ -17,17 +17,11 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
-from __future__ import absolute_import
-
 import random
 from datetime import datetime
 from functools import partial
 from weakref import WeakValueDictionary
-
-try:
-    from typing import Callable
-except ImportError:
-    pass
+from typing import Callable
 
 import attr
 from allmydata.client import _Client

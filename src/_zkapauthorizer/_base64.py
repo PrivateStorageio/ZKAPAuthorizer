@@ -16,8 +16,6 @@
 This module implements base64 encoding-related functionality.
 """
 
-from __future__ import absolute_import
-
 from base64 import b64decode as _b64decode
 from binascii import Error
 from re import compile as _compile

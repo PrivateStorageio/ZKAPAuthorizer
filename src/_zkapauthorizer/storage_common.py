@@ -16,39 +16,9 @@
 Functionality shared between the storage client and server.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from base64 import b64encode
 
 import attr
-from past.builtins import long
 from pyutil.mathutil import div_ceil
 
 from .eliot import MUTABLE_PASSES_REQUIRED
@@ -71,8 +41,8 @@ class MorePassesRequired(Exception):
         passes indicating passes which failed the signature check.
     """
 
-    valid_count = attr.ib(validator=attr.validators.instance_of((int, long)))
-    required_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    valid_count = attr.ib(validator=attr.validators.instance_of(int))
+    required_count = attr.ib(validator=attr.validators.instance_of(int))
     signature_check_failed = attr.ib(converter=frozenset)
 
 
@@ -332,7 +302,7 @@ def pass_value_attribute():
     """
     return attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of((int, long)),
+            attr.validators.instance_of(int),
             greater_than(0),
         ),
     )

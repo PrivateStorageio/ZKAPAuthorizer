@@ -17,35 +17,6 @@ This module implements a service which periodically spends ZKAPs to
 refresh leases on all shares reachable from a root.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if  PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial

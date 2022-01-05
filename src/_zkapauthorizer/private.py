@@ -10,8 +10,6 @@ Support code for applying token-based HTTP authorization rules to a
 Twisted Web resource hierarchy.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 # https://github.com/twisted/nevow/issues/106 may affect this code but if so
 # then the hotfix Tahoe-LAFS applies should deal with it.
 #

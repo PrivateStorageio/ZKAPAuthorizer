@@ -16,8 +16,6 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
-from __future__ import absolute_import, division
-
 from datetime import datetime, timedelta
 from functools import partial
 from json import loads
@@ -1300,10 +1298,10 @@ class _BracketTestMixin:
     Tests for ``bracket``.
     """
     def wrap_success(self, result):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def wrap_failure(self, result):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def test_success(self):
         """

@@ -16,40 +16,13 @@
 A module for logic controlling the manner in which ZKAPs are spent.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if  PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
+from typing import List, Tuple
 
 import attr
 from zope.interface import Attribute, Interface, implementer
 
 from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
-
+from .model import UnblindedToken, Pass
 
 class IPassGroup(Interface):
     """
@@ -140,7 +113,7 @@ class PassGroup(object):
 
     _message = attr.ib(validator=attr.validators.instance_of(bytes))  # type: bytes
     _factory = attr.ib(validator=attr.validators.provides(IPassFactory))  # type: IPassFactory
-    _tokens = attr.ib(validator=attr.validators.instance_of(list))  # type: List[(UnblinidedToken, Pass)]
+    _tokens = attr.ib(validator=attr.validators.instance_of(list))  # type: List[Tuple[UnblindedToken, Pass]]
 
     @property
     def passes(self):
@@ -195,11 +168,11 @@ class SpendingController(object):
     """
 
     get_unblinded_tokens = attr.ib()  # type: (int) -> [UnblindedToken]
-    discard_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
-    invalidate_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
-    reset_unblinded_tokens = attr.ib()  # type: ([UnblindedTokens]) -> None
+    discard_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
+    invalidate_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
+    reset_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
 
-    tokens_to_passes = attr.ib() # type: (bytes, [UnblindedTokens]) -> [Pass]
+    tokens_to_passes = attr.ib() # type: (bytes, [UnblindedToken]) -> [Pass]
 
     @classmethod
     def for_store(cls, tokens_to_passes, store):

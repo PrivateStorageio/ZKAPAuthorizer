@@ -17,39 +17,11 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from datetime import datetime
 from io import BytesIO
-from six.moves.urllib.parse import quote
-from six import ensure_binary, ensure_text
+from urllib.parse import quote
+from six import ensure_text
+from typing import Set, TypeVar, Optional
 
 import attr
 from allmydata.client import config_from_string
@@ -137,6 +109,8 @@ from .strategies import (
     unblinded_tokens,
     vouchers,
 )
+
+Strategy = TypeVar()
 
 TRANSIENT_ERROR = "something went wrong, who knows what"
 
@@ -1427,15 +1401,12 @@ class VoucherTests(TestCase):
             ),
         )
 
-
-def mime_types(blacklist=None):
+def mime_types(blacklist: Optional[Set[str]] = None) -> Strategy[str]:
     """
     Build MIME types as b"major/minor" byte strings.
 
-    :param blacklist: If not ``None``, MIME types to
-        exclude from the result.
+    :param blacklist: If not ``None``, MIME types to exclude from the result.
     """
-    # type: Optional[Set[unicode]] -> Strategy[unicode]
     if blacklist is None:
         blacklist = set()
     return (

@@ -17,35 +17,6 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from datetime import datetime
 from functools import wraps
 from json import loads
@@ -53,7 +24,7 @@ from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 
 import attr
-from aniso8601 import parse_datetime as _parse_datetime
+from aniso8601 import parse_datetime
 from past.builtins import long
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -69,21 +40,6 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
-
-
-if PY2:
-    def parse_datetime(s, **kw):
-        """
-        Like ``aniso8601.parse_datetime`` but accept str as well.
-        """
-        if isinstance(s, str):
-            s = s.encode("utf-8")
-        assert isinstance(s, bytes)
-        if "delimiter" in kw and isinstance(kw["delimiter"], str):
-            kw["delimiter"] = kw["delimiter"].encode("utf-8")
-        return _parse_datetime(s, **kw)
-else:
-    parse_datetime = _parse_datetime
 
 
 class ILeaseMaintenanceObserver(Interface):

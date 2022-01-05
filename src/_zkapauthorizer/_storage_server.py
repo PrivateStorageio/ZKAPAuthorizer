@@ -21,41 +21,13 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from datetime import timedelta
 from errno import ENOENT
 from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
+from typing import Dict, List, Optional
 
 import attr
 from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
@@ -96,10 +68,6 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
-try:
-    from typing import Dict, List, Optional
-except ImportError:
-    pass
 
 # The last Python 2-supporting prometheus_client nevertheless tries to use
 # FileNotFoundError, an exception type from Python 3.  Since that release,

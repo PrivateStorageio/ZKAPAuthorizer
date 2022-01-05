@@ -16,35 +16,6 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from datetime import timedelta
 from functools import partial
 from os import makedirs
@@ -67,8 +38,7 @@ from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
-from six.moves import StringIO
-from six import ensure_binary
+from io import StringIO
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -418,16 +388,6 @@ class ClientPluginTests(TestCase):
             u"tub.port",
             config_text.encode("utf-8"),
         )
-        # On Tahoe-LAFS <1.16, the config is written as bytes.
-        # On Tahoe-LAFS >=1.16, the config is written as unicode.
-        #
-        # So we'll use `StringIO.StringIO` (not `io.StringIO`) here - which
-        # will allow either type (it will also implicitly decode bytes to
-        # unicode if we mix them, though I don't think that should happen
-        # here).
-        #
-        # After support for Tahoe <1.16 support is dropped we probably want to
-        # switch to an io.StringIO here.
         config_text = StringIO()
         node_config.config.write(config_text)
         self.addDetail("config", text_content(config_text.getvalue()))

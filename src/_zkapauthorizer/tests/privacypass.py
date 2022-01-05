@@ -16,8 +16,6 @@
 Ristretto-flavored PrivacyPass helpers for the test suite.
 """
 
-from __future__ import absolute_import
-
 from challenge_bypass_ristretto import BatchDLEQProof, PublicKey
 
 from ..model import Pass

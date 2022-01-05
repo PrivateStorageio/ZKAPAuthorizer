@@ -21,40 +21,11 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future.utils import PY2
-
-if PY2:
-    from future.builtins import (  # noqa: F401
-        filter,
-        map,
-        zip,
-        ascii,
-        chr,
-        hex,
-        input,
-        next,
-        oct,
-        open,
-        pow,
-        round,
-        super,
-        bytes,
-        dict,
-        list,
-        object,
-        range,
-        str,
-        max,
-        min,
-    )
-
 from itertools import islice
 from json import load, loads
 from sys import maxsize
 
-from six import ensure_str, ensure_binary
+from six import ensure_binary
 from past.builtins import long
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
@@ -172,7 +143,7 @@ def from_configuration(
     )
 
     root = create_private_tree(
-        lambda: ensure_binary(node_config.get_private_config(ensure_str("api_auth_token"))),
+        lambda: ensure_binary(node_config.get_private_config("api_auth_token")),
         authorizationless_resource_tree(
             store,
             controller,

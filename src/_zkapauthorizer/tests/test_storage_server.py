@@ -16,8 +16,6 @@
 Tests for ``_zkapauthorizer._storage_server``.
 """
 
-from __future__ import absolute_import, division
-
 from random import shuffle
 from time import time
 
@@ -136,7 +134,7 @@ class ValidationResultTests(TestCase):
                     AfterPreprocessing(
                         str,
                         Equals(
-                            "MorePassesRequired(valid_count=4, required_count=10, signature_check_failed={})".format(str(frozenset([4]))),
+                            "MorePassesRequired(valid_count=4, required_count=10, signature_check_failed=frozenset({4}))",
                         ),
                     ),
                 ),
