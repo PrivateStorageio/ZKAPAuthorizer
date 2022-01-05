@@ -237,12 +237,9 @@ workflows:
     jobs:
     - "documentation"
     - "linux-tests":
-        matrix:
-          parameters:
-            py-version:
-            - "39"
-            tahoe-lafs-source:
-            - "tahoe-lafs"
+        name: "Linux tests python 3.9"
+        py-version: "39"
+        tahoe-lafs-source: "tahoe-lafs"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
