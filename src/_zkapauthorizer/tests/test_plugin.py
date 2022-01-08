@@ -16,7 +16,6 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-import os.path
 from datetime import timedelta
 from functools import partial
 from io import StringIO
@@ -623,9 +622,8 @@ class LeaseMaintenanceServiceTests(TestCase):
         # and unicode in an os.path.join() call that always fails with a
         # TypeError.
         def write_private_config(name, value):
-            privname = os.path.join(config._basedir, u"private", name)
-            with open(privname, "wb") as f:
-                f.write(value)
+            privpath = FilePath(config._basedir).descendant([u"private", name])
+            privpath.setContent(value)
 
         if servers_yaml is not None:
             # Provide it a statically configured server to connect to.
