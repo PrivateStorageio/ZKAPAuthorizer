@@ -52,14 +52,14 @@ from .model import Voucher
 RETRY_INTERVAL = timedelta(milliseconds=1000)
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class UnexpectedResponse(Exception):
     """
     The issuer responded in an unexpected and unhandled way.
     """
 
-    code = attr.ib()
-    body = attr.ib()
+    code: int = attr.ib()
+    body: bytes = attr.ib()
 
 
 class AlreadySpent(Exception):
@@ -77,7 +77,7 @@ class Unpaid(Exception):
     """
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class UnrecognizedFailureReason(Exception):
     """
     An attempt was made to redeem a voucher and the response contained an unknown reason.
@@ -85,7 +85,7 @@ class UnrecognizedFailureReason(Exception):
     The redemption attempt may be automatically retried at some point.
     """
 
-    response = attr.ib()
+    response: dict = attr.ib()
 
 
 @attr.s
