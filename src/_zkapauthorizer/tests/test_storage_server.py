@@ -241,7 +241,7 @@ class PassValidationTests(TestCase):
         renew_secret = b"x" * 32
         cancel_secret = b"y" * 32
         valid_passes = get_passes(
-            allocate_buckets_message(storage_index).encode("utf-8"),
+            allocate_buckets_message(storage_index),
             required_passes - 1,
             self.signing_key,
         )
@@ -343,7 +343,7 @@ class PassValidationTests(TestCase):
         )
 
         valid_passes = get_passes(
-            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(storage_index),
             required_pass_count,
             self.signing_key,
         )
@@ -479,7 +479,7 @@ class PassValidationTests(TestCase):
             tw_vectors,
         )
         valid_passes = get_passes(
-            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(storage_index),
             required_pass_count,
             self.signing_key,
         )
@@ -548,7 +548,7 @@ class PassValidationTests(TestCase):
 
         # Attempt the lease operation with one fewer pass than is required.
         passes = get_passes(
-            add_lease_message(storage_index).encode("utf-8"),
+            add_lease_message(storage_index),
             required_count - 1,
             self.signing_key,
         )
@@ -612,7 +612,7 @@ class PassValidationTests(TestCase):
             tw_vectors,
         )
         valid_passes = get_passes(
-            slot_testv_and_readv_and_writev_message(slot).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(slot),
             required_pass_count,
             self.signing_key,
         )
@@ -676,7 +676,7 @@ class PassValidationTests(TestCase):
             tw_vectors,
         )
         valid_passes = get_passes(
-            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(storage_index),
             num_passes,
             self.signing_key,
         )
@@ -737,7 +737,7 @@ class PassValidationTests(TestCase):
             tw_vectors,
         )
         valid_passes = get_passes(
-            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(storage_index),
             num_passes,
             self.signing_key,
         )
@@ -818,7 +818,7 @@ class PassValidationTests(TestCase):
             [size] * len(new_sharenums - existing_sharenums),
         )
         valid_passes = get_passes(
-            allocate_buckets_message(storage_index).encode("utf-8"),
+            allocate_buckets_message(storage_index),
             num_passes,
             self.signing_key,
         )
@@ -885,7 +885,7 @@ class PassValidationTests(TestCase):
             self.storage_server._pass_value, [allocated_size] * len(sharenums)
         )
         valid_passes = get_passes(
-            add_lease_message(storage_index).encode("utf-8"),
+            add_lease_message(storage_index),
             num_passes,
             self.signing_key,
         )
@@ -946,7 +946,7 @@ class PassValidationTests(TestCase):
             self.storage_server._pass_value, [allocated_size] * len(sharenums)
         )
         valid_passes = get_passes(
-            add_lease_message(storage_index).encode("utf-8"),
+            add_lease_message(storage_index),
             num_passes,
             self.signing_key,
         )

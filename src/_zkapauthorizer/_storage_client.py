@@ -355,7 +355,7 @@ class ZKAPAuthorizerStorageClient(object):
             num_passes,
             partial(
                 self._get_passes,
-                allocate_buckets_message(storage_index).encode("utf-8"),
+                allocate_buckets_message(storage_index),
             ),
             partial(self._spend_for_allocate_buckets, allocated_size),
         )
@@ -398,7 +398,7 @@ class ZKAPAuthorizerStorageClient(object):
                 cancel_secret,
             ),
             num_passes,
-            partial(self._get_passes, add_lease_message(storage_index).encode("utf-8")),
+            partial(self._get_passes, add_lease_message(storage_index)),
         )
         returnValue(result)
 
@@ -503,7 +503,7 @@ class ZKAPAuthorizerStorageClient(object):
             num_passes,
             partial(
                 self._get_passes,
-                slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+                slot_testv_and_readv_and_writev_message(storage_index),
             ),
         )
         returnValue(result)

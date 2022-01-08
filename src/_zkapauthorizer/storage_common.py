@@ -17,6 +17,7 @@ Functionality shared between the storage client and server.
 """
 
 from base64 import b64encode
+from typing import Callable
 
 import attr
 from pyutil.mathutil import div_ceil
@@ -46,12 +47,12 @@ class MorePassesRequired(Exception):
     signature_check_failed = attr.ib(converter=frozenset)
 
 
-def _message_maker(label):
+def _message_maker(label: str) -> Callable[[str], bytes]:
     def make_message(storage_index):
         return "{label} {storage_index}".format(
             label=label,
-            storage_index=b64encode(storage_index).decode("utf-8"),
-        )
+            storage_index=b64encode(storage_index).decode("ascii"),
+        ).encode("ascii")
 
     return make_message
 

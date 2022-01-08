@@ -270,7 +270,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         storage for immutable shares if they present valid passes.
         """
         validation = _ValidationResult.validate_passes(
-            allocate_buckets_message(storage_index).encode("utf-8"),
+            allocate_buckets_message(storage_index),
             passes,
             self._signing_key,
         )
@@ -353,7 +353,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         duration of share storage if they present valid passes.
         """
         validation = _ValidationResult.validate_passes(
-            add_lease_message(storage_index).encode("utf-8"),
+            add_lease_message(storage_index),
             passes,
             self._signing_key,
         )
@@ -461,7 +461,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
         # Check passes for cryptographic validity.
         validation = _ValidationResult.validate_passes(
-            slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+            slot_testv_and_readv_and_writev_message(storage_index),
             passes,
             self._signing_key,
         )
