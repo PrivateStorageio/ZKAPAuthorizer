@@ -25,7 +25,11 @@ from weakref import WeakValueDictionary
 
 import attr
 from allmydata.client import _Client
-from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin, IFilesystemNode
+from allmydata.interfaces import (
+    IAnnounceableStorageServer,
+    IFilesystemNode,
+    IFoolscapStoragePlugin,
+)
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action

@@ -16,7 +16,7 @@
 A module for logic controlling the manner in which ZKAPs are spent.
 """
 
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import attr
 from zope.interface import Attribute, Interface, implementer
@@ -112,26 +112,21 @@ class PassGroup(object):
     :ivar list[Pass] passes: The passes of which this group consists.
     """
 
-    _message = attr.ib(validator=attr.validators.instance_of(bytes))  # type: bytes
-    _factory = attr.ib(
-        validator=attr.validators.provides(IPassFactory)
-    )  # type: IPassFactory
-    _tokens = attr.ib(
+    _message: bytes = attr.ib(validator=attr.validators.instance_of(bytes))
+    _factory: IPassFactory = attr.ib(validator=attr.validators.provides(IPassFactory))
+    _tokens: List[Tuple[UnblindedToken, Pass]] = attr.ib(
         validator=attr.validators.instance_of(list)
-    )  # type: List[Tuple[UnblindedToken, Pass]]
+    )
 
     @property
-    def passes(self):
-        # type: () -> List[Pass]
+    def passes(self) -> List[Pass]:
         return list(pass_ for (unblinded_token, pass_) in self._tokens)
 
     @property
-    def unblinded_tokens(self):
-        # type: () -> List[UnblindedToken]
+    def unblinded_tokens(self) -> List[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices):
-        # type: (List[int]) -> (PassGroup, PassGroup)
+    def split(self, select_indices: List[int]) -> ("PassGroup", "PassGroup"):
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
@@ -144,23 +139,19 @@ class PassGroup(object):
             attr.evolve(self, tokens=unselected),
         )
 
-    def expand(self, by_amount):
-        # type: (int) -> PassGroup
+    def expand(self, by_amount: int) -> "PassGroup":
         return attr.evolve(
             self,
             tokens=self._tokens + self._factory.get(self._message, by_amount)._tokens,
         )
 
-    def mark_spent(self):
-        # type: () -> None
+    def mark_spent(self) -> None:
         self._factory._mark_spent(self.unblinded_tokens)
 
-    def mark_invalid(self, reason):
-        # type: () -> None
+    def mark_invalid(self, reason) -> None:
         self._factory._mark_invalid(reason, self.unblinded_tokens)
 
-    def reset(self):
-        # tye: () -> None
+    def reset(self) -> None:
         self._factory._reset(self.unblinded_tokens)
 
 
@@ -172,12 +163,12 @@ class SpendingController(object):
     attempts when necessary.
     """
 
-    get_unblinded_tokens = attr.ib()  # type: (int) -> [UnblindedToken]
-    discard_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
-    invalidate_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
-    reset_unblinded_tokens = attr.ib()  # type: ([UnblindedToken]) -> None
+    get_unblinded_tokens: Callable[[int], List[UnblindedToken]] = attr.ib()
+    discard_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
+    invalidate_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
+    reset_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
 
-    tokens_to_passes = attr.ib()  # type: (bytes, [UnblindedToken]) -> [Pass]
+    tokens_to_passes: Callable[[bytes, List[UnblindedToken]], List[Pass]] = attr.ib()
 
     @classmethod
     def for_store(cls, tokens_to_passes, store):

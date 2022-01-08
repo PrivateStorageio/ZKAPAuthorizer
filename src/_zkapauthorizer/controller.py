@@ -99,10 +99,10 @@ class RedemptionResult(object):
         the redemption process.
     """
 
-    unblinded_tokens = attr.ib(  # type: List[UnblindedToken]
+    unblinded_tokens: List[UnblindedToken] = attr.ib(
         validator=attr.validators.instance_of(list),
     )
-    public_key = attr.ib(  # type: str
+    public_key: str = attr.ib(
         validator=attr.validators.instance_of(str),
     )
 

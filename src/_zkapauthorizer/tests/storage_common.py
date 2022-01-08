@@ -20,10 +20,10 @@ from functools import partial
 from itertools import islice
 from os import SEEK_CUR
 from struct import pack
-from typing import Dict, List, Set
+from typing import Callable, Dict, List, Set
 
 import attr
-from challenge_bypass_ristretto import RandomToken
+from challenge_bypass_ristretto import RandomToken, SigningKey
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
@@ -135,7 +135,7 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
         )
 
 
-def integer_passes(limit):
+def integer_passes(limit: int) -> Callable[[bytes, int], List[int]]:
     """
     :return: A function which can be used to get a number of passes.  The
         function accepts a unicode request-binding message and an integer
@@ -153,7 +153,9 @@ def integer_passes(limit):
     return get_passes
 
 
-def get_passes(message, count, signing_key):
+def get_passes(
+    message: bytes, count: int, signing_key: SigningKey
+) -> List[RandomToken]:
     """
     :param bytes message: Request-binding message for PrivacyPass.
 
@@ -219,16 +221,15 @@ class _PassFactory(object):
         via ``IPassGroup.reset``.
     """
 
-    _get_passes = attr.ib()  # type: (bytes, int) -> List[bytes]
+    _get_passes: Callable[[bytes, int], List[bytes]] = attr.ib()
 
-    returned = attr.ib(default=attr.Factory(list), init=False)  # type: List[int]
-    in_use = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
-    invalid = attr.ib(default=attr.Factory(dict), init=False)  # type: Dict[int, str]
-    spent = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
-    issued = attr.ib(default=attr.Factory(set), init=False)  # type: Set[int]
+    returned: List[int] = attr.ib(default=attr.Factory(list), init=False)
+    in_use: Set[int] = attr.ib(default=attr.Factory(set), init=False)
+    invalid: Dict[int, str] = attr.ib(default=attr.Factory(dict), init=False)
+    spent: Set[int] = attr.ib(default=attr.Factory(set), init=False)
+    issued: Set[int] = attr.ib(default=attr.Factory(set), init=False)
 
-    def get(self, message, num_passes):
-        # type: (bytes, int) -> PassGroup
+    def get(self, message: bytes, num_passes: int) -> PassGroup:
         passes = []
         if self.returned:
             passes.extend(self.returned[:num_passes])

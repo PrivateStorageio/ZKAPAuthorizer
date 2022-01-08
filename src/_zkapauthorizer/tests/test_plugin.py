@@ -25,10 +25,10 @@ from os import makedirs
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
+    IFilesystemNode,
     IFoolscapStoragePlugin,
     IStorageServer,
     RIStorageServer,
-    IFilesystemNode,
 )
 from challenge_bypass_ristretto import SigningKey
 from eliot.testing import LoggedMessage, capture_logging
@@ -68,7 +68,7 @@ from twisted.web.resource import IResource
 
 from twisted.plugins.zkapauthorizer import storage_server
 
-from .._plugin import load_signing_key, get_root_nodes
+from .._plugin import get_root_nodes, load_signing_key
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
