@@ -506,7 +506,7 @@ class RistrettoRedeemer(object):
                     "redeemVoucher": voucher.number.decode("ascii"),
                     "redeemCounter": counter,
                     "redeemTokens": list(
-                        token.encode_base64().decode("utf-8")
+                        token.encode_base64().decode("ascii")
                         for token in blinded_tokens
                     ),
                 }
