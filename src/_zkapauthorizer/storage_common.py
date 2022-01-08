@@ -254,7 +254,7 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     """
     current_passes = required_passes(
         pass_value,
-        list(current_sizes.values()),
+        current_sizes.values(),
     )
 
     new_sizes = current_sizes.copy()
