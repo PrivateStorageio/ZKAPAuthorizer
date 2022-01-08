@@ -331,7 +331,7 @@ class GetTokenCountTests(TestCase):
             token_config = {}
         else:
             expected_count = token_count
-            token_config = {"default-token-count": "{}".format(expected_count)}
+            token_config = {"default-token-count": f"{expected_count}"}
 
         config_text = config_string_from_sections(
             [
@@ -567,7 +567,7 @@ class UnblindedTokenTests(TestCase):
         )
         self.addDetail(
             "requesting result",
-            text_content("{}".format(vars(requesting.result))),
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -615,7 +615,7 @@ class UnblindedTokenTests(TestCase):
         )
         self.addDetail(
             "requesting result",
-            text_content("{}".format(vars(requesting.result))),
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -670,7 +670,7 @@ class UnblindedTokenTests(TestCase):
         )
         self.addDetail(
             "requesting result",
-            text_content("{}".format(vars(requesting.result))),
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -958,7 +958,7 @@ class VoucherTests(TestCase):
         )
         self.addDetail(
             "requesting result",
-            text_content("{}".format(vars(requesting.result))),
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -990,7 +990,7 @@ class VoucherTests(TestCase):
         )
         self.addDetail(
             "requesting result",
-            text_content("{}".format(vars(requesting.result))),
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,

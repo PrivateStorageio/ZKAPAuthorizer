@@ -142,7 +142,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
     def merge_shares(shares, the_rest):
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
-                the_rest["shares." + k] = "{}".format(v)
+                the_rest["shares." + k] = f"{v}"
         return the_rest
 
     client_section = builds(
@@ -249,7 +249,7 @@ def server_configurations(signing_key_path):
             {
                 "pass-value":
                 # The configuration is ini so everything is always a byte string!
-                integers(min_value=1).map(lambda v: "{}".format(v).encode("ascii")),
+                integers(min_value=1).map(lambda v: f"{v}".encode("ascii")),
             }
         ),
         just({}),
