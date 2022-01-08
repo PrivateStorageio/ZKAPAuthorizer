@@ -403,7 +403,7 @@ class _VoucherCollection(Resource):
             payload = loads(request.content.read())
         except Exception:
             return bad_request("json request body required").render(request)
-        if set(payload) != {"voucher"}:
+        if payload.keys() != {"voucher"}:
             return bad_request(
                 "request object must have exactly one key: 'voucher'"
             ).render(request)
