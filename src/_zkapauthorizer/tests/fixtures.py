@@ -49,7 +49,7 @@ class AnonymousStorageServer(Fixture):
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))
         self.storage_server = StorageServer(
-            self.tempdir.asTextMode().path,
+            self.tempdir.path,
             b"x" * 20,
             clock=self.clock,
         )
