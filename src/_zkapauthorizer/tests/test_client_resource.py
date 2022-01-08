@@ -456,7 +456,7 @@ def maybe_extra_tokens():
     return one_of(
         just(None),
         # If we do, we can't have fewer than the number of redemption groups
-        # which we don't know until we're further inside the test.  oSo supply
+        # which we don't know until we're further inside the test.  So supply
         # an amount to add to that, in the case where we have tokens at all.
         integers(min_value=0, max_value=100),
     )
