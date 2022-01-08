@@ -1117,9 +1117,10 @@ class ShareTests(TestCase):
         )
         self.assertThat(d, is_successful_write())
 
-        # Write some new data to with a correct test vector.  We can only be
-        # sure we know data from the last element of the test vector since
-        # earlier elements may have been overwritten.
+        # Write some new data with a correct test vector.  We can only be sure
+        # we know data from the last element of the test vector since earlier
+        # elements may have been overwritten so only use that last element in
+        # our test vector.
         d = write(
             {
                 sharenum: (
