@@ -25,7 +25,6 @@ from sqlite3 import connect as _connect
 
 import attr
 from aniso8601 import parse_datetime
-from past.builtins import long
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -891,7 +890,7 @@ class RandomToken(object):
 def _counter_attribute():
     return attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of((int, long)),
+            attr.validators.instance_of(int),
             greater_than(-1),
         ),
     )
@@ -952,7 +951,7 @@ class Redeemed(object):
     """
 
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    token_count = attr.ib(validator=attr.validators.instance_of(int))
 
     def should_start_redemption(self):
         return False
@@ -1051,7 +1050,7 @@ class Voucher(object):
     expected_tokens = attr.ib(
         validator=attr.validators.optional(
             attr.validators.and_(
-                attr.validators.instance_of((int, long)),
+                attr.validators.instance_of(int),
                 greater_than(0),
             ),
         ),

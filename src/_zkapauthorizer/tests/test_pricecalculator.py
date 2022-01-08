@@ -21,7 +21,6 @@ from functools import partial
 
 from hypothesis import given
 from hypothesis.strategies import integers, lists, tuples
-from past.builtins import long
 from testtools import TestCase
 from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 
@@ -156,7 +155,7 @@ class PriceCalculatorTests(TestCase):
         self.assertThat(
             price,
             MatchesAll(
-                IsInstance((int, long)),
+                IsInstance(int),
                 GreaterThan(0),
             ),
         )

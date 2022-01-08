@@ -25,7 +25,6 @@ from itertools import islice
 from json import load, loads
 from sys import maxsize
 
-from past.builtins import long
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -256,7 +255,7 @@ class _CalculatePrice(Resource):
             )
 
         if not isinstance(sizes, list) or not all(
-            isinstance(size, (int, long)) and size >= 0 for size in sizes
+            isinstance(size, int) and size >= 0 for size in sizes
         ):
             request.setResponseCode(BAD_REQUEST)
             return dumps_utf8(
