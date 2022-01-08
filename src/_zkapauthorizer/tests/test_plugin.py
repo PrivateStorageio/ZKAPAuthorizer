@@ -56,7 +56,6 @@ from testtools.matchers import (
     MatchesAll,
     MatchesListwise,
     MatchesStructure,
-    Not,
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
@@ -353,6 +352,7 @@ class ClientPluginTests(TestCase):
     Tests for the plugin's implementation of
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
+
     @given(tahoe_configs(), announcements())
     def test_interface(self, get_config, announcement):
         """
@@ -653,7 +653,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         self.assertThat(
             roots,
             MatchesAll(
-                Not(HasLength(0)),
+                HasLength(1),
                 AllMatch(Provides([IFilesystemNode])),
             ),
         )
