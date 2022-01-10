@@ -20,6 +20,7 @@ from random import shuffle
 from time import time
 
 from allmydata.storage.mutable import MutableShareFile
+from allmydata.interfaces import NoSpace
 from challenge_bypass_ristretto import PublicKey, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
@@ -193,15 +194,15 @@ class PassValidationTests(TestCase):
         # the same time so we can do lease expiration calculations more
         # easily.
         self.clock.advance(time())
-        self.anonymous_storage_server = self.useFixture(
+        self.storage = self.useFixture(
             AnonymousStorageServer(self.clock),
-        ).storage_server
+        )
         self.signing_key = random_signing_key()
         self.public_key_hash = PublicKey.from_signing_key(
             self.signing_key
         ).encode_base64()
         self.storage_server = ZKAPAuthorizerStorageServer(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             self.pass_value,
             self.signing_key,
             spender,
@@ -221,7 +222,11 @@ class PassValidationTests(TestCase):
         # Hypothesis and testtools fixtures don't play nicely together in a
         # way that allows us to just move everything from `setUp` into this
         # method.
-        cleanup_storage_server(self.anonymous_storage_server)
+        cleanup_storage_server(self.storage.backend)
+        # One of the tests makes the server read-only partway through.  Make
+        # sure that doesn't leak into other examples.
+        self.storage.backend.readonly_storage = False
+
         self.spending_recorder.reset()
 
         # Reset all of the metrics, too, so the individual tests have a
@@ -527,7 +532,7 @@ class PassValidationTests(TestCase):
         )
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -801,7 +806,7 @@ class PassValidationTests(TestCase):
         # the subsequent `allocate_buckets` operation - but of which the
         # client is unaware.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -872,7 +877,7 @@ class PassValidationTests(TestCase):
     ):
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -919,21 +924,24 @@ class PassValidationTests(TestCase):
 
     @given(
         storage_index=storage_indexes(),
-        renew_secret=lease_renew_secrets(),
+        renew_secrets=lists(lease_renew_secrets(), min_size=2, max_size=2, unique=True),
         cancel_secret=lease_cancel_secrets(),
         sharenums=sharenum_sets(),
         allocated_size=sizes(),
     )
     def test_add_lease_metrics_on_failure(
-        self, storage_index, renew_secret, cancel_secret, sharenums, allocated_size
+        self, storage_index, renew_secrets, cancel_secret, sharenums, allocated_size
     ):
         """
         If the ``add_lease`` operation fails then the successful pass spending
         metric is not incremented.
         """
+        # We have two renew secrets so we can operate on two distinct leases.
+        renew_secret, another_renew_secret = renew_secrets
+
         # Put some shares up there to target with the add_lease operation.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -951,12 +959,9 @@ class PassValidationTests(TestCase):
             self.signing_key,
         )
 
-        # Tahoe doesn't make it very easy to make an add_lease operation fail
-        # so monkey-patch something broken in.  After 1.17.0 we can set
-        # `reserved_space` on StorageServer to a very large number and the
-        # server should refuse to allocate space for a *new* lease (which
-        # means we need to use a different renew secret for the next step.
-        self.anonymous_storage_server.remote_add_lease = lambda *a, **kw: 1 / 0
+        # Turn off space-allocating operations entirely.  Since there will be
+        # no space for a new lease, the operation will fail.
+        self.storage.backend.readonly_storage = True
 
         try:
             self.storage_server.doRemoteCall(
@@ -965,14 +970,14 @@ class PassValidationTests(TestCase):
                 dict(
                     passes=_encode_passes(valid_passes),
                     storage_index=storage_index,
-                    renew_secret=renew_secret,
+                    renew_secret=another_renew_secret,
                     cancel_secret=cancel_secret,
                 ),
             )
-        except ZeroDivisionError:
+        except NoSpace:
             pass
         else:
-            self.fail("expected our ZeroDivisionError to be raised")
+            self.fail("expected NoSpace to be raised")
 
         after_count = read_spending_success_histogram_total(self.storage_server)
         self.expectThat(

@@ -19,7 +19,7 @@ Common fixtures to let the test suite focus on application logic.
 from base64 import b64encode
 
 import attr
-from allmydata.storage.server import StorageServer
+from allmydata.storage.server import StorageServer, FoolscapStorageServer
 from fixtures import Fixture, TempDir
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
@@ -28,30 +28,38 @@ from ..controller import DummyRedeemer, PaymentController
 from ..model import VoucherStore, memory_connect, open_and_initialize
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class AnonymousStorageServer(Fixture):
     """
     Supply an instance of allmydata.storage.server.StorageServer which
     implements anonymous access to Tahoe-LAFS storage server functionality.
 
-    :ivar FilePath tempdir: The path to the server's storage on the
-        filesystem.
+    :ivar tempdir: The path to the server's storage on the filesystem.
 
-    :ivar allmydata.storage.server.StorageServer storage_server: The storage
-        server.
+    :ivar backend: The protocol-agnostic storage server backend.
 
-    :ivar twisted.internet.task.Clock clock: The ``IReactorTime`` provider to
-        supply to ``StorageServer`` for its time-checking needs.
+    :ivar anonymous_foolscap_server: The Foolscap-based server wrapped around
+        the backend.
+
+    :ivar clock: The ``IReactorTime`` provider to supply to ``StorageServer``
+        for its time-checking needs.
     """
 
-    clock = attr.ib()
+    clock: Clock = attr.ib()
+
+    tempdir: FilePath = attr.ib(default=None)
+    backend: StorageServer = attr.ib(default=None)
+    anonymous_foolscap_server: FoolscapStorageServer = attr.ib(default=None)
 
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))
-        self.storage_server = StorageServer(
+        self.backend = StorageServer(
             self.tempdir.path,
             b"x" * 20,
             clock=self.clock,
+        )
+        self.anonymous_foolscap_server = FoolscapStorageServer(
+            self.backend,
         )
 
 

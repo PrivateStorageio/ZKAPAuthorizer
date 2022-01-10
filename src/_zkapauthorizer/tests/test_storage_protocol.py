@@ -154,13 +154,13 @@ class ShareTests(TestCase):
         )
 
         self.clock = Clock()
-        self.anonymous_storage_server = self.useFixture(
+        self.storage = self.useFixture(
             AnonymousStorageServer(self.clock),
-        ).storage_server
+        )
 
         self.spending_recorder, spender = RecordingSpender.make()
         self.server = ZKAPAuthorizerStorageServer(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             self.pass_value,
             self.signing_key,
             spender,
@@ -191,7 +191,7 @@ class ShareTests(TestCase):
         self.spending_recorder.reset()
 
         # And clean out any shares that might confuse things.
-        cleanup_storage_server(self.anonymous_storage_server)
+        cleanup_storage_server(self.storage.backend)
 
     def test_get_version(self):
         """
@@ -410,7 +410,7 @@ class ShareTests(TestCase):
         # Create some shares to alter the behavior of the next
         # allocate_buckets.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -480,7 +480,7 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            dict(get_lease_grant_times(self.anonymous_storage_server, storage_index)),
+            dict(get_lease_grant_times(self.storage.backend, storage_index)),
             Equals(expected_leases),
         )
 
@@ -504,7 +504,7 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             add_lease_secret,
             cancel_secret,
@@ -528,7 +528,7 @@ class ShareTests(TestCase):
             matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
         )
 
-        leases = list(self.anonymous_storage_server.get_leases(storage_index))
+        leases = list(self.storage.backend.get_leases(storage_index))
         self.assertThat(leases, HasLength(2))
 
     def _stat_shares_immutable_test(
@@ -541,7 +541,7 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         write_shares(
-            self.anonymous_storage_server,
+            self.storage,
             storage_index,
             {sharenum},
             size,
@@ -550,7 +550,7 @@ class ShareTests(TestCase):
         # Perhaps put some more leases on it.  Leases might impact our
         # ability to determine share data size.
         for renew_secret in leases:
-            self.anonymous_storage_server.remote_add_lease(
+            self.storage.backend.add_lease(
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -591,8 +591,8 @@ class ShareTests(TestCase):
             size,
             when,
             leases,
-            lambda storage_server, storage_index, sharenums, size, canary: write_toy_shares(
-                storage_server,
+            lambda storage, storage_index, sharenums, size, canary: write_toy_shares(
+                storage.anonymous_foolscap_server,
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -619,7 +619,7 @@ class ShareTests(TestCase):
         """
         assume(version not in (1, 2))
 
-        sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
+        sharedir = FilePath(self.storage.backend.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
             # joined by pathsep
             storage_index_to_dir(storage_index),
@@ -661,7 +661,7 @@ class ShareTests(TestCase):
         ``stat_shares`` declines to offer a result (by raising
         ``ValueError``).
         """
-        sharedir = FilePath(self.anonymous_storage_server.sharedir).preauthChild(
+        sharedir = FilePath(self.storage.backend.sharedir).preauthChild(
             # storage_index_to_dir likes to return multiple segments
             # joined by pathsep
             storage_index_to_dir(storage_index),
@@ -713,8 +713,8 @@ class ShareTests(TestCase):
         write real multi-gigabyte files to exercise the behavior.
         """
 
-        def write_shares(storage_server, storage_index, sharenums, size, canary):
-            sharedir = FilePath(storage_server.sharedir).preauthChild(
+        def write_shares(storage, storage_index, sharenums, size, canary):
+            sharedir = FilePath(storage.backend.sharedir).preauthChild(
                 # storage_index_to_dir likes to return multiple segments
                 # joined by pathsep
                 storage_index_to_dir(storage_index),
@@ -819,7 +819,7 @@ class ShareTests(TestCase):
         """
         # Create a share we can toy with.
         write_toy_shares(
-            self.anonymous_storage_server,
+            self.storage.anonymous_foolscap_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -838,7 +838,7 @@ class ShareTests(TestCase):
             succeeded(Always()),
         )
         self.assertThat(
-            FilePath(self.anonymous_storage_server.corruption_advisory_dir).children(),
+            FilePath(self.storage.backend.corruption_advisory_dir).children(),
             HasLength(1),
         )
 
@@ -928,7 +928,7 @@ class ShareTests(TestCase):
         self.assertThat(
             dict(
                 get_lease_grant_times(
-                    self.anonymous_storage_server,
+                    self.storage.backend,
                     storage_index,
                 )
             ),
@@ -956,7 +956,7 @@ class ShareTests(TestCase):
         def leases():
             return list(
                 lease.to_mutable_data()
-                for lease in self.anonymous_storage_server.get_slot_leases(
+                for lease in self.storage.backend.get_slot_leases(
                     storage_index
                 )
             )

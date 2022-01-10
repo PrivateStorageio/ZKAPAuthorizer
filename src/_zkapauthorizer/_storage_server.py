@@ -32,7 +32,7 @@ from typing import Dict, List, Optional
 import attr
 from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
-from allmydata.storage.immutable import ShareFile
+from allmydata.storage.immutable import ShareFile, FoolscapBucketWriter
 from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.server import StorageServer
@@ -253,7 +253,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without pass check to allow clients to learn about our
         version and configuration in case it helps them decide how to behave.
         """
-        return self._original.remote_get_version()
+        return self._original._server.get_version()
 
     def remote_allocate_buckets(
         self,
@@ -302,7 +302,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
         )
 
-        alreadygot, bucketwriters = self._original._allocate_buckets(
+        alreadygot, bucketwriters = self._original._server.allocate_buckets(
             storage_index,
             renew_secret,
             cancel_secret,
@@ -338,7 +338,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._public_key,
             validation.valid[:spent_passes],
         )
-        return alreadygot, bucketwriters
+        return alreadygot, {
+            k: FoolscapBucketWriter(bw)
+            for (k, bw) in bucketwriters.items()
+        }
 
     def remote_get_buckets(self, storage_index):
         """
@@ -361,9 +364,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._pass_value,
             storage_index,
             validation,
-            self._original,
+            self._original._server,
         )
-        result = self._original.remote_add_lease(storage_index, *a, **kw)
+        result = self._original._server.add_lease(storage_index, *a, **kw)
         self._spender.mark_as_spent(
             self._public_key,
             validation.valid,
@@ -376,7 +379,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients inform us of possible
         issues with the system without incurring any cost to themselves.
         """
-        return self._original.remote_advise_corrupt_share(*a, **kw)
+        return self._original._server.advise_corrupt_share(*a, **kw)
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         with start_action(
@@ -384,13 +387,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             storage_index_or_slot=storage_index_or_slot,
         ):
             return dict(
-                get_share_sizes(self._original, storage_index_or_slot, sharenums)
+                get_share_sizes(self._original._server, storage_index_or_slot, sharenums)
             )
 
     def remote_stat_shares(self, storage_indexes_or_slots):
         # type: (List[bytes]) -> List[Dict[int, ShareStat]]
         return list(
-            dict(get_share_stats(self._original, storage_index_or_slot, None))
+            dict(get_share_stats(self._original._server, storage_index_or_slot, None))
             for storage_index_or_slot in storage_indexes_or_slots
         )
 
@@ -469,7 +472,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Inspect the operation to determine its price based on any
         # allocations.
         required_new_passes = get_writev_price(
-            self._original,
+            self._original._server,
             self._pass_value,
             storage_index,
             tw_vectors,
@@ -482,7 +485,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation.raise_for(required_new_passes)
 
         # Perform the operation.
-        result = self._original.slot_testv_and_readv_and_writev(
+        result = self._original._server.slot_testv_and_readv_and_writev(
             storage_index,
             secrets,
             tw_vectors,
@@ -503,7 +506,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # difference but this only grants storage for the remainder of the
         # existing lease period.  This results in the client being overcharged
         # somewhat.
-        add_leases_for_writev(self._original, storage_index, secrets, tw_vectors, now)
+        add_leases_for_writev(self._original._server, storage_index, secrets, tw_vectors, now)
 
         self._spender.mark_as_spent(
             self._public_key,
@@ -521,7 +524,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        return self._original.remote_slot_readv(*a, **kw)
+        return self._original._server.slot_readv(*a, **kw)
 
 
 def check_pass_quantity(pass_value, validation, share_sizes):
