@@ -160,7 +160,7 @@ class ShareTests(TestCase):
 
         self.spending_recorder, spender = RecordingSpender.make()
         self.server = ZKAPAuthorizerStorageServer(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             self.pass_value,
             self.signing_key,
             spender,
@@ -410,13 +410,12 @@ class ShareTests(TestCase):
         # Create some shares to alter the behavior of the next
         # allocate_buckets.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             existing_sharenums,
             size,
-            canary=self.canary,
         )
 
         # Let some time pass so leases added after this point will look
@@ -504,13 +503,12 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             add_lease_secret,
             cancel_secret,
             sharenums,
             size,
-            canary=self.canary,
         )
 
         self.assertThat(
@@ -592,13 +590,12 @@ class ShareTests(TestCase):
             when,
             leases,
             lambda storage, storage_index, sharenums, size, canary: write_toy_shares(
-                storage.anonymous_foolscap_server,
+                storage.backend,
                 storage_index,
                 renew_secret,
                 cancel_secret,
                 sharenums,
                 size,
-                canary,
             ),
         )
 
@@ -819,13 +816,12 @@ class ShareTests(TestCase):
         """
         # Create a share we can toy with.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             {sharenum},
             size,
-            canary=self.canary,
         )
 
         self.assertThat(
@@ -956,9 +952,7 @@ class ShareTests(TestCase):
         def leases():
             return list(
                 lease.to_mutable_data()
-                for lease in self.storage.backend.get_slot_leases(
-                    storage_index
-                )
+                for lease in self.storage.backend.get_slot_leases(storage_index)
             )
 
         def write():

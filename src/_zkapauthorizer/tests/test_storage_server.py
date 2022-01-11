@@ -19,8 +19,8 @@ Tests for ``_zkapauthorizer._storage_server``.
 from random import shuffle
 from time import time
 
-from allmydata.storage.mutable import MutableShareFile
 from allmydata.interfaces import NoSpace
+from allmydata.storage.mutable import MutableShareFile
 from challenge_bypass_ristretto import PublicKey, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, note
@@ -202,7 +202,7 @@ class PassValidationTests(TestCase):
             self.signing_key
         ).encode_base64()
         self.storage_server = ZKAPAuthorizerStorageServer(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             self.pass_value,
             self.signing_key,
             spender,
@@ -532,13 +532,12 @@ class PassValidationTests(TestCase):
         )
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             sharenums,
             allocated_size,
-            LocalReferenceable(None),
         )
 
         # Advance time to a point where the lease is expired.  This simplifies
@@ -806,13 +805,12 @@ class PassValidationTests(TestCase):
         # the subsequent `allocate_buckets` operation - but of which the
         # client is unaware.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             existing_sharenums,
             size,
-            LocalReferenceable(None),
         )
 
         # The client will present this many passes.
@@ -877,13 +875,12 @@ class PassValidationTests(TestCase):
     ):
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             sharenums,
             allocated_size,
-            LocalReferenceable(None),
         )
 
         num_passes = required_passes(
@@ -941,13 +938,12 @@ class PassValidationTests(TestCase):
 
         # Put some shares up there to target with the add_lease operation.
         write_toy_shares(
-            self.storage.anonymous_foolscap_server,
+            self.storage.backend,
             storage_index,
             renew_secret,
             cancel_secret,
             sharenums,
             allocated_size,
-            LocalReferenceable(None),
         )
 
         num_passes = required_passes(

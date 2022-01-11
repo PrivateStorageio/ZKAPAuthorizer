@@ -60,7 +60,6 @@ def write_toy_shares(
     cancel_secret,
     sharenums,
     size,
-    canary,
 ):
     """
     Write some immutable shares to the given storage server.
@@ -71,19 +70,17 @@ def write_toy_shares(
     :param bytes cancel_secret:
     :param set[int] sharenums:
     :param int size:
-    :param IRemoteReference canary:
     """
-    _, allocated = storage_server.remote_allocate_buckets(
+    _, allocated = storage_server.allocate_buckets(
         storage_index,
         renew_secret,
         cancel_secret,
         sharenums,
         size,
-        canary=canary,
     )
     for (sharenum, writer) in allocated.items():
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
+        writer.write(0, bytes_for_share(sharenum, size))
+        writer.close()
 
 
 def whitebox_write_sparse_share(sharepath, version, size, leases, now):

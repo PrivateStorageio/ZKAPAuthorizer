@@ -19,7 +19,7 @@ Common fixtures to let the test suite focus on application logic.
 from base64 import b64encode
 
 import attr
-from allmydata.storage.server import StorageServer, FoolscapStorageServer
+from allmydata.storage.server import StorageServer
 from fixtures import Fixture, TempDir
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
@@ -38,9 +38,6 @@ class AnonymousStorageServer(Fixture):
 
     :ivar backend: The protocol-agnostic storage server backend.
 
-    :ivar anonymous_foolscap_server: The Foolscap-based server wrapped around
-        the backend.
-
     :ivar clock: The ``IReactorTime`` provider to supply to ``StorageServer``
         for its time-checking needs.
     """
@@ -49,7 +46,6 @@ class AnonymousStorageServer(Fixture):
 
     tempdir: FilePath = attr.ib(default=None)
     backend: StorageServer = attr.ib(default=None)
-    anonymous_foolscap_server: FoolscapStorageServer = attr.ib(default=None)
 
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))
@@ -57,9 +53,6 @@ class AnonymousStorageServer(Fixture):
             self.tempdir.path,
             b"x" * 20,
             clock=self.clock,
-        )
-        self.anonymous_foolscap_server = FoolscapStorageServer(
-            self.backend,
         )
 
 
