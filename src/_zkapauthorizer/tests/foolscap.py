@@ -17,7 +17,6 @@ Testing helpers related to Foolscap.
 """
 
 import attr
-from allmydata.interfaces import RIStorageServer
 from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
 from foolscap.copyable import CopyableSlicer, ICopyable
 from twisted.internet.defer import fail, succeed
@@ -38,14 +37,8 @@ class StubStorageBackend(object):
         pass
 
 
-@implementer(RIStorageServer)
-@attr.s
-class StubFoolscapStorageServer(object):
-    _server = attr.ib(default=attr.Factory(StubStorageBackend))
-
-
 def get_anonymous_storage_server():
-    return StubFoolscapStorageServer()
+    return StubStorageBackend()
 
 
 class BrokenCopyable(Copyable):
