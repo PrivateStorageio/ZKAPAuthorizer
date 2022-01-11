@@ -32,13 +32,13 @@ class RIEcho(RemoteInterface):
         return Any()
 
 
-class StubStorageBackend(object):
+class StubStorageServer(object):
     def register_bucket_writer_close_handler(self, handler):
         pass
 
 
 def get_anonymous_storage_server():
-    return StubStorageBackend()
+    return StubStorageServer()
 
 
 class BrokenCopyable(Copyable):
