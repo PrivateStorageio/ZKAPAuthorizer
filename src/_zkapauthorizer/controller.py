@@ -52,6 +52,10 @@ from .model import Voucher
 RETRY_INTERVAL = timedelta(milliseconds=1000)
 
 
+# It would be nice to have frozen exception types but Failure.cleanFailure
+# interacts poorly with these.
+# https://twistedmatrix.com/trac/ticket/9641
+# https://twistedmatrix.com/trac/ticket/9771
 @attr.s(auto_attribs=True)
 class UnexpectedResponse(Exception):
     """
