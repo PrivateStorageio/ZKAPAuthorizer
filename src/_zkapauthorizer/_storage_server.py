@@ -226,12 +226,21 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # so that `self._signing_key` will be assigned when this runs.
         return PublicKey.from_signing_key(self._signing_key)
 
-    def _bucket_writer_closed(self, bw):
+    def _bucket_writer_closed(self, bw: BucketWriter):
+        """
+        This is registered as a callback with the storage backend and receives
+        notification when a bucket writer is closed.  It removes the
+        disconnection-based cleanup callback for the given bucket.
+        """
         if bw in self._bucket_writer_disconnect_markers:
             canary, disconnect_marker = self._bucket_writer_disconnect_markers.pop(bw)
             canary.dontNotifyOnDisconnect(disconnect_marker)
 
     def __attrs_post_init__(self):
+        """
+        Finish initialization after attrs does its job.  This consists of
+        registering a cleanup handler with the storage backend.
+        """
         self._original.register_bucket_writer_close_handler(self._bucket_writer_closed)
 
     def _get_spending_histogram_buckets(self):
