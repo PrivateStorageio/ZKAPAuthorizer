@@ -46,7 +46,7 @@ def _configure_hypothesis():
         # Make CI runs a little more aggressive in amount of coverage they try
         # to provide.
         max_examples=200,
-        **base
+        **base,
     )
 
     settings.register_profile(
@@ -58,7 +58,7 @@ def _configure_hypothesis():
         # full 50 because, combined with searching for 10000 successful
         # examples this makes the stateful test take *ages* to complete.
         stateful_step_count=15,
-        **base
+        **base,
     )
 
     profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")

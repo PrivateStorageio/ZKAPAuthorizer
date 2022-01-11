@@ -112,7 +112,7 @@ def invalidate_rejected_passes(passes, more_passes_required):
     rejected_passes, okay_passes = passes.split(
         more_passes_required.signature_check_failed
     )
-    rejected_passes.mark_invalid(u"signature check failed")
+    rejected_passes.mark_invalid("signature check failed")
 
     # It would be great to just expand okay_passes right here.  However, if
     # that fails (eg because we don't have enough tokens remaining) then the

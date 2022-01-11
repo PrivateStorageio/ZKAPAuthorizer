@@ -46,12 +46,12 @@ def lease_maintenance_from_tahoe_config(node_config):
     return LeaseMaintenanceConfig(
         crawl_interval_mean=_read_duration(
             node_config,
-            u"lease.crawl-interval.mean",
+            "lease.crawl-interval.mean",
             timedelta(days=26),
         ),
         crawl_interval_range=_read_duration(
             node_config,
-            u"lease.crawl-interval.range",
+            "lease.crawl-interval.range",
             timedelta(days=4),
         ),
         # The greater the min lease remaining time, the more of each lease
@@ -72,7 +72,7 @@ def lease_maintenance_from_tahoe_config(node_config):
         # if you want.
         min_lease_remaining=_read_duration(
             node_config,
-            u"lease.min-time-remaining",
+            "lease.min-time-remaining",
             timedelta(days=0),
         ),
     )
@@ -124,7 +124,7 @@ def _read_duration(cfg, option, default):
         as a ``timedelta``.
     """
     # type: (_Config, str) -> Optional[timedelta]
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
     value_str = cfg.get_config(
         section=section_name,
         option=option,

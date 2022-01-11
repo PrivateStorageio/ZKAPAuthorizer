@@ -251,13 +251,13 @@ class VoucherStoreTests(TestCase):
         then ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(u"node")
+        nodedir = tempdir.join("node")
 
         # Create the node directory without permission to create the
         # underlying directory.
         mkdir(nodedir, 0o500)
 
-        config = get_config(nodedir, u"tub.port")
+        config = get_config(nodedir, "tub.port")
 
         self.assertThat(
             lambda: VoucherStore.from_node_config(
@@ -293,9 +293,9 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(u"node")
+        nodedir = tempdir.join("node")
 
-        config = get_config(nodedir, u"tub.port")
+        config = get_config(nodedir, "tub.port")
 
         # Create the underlying database file.
         store = VoucherStore.from_node_config(config, lambda: now)
@@ -356,9 +356,9 @@ class VoucherStoreTests(TestCase):
         :return: A three-tuple of (backed up tokens, extracted tokens, inserted tokens).
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(u"node")
+        nodedir = tempdir.join("node")
 
-        config = get_config(nodedir, u"tub.port")
+        config = get_config(nodedir, "tub.port")
 
         # Create the underlying database file.
         store = VoucherStore.from_node_config(config, lambda: now)
@@ -376,7 +376,7 @@ class VoucherStoreTests(TestCase):
             spendable=True,
         )
 
-        backed_up_tokens = store.backup()[u"unblinded-tokens"]
+        backed_up_tokens = store.backup()["unblinded-tokens"]
         extracted_tokens = []
         tokens_remaining = len(unblinded_tokens)
         while tokens_remaining > 0:
@@ -508,7 +508,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.using, to_invalidate = random_slice(self.using, random, data)
         note("invalidate_passes: {}".format(to_invalidate))
         self.configless.store.invalidate_unblinded_tokens(
-            u"reason",
+            "reason",
             to_invalidate,
         )
         self.invalid.extend(to_invalidate)
@@ -945,7 +945,7 @@ def store_for_test(testcase, get_config, get_now):
     :return VoucherStore: A newly created temporary store.
     """
     tempdir = testcase.useFixture(TempDir())
-    config = get_config(tempdir.join(u"node"), u"tub.port")
+    config = get_config(tempdir.join("node"), "tub.port")
     store = VoucherStore.from_node_config(
         config,
         get_now,

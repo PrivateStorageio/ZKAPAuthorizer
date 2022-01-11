@@ -128,7 +128,7 @@ class PassGroupTests(TestCase):
             return AfterPreprocessing(
                 # The use of `backup` here to check is questionable.  TODO:
                 # Straight-up query interface for tokens in different states.
-                lambda store: store.backup()[u"unblinded-tokens"],
+                lambda store: store.backup()["unblinded-tokens"],
                 HasLength(num_passes - len(group.passes)),
             )
 
@@ -153,12 +153,12 @@ class PassGroupTests(TestCase):
             return AfterPreprocessing(
                 # The use of `backup` here to check is questionable.  TODO:
                 # Straight-up query interface for tokens in different states.
-                lambda store: store.backup()[u"unblinded-tokens"],
+                lambda store: store.backup()["unblinded-tokens"],
                 HasLength(num_passes - len(group.passes)),
             )
 
         return self._test_token_group_operation(
-            lambda group: group.mark_invalid(u"reason"),
+            lambda group: group.mark_invalid("reason"),
             matches_tokens,
             voucher,
             num_passes,

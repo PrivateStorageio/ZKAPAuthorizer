@@ -40,7 +40,7 @@ from .controller import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
 
-SERVICE_NAME = u"lease maintenance service"
+SERVICE_NAME = "lease maintenance service"
 
 
 @inlineCallbacks

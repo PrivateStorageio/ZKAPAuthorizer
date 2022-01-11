@@ -269,8 +269,8 @@ def get_config_with_api_token(tempdir, get_config, api_auth_token):
     :param bytes api_auth_token: The HTTP API authorization token to write to
         the node directory.
     """
-    basedir = tempdir.join(u"tahoe")
-    config = get_config(basedir, u"tub.port")
+    basedir = tempdir.join("tahoe")
+    config = get_config(basedir, "tub.port")
     add_api_token_to_config(
         basedir,
         config,
@@ -284,9 +284,9 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     Create a private directory beneath the given base directory, point the
     given config at it, and write the given API auth token to it.
     """
-    FilePath(basedir).child(u"private").makedirs()
+    FilePath(basedir).child("private").makedirs()
     config._basedir = basedir
-    config.write_private_config(u"api_auth_token", api_auth_token)
+    config.write_private_config("api_auth_token", api_auth_token)
 
 
 class FromConfigurationTests(TestCase):
@@ -611,7 +611,7 @@ class UnblindedTokenTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/unblinded-token?limit={}".format(limit).encode("utf-8"),
+            "http://127.0.0.1/unblinded-token?limit={}".format(limit).encode("utf-8"),
         )
         self.addDetail(
             "requesting result",
@@ -664,7 +664,7 @@ class UnblindedTokenTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/unblinded-token?position={}".format(
+            "http://127.0.0.1/unblinded-token?position={}".format(
                 quote(position.encode("utf-8"), safe=b""),
             ).encode("utf-8"),
         )
@@ -1012,7 +1012,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        url = u"http://127.0.0.1/voucher/{}".format(
+        url = "http://127.0.0.1/voucher/{}".format(
             quote(
                 not_voucher,
                 safe=b"",
@@ -1254,10 +1254,10 @@ class VoucherTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/voucher/{}".format(
+            "http://127.0.0.1/voucher/{}".format(
                 quote(
                     voucher,
-                    safe=u"",
+                    safe="",
                 ),
             ).encode("ascii"),
         )
@@ -1420,7 +1420,7 @@ def mime_types(blacklist: Optional[Set[str]] = None) -> SearchStrategy[str]:
             text(),
         )
         .map(
-            u"/".join,
+            "/".join,
         )
         .filter(
             lambda content_type: content_type not in blacklist,

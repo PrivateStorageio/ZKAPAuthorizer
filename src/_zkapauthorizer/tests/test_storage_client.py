@@ -439,7 +439,7 @@ def spend(group):
 
 
 def invalidate(group):
-    group.mark_invalid(u"reason")
+    group.mark_invalid("reason")
 
 
 class PassFactoryTests(TestCase):

@@ -48,7 +48,7 @@ class AnonymousStorageServer(Fixture):
     backend: StorageServer = attr.ib(default=None)
 
     def _setUp(self):
-        self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))
+        self.tempdir = FilePath(self.useFixture(TempDir()).join("storage"))
         self.backend = StorageServer(
             self.tempdir.path,
             b"x" * 20,
@@ -74,7 +74,7 @@ class TemporaryVoucherStore(Fixture):
 
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
-        self.config = self.get_config(self.tempdir.join(u"node"), u"tub.port")
+        self.config = self.get_config(self.tempdir.join("node"), "tub.port")
         self.store = VoucherStore.from_node_config(
             self.config,
             self.get_now,
@@ -100,7 +100,7 @@ class ConfiglessMemoryVoucherStore(Fixture):
         self.redeemer = DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        here = FilePath(u".")
+        here = FilePath(".")
         self.store = VoucherStore(
             pass_value=2 ** 15,
             database_path=here,

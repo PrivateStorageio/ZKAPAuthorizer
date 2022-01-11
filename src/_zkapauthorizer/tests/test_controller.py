@@ -441,7 +441,7 @@ class PaymentControllerTests(TestCase):
         If ``IRedeemer.redeem`` fails with an unrecognized exception then the
         voucher is put into the error state.
         """
-        details = u"these are the reasons it broke"
+        details = "these are the reasons it broke"
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         controller = PaymentController(
             store,
@@ -747,7 +747,7 @@ class PaymentControllerTests(TestCase):
         )
 
 
-NOWHERE = URL.from_text(u"https://127.0.0.1/")
+NOWHERE = URL.from_text("https://127.0.0.1/")
 
 
 class RistrettoRedeemerTests(TestCase):
@@ -897,7 +897,7 @@ class RistrettoRedeemerTests(TestCase):
         ``RistrettoRedeemer.redeemWithCounter`` returns a ``Deferred`` that
         fails with ``UnrecognizedFailureReason``.
         """
-        details = u"mysterious"
+        details = "mysterious"
         num_tokens = counter + extra_tokens
         issuer = UnsuccessfulRedemption(details)
         treq = treq_for_loopback_ristretto(issuer)
@@ -916,8 +916,8 @@ class RistrettoRedeemerTests(TestCase):
                     Equals(
                         UnrecognizedFailureReason(
                             {
-                                u"success": False,
-                                u"reason": details,
+                                "success": False,
+                                "reason": details,
                             }
                         )
                     ),
@@ -949,7 +949,7 @@ class RistrettoRedeemerTests(TestCase):
             counter,
             random_tokens,
         )
-        self.addDetail(u"redeem Deferred", text_content(str(d)))
+        self.addDetail("redeem Deferred", text_content(str(d)))
         self.assertThat(
             d,
             failed(
@@ -1099,7 +1099,7 @@ class UnsuccessfulRedemption(Resource, object):
         if request_error is not None:
             return request_error
 
-        return bad_request(request, {u"success": False, u"reason": self.reason})
+        return bad_request(request, {"success": False, "reason": self.reason})
 
 
 def unpaid_redemption():
@@ -1108,7 +1108,7 @@ def unpaid_redemption():
     vouchers to be redeemed and reports an error that the voucher has not been
     paid for.
     """
-    return UnsuccessfulRedemption(u"unpaid")
+    return UnsuccessfulRedemption("unpaid")
 
 
 def already_spent_redemption():
@@ -1117,7 +1117,7 @@ def already_spent_redemption():
     vouchers to be redeemed and reports an error that the voucher has already
     been redeemed.
     """
-    return UnsuccessfulRedemption(u"double-spend")
+    return UnsuccessfulRedemption("double-spend")
 
 
 class RistrettoRedemption(Resource):
@@ -1132,7 +1132,7 @@ class RistrettoRedemption(Resource):
             return request_error
 
         request_body = loads(request.content.read())
-        marshaled_blinded_tokens = request_body[u"redeemTokens"]
+        marshaled_blinded_tokens = request_body["redeemTokens"]
         servers_blinded_tokens = list(
             BlindedToken.decode_base64(marshaled_blinded_token.encode("ascii"))
             for marshaled_blinded_token in marshaled_blinded_tokens
@@ -1156,10 +1156,10 @@ class RistrettoRedemption(Resource):
 
         return dumps_utf8(
             {
-                u"success": True,
-                u"public-key": self.public_key.encode_base64().decode("utf-8"),
-                u"signatures": list(t.decode("utf-8") for t in marshaled_signed_tokens),
-                u"proof": marshaled_proof.decode("utf-8"),
+                "success": True,
+                "public-key": self.public_key.encode_base64().decode("utf-8"),
+                "signatures": list(t.decode("utf-8") for t in marshaled_signed_tokens),
+                "proof": marshaled_proof.decode("utf-8"),
             }
         )
 
@@ -1177,7 +1177,7 @@ class CheckRedemptionRequestTests(TestCase):
         issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
-            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            NOWHERE.child("v1", "redeem").to_text().encode("ascii"),
             b"{}",
         )
         self.assertThat(
@@ -1198,9 +1198,9 @@ class CheckRedemptionRequestTests(TestCase):
         issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
-            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            NOWHERE.child("v1", "redeem").to_text().encode("ascii"),
             b"foo",
-            headers=Headers({u"content-type": [u"application/json"]}),
+            headers=Headers({"content-type": ["application/json"]}),
         )
         self.assertThat(
             d,
@@ -1215,7 +1215,7 @@ class CheckRedemptionRequestTests(TestCase):
     @given(
         lists(
             sampled_from(
-                [u"redeemVoucher", u"redeemCounter", u"redeemTokens"],
+                ["redeemVoucher", "redeemCounter", "redeemTokens"],
             ),
             # Something must be missing if the length is no longer than 2
             # because there are 3 required properties.
@@ -1231,9 +1231,9 @@ class CheckRedemptionRequestTests(TestCase):
         issuer = unpaid_redemption()
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
-            NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
+            NOWHERE.child("v1", "redeem").to_text().encode("ascii"),
             dumps_utf8(dict.fromkeys(properties)),
-            headers=Headers({u"content-type": [u"application/json"]}),
+            headers=Headers({"content-type": ["application/json"]}),
         )
         self.assertThat(
             d,
@@ -1263,14 +1263,14 @@ def check_redemption_request(request):
     except ValueError:
         return bad_request(request, None)
 
-    expected_keys = {u"redeemVoucher", u"redeemCounter", u"redeemTokens"}
+    expected_keys = {"redeemVoucher", "redeemCounter", "redeemTokens"}
     actual_keys = set(request_body.keys())
     if expected_keys != actual_keys:
         return bad_request(
             request,
             {
-                u"success": False,
-                u"reason": u"{} != {}".format(
+                "success": False,
+                "reason": "{} != {}".format(
                     expected_keys,
                     actual_keys,
                 ),
