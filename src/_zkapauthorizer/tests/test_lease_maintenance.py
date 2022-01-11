@@ -16,9 +16,8 @@
 Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
-from __future__ import absolute_import, unicode_literals
-
 from datetime import datetime, timedelta
+from typing import Dict, List
 
 import attr
 from allmydata.client import SecretHolder
@@ -77,12 +76,6 @@ from .strategies import (
     sharenums,
     storage_indexes,
 )
-
-try:
-    from typing import Dict, List
-except ImportError:
-    pass
-
 
 default_lease_maint_config = lease_maintenance_from_tahoe_config(empty_config)
 
@@ -284,8 +277,8 @@ class LeaseMaintenanceServiceTests(TestCase):
         [maintenance_call] = clock.getDelayedCalls()
 
         datetime_now = datetime.utcfromtimestamp(clock.seconds())
-        low = datetime_now + mean - (range_ / 2)
-        high = datetime_now + mean + (range_ / 2)
+        low = datetime_now + mean - (range_ // 2)
+        high = datetime_now + mean + (range_ // 2)
         self.assertThat(
             datetime.utcfromtimestamp(maintenance_call.getTime()),
             between(low, high),
@@ -313,7 +306,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         # Figure out the absolute last run time.
         last_run = datetime_now - since_last_run
         last_run_path = FilePath(self.useFixture(TempDir()).join("last-run"))
-        last_run_path.setContent(last_run.isoformat())
+        last_run_path.setContent(last_run.isoformat().encode("utf-8"))
 
         service = lease_maintenance_service(
             dummy_maintain_leases,
@@ -331,14 +324,14 @@ class LeaseMaintenanceServiceTests(TestCase):
 
         low = datetime_now + max(
             timedelta(0),
-            mean - (range_ / 2) - since_last_run,
+            mean - (range_ // 2) - since_last_run,
         )
         high = max(
             # If since_last_run is one microsecond (precision of timedelta)
             # then the range is indivisible.  Avoid putting the expected high
             # below the expected low.
             low,
-            datetime_now + mean + (range_ / 2) - since_last_run,
+            datetime_now + mean + (range_ // 2) - since_last_run,
         )
 
         note(

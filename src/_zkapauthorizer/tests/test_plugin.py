@@ -16,21 +16,21 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from __future__ import absolute_import
-
 from datetime import timedelta
 from functools import partial
+from io import StringIO
 from os import makedirs
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
+    IFilesystemNode,
     IFoolscapStoragePlugin,
     IStorageServer,
     RIStorageServer,
 )
 from challenge_bypass_ristretto import SigningKey
-from eliot.testing import LoggedMessage
+from eliot.testing import LoggedMessage, capture_logging
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
@@ -39,7 +39,6 @@ from hypothesis import given, settings
 from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
-from StringIO import StringIO
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -68,7 +67,7 @@ from twisted.web.resource import IResource
 
 from twisted.plugins.zkapauthorizer import storage_server
 
-from .._plugin import load_signing_key
+from .._plugin import get_root_nodes, load_signing_key
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
@@ -76,7 +75,6 @@ from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
 from .common import skipIf
-from .eliot import capture_logging
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, raises
 from .strategies import (
@@ -99,7 +97,7 @@ from .strategies import (
     vouchers,
 )
 
-SIGNING_KEY_PATH = FilePath(__file__).sibling(u"testing-signing.key")
+SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
 
 def get_rref(interface=None):
@@ -281,12 +279,12 @@ class ServerPluginTests(TestCase):
         and an interval how often to do so, test that metrics are actually
         written there after the configured interval.
         """
-        metrics_path = self.useFixture(TempDir()).join(u"metrics")
+        metrics_path = self.useFixture(TempDir()).join("metrics")
         configuration = {
-            u"prometheus-metrics-path": metrics_path,
-            u"prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
-            u"ristretto-issuer-root-url": "foo",
-            u"ristretto-signing-key-path": SIGNING_KEY_PATH.path,
+            "prometheus-metrics-path": metrics_path,
+            "prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
+            "ristretto-issuer-root-url": "foo",
+            "ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }
         announceable = extract_result(
             storage_server.get_storage_server(
@@ -341,8 +339,8 @@ tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configura
 
 tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs(
     {
-        u"privatestorageio-zkapauthz-v1": just(
-            {u"ristretto-issuer-root-url": u"https://another-issuer.example.invalid/"}
+        "privatestorageio-zkapauthz-v1": just(
+            {"ristretto-issuer-root-url": "https://another-issuer.example.invalid/"}
         ),
     }
 )
@@ -362,8 +360,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         storage_client = storage_server.get_storage_client(
@@ -385,24 +383,14 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = config_from_string(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
             config_text.encode("utf-8"),
         )
-        # On Tahoe-LAFS <1.16, the config is written as bytes.
-        # On Tahoe-LAFS >=1.16, the config is written as unicode.
-        #
-        # So we'll use `StringIO.StringIO` (not `io.StringIO`) here - which
-        # will allow either type (it will also implicitly decode bytes to
-        # unicode if we mix them, though I don't think that should happen
-        # here).
-        #
-        # After support for Tahoe <1.16 support is dropped we probably want to
-        # switch to an io.StringIO here.
         config_text = StringIO()
         node_config.config.write(config_text)
-        self.addDetail(u"config", text_content(config_text.getvalue()))
-        self.addDetail(u"announcement", text_content(unicode(announcement)))
+        self.addDetail("config", text_content(config_text.getvalue()))
+        self.addDetail("announcement", text_content(str(announcement)))
         self.assertThat(
             lambda: storage_server.get_storage_client(
                 node_config,
@@ -439,8 +427,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         storage_client = storage_server.get_storage_client(
@@ -489,8 +477,8 @@ class ClientPluginTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         node_config = get_config(
-            tempdir.join(b"node"),
-            b"tub.port",
+            tempdir.join(u"node"),
+            u"tub.port",
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
@@ -521,12 +509,12 @@ class ClientPluginTests(TestCase):
         # tests, at least until creating a real server doesn't involve so much
         # complex setup.  So avoid using any of the client APIs that make a
         # remote call ... which is all of them.
-        pass_group = storage_client._get_passes(u"request binding message", num_passes)
+        pass_group = storage_client._get_passes(b"request binding message", num_passes)
         pass_group.mark_spent()
 
         # There should be no unblinded tokens left to extract.
         self.assertThat(
-            lambda: storage_client._get_passes(u"request binding message", 1),
+            lambda: storage_client._get_passes(b"request binding message", 1),
             raises(NotEnoughTokens),
         )
 
@@ -540,8 +528,8 @@ class ClientPluginTests(TestCase):
                         lambda logged_message: logged_message.message,
                         ContainsDict(
                             {
-                                u"message": Equals(u"request binding message"),
-                                u"count": Equals(num_passes),
+                                "message": Equals(u"request binding message"),
+                                "count": Equals(num_passes),
                             }
                         ),
                     ),
@@ -562,8 +550,8 @@ class ClientResourceTests(TestCase):
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        config = get_config(nodedir, b"tub.port")
+        nodedir = tempdir.join(u"node")
+        config = get_config(nodedir, u"tub.port")
         self.assertThat(
             storage_server.get_client_resource(
                 config,
@@ -625,24 +613,62 @@ class LeaseMaintenanceServiceTests(TestCase):
             file, ``False`` otherwise.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
-        privatedir = tempdir.join(b"node", b"private")
+        nodedir = tempdir.join(u"node")
+        privatedir = tempdir.join(u"node", u"private")
         makedirs(privatedir)
-        config = get_config(nodedir, b"tub.port")
+        config = get_config(nodedir, u"tub.port")
+
+        # In Tahoe-LAFS 1.17 write_private_config is broken.  It mixes bytes
+        # and unicode in an os.path.join() call that always fails with a
+        # TypeError.
+        def write_private_config(name, value):
+            privpath = FilePath(config._basedir).descendant([u"private", name])
+            privpath.setContent(value)
 
         if servers_yaml is not None:
             # Provide it a statically configured server to connect to.
-            config.write_private_config(
-                b"servers.yaml",
+            write_private_config(
+                u"servers.yaml",
                 servers_yaml,
             )
         if rootcap:
             config.write_private_config(
-                b"rootcap",
+                u"rootcap",
                 b"dddddddd",
             )
 
         return create_client_from_config(config)
+
+    @given(tahoe_configs())
+    def test_get_root_nodes_rootcap_present(self, get_config):
+        """
+        ``get_root_nodes`` returns a ``list`` of one ``IFilesystemNode`` provider
+        derived from the contents of the *rootcap* private configuration.
+        """
+        d = self._create(get_config, servers_yaml=None, rootcap=True)
+        client_node = extract_result(d)
+        roots = get_root_nodes(client_node, client_node.config)
+        self.assertThat(
+            roots,
+            MatchesAll(
+                HasLength(1),
+                AllMatch(Provides([IFilesystemNode])),
+            ),
+        )
+
+    @given(tahoe_configs())
+    def test_get_root_nodes_rootcap_missing(self, get_config):
+        """
+        ``get_root_nodes`` returns an empty ``list`` if there is no private
+        *rootcap* configuration.
+        """
+        d = self._create(get_config, servers_yaml=None, rootcap=False)
+        client_node = extract_result(d)
+        roots = get_root_nodes(client_node, client_node.config)
+        self.assertThat(
+            roots,
+            Equals([]),
+        )
 
     @settings(
         deadline=None,
@@ -753,7 +779,7 @@ class LoadSigningKeyTests(TestCase):
 
         :param bytes key: A base64-encoded Ristretto signing key.
         """
-        p = FilePath(self.useFixture(TempDir()).join(b"key"))
+        p = FilePath(self.useFixture(TempDir()).join(u"key"))
         p.setContent(key_bytes)
         key = load_signing_key(p)
         self.assertThat(key, IsInstance(SigningKey))

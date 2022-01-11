@@ -9,8 +9,6 @@
 Tests for ``_zkapauthorizer.private``.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 from allmydata.test.web.matchers import has_response_code
 from testtools import TestCase
 from testtools.matchers import Equals
@@ -39,7 +37,9 @@ class PrivacyTests(TestCase):
     def _authorization(self, scheme, value):
         return Headers(
             {
-                "authorization": ["{} {}".format(scheme, value)],
+                u"authorization": [
+                    u"{} {}".format(scheme.decode("ascii"), value.decode("ascii")),
+                ],
             }
         )
 
@@ -60,7 +60,7 @@ class PrivacyTests(TestCase):
         self.assertThat(
             self.client.head(
                 b"http:///foo/bar",
-                headers=self._authorization("basic", self.token),
+                headers=self._authorization(b"basic", self.token),
             ),
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )
@@ -73,7 +73,7 @@ class PrivacyTests(TestCase):
         self.assertThat(
             self.client.head(
                 b"http:///foo/bar",
-                headers=self._authorization(SCHEME, "foo bar"),
+                headers=self._authorization(SCHEME, b"foo bar"),
             ),
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )

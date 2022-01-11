@@ -71,14 +71,7 @@ jobs:
       - run:
           name: "Get Pip"
           command: |
-            # The CircleCI macOS environment has curl and Python but does not
-            # have pip.  So, for starters, use curl and Python to get pip.
-            if [ "<< parameters.py-version >>" == "2.7" ]; then
-
-              curl https://bootstrap.pypa.io/pip/2.7/get-pip.py -o get-pip.py
-            else
-              curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-            fi
+            curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
             python<< parameters.py-version >> get-pip.py
 
       - run:
@@ -136,6 +129,8 @@ jobs:
 
   linux-tests: &LINUX_TESTS
     parameters:
+      py-version:
+        type: "string"
       tahoe-lafs-source:
         # The name of a niv source in nix/sources.json which corresponds to
         # a Tahoe-LAFS version. This is the version that will be declared as a
@@ -209,7 +204,8 @@ jobs:
             nix-build tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
-              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >>
+              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
+              --argstr python python<< parameters.py-version >>
 
       - run:
           name: "Push to Cachix"
@@ -241,18 +237,17 @@ workflows:
     jobs:
     - "documentation"
     - "linux-tests":
-        matrix:
-          parameters:
-            tahoe-lafs-source:
-            - "tahoe-lafs"
+        name: "Linux tests python 3.9"
+        py-version: "39"
+        tahoe-lafs-source: "tahoe-lafs"
+
+    # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
+    - "macos-tests":
+        name: "macOS tests python 3.8 xcode 11.7.0"
+        py-version: "3.8"
+        xcode-version: "11.7.0"
 
     - "macos-tests":
-        matrix:
-          parameters:
-            py-version:
-            - "2.7"
-
-            xcode-version:
-            # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
-            - "12.3.0"
-            - "11.7.0"
+        name: "macOS tests python 3.9 xcode 12.3.0"
+        py-version: "3.9"
+        xcode-version: "12.3.0"

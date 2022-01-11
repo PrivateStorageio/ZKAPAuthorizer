@@ -16,8 +16,6 @@
 Tests for Foolscap-related test helpers.
 """
 
-from __future__ import absolute_import
-
 from fixtures import Fixture
 from foolscap.api import Any, RemoteInterface, Violation
 from foolscap.furl import decode_furl
@@ -55,7 +53,7 @@ class IHasSchema(RemoteInterface):
 def remote_reference():
     tub = Tub()
     tub.setLocation("127.0.0.1:12345")
-    url = tub.buildURL(b"efgh")
+    url = tub.buildURL("efgh")
 
     # Ugh ugh ugh.  Skip over the extra correctness checking in
     # RemoteReferenceTracker.__init__ that requires having a broker by passing
@@ -86,7 +84,7 @@ class LocalRemoteTests(TestCase):
         self.assertThat(
             ref.tracker.getURL(),
             MatchesAll(
-                IsInstance(bytes),
+                IsInstance(str),
                 AfterPreprocessing(
                     decode_furl,
                     Always(),

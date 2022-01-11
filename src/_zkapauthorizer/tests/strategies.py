@@ -18,7 +18,7 @@ Hypothesis strategies for property testing.
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
-from urllib import quote
+from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
@@ -142,7 +142,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
     def merge_shares(shares, the_rest):
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
-                the_rest["shares." + k] = u"{}".format(v)
+                the_rest["shares." + k] = f"{v}"
         return the_rest
 
     client_section = builds(
@@ -151,7 +151,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
         fixed_dictionaries(
             {
                 "storage.plugins": just(
-                    u",".join(storage_client_plugins.keys()),
+                    ",".join(storage_client_plugins.keys()),
                 ),
             },
         ),
@@ -186,8 +186,8 @@ def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, 
 
     :param shares: See ``tahoe_config_texts``.
 
-    :return SearchStrategy[unicode]: A strategy that builds unicode strings
-        which are Tahoe-LAFS configuration file contents.
+    :return SearchStrategy[str]: A strategy that builds text strings which are
+        Tahoe-LAFS configuration file contents.
     """
     if storage_client_plugins is None:
         storage_client_plugins = {}
@@ -207,9 +207,9 @@ def node_nicknames():
         alphabet=characters(
             blacklist_categories={
                 # Surrogates
-                u"Cs",
+                "Cs",
                 # Unnamed and control characters
-                u"Cc",
+                "Cc",
             },
         ),
     )
@@ -241,23 +241,23 @@ def server_configurations(signing_key_path):
     """
     Build configuration values for the server-side plugin.
 
-    :param unicode signing_key_path: A value to insert for the
+    :param str signing_key_path: A value to insert for the
         **ristretto-signing-key-path** item.
     """
     return one_of(
         fixed_dictionaries(
             {
-                u"pass-value":
+                "pass-value":
                 # The configuration is ini so everything is always a byte string!
-                integers(min_value=1).map(bytes),
+                integers(min_value=1).map(lambda v: f"{v}".encode("ascii")),
             }
         ),
         just({}),
     ).map(
         lambda config: config.update(
             {
-                u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-                u"ristretto-signing-key-path": signing_key_path.path,
+                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
+                "ristretto-signing-key-path": signing_key_path.path,
             }
         )
         or config,
@@ -294,8 +294,8 @@ def zkapauthz_configuration(
         allowed_public_keys,
     ):
         config = {
-            u"default-token-count": u"32",
-            u"allowed-public-keys": u",".join(allowed_public_keys),
+            "default-token-count": "32",
+            "allowed-public-keys": ",".join(allowed_public_keys),
         }
         config.update(extra_configuration)
         return config
@@ -314,8 +314,8 @@ def client_ristrettoredeemer_configurations():
     return zkapauthz_configuration(
         just(
             {
-                u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
-                u"redeemer": u"ristretto",
+                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
+                "redeemer": "ristretto",
             }
         )
     )
@@ -351,10 +351,10 @@ def client_dummyredeemer_configurations(
         extra_config = lease_configs.map(
             lambda config: config.update(
                 {
-                    u"redeemer": u"dummy",
+                    "redeemer": "dummy",
                     # Pick out one of the allowed public keys so that the dummy
                     # appears to produce usable tokens.
-                    u"issuer-public-key": next(iter(allowed_keys)),
+                    "issuer-public-key": next(iter(allowed_keys)),
                 }
             )
             or config,
@@ -382,7 +382,7 @@ def client_doublespendredeemer_configurations(default_token_counts=token_counts(
     return zkapauthz_configuration(
         just(
             {
-                u"redeemer": u"double-spend",
+                "redeemer": "double-spend",
             }
         )
     )
@@ -395,7 +395,7 @@ def client_unpaidredeemer_configurations():
     return zkapauthz_configuration(
         just(
             {
-                u"redeemer": u"unpaid",
+                "redeemer": "unpaid",
             }
         )
     )
@@ -408,7 +408,7 @@ def client_nonredeemer_configurations():
     return zkapauthz_configuration(
         just(
             {
-                u"redeemer": u"non",
+                "redeemer": "non",
             }
         )
     )
@@ -421,8 +421,8 @@ def client_errorredeemer_configurations(details):
     return zkapauthz_configuration(
         just(
             {
-                u"redeemer": u"error",
-                u"details": details,
+                "redeemer": "error",
+                "details": details,
             }
         )
     )
@@ -492,14 +492,14 @@ def direct_tahoe_configs(
     """
     config_texts = minimal_tahoe_configs(
         {
-            u"privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
+            "privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
         },
         shares,
     )
     return config_texts.map(
         lambda config_text: config_from_string(
-            u"/dev/null/illegal",
-            u"",
+            "/dev/null/illegal",
+            "",
             config_text.encode("utf-8"),
         ),
     )
@@ -525,7 +525,7 @@ def tahoe_configs(
 
     def path_setter(config):
         def set_paths(basedir, portnumfile):
-            config._basedir = basedir.decode("ascii")
+            config._basedir = basedir
             config.portnum_fname = portnumfile
             return config
 
@@ -728,7 +728,11 @@ def request_paths():
 
     :see: ``requests``
     """
-    return lists(text().map(lambda x: quote(x.encode("utf-8"), safe=b"")))
+
+    def quote_segment(seg):
+        return quote(seg, safe="").encode("utf-8")
+
+    return lists(text().map(quote_segment))
 
 
 def requests(paths=request_paths()):
@@ -845,7 +849,7 @@ def bytes_for_share(sharenum, size):
         given share number
     """
     if 0 <= sharenum <= 255:
-        return (unichr(sharenum) * size).encode("latin-1")
+        return (chr(sharenum) * size).encode("latin-1")
     raise ValueError("Sharenum must be between 0 and 255 inclusive.")
 
 
@@ -949,7 +953,7 @@ def announcements():
     """
     return just(
         {
-            u"ristretto-issuer-root-url": u"https://issuer.example.invalid/",
+            "ristretto-issuer-root-url": "https://issuer.example.invalid/",
         }
     )
 
@@ -977,7 +981,7 @@ class _DirectoryNode(object):
     _storage_index = attr.ib()
     _children = attr.ib()
 
-    def list(self):
+    def list(self):  # noqa: F811
         return succeed(self._children)
 
     def get_storage_index(self):

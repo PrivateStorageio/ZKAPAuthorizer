@@ -16,91 +16,89 @@
 Eliot field, message, and action definitions for ZKAPAuthorizer.
 """
 
-from __future__ import absolute_import
-
 from eliot import ActionType, Field, MessageType
 
 PRIVACYPASS_MESSAGE = Field(
-    u"message",
-    unicode,
-    u"The PrivacyPass request-binding data associated with a pass.",
+    "message",
+    str,
+    "The PrivacyPass request-binding data associated with a pass.",
 )
 
 INVALID_REASON = Field(
-    u"reason",
-    unicode,
-    u"The reason given by the server for rejecting a pass as invalid.",
+    "reason",
+    str,
+    "The reason given by the server for rejecting a pass as invalid.",
 )
 
 PASS_COUNT = Field(
-    u"count",
+    "count",
     int,
-    u"A number of passes.",
+    "A number of passes.",
 )
 
 GET_PASSES = MessageType(
-    u"zkapauthorizer:get-passes",
+    "zkapauthorizer:get-passes",
     [PRIVACYPASS_MESSAGE, PASS_COUNT],
-    u"An attempt to spend passes is beginning.",
+    "An attempt to spend passes is beginning.",
 )
 
 SPENT_PASSES = MessageType(
-    u"zkapauthorizer:spent-passes",
+    "zkapauthorizer:spent-passes",
     [PASS_COUNT],
-    u"An attempt to spend passes has succeeded.",
+    "An attempt to spend passes has succeeded.",
 )
 
 INVALID_PASSES = MessageType(
-    u"zkapauthorizer:invalid-passes",
+    "zkapauthorizer:invalid-passes",
     [INVALID_REASON, PASS_COUNT],
-    u"An attempt to spend passes has found some to be invalid.",
+    "An attempt to spend passes has found some to be invalid.",
 )
 
 RESET_PASSES = MessageType(
-    u"zkapauthorizer:reset-passes",
+    "zkapauthorizer:reset-passes",
     [PASS_COUNT],
-    u"Some passes involved in a failed spending attempt have not definitely been spent and are being returned for future use.",
+    "Some passes involved in a failed spending attempt have not definitely been spent and are being returned for future use.",
 )
 
 SIGNATURE_CHECK_FAILED = MessageType(
-    u"zkapauthorizer:storage-client:signature-check-failed",
+    "zkapauthorizer:storage-client:signature-check-failed",
     [PASS_COUNT],
-    u"Some passes the client tried to use were rejected for having invalid signatures.",
+    "Some passes the client tried to use were rejected for having invalid signatures.",
 )
 
 CALL_WITH_PASSES = ActionType(
-    u"zkapauthorizer:storage-client:call-with-passes",
+    "zkapauthorizer:storage-client:call-with-passes",
     [PASS_COUNT],
     [],
-    u"A storage operation is being started which may spend some passes.",
+    "A storage operation is being started which may spend some passes.",
 )
 
 CURRENT_SIZES = Field(
-    u"current_sizes",
+    "current_sizes",
     dict,
-    u"A dictionary mapping the numbers of existing shares to their existing sizes.",
+    "A dictionary mapping the numbers of existing shares to their existing sizes.",
 )
 
 TW_VECTORS_SUMMARY = Field(
-    u"tw_vectors_summary",
+    "tw_vectors_summary",
     dict,
-    u"A dictionary mapping share numbers from tw_vectors to test and write vector summaries.",
+    "A dictionary mapping share numbers from tw_vectors to test and write vector summaries.",
 )
 
 NEW_SIZES = Field(
-    u"new_sizes",
+    "new_sizes",
     dict,
-    u"A dictionary like that of CURRENT_SIZES but for the sizes computed for the shares after applying tw_vectors.",
+    "A dictionary like that of CURRENT_SIZES but for the sizes computed for the shares after applying tw_vectors.",
 )
 
 NEW_PASSES = Field(
-    u"new_passes",
+    "new_passes",
     int,
-    u"The number of passes computed as being required for the change in size.",
+    "The number of passes computed as being required for the change in size.",
 )
 
 MUTABLE_PASSES_REQUIRED = MessageType(
-    u"zkapauthorizer:storage:mutable-passes-required",
+    "zkapauthorizer:storage:mutable-passes-required",
     [CURRENT_SIZES, TW_VECTORS_SUMMARY, NEW_SIZES, NEW_PASSES],
-    u"Some number of passes has been computed as the cost of updating a mutable.",
+    "Some number of passes has been computed as the cost of updating a mutable.",
 )

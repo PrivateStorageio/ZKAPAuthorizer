@@ -16,8 +16,6 @@
 Tests for communication between the client and server components.
 """
 
-from __future__ import absolute_import
-
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
 from challenge_bypass_ristretto import PublicKey, random_signing_key
@@ -72,6 +70,7 @@ from .storage_common import (
 )
 from .strategies import bytes_for_share  # Not really a strategy...
 from .strategies import (
+    TestAndWriteVectors,
     lease_cancel_secrets,
     lease_renew_secrets,
     posix_timestamps,
@@ -79,6 +78,7 @@ from .strategies import (
     sharenum_sets,
     sharenums,
     sizes,
+    slot_data_vectors,
     slot_test_and_write_vectors_for_shares,
     storage_indexes,
     write_enabler_secrets,
@@ -1071,6 +1071,73 @@ class ShareTests(TestCase):
                     }
                 ]
             ),
+        )
+
+    @given(
+        storage_index=storage_indexes(),
+        secrets=tuples(
+            write_enabler_secrets(),
+            lease_renew_secrets(),
+            lease_cancel_secrets(),
+        ),
+        sharenum=sharenums(),
+        data_vector=slot_data_vectors(),
+        replacement_data_vector=slot_data_vectors(),
+    )
+    def test_test_vectors_match(
+        self, storage_index, secrets, sharenum, data_vector, replacement_data_vector
+    ):
+        """
+        If test vectors are given then the write is allowed if they match the
+        existing data.
+        """
+        empty_test_vector = []
+
+        def write(tw_vectors):
+            return self.client.slot_testv_and_readv_and_writev(
+                storage_index,
+                secrets=secrets,
+                tw_vectors=tw_vectors,
+                r_vector=[],
+            )
+
+        def read(sharenum, readv):
+            d = self.client.slot_readv(storage_index, [sharenum], readv)
+            d.addCallback(lambda data: data[sharenum])
+            return d
+
+        def equal_test_vector(data_vector):
+            return list((offset, len(data), data) for (offset, data) in data_vector)
+
+        # Create the share
+        d = write(
+            {
+                sharenum: (empty_test_vector, data_vector, None),
+            }
+        )
+        self.assertThat(d, is_successful_write())
+
+        # Write some new data with a correct test vector.  We can only be sure
+        # we know data from the last element of the test vector since earlier
+        # elements may have been overwritten so only use that last element in
+        # our test vector.
+        d = write(
+            {
+                sharenum: (
+                    equal_test_vector(data_vector)[-1:],
+                    replacement_data_vector,
+                    None,
+                ),
+            }
+        )
+        self.assertThat(d, is_successful_write())
+
+        # Check that the new data is present
+        assert_read_back_data(
+            self,
+            storage_index,
+            secrets,
+            {sharenum: TestAndWriteVectors(None, replacement_data_vector, None)},
         )
 
 

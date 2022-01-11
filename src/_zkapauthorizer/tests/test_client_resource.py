@@ -17,12 +17,10 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-from __future__ import absolute_import
-
 from datetime import datetime
 from io import BytesIO
-from json import dumps
-from urllib import quote
+from typing import Optional, Set
+from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
@@ -30,6 +28,7 @@ from aniso8601 import parse_datetime
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
     datetimes,
@@ -73,6 +72,7 @@ from twisted.web.resource import IResource, getChildForRequest
 
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
+from .._json import dumps_utf8
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -110,7 +110,7 @@ from .strategies import (
     vouchers,
 )
 
-TRANSIENT_ERROR = u"something went wrong, who knows what"
+TRANSIENT_ERROR = "something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
@@ -137,17 +137,19 @@ def is_not_json(bytestring):
 
 def not_vouchers():
     """
-    Builds unicode strings which are not legal vouchers.
+    Builds byte strings which are not legal vouchers.
     """
     return one_of(
-        text().filter(
+        text()
+        .filter(
             lambda t: (not is_urlsafe_base64(t)),
-        ),
+        )
+        .map(lambda t: t.encode("utf-8")),
         vouchers().map(
             # Turn a valid voucher into a voucher that is invalid only by
             # containing a character from the base64 alphabet in place of one
             # from the urlsafe-base64 alphabet.
-            lambda voucher: u"/"
+            lambda voucher: b"/"
             + voucher[1:],
         ),
     )
@@ -155,7 +157,7 @@ def not_vouchers():
 
 def is_urlsafe_base64(text):
     """
-    :param unicode text: A candidate unicode string to inspect.
+    :param str text: A candidate text string to inspect.
 
     :return bool: ``True`` if and only if ``text`` is urlsafe-base64 encoded
     """
@@ -174,18 +176,18 @@ def invalid_bodies():
         # The wrong key but the right kind of value.
         fixed_dictionaries(
             {
-                u"some-key": vouchers(),
+                "some-key": vouchers().map(lambda v: v.decode("utf-8")),
             }
-        ).map(dumps),
+        ).map(dumps_utf8),
         # The right key but the wrong kind of value.
         fixed_dictionaries(
             {
-                u"voucher": one_of(
+                "voucher": one_of(
                     integers(),
-                    not_vouchers(),
+                    not_vouchers().map(lambda v: v.decode("utf-8")),
                 ),
             }
-        ).map(dumps),
+        ).map(dumps_utf8),
         # Not even JSON
         binary().filter(is_not_json),
     )
@@ -242,8 +244,8 @@ def authorized_request(api_auth_token, agent, method, uri, headers=None, data=No
     else:
         headers = Headers(headers)
     headers.setRawHeaders(
-        u"authorization",
-        [b"tahoe-lafs {}".format(api_auth_token)],
+        "authorization",
+        [b"tahoe-lafs " + api_auth_token],
     )
     return agent.request(
         method,
@@ -267,8 +269,8 @@ def get_config_with_api_token(tempdir, get_config, api_auth_token):
     :param bytes api_auth_token: The HTTP API authorization token to write to
         the node directory.
     """
-    basedir = tempdir.join(b"tahoe")
-    config = get_config(basedir, b"tub.port")
+    basedir = tempdir.join(u"tahoe")
+    config = get_config(basedir, u"tub.port")
     add_api_token_to_config(
         basedir,
         config,
@@ -282,9 +284,9 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     Create a private directory beneath the given base directory, point the
     given config at it, and write the given API auth token to it.
     """
-    FilePath(basedir).child(b"private").makedirs()
+    FilePath(basedir).child(u"private").makedirs()
     config._basedir = basedir
-    config.write_private_config(b"api_auth_token", api_auth_token)
+    config.write_private_config(u"api_auth_token", api_auth_token)
 
 
 class FromConfigurationTests(TestCase):
@@ -299,7 +301,7 @@ class FromConfigurationTests(TestCase):
         the public keys found in the configuration.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config(tempdir.join("tahoe"), "tub.port")
         allowed_public_keys = get_configured_allowed_public_keys(config)
 
         # root_from_config is just an easier way to call from_configuration
@@ -323,24 +325,24 @@ class GetTokenCountTests(TestCase):
         ``get_token_count`` returns the integer value of the
         ``default-token-count`` item from the given configuration object.
         """
-        plugin_name = u"hello-world"
+        plugin_name = "hello-world"
         if token_count is None:
             expected_count = NUM_TOKENS
             token_config = {}
         else:
             expected_count = token_count
-            token_config = {u"default-token-count": u"{}".format(expected_count)}
+            token_config = {"default-token-count": f"{expected_count}"}
 
         config_text = config_string_from_sections(
             [
                 {
-                    u"storageclient.plugins." + plugin_name: token_config,
+                    "storageclient.plugins." + plugin_name: token_config,
                 }
             ]
         )
         node_config = config_from_string(
-            self.useFixture(TempDir()).join(b"tahoe"),
-            u"tub.port",
+            self.useFixture(TempDir()).join("tahoe"),
+            "tub.port",
             config_text.encode("utf-8"),
         )
         self.assertThat(
@@ -364,7 +366,7 @@ class ResourceTests(TestCase):
         receives a 401 response.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config(tempdir.join("tahoe"), "tub.port")
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
@@ -402,7 +404,7 @@ class ResourceTests(TestCase):
         ``from_configuration``.
         """
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join(b"tahoe"), b"tub.port")
+        config = get_config(tempdir.join("tahoe"), "tub.port")
         root = root_from_config(config, datetime.now)
         self.assertThat(
             getChildForRequest(root, request),
@@ -490,9 +492,9 @@ class UnblindedTokenTests(TestCase):
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
         data = BytesIO(
-            dumps(
+            dumps_utf8(
                 {
-                    u"unblinded-tokens": list(
+                    "unblinded-tokens": list(
                         token.unblinded_token.decode("ascii")
                         for token in unblinded_tokens
                     )
@@ -514,11 +516,15 @@ class UnblindedTokenTests(TestCase):
             ),
         )
 
-        stored_tokens = root.controller.store.backup()[u"unblinded-tokens"]
+        stored_tokens = root.controller.store.backup()["unblinded-tokens"]
 
         self.assertThat(
             stored_tokens,
-            Equals(list(token.unblinded_token for token in unblinded_tokens)),
+            Equals(
+                list(
+                    token.unblinded_token.decode("ascii") for token in unblinded_tokens
+                )
+            ),
         )
 
     @given(
@@ -560,8 +566,8 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/unblinded-token",
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -605,11 +611,11 @@ class UnblindedTokenTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            b"http://127.0.0.1/unblinded-token?limit={}".format(limit),
+            u"http://127.0.0.1/unblinded-token?limit={}".format(limit).encode("utf-8"),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -658,13 +664,13 @@ class UnblindedTokenTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            b"http://127.0.0.1/unblinded-token?position={}".format(
+            u"http://127.0.0.1/unblinded-token?position={}".format(
                 quote(position.encode("utf-8"), safe=b""),
-            ),
+            ).encode("utf-8"),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -674,7 +680,7 @@ class UnblindedTokenTests(TestCase):
                 AllMatch(
                     MatchesAll(
                         GreaterThan(position),
-                        IsInstance(unicode),
+                        IsInstance(str),
                     ),
                 ),
                 matches_lease_maintenance_spending(),
@@ -715,7 +721,7 @@ class UnblindedTokenTests(TestCase):
             )
             d.addCallback(readBody)
             d.addCallback(
-                lambda body: loads(body)[u"unblinded-tokens"],
+                lambda body: loads(body)["unblinded-tokens"],
             )
             return d
 
@@ -756,7 +762,7 @@ class UnblindedTokenTests(TestCase):
             succeeded(
                 MatchesPredicate(
                     check_tokens,
-                    u"initial, after (%s): initial[1:] != after",
+                    "initial, after (%s): initial[1:] != after",
                 ),
             ),
         )
@@ -803,7 +809,7 @@ class UnblindedTokenTests(TestCase):
         )
         d.addCallback(readBody)
         d.addCallback(
-            lambda body: loads(body)[u"lease-maintenance-spending"],
+            lambda body: loads(body)["lease-maintenance-spending"],
         )
         self.assertThat(
             d,
@@ -845,10 +851,10 @@ def succeeded_with_unblinded_tokens_with_matcher(
                 succeeded(
                     ContainsDict(
                         {
-                            u"total": Equals(all_token_count),
-                            u"spendable": match_spendable_token_count,
-                            u"unblinded-tokens": match_unblinded_tokens,
-                            u"lease-maintenance-spending": match_lease_maint_spending,
+                            "total": Equals(all_token_count),
+                            "spendable": match_spendable_token_count,
+                            "unblinded-tokens": match_unblinded_tokens,
+                            "lease-maintenance-spending": match_lease_maint_spending,
                         }
                     ),
                 ),
@@ -873,7 +879,7 @@ def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
         match_spendable_token_count=Equals(all_token_count),
         match_unblinded_tokens=MatchesAll(
             HasLength(returned_token_count),
-            AllMatch(IsInstance(unicode)),
+            AllMatch(IsInstance(str)),
         ),
         match_lease_maint_spending=matches_lease_maintenance_spending(),
     )
@@ -889,8 +895,8 @@ def matches_lease_maintenance_spending():
         Is(None),
         ContainsDict(
             {
-                u"when": matches_iso8601_datetime(),
-                u"amount": matches_positive_integer(),
+                "when": matches_iso8601_datetime(),
+                "amount": matches_positive_integer(),
             }
         ),
     )
@@ -905,11 +911,11 @@ def matches_positive_integer():
 
 def matches_iso8601_datetime():
     """
-    :return: A matcher which matches unicode strings which can be parsed as an
+    :return: A matcher which matches text strings which can be parsed as an
         ISO8601 datetime string.
     """
     return MatchesAll(
-        IsInstance(unicode),
+        IsInstance(str),
         AfterPreprocessing(
             parse_datetime,
             lambda d: Always(),
@@ -942,7 +948,7 @@ class VoucherTests(TestCase):
         )
         root = root_from_config(config, datetime.now)
         agent = RequestTraversalAgent(root)
-        data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
+        data = BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")}))
         requesting = authorized_request(
             api_auth_token,
             agent,
@@ -951,8 +957,8 @@ class VoucherTests(TestCase):
             data=data,
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -983,8 +989,8 @@ class VoucherTests(TestCase):
             data=BytesIO(body),
         )
         self.addDetail(
-            u"requesting result",
-            text_content(u"{}".format(vars(requesting.result))),
+            "requesting result",
+            text_content(f"{vars(requesting.result)}"),
         )
         self.assertThat(
             requesting,
@@ -1008,9 +1014,9 @@ class VoucherTests(TestCase):
         agent = RequestTraversalAgent(root)
         url = u"http://127.0.0.1/voucher/{}".format(
             quote(
-                not_voucher.encode("utf-8"),
+                not_voucher,
                 safe=b"",
-            ).decode("utf-8"),
+            ),
         ).encode("ascii")
         requesting = authorized_request(
             api_auth_token,
@@ -1043,7 +1049,7 @@ class VoucherTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            u"http://127.0.0.1/voucher/{}".format(voucher).encode("ascii"),
+            b"http://127.0.0.1/voucher/" + voucher,
         )
         self.assertThat(
             requesting,
@@ -1224,7 +1230,7 @@ class VoucherTests(TestCase):
             to be returned by the ``GET``.
         """
         add_api_token_to_config(
-            self.useFixture(TempDir()).join(b"tahoe"),
+            self.useFixture(TempDir()).join("tahoe"),
             config,
             api_auth_token,
         )
@@ -1235,7 +1241,7 @@ class VoucherTests(TestCase):
             agent,
             b"PUT",
             b"http://127.0.0.1/voucher",
-            data=BytesIO(dumps({u"voucher": voucher.decode("ascii")})),
+            data=BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")})),
         )
         self.assertThat(
             putting,
@@ -1250,9 +1256,9 @@ class VoucherTests(TestCase):
             b"GET",
             u"http://127.0.0.1/voucher/{}".format(
                 quote(
-                    voucher.encode("utf-8"),
-                    safe=b"",
-                ).decode("utf-8"),
+                    voucher,
+                    safe=u"",
+                ),
             ).encode("ascii"),
         )
         self.assertThat(
@@ -1292,7 +1298,7 @@ class VoucherTests(TestCase):
             vouchers,
             Equals(
                 {
-                    u"vouchers": list(
+                    "vouchers": list(
                         Voucher(
                             number=voucher,
                             expected_tokens=count,
@@ -1329,7 +1335,7 @@ class VoucherTests(TestCase):
             vouchers,
             Equals(
                 {
-                    u"vouchers": list(
+                    "vouchers": list(
                         Voucher(
                             number=voucher,
                             expected_tokens=count,
@@ -1352,7 +1358,7 @@ class VoucherTests(TestCase):
             # times between setUp and tearDown.  Avoid re-using the same
             # temporary directory for every Hypothesis iteration because this
             # test leaves state behind that invalidates future iterations.
-            self.useFixture(TempDir()).join(b"tahoe"),
+            self.useFixture(TempDir()).join("tahoe"),
             config,
             api_auth_token,
         )
@@ -1362,7 +1368,7 @@ class VoucherTests(TestCase):
         note("{} vouchers".format(len(vouchers)))
 
         for voucher in vouchers:
-            data = BytesIO(dumps({u"voucher": voucher.decode("ascii")}))
+            data = BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")}))
             putting = authorized_request(
                 api_auth_token,
                 agent,
@@ -1400,12 +1406,11 @@ class VoucherTests(TestCase):
         )
 
 
-def mime_types(blacklist=None):
+def mime_types(blacklist: Optional[Set[str]] = None) -> SearchStrategy[str]:
     """
     Build MIME types as b"major/minor" byte strings.
 
-    :param set|None blacklist: If not ``None``, MIME types to exclude from the
-        result.
+    :param blacklist: If not ``None``, MIME types to exclude from the result.
     """
     if blacklist is None:
         blacklist = set()
@@ -1415,7 +1420,7 @@ def mime_types(blacklist=None):
             text(),
         )
         .map(
-            b"/".join,
+            u"/".join,
         )
         .filter(
             lambda content_type: content_type not in blacklist,
@@ -1455,7 +1460,7 @@ def bad_calculate_price_requests():
     bad_headers = fixed_dictionaries(
         {
             b"content-type": mime_types(blacklist={b"application/json"},).map(
-                lambda content_type: [content_type],
+                lambda content_type: [content_type.encode("utf-8")],
             ),
         }
     )
@@ -1479,29 +1484,29 @@ def bad_calculate_price_requests():
 
     good_data = fixed_dictionaries(
         {
-            u"version": good_version,
-            u"sizes": good_sizes,
+            "version": good_version,
+            "sizes": good_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_version = fixed_dictionaries(
         {
-            u"version": bad_version,
-            u"sizes": good_sizes,
+            "version": bad_version,
+            "sizes": good_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_sizes = fixed_dictionaries(
         {
-            u"version": good_version,
-            u"sizes": bad_sizes,
+            "version": good_version,
+            "sizes": bad_sizes,
         }
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_other = dictionaries(
         text(),
         integers(),
-    ).map(dumps)
+    ).map(dumps_utf8)
 
     bad_data_junk = binary()
 
@@ -1618,7 +1623,7 @@ class CalculatePriceTests(TestCase):
         (encoding_params, min_time_remaining), config = encoding_params_and_config
         shares_needed, shares_happy, shares_total = encoding_params
         add_api_token_to_config(
-            self.useFixture(TempDir()).join(b"tahoe"),
+            self.useFixture(TempDir()).join("tahoe"),
             config,
             api_auth_token,
         )
@@ -1638,7 +1643,7 @@ class CalculatePriceTests(TestCase):
                 b"POST",
                 self.url,
                 headers={b"content-type": [b"application/json"]},
-                data=BytesIO(dumps({u"version": 1, u"sizes": sizes})),
+                data=BytesIO(dumps_utf8({"version": 1, "sizes": sizes})),
             ),
             succeeded(
                 matches_response(
@@ -1648,8 +1653,8 @@ class CalculatePriceTests(TestCase):
                         loads,
                         Equals(
                             {
-                                u"price": expected_price,
-                                u"period": 60 * 60 * 24 * 31 - min_time_remaining,
+                                "price": expected_price,
+                                "period": 60 * 60 * 24 * 31 - min_time_remaining,
                             }
                         ),
                     ),
@@ -1660,8 +1665,8 @@ class CalculatePriceTests(TestCase):
 
 def application_json():
     return AfterPreprocessing(
-        lambda h: h.getRawHeaders(u"content-type"),
-        Equals([u"application/json"]),
+        lambda h: h.getRawHeaders("content-type"),
+        Equals(["application/json"]),
     )
 
 
@@ -1672,7 +1677,7 @@ def json_content(response):
 
 
 def ok_response(headers=None):
-    return match_response(OK, headers)
+    return match_response(OK, headers, phrase=Equals(b"OK"))
 
 
 def not_found_response(headers=None):
@@ -1683,12 +1688,13 @@ def bad_request_response(headers=None):
     return match_response(BAD_REQUEST, headers)
 
 
-def match_response(code, headers):
+def match_response(code, headers, phrase=Always()):
     if headers is None:
         headers = Always()
     return _MatchResponse(
         code=Equals(code),
         headers=headers,
+        phrase=phrase,
     )
 
 
@@ -1696,18 +1702,20 @@ def match_response(code, headers):
 class _MatchResponse(object):
     code = attr.ib()
     headers = attr.ib()
+    phrase = attr.ib()
     _details = attr.ib(default=attr.Factory(dict))
 
     def match(self, response):
         self._details.update(
             {
-                u"code": response.code,
-                u"headers": response.headers.getAllRawHeaders(),
+                "code": response.code,
+                "headers": response.headers.getAllRawHeaders(),
             }
         )
         return MatchesStructure(
             code=self.code,
             headers=self.headers,
+            phrase=self.phrase,
         ).match(response)
 
     def get_details(self):

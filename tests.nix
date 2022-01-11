@@ -51,9 +51,9 @@ let
       mkdir -p $out
 
       pushd ${zkapauthorizer.src}
-      ${python}/bin/pyflakes src
       ${lint-python}/bin/black --check src
       ${lint-python}/bin/isort --check src
+      ${lint-python}/bin/flake8 src
       popd
 
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
@@ -70,5 +70,5 @@ let
     '';
 in
 {
-  inherit pkgs python lint-python tests;
+  inherit privatestorage lint-python tests;
 }

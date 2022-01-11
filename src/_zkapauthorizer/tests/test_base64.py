@@ -16,8 +16,6 @@
 Tests for ``_zkapauthorizer._base64``.
 """
 
-from __future__ import absolute_import
-
 from base64 import urlsafe_b64encode
 
 from hypothesis import given

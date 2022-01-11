@@ -17,21 +17,19 @@ The Twisted plugin that glues the Zero-Knowledge Access Pass system into
 Tahoe-LAFS.
 """
 
-from __future__ import absolute_import
-
 import random
 from datetime import datetime
 from functools import partial
+from typing import Callable, List
 from weakref import WeakValueDictionary
-
-try:
-    from typing import Callable
-except ImportError:
-    pass
 
 import attr
 from allmydata.client import _Client
-from allmydata.interfaces import IAnnounceableStorageServer, IFoolscapStoragePlugin
+from allmydata.interfaces import (
+    IAnnounceableStorageServer,
+    IFilesystemNode,
+    IFoolscapStoragePlugin,
+)
 from allmydata.node import MissingConfigEntry
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
@@ -291,7 +289,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         get_now=get_now,
     )
     last_run_path = FilePath(
-        node_config.get_private_path(b"last-lease-maintenance-run")
+        node_config.get_private_path(u"last-lease-maintenance-run")
     )
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
@@ -303,13 +301,16 @@ def _create_maintenance_service(reactor, node_config, client_node):
     )
 
 
-def get_root_nodes(client_node, node_config):
+def get_root_nodes(client_node, node_config) -> List[IFilesystemNode]:
+    """
+    Get the configured starting points for lease maintenance traversal.
+    """
     try:
-        rootcap = node_config.get_private_config(b"rootcap")
+        rootcap = node_config.get_private_config("rootcap")
     except MissingConfigEntry:
         return []
     else:
-        return [client_node.create_node_from_uri(rootcap)]
+        return [client_node.create_node_from_uri(rootcap.encode("utf-8"))]
 
 
 def load_signing_key(path):

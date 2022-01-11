@@ -3,12 +3,34 @@
 { ... }@args:
 let
   tests = import ./tests.nix args;
-  inherit (tests) pkgs;
+  inherit (tests) privatestorage lint-python;
+  inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
+
+  python-env = mach-nix.mkPython {
+    inherit (zkapauthorizer.meta.mach-nix) python providers;
+    overridesPre = [
+      (
+        self: super: {
+          inherit tahoe-lafs;
+        }
+      )
+    ];
+    requirements =
+      ''
+      ${builtins.readFile ./requirements/test.in}
+      ${zkapauthorizer.requirements}
+      '';
+  };
 in
 pkgs.mkShell {
+  # Avoid leaving .pyc all over the source tree when manually triggering tests
+  # runs.
+  PYTHONDONTWRITEBYTECODE = "1";
+
   buildInputs = [
-    tests.python
-    tests.lint-python
-    pkgs.niv
+    # Provide the linting tools for interactive usage.
+    lint-python
+    # Supply all of the runtime and testing dependencies.
+    python-env
   ];
 }

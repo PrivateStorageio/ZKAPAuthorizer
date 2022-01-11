@@ -16,8 +16,6 @@
 Tests for our custom Hypothesis strategies.
 """
 
-from __future__ import absolute_import
-
 from allmydata.client import config_from_string
 from fixtures import TempDir
 from hypothesis import given, note
@@ -49,7 +47,7 @@ class TahoeConfigsTests(TestCase):
         )
         note(config_text)
         config_from_string(
-            tempdir.join(b"tahoe.ini"),
-            b"tub.port",
+            tempdir.join(u"tahoe.ini"),
+            u"tub.port",
             config_text.encode("utf-8"),
         )

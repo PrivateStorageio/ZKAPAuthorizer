@@ -17,8 +17,6 @@ Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
 to communicate between storage clients and servers.
 """
 
-from __future__ import absolute_import
-
 import attr
 from allmydata.interfaces import Offset, RIStorageServer, StorageIndex
 from foolscap.api import Any, Copyable, DictOf, ListOf, RemoteCopy
@@ -90,7 +88,7 @@ def add_passes(schema):
     :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
         ``schema`` but with one additional required argument.
     """
-    return add_arguments(schema, [(b"passes", _PassList)])
+    return add_arguments(schema, [("passes", _PassList)])
 
 
 def add_arguments(schema, kwargs):

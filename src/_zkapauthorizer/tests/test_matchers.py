@@ -16,8 +16,6 @@
 Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
-from __future__ import absolute_import
-
 from testtools import TestCase
 from testtools.matchers import Is, Not
 from zope.interface import Interface, implementer

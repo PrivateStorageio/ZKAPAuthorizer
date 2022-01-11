@@ -20,16 +20,15 @@ This is the client part of a storage access protocol.  The server part is
 implemented in ``_storage_server.py``.
 """
 
-from __future__ import absolute_import
-
 from functools import partial, wraps
+from typing import Any, Dict, List, Optional, Tuple
 
 import attr
 from allmydata.interfaces import IStorageServer
 from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
 from eliot.twisted import inline_callbacks
-from twisted.internet.defer import returnValue
+from twisted.internet.defer import Deferred, returnValue
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
@@ -45,6 +44,21 @@ from .storage_common import (
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
+
+Secrets = Tuple[bytes, bytes, bytes]
+TestWriteVectors = Dict[
+    int,
+    Tuple[
+        List[
+            Tuple[int, int, bytes, bytes],
+        ],
+        List[
+            Tuple[int, bytes],
+        ],
+        Optional[int],
+    ],
+]
+ReadVector = List[Tuple[int, int]]
 
 
 class IncorrectStorageServerReference(Exception):
@@ -341,7 +355,7 @@ class ZKAPAuthorizerStorageClient(object):
             num_passes,
             partial(
                 self._get_passes,
-                allocate_buckets_message(storage_index).encode("utf-8"),
+                allocate_buckets_message(storage_index),
             ),
             partial(self._spend_for_allocate_buckets, allocated_size),
         )
@@ -384,7 +398,7 @@ class ZKAPAuthorizerStorageClient(object):
                 cancel_secret,
             ),
             num_passes,
-            partial(self._get_passes, add_lease_message(storage_index).encode("utf-8")),
+            partial(self._get_passes, add_lease_message(storage_index)),
         )
         returnValue(result)
 
@@ -417,12 +431,12 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     def slot_testv_and_readv_and_writev(
         self,
-        rref,
-        storage_index,
-        secrets,
-        tw_vectors,
-        r_vector,
-    ):
+        rref: Any,
+        storage_index: bytes,
+        secrets: Secrets,
+        tw_vectors: TestWriteVectors,
+        r_vector: ReadVector,
+    ) -> Deferred:
         # Read operations are free.
         num_passes = 0
 
@@ -431,7 +445,7 @@ class ZKAPAuthorizerStorageClient(object):
         tw_vectors = {
             sharenum: (
                 [
-                    (offset, length, "eq", specimen)
+                    (offset, length, b"eq", specimen)
                     for (offset, length, specimen) in test_vector
                 ],
                 data_vectors,
@@ -489,7 +503,7 @@ class ZKAPAuthorizerStorageClient(object):
             num_passes,
             partial(
                 self._get_passes,
-                slot_testv_and_readv_and_writev_message(storage_index).encode("utf-8"),
+                slot_testv_and_readv_and_writev_message(storage_index),
             ),
         )
         returnValue(result)

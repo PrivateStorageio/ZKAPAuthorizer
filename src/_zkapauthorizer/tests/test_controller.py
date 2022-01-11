@@ -16,11 +16,9 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
-from __future__ import absolute_import, division
-
 from datetime import datetime, timedelta
 from functools import partial
-from json import dumps, loads
+from json import loads
 
 import attr
 from challenge_bypass_ristretto import (
@@ -42,13 +40,14 @@ from testtools.matchers import (
     Always,
     Equals,
     HasLength,
+    Is,
     IsInstance,
     MatchesAll,
     MatchesStructure,
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
-from twisted.internet.defer import fail
+from twisted.internet.defer import fail, succeed
 from twisted.internet.task import Clock
 from twisted.python.url import URL
 from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
@@ -57,6 +56,7 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
+from .._json import dumps_utf8
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
@@ -72,6 +72,7 @@ from ..controller import (
     Unpaid,
     UnpaidRedeemer,
     UnrecognizedFailureReason,
+    bracket,
     token_count_for_group,
 )
 from ..model import DoubleSpend as model_DoubleSpend
@@ -792,7 +793,9 @@ class RistrettoRedeemerTests(TestCase):
                         HasLength(num_tokens),
                     ),
                     public_key=Equals(
-                        PublicKey.from_signing_key(signing_key).encode_base64(),
+                        PublicKey.from_signing_key(signing_key)
+                        .encode_base64()
+                        .decode("utf-8"),
                     ),
                 ),
             ),
@@ -1151,12 +1154,12 @@ class RistrettoRedemption(Resource):
         finally:
             servers_proof.destroy()
 
-        return dumps(
+        return dumps_utf8(
             {
                 u"success": True,
-                u"public-key": self.public_key.encode_base64(),
-                u"signatures": marshaled_signed_tokens,
-                u"proof": marshaled_proof,
+                u"public-key": self.public_key.encode_base64().decode("utf-8"),
+                u"signatures": list(t.decode("utf-8") for t in marshaled_signed_tokens),
+                u"proof": marshaled_proof.decode("utf-8"),
             }
         )
 
@@ -1229,7 +1232,7 @@ class CheckRedemptionRequestTests(TestCase):
         treq = treq_for_loopback_ristretto(issuer)
         d = treq.post(
             NOWHERE.child(u"v1", u"redeem").to_text().encode("ascii"),
-            dumps(dict.fromkeys(properties)),
+            dumps_utf8(dict.fromkeys(properties)),
             headers=Headers({u"content-type": [u"application/json"]}),
         )
         self.assertThat(
@@ -1248,7 +1251,7 @@ def check_redemption_request(request):
     Verify that the given request conforms to the redemption server's public
     interface.
     """
-    if request.requestHeaders.getRawHeaders(b"content-type") != ["application/json"]:
+    if request.requestHeaders.getRawHeaders(b"content-type") != [b"application/json"]:
         return bad_content_type(request)
 
     p = request.content.tell()
@@ -1279,7 +1282,7 @@ def check_redemption_request(request):
 def bad_request(request, body_object):
     request.setResponseCode(BAD_REQUEST)
     request.setHeader(b"content-type", b"application/json")
-    request.write(dumps(body_object))
+    request.write(dumps_utf8(body_object))
     return b""
 
 
@@ -1289,3 +1292,190 @@ def bad_content_type(request):
         b"Unsupported media type",
         b"Unsupported media type",
     ).render(request)
+
+
+class _BracketTestMixin:
+    """
+    Tests for ``bracket``.
+    """
+
+    def wrap_success(self, result):
+        raise NotImplementedError()
+
+    def wrap_failure(self, result):
+        raise NotImplementedError()
+
+    def test_success(self):
+        """
+        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
+        ``Deferred`` that fires with the result of ``between``.
+        """
+        result = object()
+        actions = []
+        first = partial(actions.append, "first")
+
+        def between():
+            actions.append("between")
+            return self.wrap_success(result)
+
+        last = partial(actions.append, "last")
+        self.assertThat(
+            bracket(first, last, between),
+            succeeded(
+                Is(result),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first", "between", "last"]),
+        )
+
+    def test_failure(self):
+        """
+        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
+        ``Deferred`` that fires with the failure result of ``between``.
+        """
+
+        class SomeException(Exception):
+            pass
+
+        actions = []
+        first = partial(actions.append, "first")
+
+        def between():
+            actions.append("between")
+            return self.wrap_failure(SomeException())
+
+        last = partial(actions.append, "last")
+        self.assertThat(
+            bracket(first, last, between),
+            failed(
+                AfterPreprocessing(
+                    lambda failure: failure.value,
+                    IsInstance(SomeException),
+                ),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first", "between", "last"]),
+        )
+
+    def test_success_with_failing_last(self):
+        """
+        If the ``between`` action succeeds and the ``last`` action fails then
+        ``bracket`` fails the same way as the ``last`` action.
+        """
+
+        class SomeException(Exception):
+            pass
+
+        actions = []
+        first = partial(actions.append, "first")
+
+        def between():
+            actions.append("between")
+            return self.wrap_success(None)
+
+        def last():
+            actions.append("last")
+            return self.wrap_failure(SomeException())
+
+        self.assertThat(
+            bracket(first, last, between),
+            failed(
+                AfterPreprocessing(
+                    lambda failure: failure.value,
+                    IsInstance(SomeException),
+                ),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first", "between", "last"]),
+        )
+
+    def test_failure_with_failing_last(self):
+        """
+        If both the ``between`` and ``last`` actions fail then ``bracket`` fails
+        the same way as the ``last`` action.
+        """
+
+        class SomeException(Exception):
+            pass
+
+        class AnotherException(Exception):
+            pass
+
+        actions = []
+        first = partial(actions.append, "first")
+
+        def between():
+            actions.append("between")
+            return self.wrap_failure(SomeException())
+
+        def last():
+            actions.append("last")
+            return self.wrap_failure(AnotherException())
+
+        self.assertThat(
+            bracket(first, last, between),
+            failed(
+                AfterPreprocessing(
+                    lambda failure: failure.value,
+                    IsInstance(AnotherException),
+                ),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first", "between", "last"]),
+        )
+
+    def test_first_failure(self):
+        """
+        If the ``first`` action fails then ``bracket`` fails the same way and
+        runs neither the ``between`` nor ``last`` actions.
+        """
+
+        class SomeException(Exception):
+            pass
+
+        actions = []
+
+        def first():
+            actions.append("first")
+            return self.wrap_failure(SomeException())
+
+        between = partial(actions.append, "between")
+        last = partial(actions.append, "last")
+
+        self.assertThat(
+            bracket(first, last, between),
+            failed(
+                AfterPreprocessing(
+                    lambda failure: failure.value,
+                    IsInstance(SomeException),
+                ),
+            ),
+        )
+        self.assertThat(
+            actions,
+            Equals(["first"]),
+        )
+
+
+class BracketTests(_BracketTestMixin, TestCase):
+    def wrap_success(self, result):
+        return result
+
+    def wrap_failure(self, exception):
+        raise exception
+
+
+class SynchronousDeferredBracketTests(_BracketTestMixin, TestCase):
+    def wrap_success(self, result):
+        return succeed(result)
+
+    def wrap_failure(self, exception):
+        return fail(exception)

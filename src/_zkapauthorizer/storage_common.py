@@ -16,9 +16,8 @@
 Functionality shared between the storage client and server.
 """
 
-from __future__ import division
-
 from base64 import b64encode
+from typing import Callable
 
 import attr
 from pyutil.mathutil import div_ceil
@@ -27,7 +26,7 @@ from .eliot import MUTABLE_PASSES_REQUIRED
 from .validators import greater_than
 
 
-@attr.s(frozen=True, str=True)
+@attr.s(str=True)
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -43,27 +42,27 @@ class MorePassesRequired(Exception):
         passes indicating passes which failed the signature check.
     """
 
-    valid_count = attr.ib(validator=attr.validators.instance_of((int, long)))
-    required_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    valid_count = attr.ib(validator=attr.validators.instance_of(int))
+    required_count = attr.ib(validator=attr.validators.instance_of(int))
     signature_check_failed = attr.ib(converter=frozenset)
 
 
-def _message_maker(label):
+def _message_maker(label: str) -> Callable[[str], bytes]:
     def make_message(storage_index):
-        return u"{label} {storage_index}".format(
+        return "{label} {storage_index}".format(
             label=label,
-            storage_index=b64encode(storage_index),
-        )
+            storage_index=b64encode(storage_index).decode("ascii"),
+        ).encode("ascii")
 
     return make_message
 
 
 # Functions to construct the PrivacyPass request-binding message for pass
 # construction for different Tahoe-LAFS storage operations.
-allocate_buckets_message = _message_maker(u"allocate_buckets")
-add_lease_message = _message_maker(u"add_lease")
+allocate_buckets_message = _message_maker("allocate_buckets")
+add_lease_message = _message_maker("add_lease")
 slot_testv_and_readv_and_writev_message = _message_maker(
-    u"slot_testv_and_readv_and_writev"
+    "slot_testv_and_readv_and_writev"
 )
 
 # The number of bytes we're willing to store for a lease period for each pass
@@ -80,8 +79,8 @@ def get_configured_shares_needed(node_config):
     """
     return int(
         node_config.get_config(
-            section=u"client",
-            option=u"shares.needed",
+            section="client",
+            option="shares.needed",
             default=3,
         )
     )
@@ -96,8 +95,8 @@ def get_configured_shares_total(node_config):
     """
     return int(
         node_config.get_config(
-            section=u"client",
-            option=u"shares.total",
+            section="client",
+            option="shares.total",
             default=10,
         )
     )
@@ -111,11 +110,11 @@ def get_configured_pass_value(node_config):
     value is read from the **pass-value** option of the ZKAPAuthorizer plugin
     client section.
     """
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
     return int(
         node_config.get_config(
             section=section_name,
-            option=u"pass-value",
+            option="pass-value",
             default=BYTES_PER_PASS,
         )
     )
@@ -125,15 +124,18 @@ def get_configured_allowed_public_keys(node_config):
     """
     Read the set of allowed issuer public keys from the given configuration.
     """
-    section_name = u"storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
     return set(
         node_config.get_config(
             section=section_name,
-            option=u"allowed-public-keys",
+            option="allowed-public-keys",
         )
         .strip()
         .split(",")
     )
+
+
+_dict_values = type(dict().values())
 
 
 def required_passes(bytes_per_pass, share_sizes):
@@ -148,9 +150,9 @@ def required_passes(bytes_per_pass, share_sizes):
 
     :return int: The number of passes required to cover the storage cost.
     """
-    if not isinstance(share_sizes, list):
+    if not isinstance(share_sizes, (list, _dict_values)):
         raise TypeError(
-            "Share sizes must be a list of integers, got {!r} instead".format(
+            "Share sizes must be a list (or dict_values) of integers, got {!r} instead".format(
                 share_sizes,
             ),
         )
@@ -301,7 +303,7 @@ def pass_value_attribute():
     """
     return attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of((int, long)),
+            attr.validators.instance_of(int),
             greater_than(0),
         ),
     )

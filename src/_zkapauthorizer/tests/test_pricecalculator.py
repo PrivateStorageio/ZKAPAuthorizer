@@ -155,7 +155,7 @@ class PriceCalculatorTests(TestCase):
         self.assertThat(
             price,
             MatchesAll(
-                IsInstance((int, long)),
+                IsInstance(int),
                 GreaterThan(0),
             ),
         )

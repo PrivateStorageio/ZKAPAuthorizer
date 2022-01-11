@@ -16,8 +16,6 @@
 A better JSON module.
 """
 
-from __future__ import absolute_import
-
 from json import loads as _loads
 
 

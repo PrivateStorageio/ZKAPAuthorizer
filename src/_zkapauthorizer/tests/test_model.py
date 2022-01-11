@@ -17,8 +17,6 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from __future__ import absolute_import
-
 from datetime import datetime, timedelta
 from errno import EACCES
 from os import mkdir
@@ -141,8 +139,8 @@ class VoucherStoreTests(TestCase):
         """
         counter_a = counters[0]
         counter_b = counters[1]
-        tokens_a = tokens[: len(tokens) / 2]
-        tokens_b = tokens[len(tokens) / 2 :]
+        tokens_a = tokens[: len(tokens) // 2]
+        tokens_b = tokens[len(tokens) // 2 :]
 
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         # We only have to get the expected_tokens value (len(tokens)) right on
@@ -253,13 +251,13 @@ class VoucherStoreTests(TestCase):
         then ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
+        nodedir = tempdir.join(u"node")
 
         # Create the node directory without permission to create the
         # underlying directory.
         mkdir(nodedir, 0o500)
 
-        config = get_config(nodedir, b"tub.port")
+        config = get_config(nodedir, u"tub.port")
 
         self.assertThat(
             lambda: VoucherStore.from_node_config(
@@ -269,7 +267,7 @@ class VoucherStoreTests(TestCase):
             ),
             Raises(
                 AfterPreprocessing(
-                    lambda (type, exc, tb): exc,
+                    lambda exc_info: exc_info[1],
                     MatchesAll(
                         IsInstance(StoreOpenError),
                         MatchesStructure(
@@ -295,9 +293,9 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
+        nodedir = tempdir.join(u"node")
 
-        config = get_config(nodedir, b"tub.port")
+        config = get_config(nodedir, u"tub.port")
 
         # Create the underlying database file.
         store = VoucherStore.from_node_config(config, lambda: now)
@@ -358,9 +356,9 @@ class VoucherStoreTests(TestCase):
         :return: A three-tuple of (backed up tokens, extracted tokens, inserted tokens).
         """
         tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join(b"node")
+        nodedir = tempdir.join(u"node")
 
-        config = get_config(nodedir, b"tub.port")
+        config = get_config(nodedir, u"tub.port")
 
         # Create the underlying database file.
         store = VoucherStore.from_node_config(config, lambda: now)
@@ -384,14 +382,15 @@ class VoucherStoreTests(TestCase):
         while tokens_remaining > 0:
             to_spend = data.draw(integers(min_value=1, max_value=tokens_remaining))
             extracted_tokens.extend(
-                token.unblinded_token for token in store.get_unblinded_tokens(to_spend)
+                token.unblinded_token.decode("ascii")
+                for token in store.get_unblinded_tokens(to_spend)
             )
             tokens_remaining -= to_spend
 
         return (
             backed_up_tokens,
             extracted_tokens,
-            list(token.unblinded_token for token in unblinded_tokens),
+            list(token.unblinded_token.decode("ascii") for token in unblinded_tokens),
         )
 
 
@@ -946,7 +945,7 @@ def store_for_test(testcase, get_config, get_now):
     :return VoucherStore: A newly created temporary store.
     """
     tempdir = testcase.useFixture(TempDir())
-    config = get_config(tempdir.join(b"node"), b"tub.port")
+    config = get_config(tempdir.join(u"node"), u"tub.port")
     store = VoucherStore.from_node_config(
         config,
         get_now,

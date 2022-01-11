@@ -21,14 +21,13 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
-from __future__ import absolute_import
-
 from datetime import timedelta
 from errno import ENOENT
 from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
+from typing import Dict, List, Optional
 
 import attr
 from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
@@ -69,24 +68,6 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
-try:
-    from typing import Dict, List, Optional
-except ImportError:
-    pass
-
-# The last Python 2-supporting prometheus_client nevertheless tries to use
-# FileNotFoundError, an exception type from Python 3.  Since that release,
-# prometheus_client has dropped Python 2 support entirely so there is little
-# hope of ever having this fixed upstream.  When ZKAPAuthorizer is ported to
-# Python 3, this should no longer be necessary.
-def _prometheus_client_fix():
-    import prometheus_client.exposition
-
-    prometheus_client.exposition.FileNotFoundError = IOError
-
-
-_prometheus_client_fix()
-
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
 LEASE_TRAILER_SIZE = 4
@@ -122,13 +103,13 @@ class _ValidationResult(object):
         """
         Cryptographically check the validity of a single pass.
 
-        :param unicode message: The shared message for pass validation.
+        :param bytes message: The shared message for pass validation.
         :param Pass pass_: The pass to validate.
 
         :return bool: ``False`` (invalid) if the pass includes a valid
             signature, ``True`` (valid) otherwise.
         """
-        assert isinstance(message, unicode), "message %r not unicode" % (message,)
+        assert isinstance(message, bytes), "message %r not bytes" % (message,)
         assert isinstance(pass_, Pass), "pass %r not a Pass" % (pass_,)
         try:
             preimage = TokenPreimage.decode_base64(pass_.preimage)
@@ -136,7 +117,8 @@ class _ValidationResult(object):
             unblinded_token = signing_key.rederive_unblinded_token(preimage)
             verification_key = unblinded_token.derive_verification_key_sha512()
             invalid_pass = verification_key.invalid_sha512(
-                proposed_signature, message.encode("utf-8")
+                proposed_signature,
+                message,
             )
             return invalid_pass
         except Exception:
@@ -148,7 +130,7 @@ class _ValidationResult(object):
         """
         Check all of the given passes for validity.
 
-        :param unicode message: The shared message for pass validation.
+        :param bytes message: The shared message for pass validation.
         :param list[bytes] passes: The encoded passes to validate.
         :param SigningKey signing_key: The signing key to use to check the passes.
 
@@ -398,7 +380,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         with start_action(
-            action_type=u"zkapauthorizer:storage-server:remote:share-sizes",
+            action_type="zkapauthorizer:storage-server:remote:share-sizes",
             storage_index_or_slot=storage_index_or_slot,
         ):
             return dict(
@@ -443,7 +425,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
           Note that the lease is *not* renewed in this case (see #254).
         """
         with start_action(
-            action_type=u"zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
+            action_type="zkapauthorizer:storage-server:remote:slot-testv-and-readv-and-writev",
             storage_index=b2a(storage_index),
             path=storage_index_to_dir(storage_index),
         ):
@@ -877,7 +859,7 @@ def get_share_path(storage_server, storage_index, sharenum):
     return (
         FilePath(storage_server.sharedir)
         .preauthChild(storage_index_to_dir(storage_index))
-        .child(u"{}".format(sharenum))
+        .child("{}".format(sharenum))
     )
 
 

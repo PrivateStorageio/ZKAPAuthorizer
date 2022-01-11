@@ -19,17 +19,18 @@ the storage plugin.
 
 from datetime import datetime
 from functools import wraps
-from json import dumps, loads
+from json import loads
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 
 import attr
-from aniso8601 import parse_datetime as _parse_datetime
+from aniso8601 import parse_datetime
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
+from ._json import dumps_utf8
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -37,18 +38,6 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
-
-
-def parse_datetime(s, **kw):
-    """
-    Like ``aniso8601.parse_datetime`` but accept unicode as well.
-    """
-    if isinstance(s, unicode):
-        s = s.encode("utf-8")
-    assert isinstance(s, bytes)
-    if "delimiter" in kw and isinstance(kw["delimiter"], unicode):
-        kw["delimiter"] = kw["delimiter"].encode("utf-8")
-    return _parse_datetime(s, **kw)
 
 
 class ILeaseMaintenanceObserver(Interface):
@@ -86,7 +75,7 @@ class NotEnoughTokens(Exception):
     """
 
 
-CONFIG_DB_NAME = u"privatestorageio-zkapauthz-v1.sqlite3"
+CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
 
 def open_and_initialize(path, connect=None):
@@ -107,10 +96,9 @@ def open_and_initialize(path, connect=None):
     except OSError as e:
         raise StoreOpenError(e)
 
-    dbfile = path.asBytesMode().path
     try:
         conn = connect(
-            dbfile,
+            path.path,
             isolation_level="IMMEDIATE",
         )
     except OperationalError as e:
@@ -380,7 +368,7 @@ class VoucherStore(object):
         Store some unblinded tokens, for example as part of a backup-restore
         process.
 
-        :param list[unicode] unblinded_tokens: The unblinded tokens to store.
+        :param list[str] unblinded_tokens: The unblinded tokens to store.
 
         :param int group_id: The unique identifier of the redemption group to
             which these tokens belong.
@@ -398,7 +386,7 @@ class VoucherStore(object):
             tokens.  This voucher will be marked as redeemed to indicate it
             has fulfilled its purpose and has no further use for us.
 
-        :param unicode public_key: The encoded public key for the private key
+        :param str public_key: The encoded public key for the private key
             which was used to sign these tokens.
 
         :param list[UnblindedToken] unblinded_tokens: The unblinded tokens to
@@ -411,9 +399,9 @@ class VoucherStore(object):
             inserted tokens, ``False`` otherwise.
         """
         if completed:
-            voucher_state = u"redeemed"
+            voucher_state = "redeemed"
         else:
-            voucher_state = u"pending"
+            voucher_state = "pending"
 
         if spendable:
             token_count_increase = len(unblinded_tokens)
@@ -683,7 +671,7 @@ class VoucherStore(object):
         )
         tokens = cursor.fetchall()
         return {
-            u"unblinded-tokens": list(token for (token,) in tokens),
+            "unblinded-tokens": list(token for (token,) in tokens),
         }
 
     def start_lease_maintenance(self):
@@ -720,9 +708,9 @@ class VoucherStore(object):
             return None
         [(started, count, finished)] = activity
         return LeaseMaintenanceActivity(
-            parse_datetime(started, delimiter=u" "),
+            parse_datetime(started, delimiter=" "),
             count,
-            parse_datetime(finished, delimiter=u" "),
+            parse_datetime(finished, delimiter=" "),
         )
 
 
@@ -901,7 +889,7 @@ class RandomToken(object):
 def _counter_attribute():
     return attr.ib(
         validator=attr.validators.and_(
-            attr.validators.instance_of((int, long)),
+            attr.validators.instance_of(int),
             greater_than(-1),
         ),
     )
@@ -923,8 +911,8 @@ class Pending(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"pending",
-            u"counter": self.counter,
+            "name": "pending",
+            "counter": self.counter,
         }
 
 
@@ -944,9 +932,9 @@ class Redeeming(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"redeeming",
-            u"started": self.started.isoformat(),
-            u"counter": self.counter,
+            "name": "redeeming",
+            "started": self.started.isoformat(),
+            "counter": self.counter,
         }
 
 
@@ -962,16 +950,16 @@ class Redeemed(object):
     """
 
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    token_count = attr.ib(validator=attr.validators.instance_of((int, long)))
+    token_count = attr.ib(validator=attr.validators.instance_of(int))
 
     def should_start_redemption(self):
         return False
 
     def to_json_v1(self):
         return {
-            u"name": u"redeemed",
-            u"finished": self.finished.isoformat(),
-            u"token-count": self.token_count,
+            "name": "redeemed",
+            "finished": self.finished.isoformat(),
+            "token-count": self.token_count,
         }
 
 
@@ -984,8 +972,8 @@ class DoubleSpend(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"double-spend",
-            u"finished": self.finished.isoformat(),
+            "name": "double-spend",
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -1004,8 +992,8 @@ class Unpaid(object):
 
     def to_json_v1(self):
         return {
-            u"name": u"unpaid",
-            u"finished": self.finished.isoformat(),
+            "name": "unpaid",
+            "finished": self.finished.isoformat(),
         }
 
 
@@ -1018,16 +1006,16 @@ class Error(object):
     """
 
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    details = attr.ib(validator=attr.validators.instance_of(unicode))
+    details = attr.ib(validator=attr.validators.instance_of(str))
 
     def should_start_redemption(self):
         return True
 
     def to_json_v1(self):
         return {
-            u"name": u"error",
-            u"finished": self.finished.isoformat(),
-            u"details": self.details,
+            "name": "error",
+            "finished": self.finished.isoformat(),
+            "details": self.details,
         }
 
 
@@ -1061,7 +1049,7 @@ class Voucher(object):
     expected_tokens = attr.ib(
         validator=attr.validators.optional(
             attr.validators.and_(
-                attr.validators.instance_of((int, long)),
+                attr.validators.instance_of(int),
                 greater_than(0),
             ),
         ),
@@ -1089,15 +1077,15 @@ class Voucher(object):
     @classmethod
     def from_row(cls, row):
         def state_from_row(state, row):
-            if state == u"pending":
+            if state == "pending":
                 return Pending(counter=row[3])
-            if state == u"double-spend":
+            if state == "double-spend":
                 return DoubleSpend(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0], delimiter=" "),
                 )
-            if state == u"redeemed":
+            if state == "redeemed":
                 return Redeemed(
-                    parse_datetime(row[0], delimiter=u" "),
+                    parse_datetime(row[0], delimiter=" "),
                     row[1],
                 )
             raise ValueError("Unknown voucher state {}".format(state))
@@ -1112,59 +1100,59 @@ class Voucher(object):
             # value represents a leap second.  However, since we also use
             # Python to generate the data in the first place, it should never
             # represent a leap second... I hope.
-            created=parse_datetime(created, delimiter=u" "),
+            created=parse_datetime(created, delimiter=" "),
             state=state_from_row(state, row[4:]),
         )
 
     @classmethod
     def from_json(cls, json):
         values = loads(json)
-        version = values.pop(u"version")
+        version = values.pop("version")
         return getattr(cls, "from_json_v{}".format(version))(values)
 
     @classmethod
     def from_json_v1(cls, values):
-        state_json = values[u"state"]
-        state_name = state_json[u"name"]
-        if state_name == u"pending":
-            state = Pending(counter=state_json[u"counter"])
-        elif state_name == u"redeeming":
+        state_json = values["state"]
+        state_name = state_json["name"]
+        if state_name == "pending":
+            state = Pending(counter=state_json["counter"])
+        elif state_name == "redeeming":
             state = Redeeming(
-                started=parse_datetime(state_json[u"started"]),
-                counter=state_json[u"counter"],
+                started=parse_datetime(state_json["started"]),
+                counter=state_json["counter"],
             )
-        elif state_name == u"double-spend":
+        elif state_name == "double-spend":
             state = DoubleSpend(
-                finished=parse_datetime(state_json[u"finished"]),
+                finished=parse_datetime(state_json["finished"]),
             )
-        elif state_name == u"redeemed":
+        elif state_name == "redeemed":
             state = Redeemed(
-                finished=parse_datetime(state_json[u"finished"]),
-                token_count=state_json[u"token-count"],
+                finished=parse_datetime(state_json["finished"]),
+                token_count=state_json["token-count"],
             )
-        elif state_name == u"unpaid":
+        elif state_name == "unpaid":
             state = Unpaid(
-                finished=parse_datetime(state_json[u"finished"]),
+                finished=parse_datetime(state_json["finished"]),
             )
-        elif state_name == u"error":
+        elif state_name == "error":
             state = Error(
-                finished=parse_datetime(state_json[u"finished"]),
-                details=state_json[u"details"],
+                finished=parse_datetime(state_json["finished"]),
+                details=state_json["details"],
             )
         else:
             raise ValueError("Unrecognized state {!r}".format(state_json))
 
         return cls(
-            number=values[u"number"].encode("ascii"),
-            expected_tokens=values[u"expected-tokens"],
+            number=values["number"].encode("ascii"),
+            expected_tokens=values["expected-tokens"],
             created=None
-            if values[u"created"] is None
-            else parse_datetime(values[u"created"]),
+            if values["created"] is None
+            else parse_datetime(values["created"]),
             state=state,
         )
 
     def to_json(self):
-        return dumps(self.marshal())
+        return dumps_utf8(self.marshal())
 
     def marshal(self):
         return self.to_json_v1()
@@ -1172,9 +1160,9 @@ class Voucher(object):
     def to_json_v1(self):
         state = self.state.to_json_v1()
         return {
-            u"number": self.number.decode("ascii"),
-            u"expected-tokens": self.expected_tokens,
-            u"created": None if self.created is None else self.created.isoformat(),
-            u"state": state,
-            u"version": 1,
+            "number": self.number.decode("ascii"),
+            "expected-tokens": self.expected_tokens,
+            "created": None if self.created is None else self.created.isoformat(),
+            "state": state,
+            "version": 1,
         }

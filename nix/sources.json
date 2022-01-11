@@ -29,10 +29,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "96d01556b4597c022647acbf8c3b58d2a99bc963",
-        "sha256": "0s6ll2hi40gj6mp2zdg7w3dq17g381gnfkm390mqgp574lmbq6yw",
+        "rev": "856d67ab093a68425c3896ec2961cea3b95ae93f",
+        "sha256": "0a7avm4xvm454gxy4dq0fc19j3f9ik8gf3kjpsqhszfkamrn9y0p",
         "type": "tarball",
-        "url": "https://github.com/DavHau/pypi-deps-db/archive/96d01556b4597c022647acbf8c3b58d2a99bc963.tar.gz",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/856d67ab093a68425c3896ec2961cea3b95ae93f.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2105": {
@@ -40,6 +40,18 @@
         "type": "tarball",
         "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
         "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
+    },
+    "release2111": {
+        "branch": "release-21.11",
+        "description": "Nix Packages collection",
+        "homepage": "",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "d887ac7aee92e8fc54dde9060d60d927afae9d69",
+        "sha256": "1bpgfv45b1yvrgpwdgc4fm4a6sav198yd41bsrvlmm3jn2wi6qx5",
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/d887ac7aee92e8fc54dde9060d60d927afae9d69.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "tahoe-lafs": {
         "branch": "master",
