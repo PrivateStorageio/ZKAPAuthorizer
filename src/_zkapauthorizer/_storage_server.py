@@ -30,7 +30,7 @@ from struct import calcsize, unpack
 from typing import Any, Dict, List, Optional, Tuple
 
 import attr
-from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
+from allmydata.interfaces import TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.immutable import (
     BucketWriter,

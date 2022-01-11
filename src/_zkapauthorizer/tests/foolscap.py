@@ -18,7 +18,6 @@ Testing helpers related to Foolscap.
 
 import attr
 from allmydata.interfaces import RIStorageServer
-from allmydata.storage.server import StorageServer
 from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
 from foolscap.copyable import CopyableSlicer, ICopyable
 from twisted.internet.defer import fail, succeed
