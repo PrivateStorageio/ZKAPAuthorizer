@@ -54,15 +54,15 @@
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "tahoe-lafs": {
-        "branch": "3858.release-1.17.1",
+        "branch": "master",
         "description": "The Tahoe-LAFS decentralized secure filesystem.",
         "homepage": "https://tahoe-lafs.org/",
-        "owner": "meejah",
+        "owner": "tahoe-lafs",
         "repo": "tahoe-lafs",
-        "rev": "f7477043c5025642ef0fbeb042310decb774bd01",
+        "rev": "tahoe-lafs-1.17.1",
         "sha256": "0vzl8xz4iwbq7d7saa6rimzgwj23s3vfgr3f428rbg0wp7dshs9s",
         "type": "tarball",
-        "url": "https://github.com/meejah/tahoe-lafs/archive/f7477043c5025642ef0fbeb042310decb774bd01.tar.gz",
+        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/tahoe-lafs-1.17.1.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
