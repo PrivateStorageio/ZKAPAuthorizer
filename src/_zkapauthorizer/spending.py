@@ -16,6 +16,8 @@
 A module for logic controlling the manner in which ZKAPs are spent.
 """
 
+from __future__ import annotations
+
 from typing import Callable, List, Tuple
 
 import attr
@@ -126,7 +128,7 @@ class PassGroup(object):
     def unblinded_tokens(self) -> List[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices: List[int]) -> ("PassGroup", "PassGroup"):
+    def split(self, select_indices: List[int]) -> (PassGroup, PassGroup):
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
@@ -139,7 +141,7 @@ class PassGroup(object):
             attr.evolve(self, tokens=unselected),
         )
 
-    def expand(self, by_amount: int) -> "PassGroup":
+    def expand(self, by_amount: int) -> PassGroup:
         return attr.evolve(
             self,
             tokens=self._tokens + self._factory.get(self._message, by_amount)._tokens,
