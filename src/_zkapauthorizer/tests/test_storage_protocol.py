@@ -61,10 +61,10 @@ from .foolscap import LocalRemote
 from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
     LEASE_INTERVAL,
-    cleanup_storage_server,
     get_passes,
     pass_factory,
     privacypass_passes,
+    reset_storage_server,
     whitebox_write_sparse_share,
     write_toy_shares,
 )
@@ -191,7 +191,7 @@ class ShareTests(TestCase):
         self.spending_recorder.reset()
 
         # And clean out any shares that might confuse things.
-        cleanup_storage_server(self.anonymous_storage_server)
+        reset_storage_server(self.anonymous_storage_server)
 
     def test_get_version(self):
         """

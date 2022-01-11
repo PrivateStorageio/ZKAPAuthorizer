@@ -45,7 +45,7 @@ from ..storage_common import (
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
 from .matchers import matches_spent_passes, raises
-from .storage_common import cleanup_storage_server, get_passes, write_toy_shares
+from .storage_common import get_passes, reset_storage_server, write_toy_shares
 from .strategies import (
     lease_cancel_secrets,
     lease_renew_secrets,
@@ -222,10 +222,7 @@ class PassValidationTests(TestCase):
         # Hypothesis and testtools fixtures don't play nicely together in a
         # way that allows us to just move everything from `setUp` into this
         # method.
-        cleanup_storage_server(self.anonymous_storage_server)
-        # One of the tests makes the server read-only partway through.  Make
-        # sure that doesn't leak into other examples.
-        self.anonymous_storage_server.readonly_storage = False
+        reset_storage_server(self.anonymous_storage_server)
 
         self.spending_recorder.reset()
 
