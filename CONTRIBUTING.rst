@@ -31,9 +31,9 @@ Python Dependencies
 ...................
 
 We use `mach-nix <https://github.com/DavHau/mach-nix/>`_ to build python packages.
-It uses a snapshot of pypi to expose python dependencies to nix,
+It uses a snapshot of PyPI to expose python dependencies to nix,
 thus our python depedencies (on nix) are automatically pinned.
-To update the pypy snapshot (and thus our python dependencies), run
+To update the PyPI snapshot (and thus our python dependencies), run
 
 .. code:: shell
 
@@ -42,14 +42,20 @@ To update the pypy snapshot (and thus our python dependencies), run
 tahoe-lafs
 ..........
 
-We depend on pinned commit of tahoe-lafs.
-To update to the latest commit, run
+We test against a pinned commit of Tahoe-LAFS master.
+To update to the current master@HEAD revision, run:
 
 .. code:: shell
 
-   nix-shell --run 'niv update tahoe-lafs --branch master'
+   nix-shell --run 'niv update tahoe-lafs-master --branch master'
 
 It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
+When feasible we also test against a released version of Tahoe-LAFS.
+To update to a new release, run:
+
+.. code:: shell
+
+   nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
 
 .. note::
 
@@ -57,7 +63,7 @@ It is also possible to pass ``pull/<pr-number>/head`` to test against a specific
    the packaging in ``default.nix`` includes a fake version number.
    This will need to be update manually at least when the minor version of tahoe-lafs changes.
 
-If you want to test multiple versions, you can add an additional source, pointing at other version
+If you want to test additional versions, you can add an additional source, pointing at other version.
 
 .. code:: shell
 
