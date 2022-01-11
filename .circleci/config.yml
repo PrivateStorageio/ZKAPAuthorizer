@@ -242,7 +242,7 @@ workflows:
         tahoe-lafs-source: "tahoe-lafs"
 
     - "linux-tests":
-        name: "Linux tests python 3.9"
+        name: "Linux tests python 3.9, Tahoe-LAFS master"
         py-version: "39"
         # This is usually not master@HEAD because it is still pinned to a
         # certain revision.  The intent is to update it frequently and
