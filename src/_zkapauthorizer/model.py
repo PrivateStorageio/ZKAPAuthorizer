@@ -96,10 +96,9 @@ def open_and_initialize(path, connect=None):
     except OSError as e:
         raise StoreOpenError(e)
 
-    dbfile = path.asBytesMode().path
     try:
         conn = connect(
-            dbfile,
+            path.path,
             isolation_level="IMMEDIATE",
         )
     except OperationalError as e:
