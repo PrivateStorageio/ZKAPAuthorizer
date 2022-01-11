@@ -241,6 +241,16 @@ workflows:
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
 
+    - "linux-tests":
+        name: "Linux tests python 3.9"
+        py-version: "39"
+        # This is usually not master@HEAD because it is still pinned to a
+        # certain revision.  The intent is to update it frequently and
+        # discover fixable incompatibilities in small groups and unfixable
+        # incompatibilities early enough to prevent them from going into a
+        # release.
+        tahoe-lafs-source: "tahoe-lafs-master"
+
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
         name: "macOS tests python 3.8 xcode 11.7.0"
