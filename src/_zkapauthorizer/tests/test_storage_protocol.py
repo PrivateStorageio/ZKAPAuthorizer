@@ -314,12 +314,12 @@ class ShareTests(TestCase):
         self.expectThat(
             alreadygot,
             Equals(set()),
-            u"fresh server somehow already had shares",
+            "fresh server somehow already had shares",
         )
         self.expectThat(
             set(allocated.keys()),
             Equals(sharenums),
-            u"fresh server refused to allocate all requested buckets",
+            "fresh server refused to allocate all requested buckets",
         )
         self.expectThat(
             self.spending_recorder,
@@ -335,13 +335,13 @@ class ShareTests(TestCase):
         self.expectThat(
             set(readers.keys()),
             Equals(sharenums),
-            u"server did not return all buckets we wrote",
+            "server did not return all buckets we wrote",
         )
         for (sharenum, bucket) in readers.items():
             self.expectThat(
                 bucket.remote_read(0, size),
                 Equals(bytes_for_share(sharenum, size)),
-                u"server returned wrong bytes for share number {}".format(
+                "server returned wrong bytes for share number {}".format(
                     sharenum,
                 ),
             )
@@ -621,7 +621,7 @@ class ShareTests(TestCase):
             # joined by pathsep
             storage_index_to_dir(storage_index),
         )
-        sharepath = sharedir.child(u"{}".format(sharenum))
+        sharepath = sharedir.child("{}".format(sharenum))
         sharepath.parent().makedirs()
         whitebox_write_sparse_share(
             sharepath,
@@ -663,7 +663,7 @@ class ShareTests(TestCase):
             # joined by pathsep
             storage_index_to_dir(storage_index),
         )
-        sharepath = sharedir.child(u"{}".format(sharenum))
+        sharepath = sharedir.child("{}".format(sharenum))
         sharepath.parent().makedirs()
         whitebox_write_sparse_share(
             sharepath,
@@ -717,7 +717,7 @@ class ShareTests(TestCase):
                 storage_index_to_dir(storage_index),
             )
             for sharenum in sharenums:
-                sharepath = sharedir.child(u"{}".format(sharenum))
+                sharepath = sharedir.child("{}".format(sharenum))
                 sharepath.parent().makedirs()
                 whitebox_write_sparse_share(
                     sharepath,
@@ -771,7 +771,7 @@ class ShareTests(TestCase):
         self.assertThat(
             wrote,
             Equals(True),
-            u"Server rejected a write to a new mutable slot",
+            "Server rejected a write to a new mutable slot",
         )
 
         # The spent passes have been reported to the spending service.
@@ -972,7 +972,7 @@ class ShareTests(TestCase):
         self.assertThat(
             write(),
             is_successful_write(),
-            u"Server rejected a write to a new mutable slot",
+            "Server rejected a write to a new mutable slot",
         )
 
         # Note the prior state.
@@ -982,7 +982,7 @@ class ShareTests(TestCase):
         self.assertThat(
             write(),
             is_successful_write(),
-            u"Server rejected rewrite of an existing mutable slot",
+            "Server rejected rewrite of an existing mutable slot",
         )
 
         # Leases are exactly unchanged.
@@ -1180,7 +1180,7 @@ def assert_read_back_data(
         self.assertThat(
             single_read[sharenum],
             Equals(expected_result),
-            u"Server didn't reliably read back data just written",
+            "Server didn't reliably read back data just written",
         )
 
 

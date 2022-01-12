@@ -80,7 +80,7 @@ class ZKAPAuthorizer(object):
         connection.
     """
 
-    name = attr.ib(default=u"privatestorageio-zkapauthz-v1")
+    name = attr.ib(default="privatestorageio-zkapauthz-v1")
     _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
 
     def _get_store(self, node_config):
@@ -113,25 +113,25 @@ class ZKAPAuthorizer(object):
         kwargs = configuration.copy()
 
         # If metrics are desired, schedule their writing to disk.
-        metrics_interval = kwargs.pop(u"prometheus-metrics-interval", None)
-        metrics_path = kwargs.pop(u"prometheus-metrics-path", None)
+        metrics_interval = kwargs.pop("prometheus-metrics-interval", None)
+        metrics_path = kwargs.pop("prometheus-metrics-path", None)
         if metrics_interval is not None and metrics_path is not None:
             FilePath(metrics_path).parent().makedirs(ignoreExistingDirectory=True)
             t = task.LoopingCall(make_safe_writer(metrics_path, registry))
             t.clock = reactor
             t.start(int(metrics_interval))
 
-        root_url = kwargs.pop(u"ristretto-issuer-root-url")
-        pass_value = int(kwargs.pop(u"pass-value", BYTES_PER_PASS))
+        root_url = kwargs.pop("ristretto-issuer-root-url")
+        pass_value = int(kwargs.pop("pass-value", BYTES_PER_PASS))
         signing_key = load_signing_key(
             FilePath(
-                kwargs.pop(u"ristretto-signing-key-path"),
+                kwargs.pop("ristretto-signing-key-path"),
             ),
         )
         public_key = PublicKey.from_signing_key(signing_key)
         announcement = {
-            u"ristretto-issuer-root-url": root_url,
-            u"ristretto-public-keys": [public_key.encode_base64()],
+            "ristretto-issuer-root-url": root_url,
+            "ristretto-public-keys": [public_key.encode_base64()],
         }
         anonymous_storage_server = get_anonymous_storage_server()
         spender = get_spender(
@@ -145,7 +145,7 @@ class ZKAPAuthorizer(object):
             signing_key=signing_key,
             spender=spender,
             registry=registry,
-            **kwargs
+            **kwargs,
         )
         return succeed(
             AnnounceableStorageServer(
@@ -203,7 +203,7 @@ def make_safe_writer(metrics_path, registry):
     def safe_writer():
         try:
             with start_action(
-                action_type=u"zkapauthorizer:metrics:write-to-textfile",
+                action_type="zkapauthorizer:metrics:write-to-textfile",
                 metrics_path=metrics_path,
             ):
                 write_to_textfile(metrics_path, registry)
@@ -288,9 +288,7 @@ def _create_maintenance_service(reactor, node_config, client_node):
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
-    last_run_path = FilePath(
-        node_config.get_private_path(u"last-lease-maintenance-run")
-    )
+    last_run_path = FilePath(node_config.get_private_path("last-lease-maintenance-run"))
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
         maintain_leases,

@@ -37,8 +37,8 @@ class PrivacyTests(TestCase):
     def _authorization(self, scheme, value):
         return Headers(
             {
-                u"authorization": [
-                    u"{} {}".format(scheme.decode("ascii"), value.decode("ascii")),
+                "authorization": [
+                    "{} {}".format(scheme.decode("ascii"), value.decode("ascii")),
                 ],
             }
         )

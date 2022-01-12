@@ -1,0 +1,8 @@
+# Reformat with black targeting Python 3.9 instead of Python 2.7
+5a9f4e2e704bbc85f58f9134027903c69681bdd1
+
+# Initial autoformat with isort
+cb7d6947160f5d717edadc487de3c9fa59ff303d
+
+# Initial autoformat with black
+61ea3e06f5da6c92020b1e7bb69fa638bc9ce87e

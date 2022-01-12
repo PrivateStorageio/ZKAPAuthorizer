@@ -47,7 +47,7 @@ class TahoeConfigsTests(TestCase):
         )
         note(config_text)
         config_from_string(
-            tempdir.join(u"tahoe.ini"),
-            u"tub.port",
+            tempdir.join("tahoe.ini"),
+            "tub.port",
             config_text.encode("utf-8"),
         )
