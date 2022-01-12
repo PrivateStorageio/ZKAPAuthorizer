@@ -64,7 +64,7 @@ in
         # the `.post999` looks weird enough that if someone really cares about
         # the version in use they will notice it and go searching for what's
         # going on and discover the real version specified by `src` below.
-        version = "1.17.0.post999";
+        version = "1.17.1.post999";
         # See https://github.com/DavHau/mach-nix/issues/190
         requirementsExtra =
           ''

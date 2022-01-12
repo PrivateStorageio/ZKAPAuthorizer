@@ -61,10 +61,10 @@ from .foolscap import LocalRemote
 from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
     LEASE_INTERVAL,
-    cleanup_storage_server,
     get_passes,
     pass_factory,
     privacypass_passes,
+    reset_storage_server,
     whitebox_write_sparse_share,
     write_toy_shares,
 )
@@ -191,7 +191,7 @@ class ShareTests(TestCase):
         self.spending_recorder.reset()
 
         # And clean out any shares that might confuse things.
-        cleanup_storage_server(self.anonymous_storage_server)
+        reset_storage_server(self.anonymous_storage_server)
 
     def test_get_version(self):
         """
@@ -416,7 +416,6 @@ class ShareTests(TestCase):
             cancel_secret,
             existing_sharenums,
             size,
-            canary=self.canary,
         )
 
         # Let some time pass so leases added after this point will look
@@ -510,7 +509,6 @@ class ShareTests(TestCase):
             cancel_secret,
             sharenums,
             size,
-            canary=self.canary,
         )
 
         self.assertThat(
@@ -550,7 +548,7 @@ class ShareTests(TestCase):
         # Perhaps put some more leases on it.  Leases might impact our
         # ability to determine share data size.
         for renew_secret in leases:
-            self.anonymous_storage_server.remote_add_lease(
+            self.anonymous_storage_server.add_lease(
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -598,7 +596,6 @@ class ShareTests(TestCase):
                 cancel_secret,
                 sharenums,
                 size,
-                canary,
             ),
         )
 
@@ -825,7 +822,6 @@ class ShareTests(TestCase):
             cancel_secret,
             {sharenum},
             size,
-            canary=self.canary,
         )
 
         self.assertThat(

@@ -36,13 +36,17 @@ from .strategies import bytes_for_share  # Not really a strategy...
 LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 
-def cleanup_storage_server(storage_server):
+def reset_storage_server(storage_server):
     """
-    Delete all of the shares held by the given storage server.
+    Restore a storage server to a default state.  This includes
+    deleting all of the shares it holds.
 
     :param allmydata.storage.server.StorageServer storage_server: The storage
         server with some on-disk shares to delete.
     """
+    # A storage server is read-write by default.
+    storage_server.readonly_storage = False
+
     starts = [
         FilePath(storage_server.sharedir),
         FilePath(storage_server.corruption_advisory_dir),
@@ -60,7 +64,6 @@ def write_toy_shares(
     cancel_secret,
     sharenums,
     size,
-    canary,
 ):
     """
     Write some immutable shares to the given storage server.
@@ -71,19 +74,17 @@ def write_toy_shares(
     :param bytes cancel_secret:
     :param set[int] sharenums:
     :param int size:
-    :param IRemoteReference canary:
     """
-    _, allocated = storage_server.remote_allocate_buckets(
+    _, allocated = storage_server.allocate_buckets(
         storage_index,
         renew_secret,
         cancel_secret,
         sharenums,
         size,
-        canary=canary,
     )
     for (sharenum, writer) in allocated.items():
-        writer.remote_write(0, bytes_for_share(sharenum, size))
-        writer.remote_close()
+        writer.write(0, bytes_for_share(sharenum, size))
+        writer.close()
 
 
 def whitebox_write_sparse_share(sharepath, version, size, leases, now):

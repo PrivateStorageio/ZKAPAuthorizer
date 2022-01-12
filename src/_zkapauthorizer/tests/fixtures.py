@@ -28,23 +28,24 @@ from ..controller import DummyRedeemer, PaymentController
 from ..model import VoucherStore, memory_connect, open_and_initialize
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class AnonymousStorageServer(Fixture):
     """
     Supply an instance of allmydata.storage.server.StorageServer which
     implements anonymous access to Tahoe-LAFS storage server functionality.
 
-    :ivar FilePath tempdir: The path to the server's storage on the
-        filesystem.
+    :ivar tempdir: The path to the server's storage on the filesystem.
 
-    :ivar allmydata.storage.server.StorageServer storage_server: The storage
-        server.
+    :ivar storage_server: The protocol-agnostic storage server backend.
 
-    :ivar twisted.internet.task.Clock clock: The ``IReactorTime`` provider to
-        supply to ``StorageServer`` for its time-checking needs.
+    :ivar clock: The ``IReactorTime`` provider to supply to ``StorageServer``
+        for its time-checking needs.
     """
 
-    clock = attr.ib()
+    clock: Clock = attr.ib()
+
+    tempdir: FilePath = attr.ib(default=None)
+    storage_server: StorageServer = attr.ib(default=None)
 
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join(u"storage"))

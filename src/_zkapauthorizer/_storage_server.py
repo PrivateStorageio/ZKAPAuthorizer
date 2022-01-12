@@ -27,12 +27,17 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import attr
-from allmydata.interfaces import RIStorageServer, TestAndWriteVectorsForShares
+from allmydata.interfaces import TestAndWriteVectorsForShares
 from allmydata.storage.common import storage_index_to_dir
-from allmydata.storage.immutable import ShareFile
+from allmydata.storage.immutable import (
+    BucketWriter,
+    FoolscapBucketReader,
+    FoolscapBucketWriter,
+    ShareFile,
+)
 from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.server import StorageServer
@@ -47,6 +52,7 @@ from challenge_bypass_ristretto import (
 )
 from eliot import log_call, start_action
 from foolscap.api import Referenceable
+from foolscap.ipb import IRemoteReference
 from prometheus_client import CollectorRegistry, Histogram
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
@@ -189,7 +195,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     # control it ourselves.
     LEASE_PERIOD = timedelta(days=31)
 
-    _original = attr.ib(validator=provides(RIStorageServer))
+    # A StorageServer instance, but not validated because of the fake used in
+    # the test suite.
+    _original = attr.ib()
+
     _pass_value = pass_value_attribute()
     _signing_key = attr.ib(validator=instance_of(SigningKey))
     _spender = attr.ib(validator=provides(ISpender))
@@ -203,6 +212,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     )
     _public_key = attr.ib(init=False)
     _metric_spending_successes = attr.ib(init=False)
+    _bucket_writer_disconnect_markers: Dict[
+        BucketWriter, Tuple[IRemoteReference, Any]
+    ] = attr.ib(
+        init=False,
+        default=attr.Factory(dict),
+    )
 
     @_public_key.default
     def _get_public_key(self):
@@ -210,6 +225,27 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # in the order the attributes were defined in the class definition,
         # so that `self._signing_key` will be assigned when this runs.
         return PublicKey.from_signing_key(self._signing_key)
+
+    def _bucket_writer_closed(self, bw: BucketWriter):
+        """
+        This is registered as a callback with the storage backend and receives
+        notification when a bucket writer is closed.  It removes the
+        disconnection-based cleanup callback for the given bucket.
+        """
+        # This implementation was originally copied from
+        # allmydata.storage.server.FoolscapStorageServer.  Since we don't use
+        # Tahoe's Foolscap storage server layer we need to do this bucket
+        # writer bookkeeping ourselves.
+        if bw in self._bucket_writer_disconnect_markers:
+            canary, disconnect_marker = self._bucket_writer_disconnect_markers.pop(bw)
+            canary.dontNotifyOnDisconnect(disconnect_marker)
+
+    def __attrs_post_init__(self):
+        """
+        Finish initialization after attrs does its job.  This consists of
+        registering a cleanup handler with the storage backend.
+        """
+        self._original.register_bucket_writer_close_handler(self._bucket_writer_closed)
 
     def _get_spending_histogram_buckets(self):
         """
@@ -253,7 +289,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without pass check to allow clients to learn about our
         version and configuration in case it helps them decide how to behave.
         """
-        return self._original.remote_get_version()
+        return self._original.get_version()
 
     def remote_allocate_buckets(
         self,
@@ -302,7 +338,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             allocated_size,
         )
 
-        alreadygot, bucketwriters = self._original._allocate_buckets(
+        alreadygot, bucketwriters = self._original.allocate_buckets(
             storage_index,
             renew_secret,
             cancel_secret,
@@ -330,7 +366,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # StorageServer.remote_allocate_buckets.
         for bw in bucketwriters.values():
             disconnect_marker = canary.notifyOnDisconnect(bw.disconnected)
-            self._original._bucket_writer_disconnect_markers[bw] = (
+            self._bucket_writer_disconnect_markers[bw] = (
                 canary,
                 disconnect_marker,
             )
@@ -338,14 +374,19 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             self._public_key,
             validation.valid[:spent_passes],
         )
-        return alreadygot, bucketwriters
+        return alreadygot, {
+            k: FoolscapBucketWriter(bw) for (k, bw) in bucketwriters.items()
+        }
 
     def remote_get_buckets(self, storage_index):
         """
         Pass-through without pass check to let clients read immutable shares as
         long as those shares exist.
         """
-        return self._original.remote_get_buckets(storage_index)
+        return {
+            k: FoolscapBucketReader(bucket)
+            for (k, bucket) in self._original.get_buckets(storage_index).items()
+        }
 
     def remote_add_lease(self, passes, storage_index, *a, **kw):
         """
@@ -363,7 +404,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation,
             self._original,
         )
-        result = self._original.remote_add_lease(storage_index, *a, **kw)
+        result = self._original.add_lease(storage_index, *a, **kw)
         self._spender.mark_as_spent(
             self._public_key,
             validation.valid,
@@ -376,7 +417,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients inform us of possible
         issues with the system without incurring any cost to themselves.
         """
-        return self._original.remote_advise_corrupt_share(*a, **kw)
+        return self._original.advise_corrupt_share(*a, **kw)
 
     def remote_share_sizes(self, storage_index_or_slot, sharenums):
         with start_action(
@@ -521,7 +562,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        return self._original.remote_slot_readv(*a, **kw)
+        return self._original.slot_readv(*a, **kw)
 
 
 def check_pass_quantity(pass_value, validation, share_sizes):
