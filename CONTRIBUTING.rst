@@ -49,6 +49,10 @@ To update to the current master@HEAD revision, run:
 
    nix-shell --run 'niv update tahoe-lafs-master --branch master'
 
+We intend for these updates to be performed periodically.
+At the moment, they must be performed manually.
+It might be worthwhile to `automate this process <https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/287>` in the future.
+
 It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
 
 The Nix package depends on a version of Tahoe-LAFS determined by the "tahoe-lafs" niv entry.
