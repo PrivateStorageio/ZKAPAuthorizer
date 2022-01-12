@@ -232,6 +232,10 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         notification when a bucket writer is closed.  It removes the
         disconnection-based cleanup callback for the given bucket.
         """
+        # This implementation was originally copied from
+        # allmydata.storage.server.FoolscapStorageServer.  Since we don't use
+        # Tahoe's Foolscap storage server layer we need to do this bucket
+        # writer bookkeeping ourselves.
         if bw in self._bucket_writer_disconnect_markers:
             canary, disconnect_marker = self._bucket_writer_disconnect_markers.pop(bw)
             canary.dontNotifyOnDisconnect(disconnect_marker)

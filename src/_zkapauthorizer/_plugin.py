@@ -140,8 +140,7 @@ class ZKAPAuthorizer(object):
             registry=registry,
         )
         storage_server = ZKAPAuthorizerStorageServer(
-            # unwrap the Foolscap layer, we'll do it ourselves.
-            anonymous_storage_server._server,
+            anonymous_storage_server,
             pass_value=pass_value,
             signing_key=signing_key,
             spender=spender,
