@@ -50,12 +50,17 @@ To update to the current master@HEAD revision, run:
    nix-shell --run 'niv update tahoe-lafs-master --branch master'
 
 It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
-When feasible we also test against a released version of Tahoe-LAFS.
+
+The Nix package depends on a version of Tahoe-LAFS determined by the "tahoe-lafs" niv entry.
+When feasible this is a released version of Tahoe-LAFS.
 To update to a new release, run:
 
 .. code:: shell
 
    nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
+
+When it is not feasible to use a released version of Tahoe-LAFS,
+niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
 
 .. note::
 
