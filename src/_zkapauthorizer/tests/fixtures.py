@@ -36,7 +36,7 @@ class AnonymousStorageServer(Fixture):
 
     :ivar tempdir: The path to the server's storage on the filesystem.
 
-    :ivar backend: The protocol-agnostic storage server backend.
+    :ivar storage_server: The protocol-agnostic storage server backend.
 
     :ivar clock: The ``IReactorTime`` provider to supply to ``StorageServer``
         for its time-checking needs.
@@ -45,11 +45,11 @@ class AnonymousStorageServer(Fixture):
     clock: Clock = attr.ib()
 
     tempdir: FilePath = attr.ib(default=None)
-    backend: StorageServer = attr.ib(default=None)
+    storage_server: StorageServer = attr.ib(default=None)
 
     def _setUp(self):
         self.tempdir = FilePath(self.useFixture(TempDir()).join("storage"))
-        self.backend = StorageServer(
+        self.storage_server = StorageServer(
             self.tempdir.path,
             b"x" * 20,
             clock=self.clock,

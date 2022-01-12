@@ -36,13 +36,17 @@ from .strategies import bytes_for_share  # Not really a strategy...
 LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 
-def cleanup_storage_server(storage_server):
+def reset_storage_server(storage_server):
     """
-    Delete all of the shares held by the given storage server.
+    Restore a storage server to a default state.  This includes
+    deleting all of the shares it holds.
 
     :param allmydata.storage.server.StorageServer storage_server: The storage
         server with some on-disk shares to delete.
     """
+    # A storage server is read-write by default.
+    storage_server.readonly_storage = False
+
     starts = [
         FilePath(storage_server.sharedir),
         FilePath(storage_server.corruption_advisory_dir),

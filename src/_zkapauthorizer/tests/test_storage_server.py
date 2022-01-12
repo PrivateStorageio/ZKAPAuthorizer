@@ -45,7 +45,7 @@ from ..storage_common import (
 from .common import skipIf
 from .fixtures import AnonymousStorageServer
 from .matchers import matches_spent_passes, raises
-from .storage_common import cleanup_storage_server, get_passes, write_toy_shares
+from .storage_common import get_passes, reset_storage_server, write_toy_shares
 from .strategies import (
     lease_cancel_secrets,
     lease_renew_secrets,
@@ -194,15 +194,15 @@ class PassValidationTests(TestCase):
         # the same time so we can do lease expiration calculations more
         # easily.
         self.clock.advance(time())
-        self.storage = self.useFixture(
+        self.anonymous_storage_server = self.useFixture(
             AnonymousStorageServer(self.clock),
-        )
+        ).storage_server
         self.signing_key = random_signing_key()
         self.public_key_hash = PublicKey.from_signing_key(
             self.signing_key
         ).encode_base64()
         self.storage_server = ZKAPAuthorizerStorageServer(
-            self.storage.backend,
+            self.anonymous_storage_server,
             self.pass_value,
             self.signing_key,
             spender,
@@ -222,10 +222,7 @@ class PassValidationTests(TestCase):
         # Hypothesis and testtools fixtures don't play nicely together in a
         # way that allows us to just move everything from `setUp` into this
         # method.
-        cleanup_storage_server(self.storage.backend)
-        # One of the tests makes the server read-only partway through.  Make
-        # sure that doesn't leak into other examples.
-        self.storage.backend.readonly_storage = False
+        reset_storage_server(self.anonymous_storage_server)
 
         self.spending_recorder.reset()
 
@@ -532,7 +529,7 @@ class PassValidationTests(TestCase):
         )
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.storage.backend,
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -805,7 +802,7 @@ class PassValidationTests(TestCase):
         # the subsequent `allocate_buckets` operation - but of which the
         # client is unaware.
         write_toy_shares(
-            self.storage.backend,
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -875,7 +872,7 @@ class PassValidationTests(TestCase):
     ):
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
-            self.storage.backend,
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -938,7 +935,7 @@ class PassValidationTests(TestCase):
 
         # Put some shares up there to target with the add_lease operation.
         write_toy_shares(
-            self.storage.backend,
+            self.anonymous_storage_server,
             storage_index,
             renew_secret,
             cancel_secret,
@@ -957,7 +954,7 @@ class PassValidationTests(TestCase):
 
         # Turn off space-allocating operations entirely.  Since there will be
         # no space for a new lease, the operation will fail.
-        self.storage.backend.readonly_storage = True
+        self.anonymous_storage_server.readonly_storage = True
 
         try:
             self.storage_server.doRemoteCall(
