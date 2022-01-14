@@ -31,9 +31,9 @@ Python Dependencies
 ...................
 
 We use `mach-nix <https://github.com/DavHau/mach-nix/>`_ to build python packages.
-It uses a snapshot of pypi to expose python dependencies to nix,
+It uses a snapshot of PyPI to expose python dependencies to nix,
 thus our python depedencies (on nix) are automatically pinned.
-To update the pypy snapshot (and thus our python dependencies), run
+To update the PyPI snapshot (and thus our python dependencies), run
 
 .. code:: shell
 
@@ -42,14 +42,38 @@ To update the pypy snapshot (and thus our python dependencies), run
 tahoe-lafs
 ..........
 
-We depend on pinned commit of tahoe-lafs.
-To update to the latest commit, run
+ZKAPAuthorizer declares a dependency on Tahoe-LAFS with a narrow version range.
+This means that Tahoe-LAFS will be installed when ZKAPAuthorizer is installed.
+It also means that ZKAPAuthorizer exerts a great deal of control over the version of Tahoe-LAFS chosen.
+
+When installing using native Python packaging mechanisms
+(for example, pip)
+the relevant Tahoe-LAFS dependency declaration is in ``setup.cfg``.
+See the comments there about the narrow version constraint used.
+
+When installing the Nix package the version of Tahoe-LAFS is determined by the "tahoe-lafs" entry in the niv-managed ``nix/sources.json``.
+When feasible this is a released version of Tahoe-LAFS.
+To update to a new release, run:
 
 .. code:: shell
 
-   nix-shell --run 'niv update tahoe-lafs --branch master'
+   nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
 
-It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
+When it is not feasible to use a released version of Tahoe-LAFS,
+niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
+
+It is also possible to pass a revision of ``pull/<pr-number>/head`` to test against a specific PR.
+
+We test against a pinned commit of Tahoe-LAFS master.
+To update to the current master@HEAD revision, run:
+
+.. code:: shell
+
+   nix-shell --run 'niv update tahoe-lafs-master --branch master'
+
+We intend for these updates to be performed periodically.
+At the moment, they must be performed manually.
+It might be worthwhile to `automate this process <https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/287>` in the future.
 
 .. note::
 
@@ -57,7 +81,7 @@ It is also possible to pass ``pull/<pr-number>/head`` to test against a specific
    the packaging in ``default.nix`` includes a fake version number.
    This will need to be update manually at least when the minor version of tahoe-lafs changes.
 
-If you want to test multiple versions, you can add an additional source, pointing at other version
+If you want to test additional versions, you can add an additional source, pointing at other version.
 
 .. code:: shell
 
