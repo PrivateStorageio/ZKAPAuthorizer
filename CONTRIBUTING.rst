@@ -62,6 +62,8 @@ To update to a new release, run:
 When it is not feasible to use a released version of Tahoe-LAFS,
 niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
 
+It is also possible to pass a revision of ``pull/<pr-number>/head`` to test against a specific PR.
+
 We test against a pinned commit of Tahoe-LAFS master.
 To update to the current master@HEAD revision, run:
 
@@ -72,8 +74,6 @@ To update to the current master@HEAD revision, run:
 We intend for these updates to be performed periodically.
 At the moment, they must be performed manually.
 It might be worthwhile to `automate this process <https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/287>` in the future.
-
-It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
 
 .. note::
 
