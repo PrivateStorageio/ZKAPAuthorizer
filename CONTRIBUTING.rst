@@ -42,6 +42,26 @@ To update the PyPI snapshot (and thus our python dependencies), run
 tahoe-lafs
 ..........
 
+ZKAPAuthorizer declares a dependency on Tahoe-LAFS with a narrow version range.
+This means that Tahoe-LAFS will be installed when ZKAPAuthorizer is installed.
+It also means that ZKAPAuthorizer exerts a great deal of control over the version of Tahoe-LAFS chosen.
+
+When installing using native Python packaging mechanisms
+(for example, pip)
+the relevant Tahoe-LAFS dependency declaration is in ``setup.cfg``.
+See the comments there about the narrow version constraint used.
+
+When installing the Nix package the version of Tahoe-LAFS is determined by the "tahoe-lafs" entry in the niv-managed ``nix/sources.json``.
+When feasible this is a released version of Tahoe-LAFS.
+To update to a new release, run:
+
+.. code:: shell
+
+   nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
+
+When it is not feasible to use a released version of Tahoe-LAFS,
+niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
+
 We test against a pinned commit of Tahoe-LAFS master.
 To update to the current master@HEAD revision, run:
 
@@ -54,17 +74,6 @@ At the moment, they must be performed manually.
 It might be worthwhile to `automate this process <https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/287>` in the future.
 
 It is also possible to pass ``pull/<pr-number>/head`` to test against a specific PR.
-
-The Nix package depends on a version of Tahoe-LAFS determined by the "tahoe-lafs" niv entry.
-When feasible this is a released version of Tahoe-LAFS.
-To update to a new release, run:
-
-.. code:: shell
-
-   nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
-
-When it is not feasible to use a released version of Tahoe-LAFS,
-niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
 
 .. note::
 
