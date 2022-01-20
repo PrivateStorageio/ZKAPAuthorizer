@@ -145,7 +145,7 @@ ZKAPAuthorizer itself could write a log of all SQL it executes against the SQLit
 This log could be uploaded to the backup location.
 This log will be smaller than new copies of the database and save on bandwidth and storage.
 
-This non-trivial implementation work in ZKAPAuthorizer to capture the stream of SQL statements
+This involves non-trivial implementation work in ZKAPAuthorizer to capture the stream of SQL statements
 (including values of parameters).
 It is likely also sensitive to changes made outside of the control of the ZKAPAuthorizer implementation -
 though less sensitive than the WAL-based approach.
