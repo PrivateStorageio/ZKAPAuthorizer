@@ -181,6 +181,16 @@ Detailed Implementation Design
 * how externally-triggered system events (e.g. sudden reboot; network congestion) will affect the system
 * scalability and performance
 
+Summary
+~~~~~~~
+
+
+
+External Interfaces
+~~~~~~~~~~~~~~~~~~~
+
+
+
 Data Integrity
 ~~~~~~~~~~~~~~
 
