@@ -31,6 +31,7 @@ in
       # This is kind of round-about but it seems to be the best way to
       # convince mach-nix to use a specific package for a specific dependency.
       tahoe-lafs = "nixpkgs";
+      zkap-spending-service = "nixpkgs";
 
       # Make sure we use an sdist of zfec so that our patch to zfec's setup.py
       # to remove its argparse dependency can be applied.  If we get a wheel,

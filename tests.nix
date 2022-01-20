@@ -8,6 +8,7 @@ let
     "testSuite"
     "trialArgs"
   ];
+  sources = import nix/sources.nix;
 in
 { privatestorage ? import ./. (fixArgs args)
 , hypothesisProfile ? null
@@ -26,11 +27,22 @@ let
     extraTrialArgs = builtins.concatStringsSep " " trialArgs';
     testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
 
+    zss = import sources.zkap-spending-service {
+      inherit pkgs mach-nix;
+    };
+
     python = mach-nix.mkPython {
       inherit (zkapauthorizer.meta.mach-nix) python providers;
       requirements =
         builtins.readFile ./requirements/test.in;
       packagesExtra = [ zkapauthorizer ];
+      overridesPre = [
+        (
+          self: super: {
+            zkap-spending-service = zss;
+          }
+        )
+      ];
       _.hypothesis.postUnpack = "";
     };
 

@@ -76,5 +76,13 @@
         "type": "tarball",
         "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/5e8cc06e93e7b23dae0f1c3e0bc158b49a9e14e6.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "zkap-spending-service": {
+        "owner": "tomprince",
+        "rev": "c959529a7d416e5c943614dc47a97ad770a8cd46",
+        "sha256": "14311w257p2dcjc7dam8fqam2jr73ywfm7xzgc6bnbjqv0i0d3z3",
+        "type": "tarball",
+        "url": "https://whetstone.private.storage/tomprince/zkap-spending-service/-/archive/c959529a7d416e5c943614dc47a97ad770a8cd46/zkap-spending-service.zip",
+        "url_template": "https://whetstone.private.storage/<owner>/zkap-spending-service/-/archive/<rev>/zkap-spending-service.zip"
     }
 }

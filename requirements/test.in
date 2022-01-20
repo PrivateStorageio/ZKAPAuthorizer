@@ -4,6 +4,7 @@ testtools
 testresources
 hypothesis
 openapi_spec_validator
+zkap-spending-service@https://whetstone.private.storage/tomprince/zkap-spending-service/-/archive/c959529a7d416e5c943614dc47a97ad770a8cd46/zkap-spending-service.zip
 
 # Lint requirements
 # Pin these narrowly so that lint rules only change when we specifically

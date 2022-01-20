@@ -22,6 +22,8 @@ import attr
 from allmydata.storage.server import StorageServer
 from attrs import define, field
 from fixtures import Fixture, TempDir
+from hyperlink import URL
+from prometheus_client import CollectorRegistry
 from testtools import TestCase
 from treq.client import HTTPClient
 from twisted.internet.defer import Deferred, inlineCallbacks
@@ -29,9 +31,11 @@ from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import Clock, deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
+from zss.testing import InMemoryBackend, make_in_memory_client
 
 from ..controller import DummyRedeemer, PaymentController
 from ..model import VoucherStore, memory_connect, open_and_initialize
+from ..server.spending import ISpender, Spender
 
 
 @attr.s(auto_attribs=True)
@@ -186,3 +190,15 @@ class Treq(Fixture):
         # reactor) seems to be enough.  If it's not, sorry.
         yield deferLater(self.reactor, 0, lambda: None)
         yield deferLater(self.reactor, 0, lambda: None)
+
+
+def make_in_memory_spender(
+    registry: CollectorRegistry = None,
+) -> (InMemoryBackend, ISpender):
+
+    backend, treq = make_in_memory_client()
+    return backend, Spender(
+        treq,
+        URL.from_text("http://spender.invalid/"),
+        CollectorRegistry(),
+    )

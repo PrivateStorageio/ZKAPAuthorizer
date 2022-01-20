@@ -49,14 +49,13 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
 )
 from ..foolscap import ShareStat
-from ..server.spending import RecordingSpender
 from ..storage_common import (
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
 )
 from .common import skipIf
-from .fixtures import AnonymousStorageServer
+from .fixtures import AnonymousStorageServer, make_in_memory_spender
 from .foolscap import LocalRemote
 from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
@@ -158,7 +157,7 @@ class ShareTests(TestCase):
             AnonymousStorageServer(self.clock),
         ).storage_server
 
-        self.spending_recorder, spender = RecordingSpender.make()
+        self.spending_recorder, spender = make_in_memory_spender()
         self.server = ZKAPAuthorizerStorageServer(
             self.anonymous_storage_server,
             self.pass_value,

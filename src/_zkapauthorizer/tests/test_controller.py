@@ -30,6 +30,7 @@ from challenge_bypass_ristretto import (
     VerificationSignature,
     random_signing_key,
 )
+from hyperlink import URL
 from hypothesis import assume, given
 from hypothesis.strategies import datetimes, integers, lists, randoms, sampled_from
 from testtools import TestCase
@@ -49,7 +50,6 @@ from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
 from twisted.internet.defer import fail, succeed
 from twisted.internet.task import Clock
-from twisted.python.url import URL
 from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IAgent

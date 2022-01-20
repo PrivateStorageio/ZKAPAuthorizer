@@ -32,7 +32,6 @@ from twisted.python.runtime import platform
 
 from .._storage_server import NewLengthRejected, _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
-from ..server.spending import RecordingSpender
 from ..storage_common import (
     add_lease_message,
     allocate_buckets_message,
@@ -43,7 +42,7 @@ from ..storage_common import (
     summarize,
 )
 from .common import skipIf
-from .fixtures import AnonymousStorageServer
+from .fixtures import AnonymousStorageServer, make_in_memory_spender
 from .matchers import matches_spent_passes, raises
 from .storage_common import get_passes, reset_storage_server, write_toy_shares
 from .strategies import (
@@ -189,7 +188,7 @@ class PassValidationTests(TestCase):
     def setUp(self):
         super(PassValidationTests, self).setUp()
         self.clock = Clock()
-        self.spending_recorder, spender = RecordingSpender.make()
+        self.spending_recorder, spender = make_in_memory_spender()
         # anonymous_storage_server uses time.time() so get our Clock close to
         # the same time so we can do lease expiration calculations more
         # easily.

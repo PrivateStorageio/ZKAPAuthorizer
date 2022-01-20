@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 """
 Testtools matchers useful for the test suite.
 """
@@ -26,8 +28,11 @@ __all__ = [
 ]
 
 from datetime import datetime
+from typing import Any
 
 import attr
+import zss.store
+from prometheus_client import CollectorRegistry
 from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
@@ -48,7 +53,6 @@ from testtools.twistedsupport import succeeded
 from treq import content
 
 from ..model import Pass
-from ..server.spending import _SpendingData
 from ._exception import raises
 
 
@@ -212,14 +216,20 @@ def matches_response(
     )
 
 
-def matches_spent_passes(public_key_hash, spent_passes):
-    # type: (bytes, list[Pass]) -> Matcher[_SpendingData]
+def matches_spent_passes(
+    public_key_hash: bytes, spent_passes: list[Pass]
+) -> Matcher[zss.store.InMemoryBackend]:
     """
     Returns a matcher for _SpendingData that checks whether the
     spent pass match the given public key and passes.
     """
     return AfterPreprocessing(
-        lambda spending_recorder: spending_recorder.spent_tokens,
+        lambda spending_recorder: {
+            public_key.encode("ascii"): [
+                preimage.encode("ascii") for preimage in token_preimages
+            ]
+            for public_key, token_preimages in spending_recorder.spent_tokens.items()
+        },
         MatchesDict(
             {
                 public_key_hash: MatchesSetwise(
@@ -228,3 +238,28 @@ def matches_spent_passes(public_key_hash, spent_passes):
             }
         ),
     )
+
+
+def matches_metrics(
+    expected: dict[tuple[type, str], Any],
+) -> Matcher[CollectorRegistry]:
+    """
+    Returns a matcher for :py:`CollectorRegistry`, that checks whether the specified
+    metrics have the given values.
+
+    :param expected: Dictionary that maps tuples of attrs-class and :py:`_zkapauthorizer.server.spending.counter_attr` names to the expected value of the given metric.
+    """
+    expected = {
+        (attr.fields_dict(cls)[attrib].metadata["metric-name"], ()): value
+        for (cls, attrib), value in expected.items()
+    }
+
+    def summarize(registry: CollectorRegistry):
+        metrics = list(registry.collect())
+        return {
+            (sample.name, tuple(sample.labels.items())): sample.value
+            for metric in metrics
+            for sample in metric.samples
+        }
+
+    return AfterPreprocessing(summarize, ContainsDict(expected))
