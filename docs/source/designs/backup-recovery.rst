@@ -10,8 +10,9 @@ ZKAP Database Backup / Recovery
 **Contacts:** Jean-Paul Calderone
 **Date:** 2021-11-08
 
-This is a design for a system in which *another component* can perform consistent backups of the internal ZKAPAuthorizer database which can be used to recover that database in the event primary storage of that database is lost.
-The system does *not* allow ZKAPAuthorizer to maintain backups *on its own*.
+This is a design for a system in ZKAPAuthorizer continuously maintains a remote backof of its own internal state.
+These backups are made onto the storage servers the Tahoe-LAFS node into which ZKAPAuthorizer is loaded is connected to.
+These backups can be used to recover that database in the event primary storage of that database is lost.
 
 Rationale
 ---------
