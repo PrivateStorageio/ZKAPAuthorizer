@@ -57,6 +57,7 @@ so that I can use all of the storage that I paid for before I lost my device.
   * At least 500 GiB-months of unused storage-time can be recovered.
   * At least 50 GiB-months of error-state ZKAPs can be recovered.
   * At least 100 vouchers can be recovered.
+  * Recovery using ZKAPAuthorizer with schema version N can be performed with a backup at schema version <= N.
 
 Backed Up ZKAPs
 ~~~~~~~~~~~~~~~
@@ -73,6 +74,8 @@ so that I can use the system without always worrying about whether I have protec
   * The backup workflow is integrated into the backup/recovery workflow for all other grid-related secrets.
 
     * In particular, no extra steps are required for ZKAP or voucher backup.
+
+  * Changes to a database at schema version N can be backed up even when the backup contains state from schema version <= N.
 
 *Gather Feedback*
 -----------------
@@ -122,6 +125,18 @@ The set of files will be smaller than new copies of the database and save on ban
 
 This requires making sure to use the database in the correct mode.
 It is likely also sensitive to changes made outside of the control of the ZKAPAuthorizer implementation.
+
+Application-Specific Change Journal
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ZKAPAuthorizer itself could write a log in an application-specific format recording all changes it makes to the database.
+This log could be uploaded to the backup location or executed against data stored in the backup location.
+This log will be smaller than new copies of the database and save on bandwidth and storage.
+
+This involves non-trivial implementation work in ZKAPAuthorizer to capture all changes and record them in such a log.
+It also requires logic to play back the log to recover the state it represents.
+It may also be sensitive to changes made outside of the control of the ZKAPAuthorizer implementation -
+though with enough effort it can be made less sensitive than the other log playback based approaches.
 
 Application SQL Log
 ~~~~~~~~~~~~~~~~~~~
