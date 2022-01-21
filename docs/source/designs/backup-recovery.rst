@@ -106,7 +106,7 @@ This requires a large amount of bandwidth to upload full copies of the database 
 The database occupies about 5 MiB per 10,000 ZKAPs.
 
 Copying "Sessions"
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 SQLite3 has a "session" system which can be used to capture all changes made to a database.
 All changes could be captured this way and then uploaded to the backup location.
