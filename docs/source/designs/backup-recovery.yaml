@@ -1,0 +1,72 @@
+openapi: "3.1.0"
+info:
+  title: "Backup / Recovery"
+  description: |
+    This API allows backup and recovery of ZKAPAuthorizer internal state.
+  version: "1.0.0"
+paths:
+  /storage-plugins/privatestorageio-zkapauthz-v1/recover:
+    post:
+      description: |
+        Recover ZKAPAuthorizer state from a previously configured backup.
+        This is only valid when ZKAPAuthorizer has no local state yet.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                recovery-capability:
+                  type: "string"
+                  description: |
+                    The Tahoe-LAFS read-only capability for the recovery data.
+                    This is a capability previously returned by the backup
+                    endpoint.
+      responses:
+        200:
+          description: |
+            Recovery from the backup has been completed.
+          content:
+            application/json:
+              schema:
+                type: "object"
+                property: {}
+
+  /storage-plugins/privatestorageio-zkapauthz-v1/backup:
+    post:
+      description: |
+        Configure ZKAPAuthorizer to maintain an on-grid backup of its state or
+        return the existing configuration details if it has already been
+        configured to do so.
+      responses:
+        201:
+          description: |
+            A new backup has just been configured.  Details about that backup
+            will be returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery-capability:
+                    type: "string"
+                    description: |
+                      The Tahoe-LAFS read-only capability for the recovery
+                      data.  This is the capability which can be submitted in
+                      order to initiate a recovery from the backup.
+
+        200:
+          description: |
+            A backup has already been configured.  Details about that backup
+            will be returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery-capability:
+                    type: "string"
+                    description: |
+                      The Tahoe-LAFS read-only capability for the recovery
+                      data.  This is the capability which can be submitted in
+                      order to initiate a recovery from the backup.

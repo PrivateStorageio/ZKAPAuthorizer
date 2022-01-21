@@ -17,10 +17,12 @@ let
     ];
     requirements =
       ''
+      ${builtins.readFile ./docs/requirements.txt}
       ${builtins.readFile ./requirements/test.in}
       ${zkapauthorizer.requirements}
       '';
   };
+
 in
 pkgs.mkShell {
   # Avoid leaving .pyc all over the source tree when manually triggering tests
