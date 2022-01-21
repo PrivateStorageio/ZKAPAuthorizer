@@ -184,7 +184,23 @@ Detailed Implementation Design
 Summary
 ~~~~~~~
 
+Backup
+``````
 
+Significant state-changing operations will be recorded in the SQLite3 database.
+As quickly as possible entries from the in-database recording will be serialized to an application-specific format and appended to the on-grid recording,
+represented as a mutable object.
+As an optimization,
+when the recording grows large enough,
+a snapshot of the SQLite3 database will be uploaded to the grid and the on-grid recording will be cleared.
+
+Recovery
+````````
+
+The SQLite3 database snapshot is downloaded from the grid.
+The on-grid recording is downloaded and state changes are executed against that database.
+After the recording has been fully executed the database state has been recovered.
+Backup operations resume as usual from this point using the existing on-grid state.
 
 External Interfaces
 ~~~~~~~~~~~~~~~~~~~
