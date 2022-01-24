@@ -8,7 +8,6 @@ ZKAP Database Backup / Recovery
 *Delete the bits in italics*
 
 **Contacts:** Jean-Paul Calderone
-**Date:** 2021-11-08
 
 This is a design for a system in ZKAPAuthorizer continuously maintains a remote backof of its own internal state.
 These backups are made onto the storage servers the Tahoe-LAFS node into which ZKAPAuthorizer is loaded is connected to.
@@ -123,8 +122,9 @@ SQLite3 has a (W)rite (A)head (L)og mode where it writes out all database change
 All changes could be captured this way and then uploaded to the backup location.
 The set of files will be smaller than new copies of the database and save on bandwidth and storage.
 
-This requires making sure to use the database in the correct mode.
-It is likely also sensitive to changes made outside of the control of the ZKAPAuthorizer implementation.
+This idea is implemented by https://litestream.io/ as a stand-alone process which supports an SFTP server as a backend.
+A Tahoe-LAFS client node can operate as this SFTP server
+(though ours currently does not).
 
 Application-Specific Change Journal
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
