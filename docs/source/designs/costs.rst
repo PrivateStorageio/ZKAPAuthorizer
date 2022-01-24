@@ -6,7 +6,7 @@ It overlays its own protocol on the Tahoe-LAFS storage protocol which accepts ZK
 The underlying storage operations are only allowed when the supplied payment covers the cost.
 
 Storage-Time
-============
+````````````
 
 Storage servers incur a storage cost over time to provide service to storage clients.
 A storage server must hold ciphertext from the time it is uploaded until the last time a client needs to download it.
