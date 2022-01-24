@@ -1,9 +1,11 @@
-openapi: "3.1.0"
+openapi: "3.0.0"
+
 info:
   title: "Backup / Recovery"
   description: >-
     This API allows backup and recovery of ZKAPAuthorizer internal state.
   version: "1.0.0"
+
 paths:
   /storage-plugins/privatestorageio-zkapauthz-v1/recover:
     post:
@@ -14,7 +16,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/definitions/BackupConfiguration"
+              properties:
+                recovery-capability:
+                  type: "string"
+                  description: >-
+                    The Tahoe-LAFS read-only capability for the recovery data.
+                    This is the capability which can be submitted in order to
+                    initiate a recovery from the backup.
       responses:
         "500":
           description: >-
@@ -22,7 +30,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ErrorResponse"
+                $ref: "#/components/schemas/Error"
 
         "404":
           description: >-
@@ -31,7 +39,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/definitions/ErrorResponse"
+                $ref: "#/components/schemas/Error"
 
         "200":
           description: >-
@@ -56,7 +64,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/definitions/BackupConfiguration"
+                $ref: "#/components/schemas/BackupConfiguration"
 
         200:
           description: |
@@ -65,24 +73,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/definitions/BackupConfiguration"
+                $ref: "#/components/schemas/BackupConfiguration"
 
-definitions:
-  BackupConfiguration:
-    type: "object"
-    properties:
-      recovery-capability:
-        type: "string"
-        description: >-
-          The Tahoe-LAFS read-only capability for the recovery data.  This is
-          the capability which can be submitted in order to initiate a
-          recovery from the backup.
+components:
+  schemas:
+    Error:
+      type: "object"
+      properties:
+        details:
+          type: "string"
+          description: >-
+            A free-form text field which may give further details about
+            the failure.
 
-  ErrorResponse:
-    type: "object"
-    properties:
-      details:
-        type: "string"
-        description: >-
-          A free-form text field which may give further details about the
-          failure.
+    BackupConfiguration:
+      type: "object"
+      properties:
+        recovery-capability:
+          type: "string"
+          description: >-
+            The Tahoe-LAFS read-only capability for the recovery data.  This
+            is the capability which can be submitted in order to initiate a
+            recovery from the backup.
+
+  responses:
+    ErrorResponse:
+      description: >-
+        Something broken.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
