@@ -43,6 +43,8 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
+from openapi_spec_validator import validate_spec
+from openapi_spec_validator.readers import read_from_filename
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -66,6 +68,7 @@ from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTH
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource, getChildForRequest
 
+from .. import __file__ as package_init_file
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
@@ -283,6 +286,20 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     FilePath(basedir).child("private").makedirs()
     config._basedir = basedir
     config.write_private_config("api_auth_token", api_auth_token)
+
+
+class OpenAPITests(TestCase):
+    """
+    Tests for the OpenAPI specification for the HTTP API.
+    """
+    def test_backup_recovery_valid(self):
+        """
+        The specification document is valid OpenAPI 3.0.
+        """
+        spec_path = FilePath(package_init_file).sibling("backup-recovery.yaml")
+        spec_dict, spec_url = read_from_filename(spec_path.path)
+        # If no exception is raised then the spec is valid.
+        validate_spec(spec_dict)
 
 
 class FromConfigurationTests(TestCase):

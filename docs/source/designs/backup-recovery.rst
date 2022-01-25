@@ -205,7 +205,7 @@ Backup operations resume as usual from this point using the existing on-grid sta
 External Interfaces
 ~~~~~~~~~~~~~~~~~~~
 
-.. openapi:: ./backup-recovery.yaml
+See the `OpenAPI specification <backup-recovery-openapi.html>`_.
 
 Data Integrity
 ~~~~~~~~~~~~~~

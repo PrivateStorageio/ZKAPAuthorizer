@@ -51,6 +51,19 @@ paths:
                 properties: {}
 
   /storage-plugins/privatestorageio-zkapauthz-v1/backup:
+    get:
+      description: >-
+        Retrieve information about the backup configuration and state of this
+        node.
+      responses:
+        200:
+          description: >-
+            Information about backup configuration is available and included
+            in the response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupConfiguration"
     post:
       description: |
         Configure ZKAPAuthorizer to maintain an on-grid backup of its state or
@@ -95,6 +108,8 @@ components:
             The Tahoe-LAFS read-only capability for the recovery data.  This
             is the capability which can be submitted in order to initiate a
             recovery from the backup.
+
+
 
   responses:
     ErrorResponse:
