@@ -174,9 +174,63 @@ def with_cursor(f):
         with self._connection:
             cursor = self._connection.cursor()
             cursor.execute("BEGIN IMMEDIATE TRANSACTION")
-            return f(self, cursor, *a, **kw)
+            statements = []
+            result = f(self, add_application_logging(cursor, statements), *a, **kw)
+            write_recorded_statements(cursor, statements)
+            return result
 
     return with_cursor
+
+def sqlquote(value):
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value
+    if isinstance(value, None):
+        return "NULL"
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+
+def write_recorded_statements(cursor, statements):
+    for (sql, args) in statements:
+        # sql="INSERT INTO foo VALUES (?, ?)" args=(1, 2)
+        # sql="INSERT INTO foo VALUES (1, 2)" args=()
+        dump_compat_string = sql.replace("?", "{}").format(*(
+            sqlquote(arg)
+            for arg
+            in args
+        ))
+        cursor.execute("INSERT INTO [event-stream] (?)", (dump_compat_string,))
+
+# TODO
+#   filter out reads
+#   build the recovery system
+#     * download the database snapshot
+#     * download the event-stream
+#     * apply the event stream starting from the right place
+#   implement local [event-stream] pruning so database doesn't grow without bounds
+#   add sequence numbers or something so you know where you are in [event-stream] for certain operations
+#   schedule [event-stream] uploads
+#   add automated tests
+#   as an optimization:
+#     implement initial database snapshot and updates to that
+#     * take a write lock
+#     * .dump the database w/o the [event-stream] table
+#     * upload the copy to the grid
+#     * repeat as desired (eg when size of event stream >> size of database snapshot)
+
+# Can we be `.dump` compatible?
+#  - Python API to format a SQL string and args as just a SQL string
+#    -
+#  - Python API to dump the database?
+#    - conn.iterdump()
+
+def add_application_logging(cursor, statements):
+    class _Cursor(object):
+        def executemany(self, sql, args):
+            statements.append((sql, args))
+            return cursor.executemany(sql, args)
+    return _Cursor()
 
 
 def memory_connect(path, *a, **kw):
