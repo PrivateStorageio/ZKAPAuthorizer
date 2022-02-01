@@ -72,7 +72,8 @@ in
           pyrsistent
           configparser
           eliot
-          foolscap >= 21.7.0
+          foolscap
+          collections-extended >= 2.0.2
 
           # undetected cryptography build dependency
           # https://github.com/DavHau/mach-nix/issues/305
