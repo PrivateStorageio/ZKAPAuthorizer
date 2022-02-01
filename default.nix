@@ -12,49 +12,49 @@ in
   let
     lib = pkgs.lib;
     providers = {
-      _default = "sdist,nixpkgs,wheel";
+      # It is convenient to get wheels since they require the least additional
+      # processing before installation.  Some packages do not have wheels on
+      # PyPI, or they have binary wheels with a platform tag that's not
+      # compatible with nixpkgs Python's platform tag (rendering them
+      # unusable), so we will also allow building from sdist.
+      #
+      # We generally don't take things from nixpkgs because when the version
+      # required does not match exactly the version in nixpkgs, that source
+      # has the greatest chance of failure due to skew between
+      # packaging-related definitions in the version in nixpkgs vs the
+      # different version we get from elsewhere.
+      _default = "wheel,sdist";
 
-      # mach-nix doesn't provide a good way to depend on mach-nix packages,
-      # so we get it as a nixpkgs dependency from an overlay. See below for
-      # details.
+      # However, we specifically want to be able to get unreleased versions of
+      # tahoe-lafs so we put our own package of that into nixpkgs and then
+      # require that mach-nix satisfy a tahoe-lafs dependency from there.
+      # This is kind of round-about but it seems to be the best way to
+      # convince mach-nix to use a specific package for a specific dependency.
       tahoe-lafs = "nixpkgs";
-      # not packaged in nixpkgs at all, we can use the binary wheel from
-      # pypi though.
-      python-challenge-bypass-ristretto = "wheel";
-      # Pure python packages that don't build correctly from sdists
-      # - patches in nixpkgs that don't apply
-      boltons = "wheel";
-      chardet = "wheel";
-      urllib3 = "wheel";
-      # - incorrectly detected dependencies due to pbr
-      fixtures = "wheel";
-      testtools = "wheel";
-      traceback2 = "wheel";
-      # - Incorrectly merged extras - https://github.com/DavHau/mach-nix/pull/334
-      tqdm = "wheel";
 
-      # The version of Klein we get doesn't need / can't have the patch that
-      # comes from the nixpkgs derivation mach-nix picks up from 21.05.
-      klein = "wheel";
-
-      # - has an undetected poetry dependency and when trying to work around
-      #   this another way, dependencies have undetected dependencies, easier
-      #   to just use the wheel.
-      collections-extended = "wheel";
-      isort = "wheel";
-
-      # The sdists for these packages have a different source/directory layout
-      # than the github archive the nixpkgs derivations expects to operate on
-      # so the sdists provider fails to build them.
-      tomli = "wheel";
-      hypothesis = "wheel";
+      # Make sure we use an sdist of zfec so that our patch to zfec's setup.py
+      # to remove its argparse dependency can be applied.  If we get a wheel,
+      # it is too late to fix that (though I suppose we could fix the metadata
+      # in t he wheel if we really wanted to).
+      zfec = "sdist";
     };
+
+    # Define some fixes to the packaging / build process of some of the
+    # dependencies.  These need to be added to each derivation that might
+    # depend on the relevant packages.
+    dependency-fixes = {
+      _.zfec.patches = [
+        (builtins.fetchurl https://github.com/tahoe-lafs/zfec/commit/c3e736a72cccf44b8e1fb7d6c276400204c6bc1e.patch)
+      ];
+    };
+
   in
     rec {
       inherit pkgs mach-nix;
 
       tahoe-lafs = mach-nix.buildPythonPackage rec {
         inherit python providers;
+        inherit (dependency-fixes) _;
         name = "tahoe-lafs";
         # We add `.post999` here so that we don't accidentally *exactly* match
         # the upstream Tahoe-LAFS version.  This avoids the misleading
@@ -69,7 +69,7 @@ in
         requirementsExtra =
           ''
           # See https://github.com/DavHau/mach-nix/issues/190
-          pyrsistent < 0.17
+          pyrsistent
           configparser
           eliot
           foolscap >= 21.7.0
@@ -93,6 +93,7 @@ in
       };
       zkapauthorizer = mach-nix.buildPythonApplication rec {
         inherit python providers;
+        inherit (dependency-fixes) _;
         src = lib.cleanSource ./.;
         # mach-nix does not provide a way to specify dependencies on other
         # mach-nix packages, that incorporates the requirements and overlays
