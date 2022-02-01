@@ -71,10 +71,10 @@
         "homepage": "https://tahoe-lafs.org/",
         "owner": "tahoe-lafs",
         "repo": "tahoe-lafs",
-        "rev": "766a53b5208c03c45ca0a98e97eee76870276aa1",
-        "sha256": "16mvh5ypgv9a5vhjnc78jjf4v5yzyyz19af2vixrc4zqb0ikxrxa",
+        "rev": "5e8cc06e93e7b23dae0f1c3e0bc158b49a9e14e6",
+        "sha256": "0lkdchnjr9nzpqsr0vphgx7ihn2ilvayi4almnlmv0n0hmgjrgjr",
         "type": "tarball",
-        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/766a53b5208c03c45ca0a98e97eee76870276aa1.tar.gz",
+        "url": "https://github.com/tahoe-lafs/tahoe-lafs/archive/5e8cc06e93e7b23dae0f1c3e0bc158b49a9e14e6.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
