@@ -222,7 +222,7 @@ A replica consists of the following pieces of state:
 
    A snapshot the minimal sequence of SQL statements
    (with arguments embedded)
-   which will re-create the database from which it was created.
+   which will re-create the database from which it was created [10]_.
    A snapshot can be produced using the ``iterdump`` feature of the Python SQLite3 module.
 
 #. an event stream
@@ -252,6 +252,11 @@ The event stream is represented in the local database in a new table::
   );
 
 Arguments are substituted into the statement so that they match the form of statements generated during the *snapshot* phase.
+
+.. [10] Rows in the ``[event-stream]`` table are always excluded from the snapshot.
+	They are not needed for recovery.
+	The state they represent is always reflected elsewhere in the database.
+	The DDL statements for ``[event-stream]`` *are* included.
 
 Replication
 ~~~~~~~~~~~
