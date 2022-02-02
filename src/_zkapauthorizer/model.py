@@ -439,6 +439,13 @@ class VoucherStore(object):
                 for token in unblinded_tokens
             ),
         )
+        # Clean up the no-longer-needed random tokens.
+        cursor.executemany(
+            """
+            DELETE FROM [tokens] WHERE [voucher] = ? AND [redemption-group] = ?
+            """,
+            (voucher, group_id),
+        )
 
     @with_cursor
     def mark_voucher_double_spent(self, cursor, voucher):
