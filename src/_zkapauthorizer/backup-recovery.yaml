@@ -19,13 +19,8 @@ paths:
         content:
           application/json:
             schema:
-              properties:
-                recovery-capability:
-                  type: "string"
-                  description: >-
-                    The Tahoe-LAFS read-only capability for the recovery data.
-                    This is the capability which can be submitted in order to
-                    initiate a recovery from the replica.
+              "$ref": "/components/schemas/ReplicaConfiguration"
+
       responses:
         "500": # INTERNAL SERVER ERROR
           description: >-

@@ -296,7 +296,45 @@ The recovery process is as follows:
 External Interfaces
 -------------------
 
+Specification
+~~~~~~~~~~~~~
+
 See the `OpenAPI specification <backup-recovery-openapi.html>`_.
+
+Sample Sessions
+~~~~~~~~~~~~~~~
+
+The expected interaction pattern involves two API calls.
+
+#. Early in the Tahoe-LAFS client node setup/configuration process,
+   configure replication:
+
+   .. code-block:: html
+
+      POST /storage-plugins/privatestorageio-zkapauthz-v1/replicate
+
+      201 Created
+      Content-Type: application/json
+
+      {"recovery-capability": "URI:DIR-RO:xxxx"}
+
+#. After losing the Tahoe-LAFS node,
+   create a new Tahoe-LAFS client node and recover from the replica:
+
+   .. code-block:: html
+
+      POST /storage-plugins/privatestorageio-zkapauthz-v1/recover
+      Content-Type: application/json
+      Content-Length: ...
+
+      {"recovery-capability": "URI:DIR-RO:xxxx"}
+
+      200 OK
+
+
+
+
+
 
 Data Integrity
 --------------
