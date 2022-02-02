@@ -214,7 +214,7 @@ Detailed Implementation Design
 * scalability and performance
 
 State
-`````
+~~~~~
 
 A replica consists of the following pieces of state:
 
@@ -254,7 +254,7 @@ The event stream is represented in the local database in a new table::
 Arguments are substituted into the statement so that they match the form of statements generated during the *snapshot* phase.
 
 Replication
-```````````
+~~~~~~~~~~~
 
 The replication process is as follows:
 
@@ -318,7 +318,7 @@ All uploads inherit the redundancy configuration from the Tahoe-LAFS client node
        Of course only the uploaded statements are deleted from the local table.
 
 Recovery
-````````
+~~~~~~~~
 
 The recovery process is as follows:
 
@@ -331,15 +331,15 @@ The recovery process is as follows:
    are executed against the database.
 
 External Interfaces
-~~~~~~~~~~~~~~~~~~~
+-------------------
 
 See the `OpenAPI specification <backup-recovery-openapi.html>`_.
 
 Data Integrity
-~~~~~~~~~~~~~~
+--------------
 
 Schema Upgrades
-```````````````
+~~~~~~~~~~~~~~~
 
 A database snapshot will include schema modification statements
 (DDL statements)
@@ -359,7 +359,7 @@ These requirements can be exactly satisfied if DDL and DML statements are handle
 If DDL statements are recorded in the event stream and later executed during recovery the schema will always match the requirements of the DML statements.
 
 Automated Testing
-`````````````````
+~~~~~~~~~~~~~~~~~
 
 The replication/recovery functionality can be implemented orthogonally to ZKAPAuthorizer application logic.
 This means it can be tested orthogonally to ZKAPAuthorizer application logic.
@@ -369,7 +369,7 @@ Successful replication in practice depends on reads from and writes to Tahoe-LAF
 Automated testing for this logic probably requires integration-style testing due to the lack of unit testing affordances from the Tahoe-LAFS project.
 
 Runtime Health-Checks
-`````````````````````
+~~~~~~~~~~~~~~~~~~~~~
 
 The maintenace of a replica is an ongoing process.
 The replica loses value,
@@ -384,7 +384,7 @@ At some point the system may determine no automatic correction is possible and u
 The design for such user interaction is out of scope for this document.
 
 Replication/Recovery System Upgrades
-````````````````````````````````````
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This document describes the on-grid schema for version 1 of this system.
 This version information will be encoded on the grid alongside snapshots and event streams.
@@ -398,17 +398,17 @@ following a new schema,
 after a client upgrade and the old replica is discarded.
 
 Security
-~~~~~~~~
+--------
 
 Terms
-`````
+~~~~~
 
 Let the data that comes from users of the system and is uploaded to and download from the Tahoe-LAFS grid be known as *user data*.
 
 Let the data that ZKAPAuthorizer itself creates and uses to manage payments be known as *accounting data*.
 
 Threat Model
-````````````
+~~~~~~~~~~~~
 
 This design aims to defend accounting data in the same way user data is defended.
 If the capability for the replica directory is kept confidential then the accounting data will be kept confidential.
@@ -426,35 +426,35 @@ This design does not mitigate this risk.
 It may be beneficial to do so in the future.
 
 Backwards Compatibility
-~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------
 
 Prior to implementation of this design ZKAPAuthorizer does not maintain backups or replicas.
 Third-parties which have their own backups or replicas should be able to activate the system described here and then discard their backup/replica data.
 
 Performance and Scalability
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
 
 Storage Requirements
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 We should build a tool to measure the storage requirements of the replica system.
 
 Network Transfers
------------------
+~~~~~~~~~~~~~~~~~
 
 We should build a tool to measure data transferred over the network for creation and maintenance of a replica.
 
 Memory Usage
-------------
+~~~~~~~~~~~~
 
 We should build a tool to measure memory used by ZKAPAuthorizer with and without replicas enabled so we can compare the incremental cost of replicas.
 
 CPU Usage
----------
+~~~~~~~~~
 
 We should build a tool to measure CPU used by the replica system.
 
 Further Reading
----------------
+~~~~~~~~~~~~~~~
 
 * https://litestream.io/
