@@ -253,11 +253,6 @@ The event stream is represented in the local database in a new table::
 
 Arguments are substituted into the statement so that they match the form of statements generated during the *snapshot* phase.
 
-.. [10] Rows in the ``[event-stream]`` table are always excluded from the snapshot.
-	They are not needed for recovery.
-	The state they represent is always reflected elsewhere in the database.
-	The DDL statements for ``[event-stream]`` *are* included.
-
 Replication
 ~~~~~~~~~~~
 
@@ -284,50 +279,6 @@ The replication process is as follows:
 #. If an event stream object in the *replica directory* contains only statements that are already part of the snapshot those statements are pruned. [9]_
 
 All uploads inherit the redundancy configuration from the Tahoe-LAFS client node.
-
-.. [1] A snapshot is sufficiently up-to-date if the event stream is no more than ``N`` times larger than it.
-       The size requirement exists because the event stream will grow without bounds but the snapshot should have a bounded size.
-       By periodically re-snapshotting and re-starting the event stream the on-grid storage can be bounded as well.
-       Some measurements may be required to choose a good value for ``N``.
-       It may also be necessary to choose whether to prioritize efficient use of network bandwidth or on-grid storage space
-       (and to what degree).
-       If the snapshot does not exist then its size is treated as 0.
-
-.. [2] A snapshot is obsolete if there is a completely uploaded snapshot with a greater sequence number.
-
-.. [3] Application-code is supplied with a cursor which performs this capturing.
-       Replication code bypasses this capturing so that statements which record the event stream are not themselves recorded.
-       Recovery code bypasses this capturing so that statements to recreate the database are also not recorded.
-       ``SELECT`` statements are ignored since they cannot change the database (XXX is this true?).
-
-.. [4] The event stream in the database is large enough when it is larger than 900,000 bytes.
-       This results in efficient ZKAP use.
-       If Tahoe-LAFS had reasonable mutable support we could upload more frequently and pack new data into an existing mutable until it reached a good size.
-       But Tahoe-LAFS does not have reasonable mutable support.
-
-.. [5] Certain database changes,
-       such as insertion of a new voucher,
-       are particularly valuable and should be captured as quickly as possible.
-       In contrast,
-       there is some tolerance for losing a database change which marks a token as spent since this state can be recreated by the application if necessary.
-
-.. [6] The SQL statements are joined with newline separators.
-       The resulting string is uploaded as a new immutable object next to the existing snapshot object.
-       The sequence number of the first statement it includes is added as metadata for that object in the containing directory.
-
-.. [7] The SQL statements from ``iterdump``,
-       except for those relating to the event stream table,
-       are joined with newline separators and compressed using lzma.
-       The compressed blob is uploaded as an immutable object.
-       The metadata of the object in the containing directory includes the snapshot's sequence number.
-
-.. [8] The upload may proceed concurrently with further database changes.
-       Of course only the uploaded statements are deleted from the local table.
-
-.. [9] The event stream objects can be placed into an order such that the sequence of each object is less than that of the next.
-       For each event stream object **E**\ :sub:`n` which has an event stream object **E**\ :sub:`m` following it in this sequence,
-       if the snapshot's sequence number is greater than or equal to **E**\ :sub:`m`'s sequence number then **E**\ :sub:`n` is completely contained by the snapshot.
-
 
 Recovery
 ~~~~~~~~
@@ -467,6 +418,57 @@ CPU Usage
 We should build a tool to measure CPU used by the replica system.
 
 Further Reading
-~~~~~~~~~~~~~~~
+---------------
 
 * https://litestream.io/
+
+Footnotes
+---------
+
+.. [1] A snapshot is sufficiently up-to-date if the event stream is no more than ``N`` times larger than it.
+       The size requirement exists because the event stream will grow without bounds but the snapshot should have a bounded size.
+       By periodically re-snapshotting and re-starting the event stream the on-grid storage can be bounded as well.
+       Some measurements may be required to choose a good value for ``N``.
+       It may also be necessary to choose whether to prioritize efficient use of network bandwidth or on-grid storage space
+       (and to what degree).
+       If the snapshot does not exist then its size is treated as 0.
+
+.. [2] A snapshot is obsolete if there is a completely uploaded snapshot with a greater sequence number.
+
+.. [3] Application-code is supplied with a cursor which performs this capturing.
+       Replication code bypasses this capturing so that statements which record the event stream are not themselves recorded.
+       Recovery code bypasses this capturing so that statements to recreate the database are also not recorded.
+       ``SELECT`` statements are ignored since they cannot change the database (XXX is this true?).
+
+.. [4] The event stream in the database is large enough when it is larger than 900,000 bytes.
+       This results in efficient ZKAP use.
+       If Tahoe-LAFS had reasonable mutable support we could upload more frequently and pack new data into an existing mutable until it reached a good size.
+       But Tahoe-LAFS does not have reasonable mutable support.
+
+.. [5] Certain database changes,
+       such as insertion of a new voucher,
+       are particularly valuable and should be captured as quickly as possible.
+       In contrast,
+       there is some tolerance for losing a database change which marks a token as spent since this state can be recreated by the application if necessary.
+
+.. [6] The SQL statements are joined with newline separators.
+       The resulting string is uploaded as a new immutable object next to the existing snapshot object.
+       The sequence number of the first statement it includes is added as metadata for that object in the containing directory.
+
+.. [7] The SQL statements from ``iterdump``,
+       except for those relating to the event stream table,
+       are joined with newline separators and compressed using lzma.
+       The compressed blob is uploaded as an immutable object.
+       The metadata of the object in the containing directory includes the snapshot's sequence number.
+
+.. [8] The upload may proceed concurrently with further database changes.
+       Of course only the uploaded statements are deleted from the local table.
+
+.. [9] The event stream objects can be placed into an order such that the sequence of each object is less than that of the next.
+       For each event stream object **E**\ :sub:`n` which has an event stream object **E**\ :sub:`m` following it in this sequence,
+       if the snapshot's sequence number is greater than or equal to **E**\ :sub:`m`'s sequence number then **E**\ :sub:`n` is completely contained by the snapshot.
+
+.. [10] Rows in the ``[event-stream]`` table are always excluded from the snapshot.
+	They are not needed for recovery.
+	The state they represent is always reflected elsewhere in the database.
+	The DDL statements for ``[event-stream]`` *are* included.
