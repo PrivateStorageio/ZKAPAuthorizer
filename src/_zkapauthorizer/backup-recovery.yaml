@@ -12,7 +12,7 @@ paths:
   /storage-plugins/privatestorageio-zkapauthz-v1/recover:
     post:
       description: >-
-        From from a previously configured replica.
+        Restore from a previously configured replica.
 
         This is only valid when ZKAPAuthorizer has no local state yet.
       requestBody:
