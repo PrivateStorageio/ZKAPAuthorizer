@@ -34,7 +34,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-        "404":
+        "409": # CONFLICT
+          description: >-
+            Recovery is not possible at this time because local state already
+            exists in the database.  Recover into a new, empty ZKAPAuthorizer
+            installation only.
+
+        "404": # NOT FOUND
           description: >-
             Recovery from the replica has failed because the recovery data
             cannot be retrieved using the given capability.
