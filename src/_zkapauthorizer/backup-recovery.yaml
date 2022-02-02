@@ -61,10 +61,13 @@ paths:
   /storage-plugins/privatestorageio-zkapauthz-v1/replicate:
     get:
       description: >-
-        Retrieve information about the replica configuration and state of this
-        node.
+        Retrieve information about the replica configuration of this node.
       responses:
-        200: # Ok
+        404: # NOT FOUND
+          description: >-
+            This node is not configuration for replication.
+
+        200: # OK
           description: >-
             Information about replica configuration is available and included
             in the response.
@@ -72,23 +75,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReplicaConfiguration"
+
     post:
-      description: |
+      description: >-
         Configure ZKAPAuthorizer to maintain an on-grid replica of its state
         or return the existing configuration details if it has already been
         configured to do so.
       responses:
-        201: # Created
-          description: |
-            The replication system is now configured.  The response includes
-            the recovery capability for the replica that is being maintained.
+        201: # CREATED
+          description: >-
+            The replication system is now configured.  A replica has not
+            necessarily been created yet but ZKAPAuthorizer will begin
+            creating one now.  The response includes the recovery capability
+            for that replica.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReplicaConfiguration"
 
-        409: # Conflict
-          description: |
+        409: # CONFLICT
+          description: >-
             The replication system was already configured.  The response
             includes the recovery capability for the replica that is being
             maintained.
