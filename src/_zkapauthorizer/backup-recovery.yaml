@@ -12,7 +12,8 @@ paths:
   /storage-plugins/privatestorageio-zkapauthz-v1/recover:
     post:
       description: >-
-        Recover ZKAPAuthorizer state from a previously configured replica.
+        From from a previously configured replica.
+
         This is only valid when ZKAPAuthorizer has no local state yet.
       requestBody:
         content:
@@ -61,7 +62,7 @@ paths:
   /storage-plugins/privatestorageio-zkapauthz-v1/replicate:
     get:
       description: >-
-        Retrieve information about the replica configuration of this node.
+        Get this node's replica configuration.
       responses:
         404: # NOT FOUND
           description: >-
@@ -78,16 +79,18 @@ paths:
 
     post:
       description: >-
-        Configure ZKAPAuthorizer to maintain an on-grid replica of its state
-        or return the existing configuration details if it has already been
-        configured to do so.
+        Configure an on-grid replica.
+
+        Once a replica has been configured this node will keep that replica
+        up-to-date with local state changes.
       responses:
         201: # CREATED
           description: >-
-            The replication system is now configured.  A replica has not
-            necessarily been created yet but ZKAPAuthorizer will begin
-            creating one now.  The response includes the recovery capability
-            for that replica.
+            The replication system is now configured.
+
+            A replica has not necessarily been created yet but ZKAPAuthorizer
+            will begin creating one now.  The response includes the recovery
+            capability for that replica.
           content:
             application/json:
               schema:
@@ -95,9 +98,10 @@ paths:
 
         409: # CONFLICT
           description: >-
-            The replication system was already configured.  The response
-            includes the recovery capability for the replica that is being
-            maintained.
+            The replication system was already configured.
+
+            The response includes the recovery capability for the replica that
+            is being maintained.
           content:
             application/json:
               schema:
@@ -120,9 +124,10 @@ components:
         recovery-capability:
           type: "string"
           description: >-
-            The Tahoe-LAFS read-only capability for the recovery data.  This
-            is the capability which can be submitted in order to initiate a
-            recovery from the replica.
+            The Tahoe-LAFS read-only capability for the recovery data.
+
+            This is the capability which can be submitted in order to initiate
+            a recovery from the replica.
 
 
 
