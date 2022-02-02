@@ -276,7 +276,7 @@ The replication process is as follows:
    #. it is added to the event stream in the *replica directory* [6]_
    #. statements which were added are pruned from the database [8]_
 
-#. If the event stream in the *replica directory* contains only statements that are already part of the snapshot those statements are pruned.
+#. If an event stream object in the *replica directory* contains only statements that are already part of the snapshot those statements are pruned. [9]_
 
 All uploads inherit the redundancy configuration from the Tahoe-LAFS client node.
 
@@ -316,6 +316,11 @@ All uploads inherit the redundancy configuration from the Tahoe-LAFS client node
 
 .. [8] The upload may proceed concurrently with further database changes.
        Of course only the uploaded statements are deleted from the local table.
+
+.. [9] The event stream objects can be placed into an order such that the sequence of each object is less than that of the next.
+       For each event stream object **E**\ :sub:`n` which has an event stream object **E**\ :sub:`m` following it in this sequence,
+       if the snapshot's sequence number is greater than or equal to **E**\ :sub:`m`'s sequence number then **E**\ :sub:`n` is completely contained by the snapshot.
+
 
 Recovery
 ~~~~~~~~
