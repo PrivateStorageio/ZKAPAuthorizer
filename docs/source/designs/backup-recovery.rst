@@ -318,7 +318,10 @@ The expected interaction pattern involves two API calls.
 
       {"recovery-capability": "URI:DIR-RO:xxxx"}
 
-#. After losing the Tahoe-LAFS node,
+#. Normal use of the Tahoe-LAFS client node,
+   including redeeming vouchers and spending ZKAPs.
+
+#. After losing the Tahoe-LAFS client node,
    create a new Tahoe-LAFS client node and recover from the replica:
 
    .. code-block:: html
@@ -330,11 +333,11 @@ The expected interaction pattern involves two API calls.
       {"recovery-capability": "URI:DIR-RO:xxxx"}
 
       200 OK
+      Content-Type: application/json
 
+      {}
 
-
-
-
+#. The new Tahoe-LAFS client node now has the same ZKAPAuthorizer state as it did prior to lose of the original instance.
 
 Data Integrity
 --------------
