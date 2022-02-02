@@ -315,7 +315,9 @@ All uploads inherit the redundancy configuration from the Tahoe-LAFS client node
        The resulting string is uploaded as a new immutable object next to the existing snapshot object.
        The sequence number of the first statement it includes is added as metadata for that object in the containing directory.
 
-.. [7] The SQL statements are joined with newline separators and compressed using lzma.
+.. [7] The SQL statements from ``iterdump``,
+       except for those relating to the event stream table,
+       are joined with newline separators and compressed using lzma.
        The compressed blob is uploaded as an immutable object.
        The metadata of the object in the containing directory includes the snapshot's sequence number.
 
