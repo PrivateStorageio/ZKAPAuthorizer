@@ -36,10 +36,12 @@ let
 
     lint-python = mach-nix.mkPython {
       python = "python39";
+      # Pin these narrowly so that lint rules only change when we specifically
+      # want them to.
       requirements = ''
-        isort
-        black
-        flake8
+        isort == 5.10.1
+        black == 21.12b0
+        flake8 == 4.0.1
       '';
     };
 
