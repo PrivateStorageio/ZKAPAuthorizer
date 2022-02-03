@@ -363,19 +363,6 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
-        """
-        Store some unblinded tokens, for example as part of a backup-restore
-        process.
-
-        :param list[str] unblinded_tokens: The unblinded tokens to store.
-
-        :param int group_id: The unique identifier of the redemption group to
-            which these tokens belong.
-        """
-        self._insert_unblinded_tokens(cursor, unblinded_tokens, group_id)
-
-    @with_cursor
     def insert_unblinded_tokens_for_voucher(
         self, cursor, voucher, public_key, unblinded_tokens, completed, spendable
     ):
@@ -657,22 +644,6 @@ class VoucherStore(object):
             DELETE FROM [to-reset]
             """,
         )
-
-    @with_cursor
-    def backup(self, cursor):
-        """
-        Read out all state necessary to recreate this database in the event it is
-        lost.
-        """
-        cursor.execute(
-            """
-            SELECT [token] FROM [unblinded-tokens] ORDER BY [rowid]
-            """,
-        )
-        tokens = cursor.fetchall()
-        return {
-            "unblinded-tokens": list(token for (token,) in tokens),
-        }
 
     def start_lease_maintenance(self):
         """

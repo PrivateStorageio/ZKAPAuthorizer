@@ -21,9 +21,7 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
-from itertools import islice
-from json import load, loads
-from sys import maxsize
+from json import loads
 
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
@@ -178,8 +176,8 @@ def authorizationless_resource_tree(
         ),
     )
     root.putChild(
-        b"unblinded-token",
-        _UnblindedTokenCollection(
+        b"lease-maintenance",
+        _LeaseMaintenanceResource(
             store,
             controller,
         ),
@@ -321,10 +319,10 @@ class _ProjectVersion(Resource):
         )
 
 
-class _UnblindedTokenCollection(Resource):
+class _LeaseMaintenanceResource(Resource):
     """
-    This class implements inspection of unblinded tokens.  Users **GET** this
-    resource to find out about unblinded tokens in the system.
+    This class implements inspection of lease maintenance activity.  Users
+    **GET** this resource to learn about lease maintenance spending.
     """
 
     _log = Logger()
@@ -336,39 +334,15 @@ class _UnblindedTokenCollection(Resource):
 
     def render_GET(self, request):
         """
-        Retrieve some unblinded tokens and associated information.
+        Retrieve the spending information.
         """
         application_json(request)
-        state = self._store.backup()
-        unblinded_tokens = state["unblinded-tokens"]
-
-        limit = request.args.get(b"limit", [None])[0]
-        if limit is not None:
-            limit = min(maxsize, int(limit))
-
-        position = request.args.get(b"position", [b""])[0].decode("utf-8")
-
         return dumps_utf8(
             {
-                "total": len(unblinded_tokens),
-                "spendable": self._store.count_unblinded_tokens(),
-                "unblinded-tokens": list(
-                    islice(
-                        (token for token in unblinded_tokens if token > position), limit
-                    )
-                ),
+                "total": self._store.count_unblinded_tokens(),
                 "lease-maintenance-spending": self._lease_maintenance_activity(),
             }
         )
-
-    def render_POST(self, request):
-        """
-        Store some unblinded tokens.
-        """
-        application_json(request)
-        unblinded_tokens = load(request.content)["unblinded-tokens"]
-        self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
-        return dumps_utf8({})
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()
