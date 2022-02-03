@@ -206,15 +206,68 @@ The *Binary Deltas* design could be applied to these SQL text dumps instead.
 Text diffs could be compressed to reduce the overhead compared to binary deltas.
 These diffs are likely to be slightly easier to work with in the event any problems arise.
 
-*What we've considered.*
-*What trade-offs are involved with each choice.*
-*Why we've chosen the one we did.*
+Comparison & Decision
+---------------------
+
+This table shows rankings for each implementation option.
+Rankings are broken down along a number of different dimensions.
+Options are ranked with respect to each other
+(ties are allowed).
+Higher rankings reflect more preferred behavior.
+Since no option has been implemented all rankings are estimates.
+
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|             |Juggle  |Database|Copying  |Copying |App-Specific  |App SQL |Binary  |Text    |
+|             |Tokens  |Copying |Sessions |WAL     |Change Journal|Log     |Delta   |Delta   |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Storage Cost |7       |0       |6        |6       |6             |3       |2       |1       |
+|[11]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Network Cost |7       |0       |6        |6       |6             |3       |2       |1       |
+|[12]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Replica      |7       |0       |5        |5       |7             |5       |2       |2       |
+|Freshness    |        |        |         |        |              |        |        |        |
+|[13]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|CPU Cost     |7       |0       |5        |5       |7             |5       |2       |2       |
+|[14]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Software     |3       |7       |0        |1       |3             |6       |6       |6       |
+|Complexity   |        |        |         |        |              |        |        |        |
+|[15]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Maintenance  |1       |7       |3        |3       |1             |7       |7       |7       |
+|Cost [17]_   |        |        |         |        |              |        |        |        |
+|             |        |        |         |        |              |        |        |        |
+|             |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Packaging /  |7       |7       |0        |2       |7             |7       |2       |7       |
+|Distribution |        |        |         |        |              |        |        |        |
+|Complexity   |        |        |         |        |              |        |        |        |
+|[16]_        |        |        |         |        |              |        |        |        |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+|Total        |39      |21      |25       |28      |37            |36      |23      |26      |
++-------------+--------+--------+---------+--------+--------------+--------+--------+--------+
+
+By raw score the overall ranking is:
+
+#. Juggle Tokens (39)
+#. App-Specific Change Journal (37)
+#. Application SQL Log (36)
+#. Copying WAL (28)
+#. Copying Sessions (25)
+#. Text Delta (26)
+#. Binary Delta (23)
+#. Database Copying (21)
+
+The top three options are closely ranked.
+**App SQL Log** scores better than the first- and second-ranked option on "software complexity" and "maintenance cost".
+This means the initial implementation is more likely to be successful and it is less likely to cause future development problems.
+Therefore **App SQL Log** is the chosen design.
 
 Detailed Implementation Design
 ------------------------------
-
-"Application SQL Log" is the chosen design.
-
 *Focus on:*
 
 * external and internal interfaces
@@ -521,3 +574,17 @@ Footnotes
 	They are not needed for recovery.
 	The state they represent is always reflected elsewhere in the database.
 	The DDL statements for ``[event-stream]`` *are* included.
+
+.. [11] The cost in ZKAPs to store the replica on the grid.
+
+.. [12] The network traffic required to create and maintain the replica.
+
+.. [13] The distance from the replica to the local database measured by number of changes.
+
+.. [14] The CPU cost on the client to create and maintain the replica.
+
+.. [15] The complexity of the software development work to implement the option starting from this design document.
+
+.. [16] The additional implementation work required to package and distribute the resulting implementation.
+
+.. [17] The cost to maintain this option over the course of continuing ZKAPAuthorizer development.
