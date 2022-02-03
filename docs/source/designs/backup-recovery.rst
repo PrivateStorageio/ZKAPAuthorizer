@@ -322,7 +322,7 @@ The replication process is as follows:
 #. Replication is configured using the external interface.
 
    #. The *replica directory*,
-      a new mutable directory,
+      a new mutable [19]_ directory,
       is created on grid.
    #. The write capability is written to the Tahoe-LAFS client node's private directory. [18]_
    #. The read capability is returned to the external caller.
@@ -613,3 +613,5 @@ Footnotes
 
 	If the write capability is somehow lost from this directory *without* the whole client being lost then the replica will have to be reconfigured.
 	This is not a catastrophic failure mode since even as it progresses the old replica directory remains available for recovery.
+
+.. [19] In this document "mutable" refers to Tahoe-LAFS SDMF or MDMF capabilities.
