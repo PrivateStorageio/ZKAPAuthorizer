@@ -354,6 +354,9 @@ The recovery process is as follows:
    starting at the first statement after the snapshot's sequence number,
    are executed against the database.
 
+After recovery replication is *not enabled*.
+If desired replication can be configured again using the external interface.
+
 External Interfaces
 -------------------
 
