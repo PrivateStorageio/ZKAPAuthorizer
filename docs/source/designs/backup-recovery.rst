@@ -480,7 +480,7 @@ If the capability for the replica directory is kept confidential then the accoun
 It is up to the party using the external interface to keep the capability confidential.
 
 This system creates new copies of accounting data on the Tahoe-LAFS grid.
-The convenient-related requirements for the user stories at the top of this design imply that the capabilities for accessing user data will grant access to read the accounting data replicas created by this system.
+The convenience-related requirements for the user stories at the top of this design imply that the capabilities for accessing user data will grant access to read the accounting data replicas created by this system.
 This is a strictly worse failure-mode than disclosure of either user data or accounting data separately since it potentially allows identifying information from the payment system to be linked to specific user data.
 Compare:
 * I know Alice has some data but I don't know what that data is.
