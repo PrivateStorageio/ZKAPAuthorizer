@@ -20,8 +20,11 @@ This database is the canonical storage for this information.
 That is,
 if it is lost then it is not likely that it will be possible to recreate it.
 
-The premise of ZKAPAuthorizer is that ZKAPs are a scarce resource.
-It follows that unnecessary loss of ZKAPs is to be avoided.
+A premise of ZKAPAuthorizer is that the user of the system will value storage-time
+(a scarce resource to the operator of a Tahoe-LAFS storage grid).
+ZKAPAuthorizer facilitates the exchange of storage-time for ZKAPs
+(a scarce resource to the user of the system).
+It follows that the user will value ZKAPs and their unnecessary loss should be avoided.
 
 After the system described here is delivered to users it will be possible for users to recover all of the valuable information in the ZKAPAuthorizer database.
 This is true even if the entire system holding that database is lost,
