@@ -542,10 +542,23 @@ Footnotes
        Recovery code bypasses this capturing so that statements to recreate the database are also not recorded.
        ``SELECT`` statements are ignored since they cannot change the database (XXX is this true?).
 
-.. [4] The event stream in the database is large enough when it is larger than 900,000 bytes.
-       This results in efficient ZKAP use.
-       If Tahoe-LAFS had reasonable mutable support we could upload more frequently and pack new data into an existing mutable until it reached a good size.
-       But Tahoe-LAFS does not have reasonable mutable support.
+.. [4] The definition of "large enough" is chosen to produce efficient use of ZKAPs to pay for on-grid storage of the event stream.
+       On-grid storage will consist of some number of shares depending on the Tahoe-LAFS client node's configuration.
+       Efficiency of ZKAP usage will depend on ZKAPAuthorizer's ``pass-value`` configuration.
+       So "large enough" is chosen so that a share will occupy most of the value of one ZKAP for one time period.
+       Concretely this will be ``pass-value × 0.95 × shares.needed / shares.total``.
+       The "efficiency factor" of 0.95 allows some slop in the system so that a single statement is not likely to increase the size from below the "large enough" limit to above the size component of the ``pass-value``
+       (which would result in doubling the cost to store the object).
+       For example,
+       for a ``pass-value`` of 1MB(×month),
+       a ``shares.needed`` of 3,
+       and a ``shares.total`` of 5,
+       "large enough" is ``1MB × 0.95 × 3 / 5`` or 540,000 bytes.
+       A 570,000 byte object erasure-encodes under these parameters to 950,001 bytes.
+       Therefore in this configuration 570,000 bytes is "large enough".
+
+       If Tahoe-LAFS had better support for appending data to a mutable object we could upload more frequently and pack new data into an existing mutable until it reached an "efficient" size.
+       But it does not.
 
 .. [5] Certain database changes,
        such as insertion of a new voucher,
