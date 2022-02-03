@@ -324,7 +324,7 @@ The replication process is as follows:
    #. The *replica directory*,
       a new mutable directory,
       is created on grid.
-   #. The write capability is added to the database.
+   #. The write capability is written to the Tahoe-LAFS client node's private directory. [18]_
    #. The read capability is returned to the external caller.
 
 #. If there is not a sufficiently up-to-date snapshot [1]_ on the grid then one is created [7]_ in the *replica directory*.
@@ -601,3 +601,15 @@ Footnotes
 .. [16] The additional implementation work required to package and distribute the resulting implementation.
 
 .. [17] The cost to maintain this option over the course of continuing ZKAPAuthorizer development.
+
+.. [18] Tahoe-LAFS mutable objects should be written by at most one writer or consistency issues arise.
+	The writer for this replica directory is exactly the one Tahoe-LAFS client node which created it.
+	If that client node's directory is lost then there should never be another write to the replica directory.
+	By putting the write capability there we ensure that the ability to write to the replica directory is lost with the client.
+
+	Additionally,
+	if the write capability is in the database itself then it can be obtained using the read capability.
+	By avoiding this capability amplification we support the goal of preventing changes to the replica from outside of the replication system.
+
+	If the write capability is somehow lost from this directory *without* the whole client being lost then the replica will have to be reconfigured.
+	This is not a catastrophic failure mode since even as it progresses the old replica directory remains available for recovery.
