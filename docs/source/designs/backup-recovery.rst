@@ -191,7 +191,7 @@ This additional copy could be copied to the on-grid storage location and would q
 As changes are made to the working copy of the database local copies could be made and diffed against the additional copy.
 These binary diffs could be copied to the on-grid storage location and would update the copy already present.
 These diffs would be smaller than new copies of the database and save on bandwidth and storage.
-At any point if the diffs grow to large the process can be started over with a new, recent copy of the database.
+At any point if the diffs grow too large the process can be started over with a new, recent copy of the database.
 
 Text Deltas
 ~~~~~~~~~~~
