@@ -110,6 +110,11 @@ Database Copying
 All of the internal state resides in a single SQLite3 database.
 This file can be copied to the on-grid storage location.
 This requires a ZKAPAuthorizer API to suspend writes to the database so a consistent copy can be made.
+The replica must be kept fresh for two reasons:
+
+* When a new voucher is funded or redeemed for new ZKAPs there is new value present in the database that is not present in an old copy of it.
+* As ZKAPs in the replica are spent by the client the cost to discard these after recovery grows.
+
 To keep the replica fresh multiple complete copies of the database need to be uploaded.
 
 This requires a large amount of bandwidth to upload full copies of the database periodically.
