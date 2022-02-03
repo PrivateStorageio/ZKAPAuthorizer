@@ -7,11 +7,7 @@ let
   inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
 
   python-env = mach-nix.mkPython {
-    inherit (zkapauthorizer.meta.mach-nix) python;
-    providers = zkapauthorizer.meta.mach-nix.providers // {
-      jedi = "wheel";
-      parso = "wheel";
-    };
+    inherit (zkapauthorizer.meta.mach-nix) python providers;
     overridesPre = [
       (
         self: super: {
@@ -21,17 +17,10 @@ let
     ];
     requirements =
       ''
-      pip
-      jedi
-      black
-      isort
-      flake8
-      ${builtins.readFile ./docs/requirements.txt}
       ${builtins.readFile ./requirements/test.in}
       ${zkapauthorizer.requirements}
       '';
   };
-
 in
 pkgs.mkShell {
   # Avoid leaving .pyc all over the source tree when manually triggering tests
@@ -39,6 +28,9 @@ pkgs.mkShell {
   PYTHONDONTWRITEBYTECODE = "1";
 
   buildInputs = [
+    # Provide the linting tools for interactive usage.
+    lint-python
+    # Supply all of the runtime and testing dependencies.
     python-env
   ];
 }
