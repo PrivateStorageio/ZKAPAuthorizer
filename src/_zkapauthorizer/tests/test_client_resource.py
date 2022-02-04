@@ -292,6 +292,7 @@ class OpenAPITests(TestCase):
     """
     Tests for the OpenAPI specification for the HTTP API.
     """
+
     def test_backup_recovery_valid(self):
         """
         The specification document is valid OpenAPI 3.0.
