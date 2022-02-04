@@ -18,6 +18,7 @@ Hypothesis strategies for property testing.
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
+from typing import List
 from urllib.parse import quote
 
 import attr
@@ -1082,4 +1083,31 @@ def ristretto_signing_keys():
         whitespace,
         keys,
         whitespace,
+    )
+
+
+@attr.s(frozen=True)
+class _VoucherInsert(object):
+    voucher : str = attr.ib()
+    expected_tokens : int = attr.ib(validator=attr.validators.gt(0))
+    counter : int = attr.ib(validator=attr.validators.gt(0))
+    tokens : List[RandomToken] = attr.ib(validator=attr.validators.max_len(1024))
+
+
+@attr.s(frozen=True)
+class _ExistingState(object):
+    vouchers : List[_VoucherInsert] = attr.ib(validator=attr.validators.max_len(3))
+
+
+def existing_states():
+    return builds(
+        _ExistingState,
+        vouchers=lists(
+            builds(
+                _VoucherInsert,
+                expected_tokens=integers(min_value=1, max_value=1024),
+                counter=integers(min_value=0, max_value=15),
+                tokens=lists(random_tokens(), max_size=128),
+            ),
+        ),
     )

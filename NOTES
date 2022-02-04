@@ -1,0 +1,49 @@
+BACKUP RECOVERY PLAN
+1. Recover from a snapshot
+   a. HTTP API in resource.py
+     i. 500, 409, 404, 200
+   b. new "recovery" object that knows how to recover the sqlite3 database
+     i. needs to know:
+       A. where to put the database
+       B. how to talk to the tahoe web api
+       C. where the existing database is (to verify it is empty)
+       D. hold a write lock on existing database to keep it empty
+     ii. cases: success, replica not found, local database already has state, other errors
+   c. How do we replace the existing database?
+      Ideas:
+      iii. exit and figure it out on next startup
+        A. create a new database at "realpath.recovered"
+	B. let external party restart tahoe
+	C. if there is a ``.recovered`` database at startup, replace the real db with it before opening
+
+      i. move existing database aside, create new database, convince VoucherStore to switch
+	B. first half of open_and_initialize (up to and excluding schema creation) to create new db
+	C. run snapshot statements
+	D. drop the old VoucherStore
+        E. filesystem move existing db away
+	F. filesystem move new db into place
+	G. make new VoucherStore
+
+      ii. delete everything from existing database, insert snapshot into it, done
+        A. (pseudo) DROP TABLE (SELECT name FROM sqlite_master);
+	B. run snapshot statements
+
+
+
+2. Backup a snapshot
+3. Recover from snapshot & event stream
+4. Backup event stream
+
+* insert_unblinded_tokens can be deleted
+  * only the backup recovery API depends on it hee hee
+* _insert_unblinded_tokens can have a new voucher parameter
+  * the callers should all have easy access to such a value
+* DELETE all the rows of [tokens] that match the voucher/group
+* write tests
+
+* push naming fix into python-challenge-bypass-ristretto
+* consider whether a Token.preimage accessor is useful
+  * You can get it now, grossly::
+
+      tok = RandomToken.create()
+      preimage = TokenPreimage.decode_base64(base64.b64encode(base64.b64decode(tok.encode_base64())[:64]))

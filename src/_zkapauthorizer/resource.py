@@ -23,6 +23,7 @@ In the future it should also allow users to read statistics about token usage.
 
 from json import loads
 
+import attr
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -35,6 +36,7 @@ from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
+from .model import VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
 from .storage_common import (
@@ -151,6 +153,25 @@ def from_configuration(
     return root
 
 
+@attr.s
+class RecoverResource(Resource):
+    """
+    Implement the endpoint for triggering local state recovery from a remote
+    replica.
+    """
+    store : VoucherStore = attr.ib()
+
+    def __attrs_post_init__(self):
+        Resource.__init__(self)
+
+    def render_POST(self, request):
+        if not self.store.is_empty():
+            request.setResponseCode(409)
+        else:
+            request.setResponseCode(500)
+        return b""
+
+
 def authorizationless_resource_tree(
     store,
     controller,
@@ -168,6 +189,12 @@ def authorizationless_resource_tree(
     :return IResource: The root of the resource hierarchy.
     """
     root = Resource()
+
+    root.putChild(
+        b"recover",
+        RecoverResource(store),
+    )
+
     root.putChild(
         b"voucher",
         _VoucherCollection(

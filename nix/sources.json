@@ -29,10 +29,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "a44853469d0d6bc65cd382f24e4e60ff59bd60b2",
-        "sha256": "1v5ynbkyl8x7nm28wxijhsgqdzxp84h36wa0xdnfz7fhk6ayfbf4",
+        "rev": "94b899dd7f58cd54a62f5d9a148efbaca58eb4f8",
+        "sha256": "1jp44cnblvgw55zwqggr0ijqjdd1d2r9yzhlmszs5si9r974qw5i",
         "type": "tarball",
-        "url": "https://github.com/DavHau/pypi-deps-db/archive/a44853469d0d6bc65cd382f24e4e60ff59bd60b2.tar.gz",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/94b899dd7f58cd54a62f5d9a148efbaca58eb4f8.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2105": {

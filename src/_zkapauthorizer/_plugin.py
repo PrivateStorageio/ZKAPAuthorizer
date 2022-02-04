@@ -184,9 +184,13 @@ class ZKAPAuthorizer(object):
         """
         if reactor is None:
             from twisted.internet import reactor
+
+        # replica = Replica()
+
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
+            # replica=replica,
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
         )

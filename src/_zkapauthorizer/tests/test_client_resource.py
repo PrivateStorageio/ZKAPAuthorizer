@@ -92,7 +92,7 @@ from ..storage_common import (
     required_passes,
 )
 from .json import loads
-from .matchers import Provides, between, matches_response
+from .matchers import between, matches_response
 from .strategies import (
     api_auth_tokens,
     client_doublespendredeemer_configurations,
@@ -101,9 +101,9 @@ from .strategies import (
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    existing_states,
     posix_timestamps,
     request_paths,
-    requests,
     share_parameters,
     tahoe_configs,
     vouchers,
@@ -407,6 +407,7 @@ class ResourceTests(TestCase):
                 [b"unblinded-token"],
                 [b"voucher"],
                 [b"version"],
+                [b"recover"],
             ]
         ),
         api_auth_tokens(),
@@ -476,6 +477,84 @@ class ResourceTests(TestCase):
                 ),
             ),
         )
+
+class RecoverTests(TestCase):
+    """
+    Tests for the ``/recover`` endpoint.
+    """
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_internal_server_error(self, get_config, api_auth_token):
+        """
+        If recovery fails for some unrecognized reason the endpoint returns a 500
+        response.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            data=BytesIO(dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})),
+        )
+
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(500))),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        existing_states(),
+    )
+    def test_conflict(self, get_config, api_auth_token, existing_state):
+        """
+        If there is state in the local database the endpoint returns a 409
+        response.
+        """
+        def create(store, state):
+            for (voucher, expected_tokens, counter, tokens) in state.vouchers:
+                store.add(voucher, expected_tokens, counter, lambda: tokens)
+
+            # blinded tokens
+            # double spent voucher
+            # invalid unblinded tokens
+
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        create(root.store, existing_state)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            data=BytesIO(dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})),
+        )
+
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(409))),
+        )
+
+        # GET - BAD METHOD
+        # non-json body - BAD REQUEST
+        # non-application/json Content-Type - BAD REQUEST
+        # unparsable capability - BAD REQUEST
+
 
 
 def maybe_extra_tokens():
