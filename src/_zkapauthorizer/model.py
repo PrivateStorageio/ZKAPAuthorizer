@@ -238,6 +238,18 @@ class VoucherStore(object):
             conn,
         )
 
+    def is_empty(self) -> bool:
+        """
+        :return: ``True`` if and only if there is no application state in the
+        underlying database.
+        """
+        # After redeemed-voucher garbage collection is implemented, this won't
+        # be enough of a check.  We should check the unblinded-tokens table
+        # (or call `count_unblinded_tokens`) and the
+        # `invalid-unblinded-tokens` table and maybe also look at lease
+        # maintenance spending.
+        return self.list() == []
+
     @with_cursor
     def get(self, cursor, voucher):
         """

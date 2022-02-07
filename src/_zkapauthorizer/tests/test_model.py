@@ -83,6 +83,71 @@ from .strategies import (
 )
 
 
+class VoucherStoreIsEmptyTests(TestCase):
+    """
+    Tests for ``VoucherStore.is_empty``.
+    """
+    def setup_example(self):
+        self.store_fixture = self.useFixture(
+            ConfiglessMemoryVoucherStore(get_now=datetime.now),
+        )
+
+    def test_empty(self):
+        """
+        If a ``VoucherStore`` is instantiated and there was no existing database
+        then it is empty.
+        """
+        self.setup_example()
+        self.assertThat(self.store_fixture.store.is_empty(), Equals(True))
+
+    @given(
+        voucher=vouchers(),
+        tokens=lists(random_tokens(), min_size=1, max_size=10, unique=True),
+    )
+    def test_not_empty_if_any_vouchers(self, voucher, tokens):
+        """
+        If there are any vouchers in the database a ``VoucherStore`` is using then
+        it is not empty.
+        """
+        self.store_fixture.store.add(
+            voucher,
+            expected_tokens=len(tokens),
+            counter=0,
+            get_tokens=lambda: tokens,
+        )
+        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+
+    @given(
+        voucher=vouchers(),
+        num_passes=integers(min_value=1, max_value=10),
+    )
+    def test_not_empty_if_any_spendable_tokens(self, voucher, num_passes):
+        """
+        If there are spendable ZKAPs in the database a ``VoucherStore`` is using
+        then it is not empty.
+        """
+        d = self.store_fixture.redeem(voucher, num_passes)
+        self.assertThat(d, succeeded(Always()))
+        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+
+    @given(
+        voucher=vouchers(),
+        num_passes=integers(min_value=1, max_value=10),
+    )
+    def test_not_empty_if_any_unspendable_tokens(self, voucher, num_passes):
+        """
+        If there are unspendable ZKAPs in the database a ``VoucherStore`` is using
+        then it is not empty.
+        """
+        d = self.store_fixture.redeem(voucher, num_passes)
+        self.assertThat(d, succeeded(Always()))
+
+        tokens = self.store_fixture.store.get_unblinded_tokens(num_passes)
+        self.store_fixture.store.invalidate_unblinded_tokens("anything", tokens)
+
+        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+
+
 class VoucherStoreTests(TestCase):
     """
     Tests for ``VoucherStore``.
