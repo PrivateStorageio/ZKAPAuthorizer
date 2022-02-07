@@ -22,6 +22,6 @@ def get_version():
 setup(
     version=get_version(),
     package_data={
-        "": ["testing-signing.key"],
+        "": ["backup-recovery.yaml", "testing-signing.key"],
     },
 )
