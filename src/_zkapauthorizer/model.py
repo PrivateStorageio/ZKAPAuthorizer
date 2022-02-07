@@ -351,16 +351,6 @@ class VoucherStore(object):
 
         return list(Voucher.from_row(row) for row in refs)
 
-    def _insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
-        """
-        Helper function to really insert unblinded tokens into the database.
-        """
-        cursor.executemany(
-            """
-            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
-            """,
-            list((token, group_id) for token in unblinded_tokens),
-        )
 
     @with_cursor
     def insert_unblinded_tokens_for_voucher(
@@ -435,10 +425,15 @@ class VoucherStore(object):
                 "Cannot insert tokens for unknown voucher; add voucher first"
             )
 
-        self._insert_unblinded_tokens(
-            cursor,
-            list(t.unblinded_token.decode("ascii") for t in unblinded_tokens),
-            group_id,
+        cursor.executemany(
+            """
+            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
+            """,
+            list(
+                (token.unblinded_token.decode("ascii"), group_id)
+                for token
+                in unblinded_tokens
+            ),
         )
 
     @with_cursor
