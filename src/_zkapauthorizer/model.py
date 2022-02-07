@@ -357,7 +357,6 @@ class VoucherStore(object):
 
         return list(Voucher.from_row(row) for row in refs)
 
-
     @with_cursor
     def insert_unblinded_tokens_for_voucher(
         self, cursor, voucher, public_key, unblinded_tokens, completed, spendable
@@ -437,8 +436,7 @@ class VoucherStore(object):
             """,
             list(
                 (token.unblinded_token.decode("ascii"), group_id)
-                for token
-                in unblinded_tokens
+                for token in unblinded_tokens
             ),
         )
 

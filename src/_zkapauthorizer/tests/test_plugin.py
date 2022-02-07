@@ -572,7 +572,11 @@ storage:
       - name: {name}
         ristretto-issuer-root-url: https://payments.example.com/
         storage-server-FURL: pb://bbbbbbbb@tcp:10.0.0.2:1234/cccccccc
-""".format(name=NAME).encode("ascii")
+""".format(
+    name=NAME
+).encode(
+    "ascii"
+)
 
 TWO_SERVERS_YAML = """
 storage:
@@ -592,7 +596,11 @@ storage:
       - name: {name}
         ristretto-issuer-root-url: https://payments.example.com/
         storage-server-FURL: pb://eeeeeeee@tcp:10.0.0.3:1234/ffffffff
-""".format(name=NAME).encode("ascii")
+""".format(
+    name=NAME
+).encode(
+    "ascii"
+)
 
 
 class LeaseMaintenanceServiceTests(TestCase):

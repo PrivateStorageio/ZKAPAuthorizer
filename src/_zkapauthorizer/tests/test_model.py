@@ -452,7 +452,6 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.available += len(self.using)
         del self.using[:]
 
-
     @invariant()
     def unblinded_token_count(self):
         """

@@ -123,9 +123,8 @@ shares.total = 10
 [storageclient.plugins.{name}]
 pass-value={pass_value}
 """.format(
-    name=NAME,
-    pass_value=expected
-),
+                name=NAME, pass_value=expected
+            ),
         )
 
         self.assertThat(
@@ -152,9 +151,9 @@ shares.total = 10
 [storageclient.plugins.{name}]
 allowed-public-keys = {allowed_public_keys}
 """.format(
-    name=NAME,
-    allowed_public_keys=",".join(expected),
-),
+                name=NAME,
+                allowed_public_keys=",".join(expected),
+            ),
         )
 
         self.assertThat(
