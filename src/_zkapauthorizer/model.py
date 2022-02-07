@@ -274,16 +274,16 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher, expected_tokens, counter, get_tokens):
+    def add(self, cursor, voucher : bytes, expected_tokens : int, counter : int, get_tokens):
         """
         Add random tokens associated with a voucher (possibly new, possibly
         existing) to the database.  If the (voucher, counter) pair is already
         present, do nothing.
 
-        :param bytes voucher: The text value of a voucher with which to
+        :param voucher: The text value of a voucher with which to
             associate the tokens.
 
-        :param int expected_tokens: The total number of tokens for which this
+        :param expected_tokens: The total number of tokens for which this
             voucher is expected to be redeemed.  This is only respected the
             first time a voucher is added.  Subsequent calls with the same
             voucher but a different count ignore the value because it is
@@ -293,7 +293,7 @@ class VoucherStore(object):
             This probably means ``add`` is a broken interface for doing these
             two things.  Maybe it should be fixed someday.
 
-        :param int counter: The redemption counter for the given voucher with
+        :param counter: The redemption counter for the given voucher with
             which to associate the tokens.
 
         :param list[RandomToken]: The tokens to add alongside the voucher.
