@@ -534,6 +534,17 @@ class VoucherStore(object):
         return list(UnblindedToken(t.encode("ascii")) for (t,) in texts)
 
     @with_cursor
+    def count_random_tokens(self, cursor) -> int:
+        """
+        :return: The number of random tokens present in the database.  This is
+        usually not interesting but it is exposed so the test suite can check
+        invariants related to it.
+        """
+        cursor.execute("SELECT count(1) FROM [tokens]")
+        (count,) = cursor.fetchone()
+        return count
+
+    @with_cursor
     def count_unblinded_tokens(self, cursor):
         """
         Return the largest number of unblinded tokens that can be requested from
