@@ -340,7 +340,7 @@ class _LeaseMaintenanceResource(Resource):
         return dumps_utf8(
             {
                 "total": self._store.count_unblinded_tokens(),
-                "lease-maintenance-spending": self._lease_maintenance_activity(),
+                "spending": self._lease_maintenance_activity(),
             }
         )
 
