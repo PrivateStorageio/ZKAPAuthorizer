@@ -382,6 +382,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     Transition rules for a state machine corresponding to the state of
     unblinded tokens in a ``VoucherStore`` - usable, in-use, spent, invalid,
     etc.
+
+    :ivar num_vouchers_redeemed: The total number of vouchers that have been
+        redeemed successfully by this machine.
     """
 
     def __init__(self, case):
@@ -393,6 +396,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
         self.configless.setUp()
 
+        self.num_vouchers_redeemed : int = 0
         self.available = 0
         self.using = []
         self.spent = []
@@ -420,6 +424,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
             succeeded(Always()),
         )
         self.available += num_passes
+        self.num_vouchers_redeemed += 1
 
     @rule(num_passes=pass_counts())
     def get_passes(self, num_passes):
@@ -541,6 +546,17 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.case.assertThat(
             self.configless.store.count_unblinded_tokens(),
             Equals(self.available),
+        )
+
+    @invariant()
+    def check_empty(self):
+        """
+        ``VoucherStore.is_empty`` returns ``True`` until any voucher is redeemed
+        and then returns ``False``.
+        """
+        self.case.assertThat(
+            self.configless.store.is_empty(),
+            Equals(self.num_vouchers_redeemed == 0),
         )
 
     @invariant()
