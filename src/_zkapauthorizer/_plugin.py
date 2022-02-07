@@ -80,7 +80,7 @@ class ZKAPAuthorizer(object):
         connection.
     """
 
-    name = attr.ib(default="privatestorageio-zkapauthz-v1")
+    name = attr.ib()
     _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
 
     def _get_store(self, node_config):

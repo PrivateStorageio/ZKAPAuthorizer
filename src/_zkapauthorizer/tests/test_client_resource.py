@@ -47,22 +47,18 @@ from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
-    AllMatch,
     Always,
     ContainsDict,
     Equals,
     GreaterThan,
-    HasLength,
     Is,
     IsInstance,
     MatchesAll,
     MatchesAny,
-    MatchesPredicate,
     MatchesStructure,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
-from twisted.internet.defer import Deferred, gatherResults, maybeDeferred
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
@@ -73,6 +69,7 @@ from twisted.web.resource import IResource, getChildForRequest
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
+from ..api import NAME
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -106,7 +103,6 @@ from .strategies import (
     requests,
     share_parameters,
     tahoe_configs,
-    unblinded_tokens,
     vouchers,
 )
 
@@ -475,301 +471,6 @@ class UnblindedTokenTests(TestCase):
     @given(
         tahoe_configs(),
         api_auth_tokens(),
-        vouchers(),
-        lists(unblinded_tokens(), unique=True, min_size=1, max_size=1000),
-    )
-    def test_post(self, get_config, api_auth_token, voucher, unblinded_tokens):
-        """
-        When the unblinded token collection receives a **POST**, the unblinded
-        tokens in the request body are inserted into the system and an OK
-        response is generated.
-        """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, datetime.now)
-        agent = RequestTraversalAgent(root)
-        data = BytesIO(
-            dumps_utf8(
-                {
-                    "unblinded-tokens": list(
-                        token.unblinded_token.decode("ascii")
-                        for token in unblinded_tokens
-                    )
-                }
-            )
-        )
-
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/unblinded-token",
-            data=data,
-        )
-        self.assertThat(
-            requesting,
-            succeeded(
-                ok_response(headers=application_json()),
-            ),
-        )
-
-        stored_tokens = root.controller.store.backup()["unblinded-tokens"]
-
-        self.assertThat(
-            stored_tokens,
-            Equals(
-                list(
-                    token.unblinded_token.decode("ascii") for token in unblinded_tokens
-                )
-            ),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-        vouchers(),
-        maybe_extra_tokens(),
-    )
-    def test_get(self, get_config, api_auth_token, voucher, extra_tokens):
-        """
-        When the unblinded token collection receives a **GET**, the response is
-        the total number of unblinded tokens in the system, the unblinded
-        tokens themselves, and information about tokens spent on recent lease
-        maintenance activity.
-        """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, datetime.now)
-        if extra_tokens is None:
-            num_tokens = 0
-        else:
-            num_tokens = root.controller.num_redemption_groups + extra_tokens
-            # Put in a number of tokens with which to test.
-            redeeming = root.controller.redeem(voucher, num_tokens)
-            # Make sure the operation completed before proceeding.
-            self.assertThat(
-                redeeming,
-                succeeded(Always()),
-            )
-
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"GET",
-            b"http://127.0.0.1/unblinded-token",
-        )
-        self.addDetail(
-            "requesting result",
-            text_content(f"{vars(requesting.result)}"),
-        )
-        self.assertThat(
-            requesting,
-            succeeded_with_unblinded_tokens(num_tokens, num_tokens),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-        vouchers(),
-        maybe_extra_tokens(),
-        integers(min_value=0),
-    )
-    def test_get_limit(self, get_config, api_auth_token, voucher, extra_tokens, limit):
-        """
-        When the unblinded token collection receives a **GET** with a **limit**
-        query argument, it returns no more unblinded tokens than indicated by
-        the limit.
-        """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, datetime.now)
-
-        if extra_tokens is None:
-            num_tokens = 0
-        else:
-            num_tokens = root.controller.num_redemption_groups + extra_tokens
-            # Put in a number of tokens with which to test.
-            redeeming = root.controller.redeem(voucher, num_tokens)
-            # Make sure the operation completed before proceeding.
-            self.assertThat(
-                redeeming,
-                succeeded(Always()),
-            )
-
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"GET",
-            "http://127.0.0.1/unblinded-token?limit={}".format(limit).encode("utf-8"),
-        )
-        self.addDetail(
-            "requesting result",
-            text_content(f"{vars(requesting.result)}"),
-        )
-        self.assertThat(
-            requesting,
-            succeeded_with_unblinded_tokens(
-                num_tokens,
-                min(num_tokens, limit),
-            ),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-        vouchers(),
-        maybe_extra_tokens(),
-        text(max_size=64),
-    )
-    def test_get_position(
-        self, get_config, api_auth_token, voucher, extra_tokens, position
-    ):
-        """
-        When the unblinded token collection receives a **GET** with a **position**
-        query argument, it returns all unblinded tokens which sort greater
-        than the position and no others.
-        """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, datetime.now)
-
-        if extra_tokens is None:
-            num_tokens = 0
-        else:
-            num_tokens = root.controller.num_redemption_groups + extra_tokens
-            # Put in a number of tokens with which to test.
-            redeeming = root.controller.redeem(voucher, num_tokens)
-            # Make sure the operation completed before proceeding.
-            self.assertThat(
-                redeeming,
-                succeeded(Always()),
-            )
-
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"GET",
-            "http://127.0.0.1/unblinded-token?position={}".format(
-                quote(position.encode("utf-8"), safe=b""),
-            ).encode("utf-8"),
-        )
-        self.addDetail(
-            "requesting result",
-            text_content(f"{vars(requesting.result)}"),
-        )
-        self.assertThat(
-            requesting,
-            succeeded_with_unblinded_tokens_with_matcher(
-                num_tokens,
-                Equals(num_tokens),
-                AllMatch(
-                    MatchesAll(
-                        GreaterThan(position),
-                        IsInstance(str),
-                    ),
-                ),
-                matches_lease_maintenance_spending(),
-            ),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-        vouchers(),
-        integers(min_value=1, max_value=16),
-        integers(min_value=1, max_value=128),
-    )
-    def test_get_order_matches_use_order(
-        self, get_config, api_auth_token, voucher, num_redemption_groups, extra_tokens
-    ):
-        """
-        The first unblinded token returned in a response to a **GET** request is
-        the first token to be used to authorize a storage request.
-        """
-
-        def after(d, f):
-            new_d = Deferred()
-
-            def f_and_continue(result):
-                maybeDeferred(f).chainDeferred(new_d)
-                return result
-
-            d.addCallback(f_and_continue)
-            return new_d
-
-        def get_tokens():
-            d = authorized_request(
-                api_auth_token,
-                agent,
-                b"GET",
-                b"http://127.0.0.1/unblinded-token",
-            )
-            d.addCallback(readBody)
-            d.addCallback(
-                lambda body: loads(body)["unblinded-tokens"],
-            )
-            return d
-
-        def use_a_token():
-            root.store.discard_unblinded_tokens(
-                root.store.get_unblinded_tokens(1),
-            )
-
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, datetime.now)
-
-        root.controller.num_redemption_groups = num_redemption_groups
-        num_tokens = root.controller.num_redemption_groups + extra_tokens
-
-        # Put in a number of tokens with which to test.
-        redeeming = root.controller.redeem(voucher, num_tokens)
-        # Make sure the operation completed before proceeding.
-        self.assertThat(
-            redeeming,
-            succeeded(Always()),
-        )
-
-        agent = RequestTraversalAgent(root)
-        getting_initial_tokens = get_tokens()
-        using_a_token = after(getting_initial_tokens, use_a_token)
-        getting_tokens_after = after(using_a_token, get_tokens)
-
-        def check_tokens(before_and_after):
-            initial_tokens, tokens_after = before_and_after
-            return initial_tokens[1:] == tokens_after
-
-        self.assertThat(
-            gatherResults([getting_initial_tokens, getting_tokens_after]),
-            succeeded(
-                MatchesPredicate(
-                    check_tokens,
-                    "initial, after (%s): initial[1:] != after",
-                ),
-            ),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
         lists(
             lists(
                 integers(min_value=0, max_value=2 ** 63 - 1),
@@ -805,11 +506,11 @@ class UnblindedTokenTests(TestCase):
             api_auth_token,
             agent,
             b"GET",
-            b"http://127.0.0.1/unblinded-token",
+            b"http://127.0.0.1/lease-maintenance",
         )
         d.addCallback(readBody)
         d.addCallback(
-            lambda body: loads(body)["lease-maintenance-spending"],
+            lambda body: loads(body)["spending"],
         )
         self.assertThat(
             d,
@@ -824,72 +525,10 @@ class UnblindedTokenTests(TestCase):
         )
 
 
-def succeeded_with_unblinded_tokens_with_matcher(
-    all_token_count,
-    match_spendable_token_count,
-    match_unblinded_tokens,
-    match_lease_maint_spending,
-):
-    """
-    :return: A matcher which matches a Deferred which fires with a response
-        like the one returned by the **unblinded-tokens** endpoint.
-
-    :param int all_token_count: The expected value in the ``total`` field of
-        the response.
-
-    :param match_unblinded_tokens: A matcher for the ``unblinded-tokens``
-        field of the response.
-
-    :param match_lease_maint_spending: A matcher for the
-        ``lease-maintenance-spending`` field of the response.
-    """
-    return succeeded(
-        MatchesAll(
-            ok_response(headers=application_json()),
-            AfterPreprocessing(
-                json_content,
-                succeeded(
-                    ContainsDict(
-                        {
-                            "total": Equals(all_token_count),
-                            "spendable": match_spendable_token_count,
-                            "unblinded-tokens": match_unblinded_tokens,
-                            "lease-maintenance-spending": match_lease_maint_spending,
-                        }
-                    ),
-                ),
-            ),
-        ),
-    )
-
-
-def succeeded_with_unblinded_tokens(all_token_count, returned_token_count):
-    """
-    :return: A matcher which matches a Deferred which fires with a response
-        like the one returned by the **unblinded-tokens** endpoint.
-
-    :param int all_token_count: The expected value in the ``total`` field of
-        the response.
-
-    :param int returned_token_count: The expected number of tokens in the
-       ``unblinded-tokens`` field of the response.
-    """
-    return succeeded_with_unblinded_tokens_with_matcher(
-        all_token_count,
-        match_spendable_token_count=Equals(all_token_count),
-        match_unblinded_tokens=MatchesAll(
-            HasLength(returned_token_count),
-            AllMatch(IsInstance(str)),
-        ),
-        match_lease_maint_spending=matches_lease_maintenance_spending(),
-    )
-
-
 def matches_lease_maintenance_spending():
     """
-    :return: A matcher which matches the value of the
-        *lease-maintenance-spending* key in the ``unblinded-tokens`` endpoint
-        response.
+    :return: A matcher which matches the value of the *spending* key in the
+      ``lease-maintenance`` endpoint response.
     """
     return MatchesAny(
         Is(None),
@@ -1071,7 +710,7 @@ class VoucherTests(TestCase):
         those relevant to a voucher which is actively being redeemed, about
         the voucher are included in a json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1103,7 +742,7 @@ class VoucherTests(TestCase):
         those relevant to a voucher which has been redeemed, about the voucher
         are included in a json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1136,7 +775,7 @@ class VoucherTests(TestCase):
         already redeemed, about the voucher are included in a json-encoded
         response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1168,7 +807,7 @@ class VoucherTests(TestCase):
         not been paid for yet, about the voucher are included in a
         json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1200,7 +839,7 @@ class VoucherTests(TestCase):
         kind of transient conditions, about the voucher are included in a
         json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -1290,7 +929,7 @@ class VoucherTests(TestCase):
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1327,7 +966,7 @@ class VoucherTests(TestCase):
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1605,7 +1244,7 @@ class CalculatePriceTests(TestCase):
             lambda share_and_lease_time: tuples(
                 just(share_and_lease_time),
                 direct_tahoe_configs(
-                    zkapauthz_v1_configuration=client_dummyredeemer_configurations(
+                    zkapauthz_v2_configuration=client_dummyredeemer_configurations(
                         min_times_remaining=just(share_and_lease_time[1]),
                     ),
                     shares=just(share_and_lease_time[0]),

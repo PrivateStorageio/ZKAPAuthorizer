@@ -38,7 +38,7 @@ from twisted.internet.defer import fail, succeed
 
 from .._storage_client import call_with_passes
 from .._storage_server import _ValidationResult
-from ..api import MorePassesRequired
+from ..api import NAME, MorePassesRequired
 from ..model import NotEnoughTokens
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -108,7 +108,7 @@ shares.total = {}
     def test_get_configured_pass_value(self, expected):
         """
         ``get_configured_pass_value`` reads the ``pass-value`` value from the
-        ``storageclient.plugins.privatestorageio-zkapauthz-v1`` section as an
+        ``storageclient.plugins.privatestorageio-zkapauthz-v2`` section as an
         integer.
         """
         config = config_from_string(
@@ -120,10 +120,10 @@ shares.needed = 3
 shares.happy = 5
 shares.total = 10
 
-[storageclient.plugins.privatestorageio-zkapauthz-v1]
-pass-value={}
+[storageclient.plugins.{name}]
+pass-value={pass_value}
 """.format(
-                expected
+                name=NAME, pass_value=expected
             ),
         )
 
@@ -136,7 +136,7 @@ pass-value={}
     def test_get_configured_allowed_public_keys(self, expected):
         """
         ``get_configured_pass_value`` reads the ``pass-value`` value from the
-        ``storageclient.plugins.privatestorageio-zkapauthz-v1`` section as an
+        ``storageclient.plugins.privatestorageio-zkapauthz-v2`` section as an
         integer.
         """
         config = config_from_string(
@@ -148,10 +148,11 @@ shares.needed = 3
 shares.happy = 5
 shares.total = 10
 
-[storageclient.plugins.privatestorageio-zkapauthz-v1]
-allowed-public-keys = {}
+[storageclient.plugins.{name}]
+allowed-public-keys = {allowed_public_keys}
 """.format(
-                ",".join(expected)
+                name=NAME,
+                allowed_public_keys=",".join(expected),
             ),
         )
 

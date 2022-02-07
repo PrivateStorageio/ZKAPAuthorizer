@@ -76,6 +76,7 @@ class PassGroupTests(TestCase):
     def _test_token_group_operation(
         self,
         operation,
+        rest_operation,
         matches_tokens,
         voucher,
         num_passes,
@@ -108,7 +109,10 @@ class PassGroupTests(TestCase):
         )
         group = pass_factory.get(b"message", num_passes)
         spent, rest = group.split(spent_indices)
+
+        # Perform the test-specified operations on the two groups.
         operation(spent)
+        rest_operation(rest)
 
         # Verify the expected outcome of the operation using the supplied
         # matcher factory.
@@ -126,14 +130,14 @@ class PassGroupTests(TestCase):
 
         def matches_tokens(num_passes, group):
             return AfterPreprocessing(
-                # The use of `backup` here to check is questionable.  TODO:
-                # Straight-up query interface for tokens in different states.
-                lambda store: store.backup()["unblinded-tokens"],
-                HasLength(num_passes - len(group.passes)),
+                lambda store: store.count_unblinded_tokens(),
+                Equals(num_passes - len(group.passes)),
             )
 
         return self._test_token_group_operation(
             lambda group: group.mark_spent(),
+            # Reset the other group so its tokens are counted above.
+            lambda group: group.reset(),
             matches_tokens,
             voucher,
             num_passes,
@@ -150,15 +154,16 @@ class PassGroupTests(TestCase):
         """
 
         def matches_tokens(num_passes, group):
+            expected = num_passes - len(group.passes)
             return AfterPreprocessing(
-                # The use of `backup` here to check is questionable.  TODO:
-                # Straight-up query interface for tokens in different states.
-                lambda store: store.backup()["unblinded-tokens"],
-                HasLength(num_passes - len(group.passes)),
+                lambda store: store.count_unblinded_tokens(),
+                Equals(expected),
             )
 
         return self._test_token_group_operation(
             lambda group: group.mark_invalid("reason"),
+            # Reset the rest so we can count them in our matcher.
+            lambda group: group.reset(),
             matches_tokens,
             voucher,
             num_passes,
@@ -183,6 +188,9 @@ class PassGroupTests(TestCase):
 
         return self._test_token_group_operation(
             lambda group: group.reset(),
+            # Leave the other group alone so we can see what the effect of the
+            # above reset was.
+            lambda group: None,
             matches_tokens,
             voucher,
             num_passes,

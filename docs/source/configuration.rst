@@ -8,9 +8,9 @@ To enable the plugin at all, add its name to the list of storage plugins in the 
 (``tahoe.cfg`` in the relevant node directory)::
 
   [client]
-  storage.plugins = privatestorageio-zkapauthz-v1
+  storage.plugins = privatestorageio-zkapauthz-v2
 
-Then configure the plugin as desired in the ``storageclient.plugins.privatestorageio-zkapauthz-v1`` section.
+Then configure the plugin as desired in the ``storageclient.plugins.privatestorageio-zkapauthz-v2`` section.
 
 redeemer
 ~~~~~~~~
@@ -20,7 +20,7 @@ The ``dummy`` value is useful for testing purposes only.
 
 For example::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   redeemer = dummy
   issuer-public-key = YXNkYXNkYXNkYXNkYXNkCg==
 
@@ -31,7 +31,7 @@ In this case, the ``ristretto-issuer-root-url`` item is also required.
 
 For example::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   redeemer = ristretto
   ristretto-issuer-root-url = https://issuer.example.invalid/
 
@@ -40,14 +40,14 @@ If the values are not the same, the client will decline to use the storage serve
 
 The client can also be configured with the value of a single pass::
 
-    [storageclient.plugins.privatestorageio-zkapauthz-v1]
+    [storageclient.plugins.privatestorageio-zkapauthz-v2]
     pass-value = 1048576
 
 The value given here must agree with the value servers use in their configuration or the storage service will be unusable.
 
 The client can also be configured with the number of passes to expect in exchange for one voucher::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   default-token-count = 32768
 
 The value given here must agree with the value the issuer uses in its configuration or redemption may fail.
@@ -58,7 +58,7 @@ allowed-public-keys
 Regardless of which redeemer is selected,
 the client must also be configured with the public part of the issuer key pair which it will allow to sign tokens::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   allowed-public-keys = AAAA...,BBBB...,CCCC...
 
 The ``allowed-public-keys`` value is a comma-separated list of encoded public keys.
@@ -76,7 +76,7 @@ The client will try to make the average (mean) interval between runs equal to th
 The value is an integer number of seconds.
 For example to run on average every 26 days::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   lease.crawl-interval.mean = 2246400
 
 
@@ -88,7 +88,7 @@ The random intervals between runs have a uniform distribution with this item's v
 The value is an integer number of seconds.
 For example to make all intervals fall within a 7 day period::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   lease.crawl-interval.range = 302400
 
 
@@ -101,7 +101,7 @@ If the crawler encounters a lease with less time left than this then it will ren
 The value is an integer number of seconds.
 For example to renew leases on all shares which will expire in less than one week::
 
-  [storageclient.plugins.privatestorageio-zkapauthz-v1]
+  [storageclient.plugins.privatestorageio-zkapauthz-v2]
   lease.min-time-remaining = 604800
 
 Server
@@ -111,16 +111,16 @@ To enable the plugin at all, add its name to the list of storage plugins in the 
 (``tahoe.cfg`` in the relevant node directory)::
 
   [storage]
-  plugins = privatestorageio-zkapauthz-v1
+  plugins = privatestorageio-zkapauthz-v2
 
 Then also configure the Ristretto-flavored PrivacyPass issuer the server will announce to clients::
 
-  [storageserver.plugins.privatestorageio-zkapauthz-v1]
+  [storageserver.plugins.privatestorageio-zkapauthz-v2]
   ristretto-issuer-root-url = https://issuer.example.invalid/
 
 The value of a single pass in the system can be configured here as well::
 
-  [storageserver.plugins.privatestorageio-zkapauthz-v1]
+  [storageserver.plugins.privatestorageio-zkapauthz-v2]
   pass-value = 1048576
 
 If no ``pass-value`` is given then a default will be used.
@@ -130,7 +130,7 @@ The storage server must also be configured with the path to the Ristretto-flavor
 To avoid placing secret material in tahoe.cfg,
 this configuration is done using a path::
 
-  [storageserver.plugins.privatestorageio-zkapauthz-v1]
+  [storageserver.plugins.privatestorageio-zkapauthz-v2]
   ristretto-signing-key-path = /path/to/signing.key
 
 The signing key is the keystone secret to the entire system and must be managed with extreme care to prevent unintended disclosure.

@@ -21,6 +21,7 @@ from typing import Optional
 
 from allmydata.node import _Config
 
+from .api import NAME
 from .lease_maintenance import LeaseMaintenanceConfig
 
 
@@ -124,7 +125,7 @@ def _read_duration(cfg, option, default):
         as a ``timedelta``.
     """
     # type: (_Config, str) -> Optional[timedelta]
-    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins." + NAME
     value_str = cfg.get_config(
         section=section_name,
         option=option,

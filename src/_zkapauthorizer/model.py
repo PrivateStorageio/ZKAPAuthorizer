@@ -75,6 +75,12 @@ class NotEnoughTokens(Exception):
     """
 
 
+# The version number in _zkapauthorizer.api.NAME doesn't match the version
+# here because the database is persistent state and we need to be sure to load
+# the older version even if we signal an API compatibility break by bumping
+# the version number elsewhere.  Consider this version number part of a
+# different scheme where we're versioning our ability to open the database at
+# all.  The schema inside the database is versioned by yet another mechanism.
 CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
 
@@ -351,30 +357,6 @@ class VoucherStore(object):
 
         return list(Voucher.from_row(row) for row in refs)
 
-    def _insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
-        """
-        Helper function to really insert unblinded tokens into the database.
-        """
-        cursor.executemany(
-            """
-            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
-            """,
-            list((token, group_id) for token in unblinded_tokens),
-        )
-
-    @with_cursor
-    def insert_unblinded_tokens(self, cursor, unblinded_tokens, group_id):
-        """
-        Store some unblinded tokens, for example as part of a backup-restore
-        process.
-
-        :param list[str] unblinded_tokens: The unblinded tokens to store.
-
-        :param int group_id: The unique identifier of the redemption group to
-            which these tokens belong.
-        """
-        self._insert_unblinded_tokens(cursor, unblinded_tokens, group_id)
-
     @with_cursor
     def insert_unblinded_tokens_for_voucher(
         self, cursor, voucher, public_key, unblinded_tokens, completed, spendable
@@ -448,10 +430,14 @@ class VoucherStore(object):
                 "Cannot insert tokens for unknown voucher; add voucher first"
             )
 
-        self._insert_unblinded_tokens(
-            cursor,
-            list(t.unblinded_token.decode("ascii") for t in unblinded_tokens),
-            group_id,
+        cursor.executemany(
+            """
+            INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
+            """,
+            list(
+                (token.unblinded_token.decode("ascii"), group_id)
+                for token in unblinded_tokens
+            ),
         )
 
     @with_cursor
@@ -657,22 +643,6 @@ class VoucherStore(object):
             DELETE FROM [to-reset]
             """,
         )
-
-    @with_cursor
-    def backup(self, cursor):
-        """
-        Read out all state necessary to recreate this database in the event it is
-        lost.
-        """
-        cursor.execute(
-            """
-            SELECT [token] FROM [unblinded-tokens] ORDER BY [rowid]
-            """,
-        )
-        tokens = cursor.fetchall()
-        return {
-            "unblinded-tokens": list(token for (token,) in tokens),
-        }
 
     def start_lease_maintenance(self):
         """

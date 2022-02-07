@@ -21,9 +21,7 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
-from itertools import islice
-from json import load, loads
-from sys import maxsize
+from json import loads
 
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
@@ -34,6 +32,7 @@ from zope.interface import Attribute
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .api import NAME
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
 from .pricecalculator import PriceCalculator
@@ -91,7 +90,7 @@ def from_configuration(
 ):
     """
     Instantiate the plugin root resource using data from its configuration
-    section, **storageclient.plugins.privatestorageio-zkapauthz-v1**, in the
+    section, **storageclient.plugins.privatestorageio-zkapauthz-v2**, in the
     Tahoe-LAFS configuration file.  See the configuration documentation for
     details of the configuration section.
 
@@ -110,16 +109,15 @@ def from_configuration(
     :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    plugin_name = "privatestorageio-zkapauthz-v1"
     if redeemer is None:
         redeemer = get_redeemer(
-            plugin_name,
+            NAME,
             node_config,
             None,
             None,
         )
     default_token_count = get_token_count(
-        plugin_name,
+        NAME,
         node_config,
     )
     controller = PaymentController(
@@ -178,8 +176,8 @@ def authorizationless_resource_tree(
         ),
     )
     root.putChild(
-        b"unblinded-token",
-        _UnblindedTokenCollection(
+        b"lease-maintenance",
+        _LeaseMaintenanceResource(
             store,
             controller,
         ),
@@ -321,10 +319,10 @@ class _ProjectVersion(Resource):
         )
 
 
-class _UnblindedTokenCollection(Resource):
+class _LeaseMaintenanceResource(Resource):
     """
-    This class implements inspection of unblinded tokens.  Users **GET** this
-    resource to find out about unblinded tokens in the system.
+    This class implements inspection of lease maintenance activity.  Users
+    **GET** this resource to learn about lease maintenance spending.
     """
 
     _log = Logger()
@@ -336,39 +334,15 @@ class _UnblindedTokenCollection(Resource):
 
     def render_GET(self, request):
         """
-        Retrieve some unblinded tokens and associated information.
+        Retrieve the spending information.
         """
         application_json(request)
-        state = self._store.backup()
-        unblinded_tokens = state["unblinded-tokens"]
-
-        limit = request.args.get(b"limit", [None])[0]
-        if limit is not None:
-            limit = min(maxsize, int(limit))
-
-        position = request.args.get(b"position", [b""])[0].decode("utf-8")
-
         return dumps_utf8(
             {
-                "total": len(unblinded_tokens),
-                "spendable": self._store.count_unblinded_tokens(),
-                "unblinded-tokens": list(
-                    islice(
-                        (token for token in unblinded_tokens if token > position), limit
-                    )
-                ),
-                "lease-maintenance-spending": self._lease_maintenance_activity(),
+                "total": self._store.count_unblinded_tokens(),
+                "spending": self._lease_maintenance_activity(),
             }
         )
-
-    def render_POST(self, request):
-        """
-        Store some unblinded tokens.
-        """
-        application_json(request)
-        unblinded_tokens = load(request.content)["unblinded-tokens"]
-        self._store.insert_unblinded_tokens(unblinded_tokens, group_id=0)
-        return dumps_utf8({})
 
     def _lease_maintenance_activity(self):
         activity = self._store.get_latest_lease_maintenance_activity()

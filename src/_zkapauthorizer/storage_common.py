@@ -22,6 +22,7 @@ from typing import Callable
 import attr
 from pyutil.mathutil import div_ceil
 
+from .api import NAME
 from .eliot import MUTABLE_PASSES_REQUIRED
 from .validators import greater_than
 
@@ -110,7 +111,7 @@ def get_configured_pass_value(node_config):
     value is read from the **pass-value** option of the ZKAPAuthorizer plugin
     client section.
     """
-    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins." + NAME
     return int(
         node_config.get_config(
             section=section_name,
@@ -124,7 +125,7 @@ def get_configured_allowed_public_keys(node_config):
     """
     Read the set of allowed issuer public keys from the given configuration.
     """
-    section_name = "storageclient.plugins.privatestorageio-zkapauthz-v1"
+    section_name = "storageclient.plugins." + NAME
     return set(
         node_config.get_config(
             section=section_name,
