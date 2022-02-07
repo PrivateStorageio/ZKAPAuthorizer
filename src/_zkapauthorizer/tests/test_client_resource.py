@@ -73,6 +73,7 @@ from twisted.web.resource import IResource, getChildForRequest
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
+from ..api import NAME
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -714,7 +715,7 @@ class VoucherTests(TestCase):
         those relevant to a voucher which is actively being redeemed, about
         the voucher are included in a json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -746,7 +747,7 @@ class VoucherTests(TestCase):
         those relevant to a voucher which has been redeemed, about the voucher
         are included in a json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -779,7 +780,7 @@ class VoucherTests(TestCase):
         already redeemed, about the voucher are included in a json-encoded
         response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -811,7 +812,7 @@ class VoucherTests(TestCase):
         not been paid for yet, about the voucher are included in a
         json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -843,7 +844,7 @@ class VoucherTests(TestCase):
         kind of transient conditions, about the voucher are included in a
         json-encoded response body.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_get_known_voucher(
             config,
             api_auth_token,
@@ -933,7 +934,7 @@ class VoucherTests(TestCase):
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -970,7 +971,7 @@ class VoucherTests(TestCase):
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
         """
-        count = get_token_count("privatestorageio-zkapauthz-v1", config)
+        count = get_token_count(NAME, config)
         return self._test_list_vouchers(
             config,
             api_auth_token,
@@ -1248,7 +1249,7 @@ class CalculatePriceTests(TestCase):
             lambda share_and_lease_time: tuples(
                 just(share_and_lease_time),
                 direct_tahoe_configs(
-                    zkapauthz_v1_configuration=client_dummyredeemer_configurations(
+                    zkapauthz_v2_configuration=client_dummyredeemer_configurations(
                         min_times_remaining=just(share_and_lease_time[1]),
                     ),
                     shares=just(share_and_lease_time[0]),

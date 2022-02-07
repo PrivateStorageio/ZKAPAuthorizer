@@ -19,7 +19,7 @@ For example, if the secret token is ``ABCDEF``::
 
 The correct value for the token can be read from the Tahoe-LAFS node's ``private/api_auth_token`` file.
 
-``GET /storage-plugins/privatestorageio-zkapauthz-v1/version``
+``GET /storage-plugins/privatestorageio-zkapauthz-v2/version``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint returns the version of the ZKAPAuthorizer Python package in use by the Tahoe-LAFS client node.
@@ -29,7 +29,7 @@ The response is **OK** with an ``application/json`` **Content-Type**::
   { "version": <string>
   }
 
-``PUT /storage-plugins/privatestorageio-zkapauthz-v1/voucher``
+``PUT /storage-plugins/privatestorageio-zkapauthz-v2/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent which has submitted a payment to cause the plugin to redeem the voucher for tokens.
@@ -44,7 +44,7 @@ If the voucher cannot be accepted at the time of the request then the response c
 If the response is **OK** then a repeated request with the same body will have no effect.
 If the response is not **OK** then a repeated request with the same body will try to accept the number again.
 
-``GET /storage-plugins/privatestorageio-zkapauthz-v1/voucher/<voucher>``
+``GET /storage-plugins/privatestorageio-zkapauthz-v2/voucher/<voucher>``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to monitor the status of the redemption of a voucher.
@@ -125,7 +125,7 @@ The *finished* timestamp gives the time when the unpaid error was encountered.
 The *finished* timestamp gives the time when this other error condition was encountered.
 The *details* string may give additional details about what the error was.
 
-``GET /storage-plugins/privatestorageio-zkapauthz-v1/voucher``
+``GET /storage-plugins/privatestorageio-zkapauthz-v2/voucher``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve the status of all vouchers.
@@ -137,7 +137,7 @@ The response is **OK** with ``application/json`` content-type response body like
 
 The elements of the list are objects like the one returned by issuing a **GET** to a child of this collection resource.
 
-``GET /storage-plugins/privatestorageio-zkapauthz-v1/lease-maintenance``
+``GET /storage-plugins/privatestorageio-zkapauthz-v2/lease-maintenance``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an external agent to retrieve information about automatic spending for lease maintenance.
@@ -159,7 +159,7 @@ If it has run,
  * ``when``: associated with an ISO8601 datetime string giving the approximate time the process ran
  * ``count``: associated with a number giving the number of passes which would need to be spent to renew leases on all stored objects seen during the lease maintenance activity
 
-``POST /storage-plugins/privatestorageio-zkapauthz-v1/calculate-price``
+``POST /storage-plugins/privatestorageio-zkapauthz-v2/calculate-price``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This endpoint allows an agent to calculate the number of ZKAPs it will cost to store a collection of files of specified sizes.

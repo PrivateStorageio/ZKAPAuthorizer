@@ -46,6 +46,7 @@ from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
+from ..api import NAME
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (
@@ -478,7 +479,7 @@ def client_lease_maintenance_configurations(maint_configs=None):
 
 
 def direct_tahoe_configs(
-    zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+    zkapauthz_v2_configuration=client_dummyredeemer_configurations(),
     shares=just((None, None, None)),
 ):
     """
@@ -492,7 +493,7 @@ def direct_tahoe_configs(
     """
     config_texts = minimal_tahoe_configs(
         {
-            "privatestorageio-zkapauthz-v1": zkapauthz_v1_configuration,
+            NAME: zkapauthz_v2_configuration,
         },
         shares,
     )
@@ -506,7 +507,7 @@ def direct_tahoe_configs(
 
 
 def tahoe_configs(
-    zkapauthz_v1_configuration=client_dummyredeemer_configurations(),
+    zkapauthz_v2_configuration=client_dummyredeemer_configurations(),
     shares=just((None, None, None)),
 ):
     """
@@ -531,7 +532,7 @@ def tahoe_configs(
 
         return set_paths
 
-    return direct_tahoe_configs(zkapauthz_v1_configuration, shares,).map(
+    return direct_tahoe_configs(zkapauthz_v2_configuration, shares,).map(
         path_setter,
     )
 

@@ -69,6 +69,7 @@ from twisted.plugins.zkapauthorizer import storage_server
 
 from .._plugin import get_root_nodes, load_signing_key
 from .._storage_client import IncorrectStorageServerReference
+from ..api import NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
@@ -339,7 +340,7 @@ tahoe_configs_with_dummy_redeemer = tahoe_configs(client_dummyredeemer_configura
 
 tahoe_configs_with_mismatched_issuer = minimal_tahoe_configs(
     {
-        "privatestorageio-zkapauthz-v1": just(
+        NAME: just(
             {"ristretto-issuer-root-url": "https://another-issuer.example.invalid/"}
         ),
     }
@@ -561,26 +562,26 @@ class ClientResourceTests(TestCase):
         )
 
 
-SERVERS_YAML = b"""
+SERVERS_YAML = """
 storage:
   v0-aaaaaaaa:
     ann:
       anonymous-storage-FURL: pb://@tcp:/
       nickname: 10.0.0.2
       storage-options:
-      - name: privatestorageio-zkapauthz-v1
+      - name: {name}
         ristretto-issuer-root-url: https://payments.example.com/
         storage-server-FURL: pb://bbbbbbbb@tcp:10.0.0.2:1234/cccccccc
-"""
+""".format(name=NAME).encode("ascii")
 
-TWO_SERVERS_YAML = b"""
+TWO_SERVERS_YAML = """
 storage:
   v0-aaaaaaaa:
     ann:
       anonymous-storage-FURL: pb://@tcp:/
       nickname: 10.0.0.2
       storage-options:
-      - name: privatestorageio-zkapauthz-v1
+      - name: {name}
         ristretto-issuer-root-url: https://payments.example.com/
         storage-server-FURL: pb://bbbbbbbb@tcp:10.0.0.2:1234/cccccccc
   v0-dddddddd:
@@ -588,10 +589,10 @@ storage:
       anonymous-storage-FURL: pb://@tcp:/
       nickname: 10.0.0.3
       storage-options:
-      - name: privatestorageio-zkapauthz-v1
+      - name: {name}
         ristretto-issuer-root-url: https://payments.example.com/
         storage-server-FURL: pb://eeeeeeee@tcp:10.0.0.3:1234/ffffffff
-"""
+""".format(name=NAME).encode("ascii")
 
 
 class LeaseMaintenanceServiceTests(TestCase):
@@ -708,7 +709,7 @@ class LeaseMaintenanceServiceTests(TestCase):
             # Then build a function that will get us a Tahoe configuration
             # that includes at least that lease maintenance configuration.
             lambda lease_maint_config: tahoe_configs(
-                zkapauthz_v1_configuration=client_lease_maintenance_configurations(
+                zkapauthz_v2_configuration=client_lease_maintenance_configurations(
                     just(lease_maint_config),
                 ),
             ).map(

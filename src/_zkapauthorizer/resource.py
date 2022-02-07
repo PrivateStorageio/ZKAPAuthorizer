@@ -32,6 +32,7 @@ from zope.interface import Attribute
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .api import NAME
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
 from .pricecalculator import PriceCalculator
@@ -89,7 +90,7 @@ def from_configuration(
 ):
     """
     Instantiate the plugin root resource using data from its configuration
-    section, **storageclient.plugins.privatestorageio-zkapauthz-v1**, in the
+    section, **storageclient.plugins.privatestorageio-zkapauthz-v2**, in the
     Tahoe-LAFS configuration file.  See the configuration documentation for
     details of the configuration section.
 
@@ -108,16 +109,15 @@ def from_configuration(
     :return IZKAPRoot: The root of the resource hierarchy presented by the
         client side of the plugin.
     """
-    plugin_name = "privatestorageio-zkapauthz-v1"
     if redeemer is None:
         redeemer = get_redeemer(
-            plugin_name,
+            NAME,
             node_config,
             None,
             None,
         )
     default_token_count = get_token_count(
-        plugin_name,
+        NAME,
         node_config,
     )
     controller = PaymentController(
