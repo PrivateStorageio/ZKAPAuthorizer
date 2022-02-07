@@ -3,3 +3,4 @@ fixtures
 testtools
 hypothesis
 pyflakes
+openapi_spec_validator

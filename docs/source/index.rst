@@ -7,14 +7,21 @@ Welcome to ZKAP Authorizer's documentation!
 ===========================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    code_of_conduct
    CONTRIBUTING
    interface
-   backup
+   configuration
    leases
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Designs:
+
+   designs/costs
+   designs/backup-recovery
 
 Indices and tables
 ==================

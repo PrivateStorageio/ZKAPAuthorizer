@@ -1,0 +1,136 @@
+openapi: "3.0.0"
+
+info:
+  title: "Replication / Recovery"
+  description: >-
+    This API allows replication and recovery of ZKAPAuthorizer internal state.
+    Replication is in a single direction from this single Tahoe-LAFS node to
+    the Tahoe-LAFS grid.
+  version: "1.0.0"
+
+paths:
+  /storage-plugins/privatestorageio-zkapauthz-v1/recover:
+    post:
+      description: >-
+        Restore from a previously configured replica.
+
+        This is only valid when ZKAPAuthorizer has no local state yet.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ReplicaConfiguration"
+
+      responses:
+        "500": # INTERNAL SERVER ERROR
+          description: >-
+            Recovery from the replica has failed for some reason.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "409": # CONFLICT
+          description: >-
+            Recovery is not possible at this time because local state already
+            exists in the database.  Recover into a new, empty ZKAPAuthorizer
+            installation only.
+
+        "404": # NOT FOUND
+          description: >-
+            Recovery from the replica has failed because the recovery data
+            cannot be retrieved using the given capability.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+        "200": # OK
+          description: >-
+            Recovery from the replica has succeeded.
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties: {}
+
+  /storage-plugins/privatestorageio-zkapauthz-v1/replicate:
+    get:
+      description: >-
+        Get this node's replica configuration.
+      responses:
+        404: # NOT FOUND
+          description: >-
+            This node is not configuration for replication.
+
+        200: # OK
+          description: >-
+            Information about replica configuration is available and included
+            in the response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplicaConfiguration"
+
+    post:
+      description: >-
+        Configure an on-grid replica.
+
+        Once a replica has been configured this node will keep that replica
+        up-to-date with local state changes.
+      responses:
+        201: # CREATED
+          description: >-
+            The replication system is now configured.
+
+            A replica has not necessarily been created yet but ZKAPAuthorizer
+            will begin creating one now.  The response includes the recovery
+            capability for that replica.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplicaConfiguration"
+
+        409: # CONFLICT
+          description: >-
+            The replication system was already configured.
+
+            The response includes the recovery capability for the replica that
+            is being maintained.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplicaConfiguration"
+
+components:
+  schemas:
+    Error:
+      type: "object"
+      properties:
+        details:
+          type: "string"
+          description: >-
+            A free-form text field which may give further details about
+            the failure.
+
+    ReplicaConfiguration:
+      type: "object"
+      properties:
+        recovery-capability:
+          type: "string"
+          description: >-
+            The Tahoe-LAFS read-only capability for the recovery data.
+
+            This is the capability which can be submitted in order to initiate
+            a recovery from the replica.
+
+
+
+  responses:
+    ErrorResponse:
+      description: >-
+        Something broken.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
