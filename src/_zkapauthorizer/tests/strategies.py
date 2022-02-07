@@ -46,7 +46,7 @@ from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
-from ..api import NAME
+from .. import NAME
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (

@@ -67,9 +67,9 @@ from twisted.web.resource import IResource
 
 from twisted.plugins.zkapauthorizer import storage_server
 
+from .. import NAME
 from .._plugin import get_root_nodes, load_signing_key
 from .._storage_client import IncorrectStorageServerReference
-from ..api import NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig

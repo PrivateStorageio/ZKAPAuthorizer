@@ -36,9 +36,10 @@ from testtools.matchers import (
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import fail, succeed
 
+from .. import NAME
 from .._storage_client import call_with_passes
 from .._storage_server import _ValidationResult
-from ..api import NAME, MorePassesRequired
+from ..api import MorePassesRequired
 from ..model import NotEnoughTokens
 from ..storage_common import (
     get_configured_allowed_public_keys,
