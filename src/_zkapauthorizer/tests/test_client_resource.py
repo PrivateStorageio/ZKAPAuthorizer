@@ -47,22 +47,18 @@ from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
-    AllMatch,
     Always,
     ContainsDict,
     Equals,
     GreaterThan,
-    HasLength,
     Is,
     IsInstance,
     MatchesAll,
     MatchesAny,
-    MatchesPredicate,
     MatchesStructure,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
-from twisted.internet.defer import Deferred, gatherResults, maybeDeferred
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
@@ -107,7 +103,6 @@ from .strategies import (
     requests,
     share_parameters,
     tahoe_configs,
-    unblinded_tokens,
     vouchers,
 )
 
