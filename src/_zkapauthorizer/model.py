@@ -17,14 +17,17 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
+from base64 import b64decode
 from datetime import datetime
 from functools import wraps
 from json import loads
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
+from typing import List
 
 import attr
 from aniso8601 import parse_datetime
+from challenge_bypass_ristretto import UnblindedToken as _UnderlyingUnblindedToken
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -439,12 +442,63 @@ class VoucherStore(object):
                 for token in unblinded_tokens
             ),
         )
-        # Clean up the no-longer-needed random tokens.
+        self._delete_corresponding_tokens(cursor, voucher, unblinded_tokens)
+
+    def _delete_corresponding_tokens(self, cursor, voucher : bytes, unblinded_tokens : List["UnblindedToken"]) -> None:
+        """
+        Delete rows from the [tokens] table corresponding to the given unblinded
+        tokens.
+        """
+        # The only way to match tokens with unblinded tokens is to compare the
+        # preimages they each contain.  Unfortunately this means we have to
+        # load all of the tokens from the database.  Hopefully this will never
+        # be a truly huge number because we clean up the table as we make
+        # progress on redemption.
+        def token_preimage(token_b64 : str) -> bytes:
+            # challenge-bypass-ristretto-ffi does not expose a preimage
+            # accessor for tokens. :( We will try to get it to do so.
+            # Meanwhile...
+            token_bytes = b64decode(token_b64)
+            preimage_bytes = token_bytes[:64]
+            return preimage_bytes
+
+        def unblinded_token_preimage(unblinded_token : UnblindedToken) -> bytes:
+            # UnblindedToken exposes a preimage accessor but we have the wrong
+            # kind...
+            unblinded_token_obj = _UnderlyingUnblindedToken.decode_base64(unblinded_token.unblinded_token)
+            preimage_obj = unblinded_token_obj.preimage()
+            preimage_b64 = preimage_obj.encode_base64()
+            preimage_bytes = b64decode(preimage_b64)
+            return preimage_bytes
+
+        # Get the preimages for the unblinded tokens in an easily-querable
+        # structure.
+        preimages = set(map(unblinded_token_preimage, unblinded_tokens))
+        # Load tokens from the database for the comparison.  We can also limit
+        # this search to tokens related to the specific voucher that we used
+        # for redemption.
+        cursor.execute(
+            "SELECT [text] FROM [tokens] WHERE [voucher] = ?",
+            (voucher.decode("ascii"),),
+        )
+        tokens_to_delete = []
+        for rows in iter(cursor.fetchmany, []):
+            for (token,) in rows:
+                preimage = token_preimage(token)
+                if preimage in preimages:
+                    # This token has a preimage that matches the preimage of
+                    # one of the unblinded tokens.  This means this is a token
+                    # which was signed.  This means we can drop this token
+                    # now.  Create the tuple now since we'll need it to
+                    # execute the SQL below.
+                    tokens_to_delete.append((token,))
+
+        # Now delete them.
         cursor.executemany(
             """
-            DELETE FROM [tokens] WHERE [voucher] = ? AND [redemption-group] = ?
+            DELETE FROM [tokens] WHERE [text] = ?
             """,
-            (voucher, group_id),
+            tokens_to_delete,
         )
 
     @with_cursor
@@ -503,7 +557,7 @@ class VoucherStore(object):
             of tokens available to be spent.  In this case, all tokens remain
             available to future calls and do not need to be reset.
 
-        :return list[UnblindedTokens]: The removed unblinded tokens.
+        :return list[UnblindedToken]: The removed unblinded tokens.
         """
         if count > _SQLITE3_INTEGER_MAX:
             # An unreasonable number of tokens and also large enough to
