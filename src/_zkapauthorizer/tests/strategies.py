@@ -1088,26 +1088,33 @@ def ristretto_signing_keys():
 
 @attr.s(frozen=True)
 class _VoucherInsert(object):
-    voucher : str = attr.ib()
+    voucher : bytes = attr.ib()
     expected_tokens : int = attr.ib(validator=attr.validators.gt(0))
-    counter : int = attr.ib(validator=attr.validators.gt(0))
-    tokens : List[RandomToken] = attr.ib(validator=attr.validators.max_len(1024))
+    counter : int = attr.ib(validator=attr.validators.ge(0))
+    tokens : List[RandomToken] = attr.ib()
 
 
 @attr.s(frozen=True)
 class _ExistingState(object):
-    vouchers : List[_VoucherInsert] = attr.ib(validator=attr.validators.max_len(3))
+    vouchers : List[_VoucherInsert] = attr.ib()
 
 
-def existing_states():
+def existing_states(min_vouchers : int = 0, max_vouchers : int = 4):
+    """
+    :param min_vouchers: The minimum number of vouchers to place into the
+    state.
+    """
     return builds(
         _ExistingState,
         vouchers=lists(
             builds(
                 _VoucherInsert,
+                voucher=vouchers(),
                 expected_tokens=integers(min_value=1, max_value=1024),
                 counter=integers(min_value=0, max_value=15),
-                tokens=lists(random_tokens(), max_size=128),
+                tokens=lists(random_tokens(), min_size=1, max_size=128, unique=True),
             ),
+            min_size=min_vouchers,
+            max_size=max_vouchers,
         ),
     )

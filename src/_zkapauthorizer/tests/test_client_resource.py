@@ -514,7 +514,7 @@ class RecoverTests(TestCase):
     @given(
         tahoe_configs(),
         api_auth_tokens(),
-        existing_states(),
+        existing_states(min_vouchers=1),
     )
     def test_conflict(self, get_config, api_auth_token, existing_state):
         """
@@ -522,8 +522,8 @@ class RecoverTests(TestCase):
         response.
         """
         def create(store, state):
-            for (voucher, expected_tokens, counter, tokens) in state.vouchers:
-                store.add(voucher, expected_tokens, counter, lambda: tokens)
+            for ins in state.vouchers:
+                store.add(ins.voucher, ins.expected_tokens, ins.counter, lambda: ins.tokens)
 
             # blinded tokens
             # double spent voucher
