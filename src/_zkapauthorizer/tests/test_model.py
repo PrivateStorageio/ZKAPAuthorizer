@@ -534,6 +534,18 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.available += len(self.using)
         del self.using[:]
 
+
+    @invariant()
+    def unblinded_token_count(self):
+        """
+        ``VoucherStore.count_unblinded_tokens`` returns the number of tokens
+        available to be spent.
+        """
+        self.case.assertThat(
+            self.configless.store.count_unblinded_tokens(),
+            Equals(self.available),
+        )
+
     @invariant()
     def report_state(self):
         note(
