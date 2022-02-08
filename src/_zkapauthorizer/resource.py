@@ -39,6 +39,7 @@ from .controller import PaymentController, get_redeemer
 from .model import VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
+from .recover import IRecoverer, SuccessRecoverer
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -88,6 +89,7 @@ def from_configuration(
     node_config,
     store,
     redeemer=None,
+    recoverer=None,
     clock=None,
 ):
     """
@@ -118,6 +120,9 @@ def from_configuration(
             None,
             None,
         )
+    if recoverer is None:
+        recoverer = SuccessRecoverer()
+
     default_token_count = get_token_count(
         NAME,
         node_config,
@@ -145,6 +150,7 @@ def from_configuration(
         authorizationless_resource_tree(
             store,
             controller,
+            recoverer,
             calculate_price,
         ),
     )
@@ -161,11 +167,14 @@ class RecoverResource(Resource):
     """
 
     store: VoucherStore = attr.ib()
+    recoverer: IRecoverer = attr.ib()
 
     def __attrs_post_init__(self):
         Resource.__init__(self)
 
     def render_POST(self, request):
+        from allmydata.uri import ReadonlyDirectoryURI, from_string
+
         if wrong_content_type(request, "application/json"):
             return NOT_DONE_YET
 
@@ -179,17 +188,34 @@ class RecoverResource(Resource):
             request.setResponseCode(400)
             return b"json did not have expected properties"
 
+        cap_str = body["recovery-capability"]
+        if not isinstance(cap_str, str):
+            request.setResponseCode(400)
+            return b"recovery-capability must be a read-only dircap string"
+
+        cap = from_string(cap_str)
+        if not isinstance(cap, ReadonlyDirectoryURI):
+            request.setResponseCode(400)
+            return b"recovery-capability must be a read-only dircap string"
+
         if not self.store.is_empty():
             request.setResponseCode(409)
             return b"there is existing local state"
 
-        request.setResponseCode(500)
+        try:
+            self.recoverer.recover()
+        except:
+            request.setResponseCode(500)
+            return b""
+
+        request.setResponseCode(202)
         return b""
 
 
 def authorizationless_resource_tree(
     store,
     controller,
+    recoverer,
     calculate_price,
 ):
     """
@@ -207,7 +233,7 @@ def authorizationless_resource_tree(
 
     root.putChild(
         b"recover",
-        RecoverResource(store),
+        RecoverResource(store, recoverer),
     )
 
     root.putChild(

@@ -86,6 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
+from ..recover import FailureRecoverer
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -193,7 +194,7 @@ def invalid_bodies():
     )
 
 
-def root_from_config(config, now):
+def root_from_config(config, now, recoverer=None):
     """
     Create a client root resource from a Tahoe-LAFS configuration.
 
@@ -211,6 +212,7 @@ def root_from_config(config, now):
             now,
             memory_connect,
         ),
+        recoverer=recoverer,
         clock=Clock(),
     )
 
@@ -487,8 +489,8 @@ class RecoverTests(TestCase):
     """
 
     # These are syntactically valid, at least.
-    readkey = b32encode(b"some key").decode("ascii")
-    fingerprint = b32encode(b"some fingerprint").decode("ascii")
+    readkey = b32encode(b"x" * 16).decode("ascii").strip("=").lower()
+    fingerprint = b32encode(b"y" * 32).decode("ascii").strip("=").lower()
 
     GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
     GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
@@ -578,6 +580,8 @@ class RecoverTests(TestCase):
         self._bad_request_test(
             {b"content-type": [b"application/cbor"]},
             self.GOOD_REQUEST_BODY,
+            None,
+            400,
         )
 
     def test_undecodeable_body(self):
@@ -588,6 +592,8 @@ class RecoverTests(TestCase):
         self._bad_request_test(
             self.GOOD_REQUEST_HEADER,
             b"some bytes that are not json",
+            None,
+            400,
         )
 
     def test_wrong_properties(self):
@@ -599,19 +605,74 @@ class RecoverTests(TestCase):
             self.GOOD_REQUEST_HEADER,
             # This is almost right but has an extra property.
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
+            None,
+            400,
+        )
+
+    def test_recovery_capability_not_a_string(self):
+        """
+        If the ``recovery-capability`` property value is not a string then the
+        endpoint returns a 400 response.
+        """
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": []}),
+            None,
+            400,
+        )
+
+    def test_not_a_capability(self):
+        """
+        If the ``recovery-capability`` property value is not a capability string
+        then the endpoint returns a 400 response.
+        """
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": "hello world"}),
+            None,
+            400,
+        )
+
+    def test_not_a_readonly_dircap(self):
+        """
+        If the ``recovery-capability`` property value is not a read-only directory
+        capability string then the endpoint returns a 400 response.
+        """
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
+            None,
+            400,
+        )
+
+    def test_object_not_found(self):
+        """
+        If the ``recovery-capability`` property value is a read-only directory
+        capability for which the object cannot be retrieved then the endpoint
+        returns a 404 response.
+        """
+        recoverer = FailureRecoverer("object not found")
+        expected_status = 404
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            self.GOOD_REQUEST_BODY,
+            recoverer,
+            expected_status,
         )
 
     @given(
         get_config=tahoe_configs(),
         api_auth_token=api_auth_tokens(),
     )
-    def _bad_request_test(self, get_config, api_auth_token, headers, body):
+    def _bad_request_test(
+        self, get_config, api_auth_token, headers, body, recoverer, expected_status
+    ):
         config = get_config_with_api_token(
             self.useFixture(TempDir()),
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, datetime.now, recoverer=recoverer)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -623,7 +684,7 @@ class RecoverTests(TestCase):
         )
         self.assertThat(
             requesting,
-            succeeded(matches_response(code_matcher=Equals(400))),
+            succeeded(matches_response(code_matcher=Equals(expected_status))),
         )
 
         # GET - BAD METHOD
