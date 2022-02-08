@@ -274,7 +274,9 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher : bytes, expected_tokens : int, counter : int, get_tokens):
+    def add(
+        self, cursor, voucher: bytes, expected_tokens: int, counter: int, get_tokens
+    ):
         """
         Add random tokens associated with a voucher (possibly new, possibly
         existing) to the database.  If the (voucher, counter) pair is already

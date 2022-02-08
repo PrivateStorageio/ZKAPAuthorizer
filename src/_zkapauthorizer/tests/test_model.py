@@ -87,6 +87,7 @@ class VoucherStoreIsEmptyTests(TestCase):
     """
     Tests for ``VoucherStore.is_empty``.
     """
+
     def setup_example(self):
         self.store_fixture = self.useFixture(
             ConfiglessMemoryVoucherStore(get_now=datetime.now),
@@ -396,7 +397,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
         self.configless.setUp()
 
-        self.num_vouchers_redeemed : int = 0
+        self.num_vouchers_redeemed: int = 0
         self.available = 0
         self.using = []
         self.spent = []

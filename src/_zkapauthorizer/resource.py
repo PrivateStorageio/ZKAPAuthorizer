@@ -159,7 +159,8 @@ class RecoverResource(Resource):
     Implement the endpoint for triggering local state recovery from a remote
     replica.
     """
-    store : VoucherStore = attr.ib()
+
+    store: VoucherStore = attr.ib()
 
     def __attrs_post_init__(self):
         Resource.__init__(self)

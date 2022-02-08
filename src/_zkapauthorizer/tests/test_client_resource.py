@@ -432,16 +432,17 @@ class ResourceTests(TestCase):
         )
 
         matches_status = matches_response(
-            code_matcher=Not(MatchesAny(
-                Equals(404),
-                between(500, 599),
-            )),
+            code_matcher=Not(
+                MatchesAny(
+                    Equals(404),
+                    between(500, 599),
+                )
+            ),
         )
         self.assertThat(
             requesting,
             succeeded(matches_status),
         )
-
 
     @given(
         tahoe_configs(),
@@ -478,10 +479,12 @@ class ResourceTests(TestCase):
             ),
         )
 
+
 class RecoverTests(TestCase):
     """
     Tests for the ``/recover`` endpoint.
     """
+
     @given(
         tahoe_configs(),
         api_auth_tokens(),
@@ -503,7 +506,9 @@ class RecoverTests(TestCase):
             agent,
             b"POST",
             b"http://127.0.0.1/recover",
-            data=BytesIO(dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})),
+            data=BytesIO(
+                dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})
+            ),
         )
 
         self.assertThat(
@@ -521,9 +526,12 @@ class RecoverTests(TestCase):
         If there is state in the local database the endpoint returns a 409
         response.
         """
+
         def create(store, state):
             for ins in state.vouchers:
-                store.add(ins.voucher, ins.expected_tokens, ins.counter, lambda: ins.tokens)
+                store.add(
+                    ins.voucher, ins.expected_tokens, ins.counter, lambda: ins.tokens
+                )
 
             # blinded tokens
             # double spent voucher
@@ -542,7 +550,9 @@ class RecoverTests(TestCase):
             agent,
             b"POST",
             b"http://127.0.0.1/recover",
-            data=BytesIO(dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})),
+            data=BytesIO(
+                dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})
+            ),
         )
 
         self.assertThat(
@@ -554,7 +564,6 @@ class RecoverTests(TestCase):
         # non-json body - BAD REQUEST
         # non-application/json Content-Type - BAD REQUEST
         # unparsable capability - BAD REQUEST
-
 
 
 def maybe_extra_tokens():
