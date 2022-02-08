@@ -491,9 +491,8 @@ class RecoverTests(TestCase):
     fingerprint = b32encode(b"some fingerprint").decode("ascii")
 
     GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
-    GOOD_REQUEST_BODY = dumps_utf8(
-        {"recovery-capability": f"URI:DIR2-RO:{readkey}:{fingerprint}"}
-    )
+    GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
+    GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
 
     @given(
         tahoe_configs(),
@@ -562,9 +561,7 @@ class RecoverTests(TestCase):
             b"POST",
             b"http://127.0.0.1/recover",
             headers=self.GOOD_REQUEST_HEADER,
-            data=BytesIO(
-                dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})
-            ),
+            data=BytesIO(self.GOOD_REQUEST_BODY),
         )
 
         self.assertThat(
@@ -591,6 +588,17 @@ class RecoverTests(TestCase):
         self._bad_request_test(
             self.GOOD_REQUEST_HEADER,
             b"some bytes that are not json",
+        )
+
+    def test_wrong_properties(self):
+        """
+        If the JSON object represented by the request body doesn't match the
+        expected structure then the endpoint returns a 400 response.
+        """
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            # This is almost right but has an extra property.
+            dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
         )
 
     @given(

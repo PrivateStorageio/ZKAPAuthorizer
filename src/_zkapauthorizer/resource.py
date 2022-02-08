@@ -170,15 +170,20 @@ class RecoverResource(Resource):
             return NOT_DONE_YET
 
         try:
-            loads(request.content.read())
+            body = loads(request.content.read())
         except:
             request.setResponseCode(400)
-            return b""
+            return b"could not parse json"
+
+        if body.keys() != {"recovery-capability"}:
+            request.setResponseCode(400)
+            return b"json did not have expected properties"
 
         if not self.store.is_empty():
             request.setResponseCode(409)
-        else:
-            request.setResponseCode(500)
+            return b"there is existing local state"
+
+        request.setResponseCode(500)
         return b""
 
 
