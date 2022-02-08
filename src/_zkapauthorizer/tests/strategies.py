@@ -1104,17 +1104,57 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
     :param min_vouchers: The minimum number of vouchers to place into the
     state.
     """
+    tokens_per_voucher = 128
+
+    # Pick a number of vouchers to build
+    num_vouchers = integers(min_value=min_vouchers, max_value=max_vouchers)
+
+    def build_vouchers_and_tokens(num_vouchers):
+        # Now build enough tokens to spread across all of the vouchers.
+        tokens = lists(
+            random_tokens(),
+            # Generate a simple multiple so each voucher can have the same
+            # number which is pretty realistic.
+            min_size=num_vouchers * tokens_per_voucher,
+            max_size=num_vouchers * tokens_per_voucher,
+            unique=True,
+        )
+        # And the voucher strings themselves.
+        vouchers_strategy = lists(
+            vouchers(),
+            min_size=num_vouchers,
+            max_size=num_vouchers,
+            unique=True,
+        )
+        # Pass them both onwards.
+        return tuples(vouchers_strategy, tokens)
+
+    vouchers_and_tokens = num_vouchers.flatmap(build_vouchers_and_tokens)
+
+    def build_voucher_inserts(vouchers_and_tokens):
+        vouchers, tokens = vouchers_and_tokens
+
+        voucher_strategies = []
+        for n, v in enumerate(vouchers):
+            voucher_strategies.append(
+                builds(
+                    _VoucherInsert,
+                    voucher=just(v),
+                    expected_tokens=integers(
+                        min_value=tokens_per_voucher, max_value=tokens_per_voucher * 2
+                    ),
+                    counter=integers(min_value=0, max_value=15),
+                    tokens=just(
+                        tokens[n * tokens_per_voucher : (n + 1) * tokens_per_voucher]
+                    ),
+                )
+            )
+
+        return tuples(*voucher_strategies)
+
+    voucher_inserts = vouchers_and_tokens.flatmap(build_voucher_inserts)
+
     return builds(
         _ExistingState,
-        vouchers=lists(
-            builds(
-                _VoucherInsert,
-                voucher=vouchers(),
-                expected_tokens=integers(min_value=1, max_value=1024),
-                counter=integers(min_value=0, max_value=15),
-                tokens=lists(random_tokens(), min_size=1, max_size=128, unique=True),
-            ),
-            min_size=min_vouchers,
-            max_size=max_vouchers,
-        ),
+        vouchers=voucher_inserts,
     )
