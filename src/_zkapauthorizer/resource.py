@@ -205,6 +205,7 @@ class RecoverResource(Resource):
         try:
             self.recoverer.recover()
         except:
+            self._log.error("recovery failed")
             request.setResponseCode(500)
             return b""
 
