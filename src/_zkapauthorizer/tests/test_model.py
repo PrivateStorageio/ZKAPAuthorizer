@@ -453,6 +453,21 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         del self.using[:]
 
     @invariant()
+    def random_token_count(self):
+        """
+        ``VoucherStore.random_token_count`` returns ``0``.
+
+        The state machine currently jumps over all intermediate states where
+        this function could legitimately return non-zero.  It might be nice to
+        split up the ``get_passes`` rule so that we could see other values
+        sometimes.
+        """
+        self.case.assertThat(
+            self.configless.store.count_random_tokens(),
+            Equals(0),
+        )
+
+    @invariant()
     def unblinded_token_count(self):
         """
         ``VoucherStore.count_unblinded_tokens`` returns the number of tokens

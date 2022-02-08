@@ -68,11 +68,11 @@ from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTH
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource, getChildForRequest
 
+from .. import NAME
 from .. import __file__ as package_init_file
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
-from ..api import NAME
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,

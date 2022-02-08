@@ -22,7 +22,7 @@ from typing import Callable
 import attr
 from pyutil.mathutil import div_ceil
 
-from .api import NAME
+from . import NAME
 from .eliot import MUTABLE_PASSES_REQUIRED
 from .validators import greater_than
 

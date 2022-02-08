@@ -21,7 +21,7 @@ from typing import Optional
 
 from allmydata.node import _Config
 
-from .api import NAME
+from . import NAME
 from .lease_maintenance import LeaseMaintenanceConfig
 
 

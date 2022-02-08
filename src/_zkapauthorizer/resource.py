@@ -29,10 +29,10 @@ from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
 
+from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .api import NAME
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
 from .pricecalculator import PriceCalculator

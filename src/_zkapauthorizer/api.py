@@ -20,10 +20,6 @@ __all__ = [
     "ZKAPAuthorizer",
 ]
 
-# The identifier for this plugin.  This appears in URLs for resources the
-# client plugin exposes, configuration files, etc.
-NAME = "privatestorageio-zkapauthz-v2"
-
 from ._storage_client import ZKAPAuthorizerStorageClient
 from ._storage_server import LeaseRenewalRequired, ZKAPAuthorizerStorageServer
 from .storage_common import MorePassesRequired

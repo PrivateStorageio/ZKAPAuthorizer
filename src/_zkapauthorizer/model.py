@@ -290,20 +290,22 @@ class VoucherStore(object):
         if not isinstance(now, datetime):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
+        voucher_text = voucher.decode("ascii")
+
         cursor.execute(
             """
             SELECT [text]
             FROM [tokens]
             WHERE [voucher] = ? AND [counter] = ?
             """,
-            (voucher.decode("ascii"), counter),
+            (voucher_text, counter),
         )
         rows = cursor.fetchall()
         if len(rows) > 0:
             self._log.info(
                 "Loaded {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(rows),
-                voucher=voucher,
+                voucher=voucher_text,
                 counter=counter,
             )
             tokens = list(
@@ -314,14 +316,14 @@ class VoucherStore(object):
             self._log.info(
                 "Persisting {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(tokens),
-                voucher=voucher.decode("ascii"),
+                voucher=voucher_text,
                 counter=counter,
             )
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
                 """,
-                (voucher.decode("ascii"), expected_tokens, self.now()),
+                (voucher_text, expected_tokens, self.now()),
             )
             cursor.executemany(
                 """
@@ -329,7 +331,7 @@ class VoucherStore(object):
                 """,
                 list(
                     (
-                        voucher.decode("ascii"),
+                        voucher_text,
                         counter,
                         token.token_value.decode("ascii"),
                     )
@@ -392,11 +394,13 @@ class VoucherStore(object):
             token_count_increase = 0
             sequestered_count_increase = len(unblinded_tokens)
 
+        voucher_text = voucher.decode("ascii")
+
         cursor.execute(
             """
             INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
             """,
-            (voucher.decode("ascii"), public_key, spendable),
+            (voucher_text, public_key, spendable),
         )
         group_id = cursor.lastrowid
 
@@ -422,13 +426,21 @@ class VoucherStore(object):
                 token_count_increase,
                 sequestered_count_increase,
                 self.now(),
-                voucher.decode("ascii"),
+                voucher_text,
             ),
         )
         if cursor.rowcount == 0:
             raise ValueError(
                 "Cannot insert tokens for unknown voucher; add voucher first"
             )
+
+        cursor.execute(
+            """
+            SELECT [counter] FROM [vouchers] WHERE [number] = ?
+            """,
+            (voucher_text,),
+        )
+        (new_counter,) = cursor.fetchone()
 
         cursor.executemany(
             """
@@ -438,6 +450,19 @@ class VoucherStore(object):
                 (token.unblinded_token.decode("ascii"), group_id)
                 for token in unblinded_tokens
             ),
+        )
+        self._delete_corresponding_tokens(cursor, voucher_text, new_counter - 1)
+
+    def _delete_corresponding_tokens(self, cursor, voucher: str, counter: int) -> None:
+        """
+        Delete rows from the [tokens] table corresponding to the given redemption
+        group.
+        """
+        cursor.execute(
+            """
+            DELETE FROM [tokens] WHERE [voucher] = ? AND [counter] = ?
+            """,
+            (voucher, counter),
         )
 
     @with_cursor
@@ -496,7 +521,7 @@ class VoucherStore(object):
             of tokens available to be spent.  In this case, all tokens remain
             available to future calls and do not need to be reset.
 
-        :return list[UnblindedTokens]: The removed unblinded tokens.
+        :return list[UnblindedToken]: The removed unblinded tokens.
         """
         if count > _SQLITE3_INTEGER_MAX:
             # An unreasonable number of tokens and also large enough to
@@ -525,6 +550,17 @@ class VoucherStore(object):
             texts,
         )
         return list(UnblindedToken(t.encode("ascii")) for (t,) in texts)
+
+    @with_cursor
+    def count_random_tokens(self, cursor) -> int:
+        """
+        :return: The number of random tokens present in the database.  This is
+        usually not interesting but it is exposed so the test suite can check
+        invariants related to it.
+        """
+        cursor.execute("SELECT count(1) FROM [tokens]")
+        (count,) = cursor.fetchone()
+        return count
 
     @with_cursor
     def count_unblinded_tokens(self, cursor):

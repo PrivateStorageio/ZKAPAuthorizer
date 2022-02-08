@@ -15,6 +15,11 @@
 __all__ = [
     "__version__",
     "__revision__",
+    "NAME",
 ]
+
+# The identifier for this plugin.  This appears in URLs for resources the
+# client plugin exposes, configuration files, etc.
+NAME = "privatestorageio-zkapauthz-v2"
 
 from ._version import __revision__, __version__
