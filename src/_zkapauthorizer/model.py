@@ -433,6 +433,14 @@ class VoucherStore(object):
                 "Cannot insert tokens for unknown voucher; add voucher first"
             )
 
+        cursor.execute(
+            """
+            SELECT [counter] FROM [vouchers] WHERE [number] = ?
+            """,
+            (voucher.decode("ascii"),),
+        )
+        (new_counter,) = cursor.fetchone()
+
         cursor.executemany(
             """
             INSERT INTO [unblinded-tokens] ([token], [redemption-group]) VALUES (?, ?)
@@ -442,63 +450,18 @@ class VoucherStore(object):
                 for token in unblinded_tokens
             ),
         )
-        self._delete_corresponding_tokens(cursor, voucher, unblinded_tokens)
+        self._delete_corresponding_tokens(cursor, voucher, new_counter - 1)
 
-    def _delete_corresponding_tokens(self, cursor, voucher : bytes, unblinded_tokens : List["UnblindedToken"]) -> None:
+    def _delete_corresponding_tokens(self, cursor, voucher : bytes, counter : int) -> None:
         """
-        Delete rows from the [tokens] table corresponding to the given unblinded
-        tokens.
+        Delete rows from the [tokens] table corresponding to the given redemption
+        group.
         """
-        # The only way to match tokens with unblinded tokens is to compare the
-        # preimages they each contain.  Unfortunately this means we have to
-        # load all of the tokens from the database.  Hopefully this will never
-        # be a truly huge number because we clean up the table as we make
-        # progress on redemption.
-        def token_preimage(token_b64 : str) -> bytes:
-            # challenge-bypass-ristretto-ffi does not expose a preimage
-            # accessor for tokens. :( We will try to get it to do so.
-            # Meanwhile...
-            token_bytes = b64decode(token_b64)
-            preimage_bytes = token_bytes[:64]
-            return preimage_bytes
-
-        def unblinded_token_preimage(unblinded_token : UnblindedToken) -> bytes:
-            # UnblindedToken exposes a preimage accessor but we have the wrong
-            # kind...
-            unblinded_token_obj = _UnderlyingUnblindedToken.decode_base64(unblinded_token.unblinded_token)
-            preimage_obj = unblinded_token_obj.preimage()
-            preimage_b64 = preimage_obj.encode_base64()
-            preimage_bytes = b64decode(preimage_b64)
-            return preimage_bytes
-
-        # Get the preimages for the unblinded tokens in an easily-querable
-        # structure.
-        preimages = set(map(unblinded_token_preimage, unblinded_tokens))
-        # Load tokens from the database for the comparison.  We can also limit
-        # this search to tokens related to the specific voucher that we used
-        # for redemption.
         cursor.execute(
-            "SELECT [text] FROM [tokens] WHERE [voucher] = ?",
-            (voucher.decode("ascii"),),
-        )
-        tokens_to_delete = []
-        for rows in iter(cursor.fetchmany, []):
-            for (token,) in rows:
-                preimage = token_preimage(token)
-                if preimage in preimages:
-                    # This token has a preimage that matches the preimage of
-                    # one of the unblinded tokens.  This means this is a token
-                    # which was signed.  This means we can drop this token
-                    # now.  Create the tuple now since we'll need it to
-                    # execute the SQL below.
-                    tokens_to_delete.append((token,))
-
-        # Now delete them.
-        cursor.executemany(
             """
-            DELETE FROM [tokens] WHERE [text] = ?
+            DELETE FROM [tokens] WHERE [voucher] = ? AND [counter] = ?
             """,
-            tokens_to_delete,
+            (voucher.decode("ascii"), counter),
         )
 
     @with_cursor
