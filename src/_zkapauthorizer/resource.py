@@ -169,6 +169,12 @@ class RecoverResource(Resource):
         if wrong_content_type(request, "application/json"):
             return NOT_DONE_YET
 
+        try:
+            loads(request.content.read())
+        except:
+            request.setResponseCode(400)
+            return b""
+
         if not self.store.is_empty():
             request.setResponseCode(409)
         else:

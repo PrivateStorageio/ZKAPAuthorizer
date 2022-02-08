@@ -485,7 +485,15 @@ class RecoverTests(TestCase):
     """
     Tests for the ``/recover`` endpoint.
     """
+
+    # These are syntactically valid, at least.
+    readkey = b32encode(b"some key").decode("ascii")
+    fingerprint = b32encode(b"some fingerprint").decode("ascii")
+
     GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
+    GOOD_REQUEST_BODY = dumps_utf8(
+        {"recovery-capability": f"URI:DIR2-RO:{readkey}:{fingerprint}"}
+    )
 
     @given(
         tahoe_configs(),
@@ -569,12 +577,20 @@ class RecoverTests(TestCase):
         If the request Content-Type is not ``application/json`` then the endpoint
         returns a 400 response.
         """
-        # These are syntactically valid, at least.
-        readkey = b32encode(b"some key")
-        fingerprint = b32encode(b"some fingerprint")
+
         self._bad_request_test(
             {b"content-type": [b"application/cbor"]},
-            dumps_utf8({"recovery-capability": f"URI:DIR2-RO:{readkey}:{fingerprint}"}),
+            self.GOOD_REQUEST_BODY,
+        )
+
+    def test_undecodeable_body(self):
+        """
+        If the request body cannot be decoded as JSON then the endpoint returns a
+        400 response.
+        """
+        self._bad_request_test(
+            self.GOOD_REQUEST_HEADER,
+            b"some bytes that are not json",
         )
 
     @given(
@@ -603,7 +619,6 @@ class RecoverTests(TestCase):
         )
 
         # GET - BAD METHOD
-        # non-json body - BAD REQUEST
         # unparsable capability - BAD REQUEST
 
 
