@@ -17,17 +17,14 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
-from base64 import b64decode
 from datetime import datetime
 from functools import wraps
 from json import loads
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import List
 
 import attr
 from aniso8601 import parse_datetime
-from challenge_bypass_ristretto import UnblindedToken as _UnderlyingUnblindedToken
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
