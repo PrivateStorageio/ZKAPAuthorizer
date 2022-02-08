@@ -166,6 +166,9 @@ class RecoverResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
+        if wrong_content_type(request, "application/json"):
+            return NOT_DONE_YET
+
         if not self.store.is_empty():
             request.setResponseCode(409)
         else:

@@ -17,6 +17,7 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
+from base64 import b32encode
 from datetime import datetime
 from io import BytesIO
 from typing import Optional, Set
@@ -484,6 +485,7 @@ class RecoverTests(TestCase):
     """
     Tests for the ``/recover`` endpoint.
     """
+    GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
 
     @given(
         tahoe_configs(),
@@ -506,6 +508,7 @@ class RecoverTests(TestCase):
             agent,
             b"POST",
             b"http://127.0.0.1/recover",
+            headers=self.GOOD_REQUEST_HEADER,
             data=BytesIO(
                 dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})
             ),
@@ -550,6 +553,7 @@ class RecoverTests(TestCase):
             agent,
             b"POST",
             b"http://127.0.0.1/recover",
+            headers=self.GOOD_REQUEST_HEADER,
             data=BytesIO(
                 dumps_utf8({"recovery-capability": "URI:DIR-RO:blahblahblah"})
             ),
@@ -560,9 +564,46 @@ class RecoverTests(TestCase):
             succeeded(matches_response(code_matcher=Equals(409))),
         )
 
+    def test_bad_content_type(self):
+        """
+        If the request Content-Type is not ``application/json`` then the endpoint
+        returns a 400 response.
+        """
+        # These are syntactically valid, at least.
+        readkey = b32encode(b"some key")
+        fingerprint = b32encode(b"some fingerprint")
+        self._bad_request_test(
+            {b"content-type": [b"application/cbor"]},
+            dumps_utf8({"recovery-capability": f"URI:DIR2-RO:{readkey}:{fingerprint}"}),
+        )
+
+    @given(
+        get_config=tahoe_configs(),
+        api_auth_token=api_auth_tokens(),
+    )
+    def _bad_request_test(self, get_config, api_auth_token, headers, body):
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            headers=headers,
+            data=BytesIO(body),
+        )
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(400))),
+        )
+
         # GET - BAD METHOD
         # non-json body - BAD REQUEST
-        # non-application/json Content-Type - BAD REQUEST
         # unparsable capability - BAD REQUEST
 
 
