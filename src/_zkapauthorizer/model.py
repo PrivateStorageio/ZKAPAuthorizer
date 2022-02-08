@@ -453,7 +453,7 @@ class VoucherStore(object):
         )
         self._delete_corresponding_tokens(cursor, voucher_text, new_counter - 1)
 
-    def _delete_corresponding_tokens(self, cursor, voucher : str, counter : int) -> None:
+    def _delete_corresponding_tokens(self, cursor, voucher: str, counter: int) -> None:
         """
         Delete rows from the [tokens] table corresponding to the given redemption
         group.
