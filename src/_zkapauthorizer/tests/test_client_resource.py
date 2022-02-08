@@ -86,7 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import FailureRecoverer
+from ..recover import SuccessRecoverer
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -577,7 +577,7 @@ class RecoverTests(TestCase):
         returns a 400 response.
         """
 
-        self._bad_request_test(
+        self._request_test(
             {b"content-type": [b"application/cbor"]},
             self.GOOD_REQUEST_BODY,
             None,
@@ -589,7 +589,7 @@ class RecoverTests(TestCase):
         If the request body cannot be decoded as JSON then the endpoint returns a
         400 response.
         """
-        self._bad_request_test(
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             b"some bytes that are not json",
             None,
@@ -601,7 +601,7 @@ class RecoverTests(TestCase):
         If the JSON object represented by the request body doesn't match the
         expected structure then the endpoint returns a 400 response.
         """
-        self._bad_request_test(
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             # This is almost right but has an extra property.
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
@@ -614,7 +614,7 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a string then the
         endpoint returns a 400 response.
         """
-        self._bad_request_test(
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": []}),
             None,
@@ -626,7 +626,7 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a capability string
         then the endpoint returns a 400 response.
         """
-        self._bad_request_test(
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": "hello world"}),
             None,
@@ -638,22 +638,21 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a read-only directory
         capability string then the endpoint returns a 400 response.
         """
-        self._bad_request_test(
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
             None,
             400,
         )
 
-    def test_object_not_found(self):
+    def test_accepted(self):
         """
-        If the ``recovery-capability`` property value is a read-only directory
-        capability for which the object cannot be retrieved then the endpoint
-        returns a 404 response.
+        If the ``recovery-capability`` property value is a string then the
+        endpoint returns a 202 response.
         """
-        recoverer = FailureRecoverer("object not found")
-        expected_status = 404
-        self._bad_request_test(
+        recoverer = SuccessRecoverer()
+        expected_status = 202
+        self._request_test(
             self.GOOD_REQUEST_HEADER,
             self.GOOD_REQUEST_BODY,
             recoverer,
@@ -664,7 +663,7 @@ class RecoverTests(TestCase):
         get_config=tahoe_configs(),
         api_auth_token=api_auth_tokens(),
     )
-    def _bad_request_test(
+    def _request_test(
         self, get_config, api_auth_token, headers, body, recoverer, expected_status
     ):
         config = get_config_with_api_token(
@@ -688,7 +687,6 @@ class RecoverTests(TestCase):
         )
 
         # GET - BAD METHOD
-        # unparsable capability - BAD REQUEST
 
 
 def maybe_extra_tokens():
