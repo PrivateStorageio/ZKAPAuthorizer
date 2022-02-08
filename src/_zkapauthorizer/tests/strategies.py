@@ -1104,12 +1104,15 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
     :param min_vouchers: The minimum number of vouchers to place into the
     state.
     """
-    tokens_per_voucher = 128
+    # Pick a number of vouchers to build and a number of tokens for them each
+    # to have.
+    num_vouchers_and_tokens_strategy = tuples(
+        integers(min_value=min_vouchers, max_value=max_vouchers),
+        integers(min_value=1, max_value=128),
+    )
 
-    # Pick a number of vouchers to build
-    num_vouchers = integers(min_value=min_vouchers, max_value=max_vouchers)
-
-    def build_vouchers_and_tokens(num_vouchers):
+    def build_vouchers_and_tokens(num_vouchers_and_tokens):
+        num_vouchers, tokens_per_voucher = num_vouchers_and_tokens
         # Now build enough tokens to spread across all of the vouchers.
         tokens = lists(
             random_tokens(),
@@ -1129,10 +1132,13 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
         # Pass them both onwards.
         return tuples(vouchers_strategy, tokens)
 
-    vouchers_and_tokens = num_vouchers.flatmap(build_vouchers_and_tokens)
+    vouchers_and_tokens = num_vouchers_and_tokens_strategy.flatmap(
+        build_vouchers_and_tokens
+    )
 
     def build_voucher_inserts(vouchers_and_tokens):
         vouchers, tokens = vouchers_and_tokens
+        tokens_per_voucher = len(tokens) // len(vouchers)
 
         voucher_strategies = []
         for n, v in enumerate(vouchers):
