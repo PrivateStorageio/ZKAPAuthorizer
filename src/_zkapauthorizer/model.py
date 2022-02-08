@@ -290,20 +290,22 @@ class VoucherStore(object):
         if not isinstance(now, datetime):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
+        voucher_text = voucher.decode("ascii")
+
         cursor.execute(
             """
             SELECT [text]
             FROM [tokens]
             WHERE [voucher] = ? AND [counter] = ?
             """,
-            (voucher.decode("ascii"), counter),
+            (voucher_text, counter),
         )
         rows = cursor.fetchall()
         if len(rows) > 0:
             self._log.info(
                 "Loaded {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(rows),
-                voucher=voucher,
+                voucher=voucher_text,
                 counter=counter,
             )
             tokens = list(
@@ -314,14 +316,14 @@ class VoucherStore(object):
             self._log.info(
                 "Persisting {count} random tokens for a voucher ({voucher}[{counter}]).",
                 count=len(tokens),
-                voucher=voucher.decode("ascii"),
+                voucher=voucher_text,
                 counter=counter,
             )
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
                 """,
-                (voucher.decode("ascii"), expected_tokens, self.now()),
+                (voucher_text, expected_tokens, self.now()),
             )
             cursor.executemany(
                 """
@@ -329,7 +331,7 @@ class VoucherStore(object):
                 """,
                 list(
                     (
-                        voucher.decode("ascii"),
+                        voucher_text,
                         counter,
                         token.token_value.decode("ascii"),
                     )
@@ -392,11 +394,13 @@ class VoucherStore(object):
             token_count_increase = 0
             sequestered_count_increase = len(unblinded_tokens)
 
+        voucher_text = voucher.decode("ascii")
+
         cursor.execute(
             """
             INSERT INTO [redemption-groups] ([voucher], [public-key], [spendable]) VALUES (?, ?, ?)
             """,
-            (voucher.decode("ascii"), public_key, spendable),
+            (voucher_text, public_key, spendable),
         )
         group_id = cursor.lastrowid
 
@@ -422,7 +426,7 @@ class VoucherStore(object):
                 token_count_increase,
                 sequestered_count_increase,
                 self.now(),
-                voucher.decode("ascii"),
+                voucher_text,
             ),
         )
         if cursor.rowcount == 0:
@@ -434,7 +438,7 @@ class VoucherStore(object):
             """
             SELECT [counter] FROM [vouchers] WHERE [number] = ?
             """,
-            (voucher.decode("ascii"),),
+            (voucher_text,),
         )
         (new_counter,) = cursor.fetchone()
 
@@ -447,9 +451,9 @@ class VoucherStore(object):
                 for token in unblinded_tokens
             ),
         )
-        self._delete_corresponding_tokens(cursor, voucher, new_counter - 1)
+        self._delete_corresponding_tokens(cursor, voucher_text, new_counter - 1)
 
-    def _delete_corresponding_tokens(self, cursor, voucher : bytes, counter : int) -> None:
+    def _delete_corresponding_tokens(self, cursor, voucher : str, counter : int) -> None:
         """
         Delete rows from the [tokens] table corresponding to the given redemption
         group.
@@ -458,7 +462,7 @@ class VoucherStore(object):
             """
             DELETE FROM [tokens] WHERE [voucher] = ? AND [counter] = ?
             """,
-            (voucher.decode("ascii"), counter),
+            (voucher, counter),
         )
 
     @with_cursor
