@@ -6,7 +6,8 @@ __all__ = [
 ]
 
 from enum import Enum, auto
-from typing import Optional
+from sqlite3 import Connection
+from typing import List, Optional
 
 from attrs import define
 from twisted.python.filepath import FilePath
@@ -34,7 +35,7 @@ class RecoveryState:
     stage: RecoveryStages = RecoveryStages.inactive
     failure_reason: Optional[str] = None
 
-    def marshal(self) -> dict[str, str]:
+    def marshal(self) -> dict[str, Optional[str]]:
         return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 
@@ -43,9 +44,9 @@ class IRecoverer(Interface):
     An object which can recover ZKAPAuthorizer state from a replica.
     """
 
-    def recover() -> None:
+    def recover(conn: Connection) -> None:
         """
-        Begin the recovery process.
+        Begin the recovery process into the given store.
 
         :raise ValueError: If recovery has already been attempted
             (successfully or otherwise).
@@ -66,7 +67,7 @@ class SuccessRecoverer:
 
     _state: RecoveryState = RecoveryState()
 
-    def recover(self):
+    def recover(self, conn):
         self._state = RecoveryState(stage=RecoveryStages.succeeded)
 
     def state(self):
@@ -82,8 +83,47 @@ class CannedRecoverer:
 
     _state: RecoveryState
 
-    def recover(self):
+    def recover(self, conn):
         pass
+
+    def state(self):
+        return self._state
+
+
+@define
+class MemorySnapshotRecoverer:
+    """
+    An ``IRecoverer`` that synchronously loads a snapshot from a list of
+    Python strings into the database.
+    """
+
+    _statements: List[str]
+    _state: RecoveryState = RecoveryState()
+
+    def recover(self, conn):
+        for sql in self._statements:
+            conn.execute(sql)
+        self._state = RecoveryState(stage=RecoveryStages.succeeded)
+
+    def state(self):
+        return self._state
+
+
+@define
+class LocalSnapshotRecoverer:
+    """
+    An ``IRecoverer`` that synchronously loads a snapshot from the local
+    filesystem into the database.
+    """
+
+    _snapshot: FilePath
+    _state: RecoveryState = RecoveryState()
+
+    def recover(self, conn):
+        """
+        Synchronously execute statements from the snapshot path against the
+        database.
+        """
 
     def state(self):
         return self._state
