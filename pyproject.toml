@@ -47,3 +47,4 @@ skip = ["src/_zkapauthorizer/_version.py"]
 [tool.mypy]
 namespace_packages = true
 plugins = "mypy_zope:plugin"
+ignore_missing_imports = true
