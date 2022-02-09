@@ -6,7 +6,7 @@ __all__ = [
 ]
 
 from enum import Enum, auto
-from sqlite3 import Connection
+from sqlite3 import Cursor
 from typing import List, Optional
 
 from attrs import define
@@ -60,7 +60,7 @@ class IRecoverer(Interface):
     An object which can recover ZKAPAuthorizer state from a replica.
     """
 
-    def recover(conn: Connection) -> None:
+    def recover(cursor: Cursor) -> None:
         """
         Begin the recovery process into the given store.
 
@@ -87,8 +87,8 @@ class StatefulRecoverer:
     _state: RecoveryState
     _recoverer: IRecoverer
 
-    def recover(self, conn):
-        new_state = self._recoverer.recover(conn)
+    def recover(self, cursor):
+        new_state = self._recoverer.recover(cursor)
         if new_state is not None:
             self._state = new_state
         return None
@@ -104,7 +104,7 @@ class NullRecoverer:
     An ``IRecoverer`` that does nothing.
     """
 
-    def recover(self, conn):
+    def recover(self, cursor):
         return None
 
 
@@ -139,12 +139,12 @@ class MemorySnapshotRecoverer:
 
     _statements: List[str]
 
-    def recover(self, conn):
+    def recover(self, cursor):
         """
-        Synchronously execute our statement list against the given connection.
+        Synchronously execute our statement list against the given cursor.
         """
         for sql in self._statements:
-            conn.execute(sql)
+            cursor.execute(sql)
         return RecoveryState(stage=RecoveryStages.succeeded)
 
 
@@ -158,8 +158,8 @@ class LocalSnapshotRecoverer:
 
     _snapshot: FilePath
 
-    def recover(self, conn):
+    def recover(self, cursor):
         """
         Synchronously execute statements read from the snapshot path against the
-        given connection.
+        given cursor.
         """
