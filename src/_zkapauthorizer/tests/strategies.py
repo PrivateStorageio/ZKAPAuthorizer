@@ -18,6 +18,7 @@ Hypothesis strategies for property testing.
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
+from functools import partial
 from typing import List
 from urllib.parse import quote
 
@@ -25,12 +26,14 @@ import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
     characters,
     datetimes,
     dictionaries,
     fixed_dictionaries,
+    floats,
     integers,
     just,
     lists,
@@ -48,6 +51,7 @@ from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
 from .. import NAME
+from .._sql import Column, Delete, Insert, StorageAffinity, Table, Update
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (
@@ -1164,3 +1168,100 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
         _ExistingState,
         vouchers=voucher_inserts,
     )
+
+
+def sql_identifiers() -> SearchStrategy[str]:
+    """
+    Build strings suitable for use as SQLite3 identifiers.
+    """
+    return text(
+        min_size=1,
+        alphabet=characters(
+            # Control characters are largely illegal.
+            # Names are case insensitive so don't even generate uppercase.
+            blacklist_categories=("Cs", "Lu"),
+            # Maybe ] should be allowed but I don't know how to quote it.  '
+            # certainly should be but Python sqlite3 module has lots of
+            # problems with it.
+            blacklist_characters=("\x00", "]", "'"),
+        ),
+    )
+
+
+def tables() -> SearchStrategy[Table]:
+    """
+    Build objects describing tables in a SQLite3 database.
+    """
+    return builds(
+        Table,
+        columns=lists(
+            tuples(
+                sql_identifiers(),
+                builds(Column),
+            ),
+            min_size=1,
+            unique_by=lambda x: x[0],
+        ),
+    )
+
+# Python has unbounded integers but SQLite3 integers must fall into this
+# range.
+_sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
+
+# SQLite3 can do infinity and NaN but I don't know how to get them through the
+# Python interface.  SQLite3 can do 64 bit floats but it only guarantees 15
+# digits of precision (maybe only for its base 10 string representations?)
+# which causes values requiring greater precision to fail to round-trip.  The
+# SQLite3 docs are quite clear about what one should expect from floating
+# point values, anyway:
+#
+#    Floating point values are approximate.
+#
+# https://www.sqlite.org/floatingpoint.html
+_sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
+
+# Here's how you can build values that match certain storage type affinities.
+_storage_affinity_strategies = {
+    StorageAffinity.INT: _sql_integer,
+    StorageAffinity.TEXT: text(),
+    StorageAffinity.BLOB: binary(),
+    StorageAffinity.REAL: _sql_floats,
+    StorageAffinity.NUMERIC: one_of(_sql_integer, text(), binary(), _sql_floats),
+}
+
+
+def inserts(name: str, table: Table) -> SearchStrategy[Insert]:
+    """
+    Build objects describing row insertions into the given table.
+    """
+    return builds(
+        partial(Insert, table_name=name, table=table),
+        fields=tuples(
+            *(
+                _storage_affinity_strategies[column.affinity]
+                for (_, column) in table.columns
+            )
+        ),
+    )
+
+
+def updates(name: str, table: Table) -> SearchStrategy[Update]:
+    """
+    Build objects describing row updates in the given table.
+    """
+    return builds(
+        partial(Update, table_name=name, table=table),
+        fields=tuples(
+            *(
+                _storage_affinity_strategies[column.affinity]
+                for (_, column) in table.columns
+            )
+        ),
+    )
+
+
+def deletes(name, table):
+    """
+    Build objects describing row deletions from the given table.
+    """
+    return just(Delete(table_name=name))
