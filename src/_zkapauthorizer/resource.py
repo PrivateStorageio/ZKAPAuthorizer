@@ -36,7 +36,7 @@ from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
-from .model import VoucherStore
+from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
 from .recover import IStatefulRecoverer, success_recoverer
@@ -204,12 +204,13 @@ class RecoverResource(Resource):
             request.setResponseCode(400)
             return b"recovery-capability must be a read-only dircap string"
 
-        if not self.store.is_empty():
+        try:
+            self.store.call_if_empty(
+                lambda conn: self.recoverer.recover(cap, conn),
+            )
+        except NotEmpty:
             request.setResponseCode(409)
             return b"there is existing local state"
-
-        try:
-            self.recoverer.recover()
         except:
             self._log.error("recovery failed")
             request.setResponseCode(500)

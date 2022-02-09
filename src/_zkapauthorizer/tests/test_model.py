@@ -58,6 +58,7 @@ from twisted.python.runtime import platform
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
+    NotEmpty,
     NotEnoughTokens,
     Pass,
     Pending,
@@ -83,9 +84,13 @@ from .strategies import (
 )
 
 
-class VoucherStoreIsEmptyTests(TestCase):
+def fail(cursor):
+    raise Exception("Should not be called")
+
+
+class VoucherStoreCallIfEmptyTests(TestCase):
     """
-    Tests for ``VoucherStore.is_empty``.
+    Tests for ``VoucherStore.call_if_empty``.
     """
 
     def setup_example(self):
@@ -99,7 +104,20 @@ class VoucherStoreIsEmptyTests(TestCase):
         then it is empty.
         """
         self.setup_example()
-        self.assertThat(self.store_fixture.store.is_empty(), Equals(True))
+
+        def side_effect(cursor):
+            cursor.execute("CREATE TABLE [it_ran] (a INT)")
+            cursor.execute("INSERT INTO [it_ran] VALUES (1)")
+            return True
+
+        self.assertThat(
+            self.store_fixture.store.call_if_empty(side_effect),
+            Equals(True),
+        )
+        rows = list(
+            self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
+        )
+        self.assertThat(rows, HasLength(1))
 
     @given(
         voucher=vouchers(),
@@ -116,7 +134,10 @@ class VoucherStoreIsEmptyTests(TestCase):
             counter=0,
             get_tokens=lambda: tokens,
         )
-        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
 
     @given(
         voucher=vouchers(),
@@ -129,7 +150,10 @@ class VoucherStoreIsEmptyTests(TestCase):
         """
         d = self.store_fixture.redeem(voucher, num_passes)
         self.assertThat(d, succeeded(Always()))
-        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
 
     @given(
         voucher=vouchers(),
@@ -146,7 +170,10 @@ class VoucherStoreIsEmptyTests(TestCase):
         tokens = self.store_fixture.store.get_unblinded_tokens(num_passes)
         self.store_fixture.store.invalidate_unblinded_tokens("anything", tokens)
 
-        self.assertThat(self.store_fixture.store.is_empty(), Equals(False))
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
 
 
 class VoucherStoreTests(TestCase):
@@ -552,13 +579,19 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     @invariant()
     def check_empty(self):
         """
-        ``VoucherStore.is_empty`` returns ``True`` until any voucher is redeemed
-        and then returns ``False``.
+        ``VoucherStore.call_if_empty`` succeeds until any voucher is redeemed and
+        then raises ``NotEmpty``.
         """
-        self.case.assertThat(
-            self.configless.store.is_empty(),
-            Equals(self.num_vouchers_redeemed == 0),
-        )
+        if self.num_vouchers_redeemed == 0:
+            self.case.assertThat(
+                self.configless.store.call_if_empty(lambda cursor: True),
+                Equals(True),
+            )
+        else:
+            self.case.assertThat(
+                lambda: self.configless.store.call_if_empty(fail),
+                raises(NotEmpty),
+            )
 
     @invariant()
     def report_state(self):
