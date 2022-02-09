@@ -7,11 +7,15 @@ __all__ = [
 
 from enum import Enum, auto
 from sqlite3 import Cursor
-from typing import List, Optional
+from typing import Callable, List, Optional
 
+from allmydata.node import _Config
 from attrs import define
+from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
+
+from .tahoe import download
 
 
 class RecoveryStages(Enum):
@@ -55,12 +59,15 @@ class RecoveryState:
         return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 
+SetState = Callable[[RecoveryState], None]
+
+
 class IRecoverer(Interface):
     """
     An object which can recover ZKAPAuthorizer state from a replica.
     """
 
-    def recover(cursor: Cursor) -> None:
+    def recover(set_state: SetState, cap: str, cursor: Cursor) -> None:
         """
         Begin the recovery process into the given store.
 
@@ -76,6 +83,42 @@ class IStatefulRecoverer(IRecoverer):
         """
 
 
+class ILocalRecoverer(Interface):
+    def recover(cursor: Cursor) -> None:
+        pass
+
+
+@implementer(IRecoverer)
+@define(frozen=True)
+class TahoeLAFSCapRecoverer:
+    """
+    An ``IRecoverer`` that downloads an object identified by a Tahoe-LAFS
+    capability and recovers the state by synchronously (TODO: asynchronous)
+    importing the data it contains.
+    """
+
+    _treq: HTTPClient
+    _node_config: _Config
+
+    def recover(self, set_state, cap, cursor):
+        api_root = self._node_config.get_config_path("node.url")
+        snapshot_path = self._node_config.get_private_path("snapshot.sql")
+
+        async def download_and_recover():
+            try:
+                set_state(RecoveryState(stage=RecoveryStages.downloading))
+                await download(self._treq, snapshot_path, api_root, cap)
+                set_state(RecoveryState(stage=RecoveryStages.importing))
+                LocalSnapshotRecoverer(snapshot_path).recover(cursor)
+                set_state(RecoveryState(stage=RecoveryStages.succeeded))
+            except Exception as e:
+                set_state(
+                    RecoveryState(stage=RecoveryStages.failed, failure_reason=str(e))
+                )
+
+        download_and_recover()
+
+
 @implementer(IStatefulRecoverer)
 @define
 class StatefulRecoverer:
@@ -87,8 +130,8 @@ class StatefulRecoverer:
     _state: RecoveryState
     _recoverer: IRecoverer
 
-    def recover(self, cursor):
-        new_state = self._recoverer.recover(cursor)
+    def recover(self, cap, cursor):
+        new_state = self._recoverer.recover(cap, cursor)
         if new_state is not None:
             self._state = new_state
         return None
@@ -97,7 +140,7 @@ class StatefulRecoverer:
         return self._state
 
 
-@implementer(IRecoverer)
+@implementer(ILocalRecoverer)
 @define
 class NullRecoverer:
     """
@@ -119,17 +162,30 @@ def canned_recoverer(state):
     )
 
 
+def fail_recoverer():
+    """
+    An ``IRecoverer`` that always immediately claims to have failed (without
+    actually doing anything).
+    """
+    return canned_recoverer(
+        RecoveryState(
+            stage=RecoveryStages.failed,
+            failure_reason="no real recoverer configured",
+        ),
+    )
+
+
 def success_recoverer():
     """
-    An ``IRecoverer`` that always immediately claims to have succeeded after
-    recovery is attempted (without actually doing anything).
+    An ``IRecoverer`` that always immediately claims to have succeeded
+    (without actually doing anything).
     """
     return canned_recoverer(
         RecoveryState(stage=RecoveryStages.succeeded),
     )
 
 
-@implementer(IRecoverer)
+@implementer(ILocalRecoverer)
 @define
 class MemorySnapshotRecoverer:
     """
@@ -148,7 +204,7 @@ class MemorySnapshotRecoverer:
         return RecoveryState(stage=RecoveryStages.succeeded)
 
 
-@implementer(IRecoverer)
+@implementer(ILocalRecoverer)
 @define
 class LocalSnapshotRecoverer:
     """

@@ -24,6 +24,7 @@ from typing import Callable, List
 from weakref import WeakValueDictionary
 
 import attr
+import treq
 from allmydata.client import _Client
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
@@ -49,6 +50,7 @@ from .lease_maintenance import (
     maintain_leases_from_root,
 )
 from .model import VoucherStore
+from .recover import TahoeLAFSCapRecoverer
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -185,12 +187,12 @@ class ZKAPAuthorizer(object):
         if reactor is None:
             from twisted.internet import reactor
 
-        # replica = Replica()
+        recoverer = TahoeLAFSCapRecoverer(treq, node_config)
 
         return resource_from_configuration(
             node_config,
             store=self._get_store(node_config),
-            # replica=replica,
+            recoverer=recoverer,
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
         )

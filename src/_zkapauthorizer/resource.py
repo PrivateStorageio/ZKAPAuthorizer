@@ -39,7 +39,7 @@ from .controller import PaymentController, get_redeemer
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import IStatefulRecoverer, success_recoverer
+from .recover import IStatefulRecoverer, fail_recoverer
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -121,7 +121,7 @@ def from_configuration(
             None,
         )
     if recoverer is None:
-        recoverer = success_recoverer()
+        recoverer = fail_recoverer()
 
     default_token_count = get_token_count(
         NAME,
@@ -206,7 +206,7 @@ class RecoverResource(Resource):
 
         try:
             self.store.call_if_empty(
-                lambda conn: self.recoverer.recover(cap, conn),
+                lambda conn: self.recoverer.recover(cap_str, conn),
             )
         except NotEmpty:
             request.setResponseCode(409)
