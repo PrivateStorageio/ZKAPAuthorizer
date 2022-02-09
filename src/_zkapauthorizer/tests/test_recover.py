@@ -58,9 +58,9 @@ class SnapshotMachine(RuleBasedStateMachine):
         statements = list(snapshot(self.connection))
         new = connect(":memory:")
         recoverer = MemorySnapshotRecoverer(statements)
-        recoverer.recover(new)
+        state = recoverer.recover(new)
         self.case.assertThat(
-            recoverer.state().stage,
+            state.stage,
             Equals(RecoveryStages.succeeded),
         )
 

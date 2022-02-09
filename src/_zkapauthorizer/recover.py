@@ -1,8 +1,8 @@
 __all__ = [
     "RecoveryState",
     "IRecoverer",
-    "SuccessRecoverer",
-    "CannedRecoverer",
+    "canned_recoverer",
+    "success_recoverer",
 ]
 
 from enum import Enum, auto
@@ -11,10 +11,26 @@ from typing import List, Optional
 
 from attrs import define
 from twisted.python.filepath import FilePath
-from zope.interface import Interface
+from zope.interface import Interface, implementer
 
 
 class RecoveryStages(Enum):
+    """
+    Constants representing the different stages a recovery process may have
+    reached.
+
+    :ivar inactive: The recovery system has not been activated.  No recovery
+        has yet been attempted.
+
+    :ivar succeeded: The recovery system has successfully recovered state from
+        a replica.  Recovery is finished.  Since state now exists in the local
+        database, the recovery system cannot be re-activated.
+
+    :ivar failed: The recovery system has definitively failed in its attempt
+        to recover from a replica.  Recovery will progress no further.  It is
+        undefined what state now exists in the local database.
+    """
+
     inactive = auto()
     succeeded = auto()
     failed = auto()
@@ -52,44 +68,68 @@ class IRecoverer(Interface):
             (successfully or otherwise).
         """
 
+
+class IStatefulRecoverer(IRecoverer):
     def state() -> RecoveryState:
         """
         Get the current state of the recovery attempt.
         """
 
 
+@implementer(IStatefulRecoverer)
 @define
-class SuccessRecoverer:
+class StatefulRecoverer:
+    """
+    An ``IRecoverer`` that exposes changing state as it progresses through the
+    recovery process.
+    """
+
+    _state: RecoveryState
+    _recoverer: IRecoverer
+
+    def recover(self, conn):
+        new_state = self._recoverer.recover(conn)
+        if new_state is not None:
+            self._state = new_state
+        return None
+
+    def state(self):
+        return self._state
+
+
+@implementer(IRecoverer)
+@define
+class NullRecoverer:
+    """
+    An ``IRecoverer`` that does nothing.
+    """
+
+    def recover(self, conn):
+        return None
+
+
+def canned_recoverer(state):
+    """
+    An ``IStatefulRecoverer`` that always immediately claims whatever you tell
+    it to (without actually doing anything).
+    """
+    return StatefulRecoverer(
+        state,
+        NullRecoverer(),
+    )
+
+
+def success_recoverer():
     """
     An ``IRecoverer`` that always immediately claims to have succeeded after
     recovery is attempted (without actually doing anything).
     """
-
-    _state: RecoveryState = RecoveryState()
-
-    def recover(self, conn):
-        self._state = RecoveryState(stage=RecoveryStages.succeeded)
-
-    def state(self):
-        return self._state
+    return canned_recoverer(
+        RecoveryState(stage=RecoveryStages.succeeded),
+    )
 
 
-@define
-class CannedRecoverer:
-    """
-    An ``IRecoverer`` that always claims whatever you tell it to (without
-    doing anything).
-    """
-
-    _state: RecoveryState
-
-    def recover(self, conn):
-        pass
-
-    def state(self):
-        return self._state
-
-
+@implementer(IRecoverer)
 @define
 class MemorySnapshotRecoverer:
     """
@@ -98,17 +138,17 @@ class MemorySnapshotRecoverer:
     """
 
     _statements: List[str]
-    _state: RecoveryState = RecoveryState()
 
     def recover(self, conn):
+        """
+        Synchronously execute our statement list against the given connection.
+        """
         for sql in self._statements:
             conn.execute(sql)
-        self._state = RecoveryState(stage=RecoveryStages.succeeded)
-
-    def state(self):
-        return self._state
+        return RecoveryState(stage=RecoveryStages.succeeded)
 
 
+@implementer(IRecoverer)
 @define
 class LocalSnapshotRecoverer:
     """
@@ -117,13 +157,9 @@ class LocalSnapshotRecoverer:
     """
 
     _snapshot: FilePath
-    _state: RecoveryState = RecoveryState()
 
     def recover(self, conn):
         """
-        Synchronously execute statements from the snapshot path against the
-        database.
+        Synchronously execute statements read from the snapshot path against the
+        given connection.
         """
-
-    def state(self):
-        return self._state

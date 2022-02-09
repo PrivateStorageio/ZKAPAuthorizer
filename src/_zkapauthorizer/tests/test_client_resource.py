@@ -86,7 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import CannedRecoverer, RecoveryStages, RecoveryState, SuccessRecoverer
+from ..recover import canned_recoverer, RecoveryStages, RecoveryState, success_recoverer
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -650,7 +650,7 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is a string then the
         endpoint returns a 202 response.
         """
-        recoverer = SuccessRecoverer()
+        recoverer = success_recoverer()
         expected_status = 202
         self._request_test(
             self.GOOD_REQUEST_HEADER,
@@ -698,7 +698,7 @@ class RecoverTests(TestCase):
         status information about the recovery.
         """
         reason = "some interesting information"
-        recoverer = CannedRecoverer(
+        recoverer = canned_recoverer(
             RecoveryState(stage=RecoveryStages.failed, failure_reason=reason),
         )
 

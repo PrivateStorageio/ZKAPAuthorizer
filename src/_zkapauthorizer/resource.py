@@ -39,7 +39,7 @@ from .controller import PaymentController, get_redeemer
 from .model import VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import IRecoverer, SuccessRecoverer
+from .recover import IStatefulRecoverer, success_recoverer
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -121,7 +121,7 @@ def from_configuration(
             None,
         )
     if recoverer is None:
-        recoverer = SuccessRecoverer()
+        recoverer = success_recoverer()
 
     default_token_count = get_token_count(
         NAME,
@@ -166,8 +166,10 @@ class RecoverResource(Resource):
     replica.
     """
 
+    _log = Logger()
+
     store: VoucherStore = attr.ib()
-    recoverer: IRecoverer = attr.ib()
+    recoverer: IStatefulRecoverer = attr.ib()
 
     def __attrs_post_init__(self):
         Resource.__init__(self)
