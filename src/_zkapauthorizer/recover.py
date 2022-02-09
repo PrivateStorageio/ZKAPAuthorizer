@@ -2,7 +2,7 @@ __all__ = [
     "RecoveryState",
     "IRecoverer",
     "SuccessRecoverer",
-    "FailureRecoverer",
+    "CannedRecoverer",
 ]
 
 from enum import Enum, auto
@@ -69,19 +69,16 @@ class SuccessRecoverer:
 
 
 @define
-class FailureRecoverer:
+class CannedRecoverer:
     """
-    An ``IRecoverer`` that always immediately claims to have failed (without
+    An ``IRecoverer`` that always claims whatever you tell it to (without
     doing anything).
     """
 
-    reason: str
-    _state: RecoveryState = RecoveryState()
+    _state: RecoveryState
 
     def recover(self):
-        self._state = RecoveryState(
-            stage=RecoveryStates.failed, failure_reason=self.reason
-        )
+        pass
 
     def state(self):
         return self._state
