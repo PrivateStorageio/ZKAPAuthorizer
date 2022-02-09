@@ -86,7 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import SuccessRecoverer
+from ..recover import CannedRecoverer, RecoveryStages, RecoveryState, SuccessRecoverer
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -686,7 +686,48 @@ class RecoverTests(TestCase):
             succeeded(matches_response(code_matcher=Equals(expected_status))),
         )
 
-        # GET - BAD METHOD
+        # PATCH - BAD METHOD
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_get_status(self, get_config, api_auth_token):
+        """
+        The endpoint responds to a **GET** request with OK and a body containing
+        status information about the recovery.
+        """
+        reason = "some interesting information"
+        recoverer = CannedRecoverer(
+            RecoveryState(stage=RecoveryStages.failed, failure_reason=reason),
+        )
+
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now, recoverer=recoverer)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"GET",
+            b"http://127.0.0.1/recover",
+        )
+        self.assertThat(
+            requesting,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(OK),
+                    headers_matcher=application_json(),
+                    body_matcher=AfterPreprocessing(
+                        loads,
+                        Equals({"stage": "failed", "failure-reason": reason}),
+                    ),
+                )
+            ),
+        )
 
 
 def maybe_extra_tokens():

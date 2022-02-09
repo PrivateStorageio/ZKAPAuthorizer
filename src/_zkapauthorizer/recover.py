@@ -9,12 +9,14 @@ from enum import Enum, auto
 from typing import Optional
 
 from attrs import define
+from twisted.python.filepath import FilePath
 from zope.interface import Interface
 
 
-class RecoveryStates(Enum):
-    inactive = auto
-    succeeded = auto
+class RecoveryStages(Enum):
+    inactive = auto()
+    succeeded = auto()
+    failed = auto()
 
 
 @define(frozen=True)
@@ -29,8 +31,11 @@ class RecoveryState:
         (maybe) string giving details about why.
     """
 
-    stage: RecoveryStates = RecoveryStates.inactive
+    stage: RecoveryStages = RecoveryStages.inactive
     failure_reason: Optional[str] = None
+
+    def marshal(self) -> dict[str, str]:
+        return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 
 class IRecoverer(Interface):
@@ -55,14 +60,14 @@ class IRecoverer(Interface):
 @define
 class SuccessRecoverer:
     """
-    An ``IRecoverer`` that always immediately claims to have succeeded
-    (without doing anything).
+    An ``IRecoverer`` that always immediately claims to have succeeded after
+    recovery is attempted (without actually doing anything).
     """
 
     _state: RecoveryState = RecoveryState()
 
     def recover(self):
-        self._state = RecoveryState(stage=RecoveryStates.succeeded)
+        self._state = RecoveryState(stage=RecoveryStages.succeeded)
 
     def state(self):
         return self._state

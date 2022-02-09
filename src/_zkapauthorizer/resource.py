@@ -172,6 +172,10 @@ class RecoverResource(Resource):
     def __attrs_post_init__(self):
         Resource.__init__(self)
 
+    def render_GET(self, request):
+        application_json(request)
+        return dumps_utf8(self.recoverer.state().marshal())
+
     def render_POST(self, request):
         from allmydata.uri import ReadonlyDirectoryURI, from_string
 
