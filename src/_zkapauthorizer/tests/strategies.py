@@ -1204,6 +1204,7 @@ def tables() -> SearchStrategy[Table]:
         ),
     )
 
+
 # Python has unbounded integers but SQLite3 integers must fall into this
 # range.
 _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)

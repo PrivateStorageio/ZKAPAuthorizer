@@ -86,7 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import canned_recoverer, RecoveryStages, RecoveryState, success_recoverer
+from ..recover import RecoveryStages, RecoveryState, canned_recoverer, success_recoverer
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
