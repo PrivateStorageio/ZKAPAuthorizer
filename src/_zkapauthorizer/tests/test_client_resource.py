@@ -407,7 +407,6 @@ class ResourceTests(TestCase):
         tahoe_configs(),
         sampled_from(
             [
-                [b"unblinded-token"],
                 [b"voucher"],
                 [b"version"],
                 [b"recover"],
