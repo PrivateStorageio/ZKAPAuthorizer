@@ -20,7 +20,7 @@ refresh leases on all shares reachable from a root.
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
@@ -321,7 +321,7 @@ class _FuzzyTimerService(Service):
     operation = attr.ib()
     initial_interval = attr.ib()
     sample_interval_distribution = attr.ib()
-    get_config = attr.ib()  # type: () -> Any
+    get_config: Callable[[], Any] = attr.ib()
     reactor = attr.ib()
 
     def startService(self):

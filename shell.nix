@@ -17,6 +17,8 @@ let
     ];
     requirements =
       ''
+      mypy
+      mypy-zope
       ${builtins.readFile ./requirements/test.in}
       ${zkapauthorizer.requirements}
       '';

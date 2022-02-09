@@ -745,24 +745,22 @@ class LeaseMaintenanceServiceTests(TestCase):
         )
 
 
-def has_lease_maintenance_service():
+def has_lease_maintenance_service() -> Matcher:
     """
     Return a matcher for a Tahoe-LAFS client object that has a lease
     maintenance service.
     """
-    # type: () -> Matcher
     return AfterPreprocessing(
         lambda client: client.getServiceNamed(SERVICE_NAME),
         Always(),
     )
 
 
-def has_lease_maintenance_configuration(lease_maint_config):
+def has_lease_maintenance_configuration(lease_maint_config: LeaseMaintenanceConfig) -> Matcher:
     """
     Return a matcher for a Tahoe-LAFS client object that has a lease
     maintenance service with the given configuration.
     """
-    # type: (LeaseMaintenanceConfig) -> Matcher
     def get_lease_maintenance_config(lease_maint_service):
         return lease_maint_service.get_config()
 
