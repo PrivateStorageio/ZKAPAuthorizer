@@ -14,15 +14,12 @@ from testresources import TestResourceManager, setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import Equals
 from testtools.twistedsupport import AsynchronousDeferredRunTest
-from treq.client import HTTPClient
-from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
-from twisted.internet.interfaces import IReactorTime
-from twisted.internet.task import deferLater
+from twisted.internet.defer import ensureDeferred, inlineCallbacks
 from twisted.python.filepath import FilePath
-from twisted.web.client import Agent, HTTPConnectionPool
 from yaml import safe_dump
 
 from ..tahoe import download, upload
+from .fixtures import Treq
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
 RETRY_DELAY = [0.3] * 100
@@ -286,46 +283,18 @@ class UploadDownloadTestCase(TestCase):
         path.
         """
         # AsynchronousDeferredRunTest sets reactor on us.
-        reactor = self.reactor
-
-        pool = HTTPConnectionPool(reactor)
-        # Make sure connections from the connection pool are cleaned up at the
-        # end of the test.
-        self.addCleanup(lambda: _cleanup(reactor, pool))
-
-        treq = HTTPClient(Agent(reactor, pool))
+        client = self.useFixture(Treq(self.reactor, case=self)).client()
 
         workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
         workdir.makedirs()
-
         inpath = workdir.child("uploaded")
         inpath.setContent(b"abc" * 1024)
-
         outpath = workdir.child("downloaded")
-        cap = yield ensureDeferred(upload(treq, inpath, self.client.node_url))
-        yield ensureDeferred(download(treq, outpath, self.client.node_url, cap))
+
+        cap = yield ensureDeferred(upload(client, inpath, self.client.node_url))
+        yield ensureDeferred(download(client, outpath, self.client.node_url, cap))
+
         self.assertThat(
             inpath.getContent(),
             Equals(outpath.getContent()),
         )
-
-
-@inlineCallbacks
-def _cleanup(reactor: IReactorTime, pool: HTTPConnectionPool) -> Deferred:
-    """
-    Clean up reactor event-sources allocated by ``HTTPConnectionPool``.
-    """
-    # Close any connections that are idling in the connection pool.
-    yield pool.closeCachedConnections()
-
-    # There may be connections which were *just* finished with.  Their
-    # `loseConnection` has been called but the connection hasn't actually been
-    # lost yet.  If their buffers are actually empty then they will close
-    # after the reactor gets another look at them.  Unfortunately it is
-    # unspecified how long after `loseConnection` the connection will actually
-    # be lost (the protocol is told via its connectionLost method but the
-    # connection pool does not expose that information to us).  Empirically, a
-    # couple of reactor iterations (or whatever the equivalent is on this
-    # reactor) seems to be enough.  If it's not, sorry.
-    yield deferLater(reactor, 0, lambda: None)
-    yield deferLater(reactor, 0, lambda: None)
