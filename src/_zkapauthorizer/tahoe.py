@@ -10,7 +10,9 @@ from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 
 
-async def upload(client: HTTPClient, inpath: FilePath, api_root: DecodedURL) -> str:
+async def upload(
+    client: HTTPClient, inpath: FilePath, api_root: DecodedURL
+) -> Awaitable[str]:
     """
     Upload data from the given path and return the resulting capability.
     """
