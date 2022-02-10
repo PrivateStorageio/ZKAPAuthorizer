@@ -2,10 +2,10 @@
 Tests for ``_zkapauthorizer.tahoe``.
 """
 
-from subprocess import Popen, check_call
+from subprocess import Popen, check_output
 from tempfile import mkdtemp
 from time import sleep
-from typing import Optional
+from typing import Iterator, Optional
 
 from attrs import define
 from fixtures import TempDir
@@ -16,57 +16,43 @@ from testtools.matchers import Equals
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from treq.client import HTTPClient
 from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
+from twisted.internet.interfaces import IReactorTime
+from twisted.internet.task import deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 from yaml import safe_dump
 
 from ..tahoe import download, upload
 
-
-def wait_for(path):
-    while not path.exists():
-        print(f"{path.path} does not exist")
-        sleep(0.3)
+# A plausible value for the ``retry`` parameter of ``wait_for_path``.
+RETRY_DELAY = [0.3] * 100
 
 
-@define
-class TahoeStorage:
-    node_dir: FilePath
-    process: Optional[Popen] = None
-    node_url: Optional[FilePath] = None
-    storage_furl: Optional[FilePath] = None
-    node_pubkey: Optional[str] = None
+def wait_for_path(path: FilePath, retry: Iterator[float] = RETRY_DELAY) -> None:
+    """
+    Wait for a file to exist at a certain path for a while.
 
-    def run(self):
-        check_call(
-            [
-                "tahoe",
-                "create-node",
-                "--webport=tcp:port=0",
-                "--hostname=127.0.0.1",
-                self.node_dir.path,
-            ]
-        )
-        self.process = Popen(["tahoe", "run", self.node_dir.path])
-        node_url_path = self.node_dir.child("node.url")
-        wait_for(node_url_path)
-        self.node_url = node_url_path.getContent().decode("ascii").strip()
-        storage_furl_path = self.node_dir.descendant(["private", "storage.furl"])
-        wait_for(storage_furl_path)
-        self.storage_furl = storage_furl_path.getContent().decode("ascii").strip()
-        node_pubkey_path = self.node_dir.child("node.pubkey")
-        wait_for(node_pubkey_path)
-        self.node_pubkey = node_pubkey_path.getContent().decode("ascii").strip()
+    :raise Exception: If it does not exist by the end of the retry period.
+    """
+    total = 0
+    for delay in retry:
+        if path.exists():
+            return
+        sleep(delay)
+        total += delay
+    raise Exception(
+        "expected path {!r} did not appear for {!r} seconds".format(
+            path.path,
+            total,
+        ),
+    )
 
-    def servers_yaml_entry(self):
-        return {
-            self.node_pubkey[len("pub-") :]: {
-                "ann": {
-                    "anonymous-storage-FURL": self.storage_furl,
-                    "nickname": "storage",
-                },
-            },
-        }
+
+def read_text(path: FilePath) -> str:
+    """
+    Read and decode some ASCII bytes from a file, stripping any whitespace.
+    """
+    return path.getContent().decode("ascii").strip()
 
 
 class TemporaryDirectoryResource(TestResourceManager):
@@ -83,7 +69,97 @@ class TemporaryDirectoryResource(TestResourceManager):
         return True
 
 
+@define
+class TahoeStorage:
+    """
+    Provide a basic interface to a Tahoe-LAFS storage node child process.
+
+    :ivar node_dir: The path to the node's directory.
+
+    :ivar create_output: The output from creating the node.
+
+    :ivar process: After the node is started, a handle on the child process.
+
+    :ivar node_url: After the node is started, the root of the node's web API.
+
+    :ivar storage_furl: After the node is started, the node's storage fURL.
+
+    :ivar node_pubkey: After the node is started, the node's public key.
+    """
+
+    node_dir: FilePath
+    create_output: Optional[str] = None
+    process: Optional[Popen] = None
+    node_url: Optional[FilePath] = None
+    storage_furl: Optional[FilePath] = None
+    node_pubkey: Optional[str] = None
+
+    def run(self):
+        """
+        Create and start the node in a child process.
+        """
+        self.create()
+        self.start()
+
+    def create(self):
+        """
+        Create the node directory.
+        """
+        self.create_output = check_output(
+            [
+                "tahoe",
+                "create-node",
+                "--webport=tcp:port=0",
+                "--hostname=127.0.0.1",
+                self.node_dir.path,
+            ],
+            text=True,
+            encoding="utf-8",
+        )
+
+    def start(self):
+        """
+        Start the node child process.
+        """
+        self.process = Popen(
+            ["tahoe", "run", self.node_dir.path],
+            stdout=self.node_dir.child("stdout").open("wb"),
+            stderr=self.node_dir.child("stderr").open("wb"),
+        )
+        node_url_path = self.node_dir.child("node.url")
+        wait_for_path(node_url_path)
+        self.node_url = read_text(node_url_path)
+        storage_furl_path = self.node_dir.descendant(["private", "storage.furl"])
+        wait_for_path(storage_furl_path)
+        self.storage_furl = read_text(storage_furl_path)
+        node_pubkey_path = self.node_dir.child("node.pubkey")
+        wait_for_path(node_pubkey_path)
+        self.node_pubkey = read_text(node_pubkey_path)
+
+    def servers_yaml_entry(self) -> dict:
+        """
+        Get an entry describing this storage node for a client's ``servers.yaml``
+        file.
+        """
+        return {
+            self.node_pubkey[len("pub-") :]: {
+                "ann": {
+                    "anonymous-storage-FURL": self.storage_furl,
+                    "nickname": "storage",
+                },
+            },
+        }
+
+
 class TahoeStorageManager(TestResourceManager):
+    """
+    Manage a Tahoe-LAFS storage node as a ``TahoeStorage`` object.
+
+    The node is created and run before the resource is handed out.  The
+    resource is always considered "clean" so it will be re-used by as many
+    tests ask for it.
+    """
+
     resources = [("node_dir", TemporaryDirectoryResource())]
 
     def clean(self, storage):
@@ -97,13 +173,39 @@ class TahoeStorageManager(TestResourceManager):
 
 @define
 class TahoeClient:
+    """
+    Provide a basic interface to a Tahoe-LAFS client node child process.
+
+    :ivar node_dir: The path to the node's directory.
+
+    :ivar storage: A representation of the storage server the node will be
+        configured with.
+
+    :ivar create_output: The output from creating the node.
+
+    :ivar process: After the node is started, a handle on the child process.
+
+    :ivar node_url: After the node is started, the root of the node's web API.
+    """
+
     node_dir: FilePath
-    storage: Optional[TahoeStorage] = None
+    storage: TahoeStorage
+    create_output: Optional[str] = None
     process: Optional[Popen] = None
     node_url: Optional[FilePath] = None
 
     def run(self):
-        check_call(
+        """
+        Create and start the node in a child process.
+        """
+        self.create()
+        self.start()
+
+    def create(self):
+        """
+        Create the node directory and write the necessary configuration to it.
+        """
+        self.create_output = check_output(
             [
                 "tahoe",
                 "create-node",
@@ -113,7 +215,9 @@ class TahoeClient:
                 "--shares-total=1",
                 "--shares-happy=1",
                 self.node_dir.path,
-            ]
+            ],
+            text=True,
+            encoding="utf-8",
         )
         with open(
             self.node_dir.descendant(["private", "servers.yaml"]).path, "wt"
@@ -121,15 +225,30 @@ class TahoeClient:
             f.write(
                 safe_dump({"storage": self.storage.servers_yaml_entry()}),
             )
-        self.process = Popen(["tahoe", "run", self.node_dir.path])
-        node_url_path = self.node_dir.child("node.url")
-        wait_for(node_url_path)
-        self.node_url = DecodedURL.from_text(
-            node_url_path.getContent().decode("ascii").strip()
+
+    def start(self):
+        """
+        Start the node child process.
+        """
+        self.process = Popen(
+            ["tahoe", "run", self.node_dir.path],
+            stdout=self.node_dir.child("stdout").open("wb"),
+            stderr=self.node_dir.child("stderr").open("wb"),
         )
+        node_url_path = self.node_dir.child("node.url")
+        wait_for_path(node_url_path)
+        self.node_url = DecodedURL.from_text(read_text(node_url_path))
 
 
 class TahoeClientManager(TestResourceManager):
+    """
+    Manage a Tahoe-LAFS client node as a ``TahoeClient`` object.
+
+    The node is created and run before the resource is handed out.  The
+    resource is always considered "clean" so it will be re-used by as many
+    tests ask for it.
+    """
+
     resources = [
         ("storage", TahoeStorageManager()),
         ("node_dir", TemporaryDirectoryResource()),
@@ -144,13 +263,15 @@ class TahoeClientManager(TestResourceManager):
         return client
 
 
-class DownloadTestCase(TestCase):
+class UploadDownloadTestCase(TestCase):
     """
-    Tests for ``download``.
+    Tests for ``upload`` and ``download``.
     """
 
+    # Support test methods that return a Deferred.
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
+    # Get a Tahoe-LAFS client node connected to a storage node.
     resources = [("client", TahoeClientManager())]
 
     def setUp(self):
@@ -164,11 +285,13 @@ class DownloadTestCase(TestCase):
         If the identified object can be downloaded then it is written to the given
         path.
         """
-        sleep(1)
-        from twisted.internet import reactor
+        # AsynchronousDeferredRunTest sets reactor on us.
+        reactor = self.reactor
 
-        pool = HTTPConnectionPool(reactor, persistent=False)
-        self.addCleanup(pool.closeCachedConnections)
+        pool = HTTPConnectionPool(reactor)
+        # Make sure connections from the connection pool are cleaned up at the
+        # end of the test.
+        self.addCleanup(lambda: _cleanup(reactor, pool))
 
         treq = HTTPClient(Agent(reactor, pool))
 
@@ -185,3 +308,24 @@ class DownloadTestCase(TestCase):
             inpath.getContent(),
             Equals(outpath.getContent()),
         )
+
+
+@inlineCallbacks
+def _cleanup(reactor: IReactorTime, pool: HTTPConnectionPool) -> Deferred:
+    """
+    Clean up reactor event-sources allocated by ``HTTPConnectionPool``.
+    """
+    # Close any connections that are idling in the connection pool.
+    yield pool.closeCachedConnections()
+
+    # There may be connections which were *just* finished with.  Their
+    # `loseConnection` has been called but the connection hasn't actually been
+    # lost yet.  If their buffers are actually empty then they will close
+    # after the reactor gets another look at them.  Unfortunately it is
+    # unspecified how long after `loseConnection` the connection will actually
+    # be lost (the protocol is told via its connectionLost method but the
+    # connection pool does not expose that information to us).  Empirically, a
+    # couple of reactor iterations (or whatever the equivalent is on this
+    # reactor) seems to be enough.  If it's not, sorry.
+    yield deferLater(reactor, 0, lambda: None)
+    yield deferLater(reactor, 0, lambda: None)
