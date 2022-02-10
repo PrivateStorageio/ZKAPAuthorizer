@@ -1,6 +1,7 @@
 coverage
 fixtures
 testtools
+testresources
 hypothesis
 pyflakes
 openapi_spec_validator
