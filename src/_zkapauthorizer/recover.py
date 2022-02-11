@@ -5,12 +5,15 @@ __all__ = [
     "success_recoverer",
 ]
 
+from collections.abc import Awaitable
 from enum import Enum, auto
+from functools import partial
 from sqlite3 import Cursor
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, TextIO
 
 from allmydata.node import _Config
 from attrs import define
+from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -42,6 +45,9 @@ class RecoveryStages(Enum):
     """
 
     inactive = auto()
+    started = auto()
+    downloading = auto()
+    importing = auto()
     succeeded = auto()
     failed = auto()
 
@@ -94,12 +100,12 @@ class IStatefulRecoverer(Interface):
 SetState = Callable[[RecoveryState], None]
 
 
-class IRecoverer(Interface):
+class ISynchronousRecoverer(Interface):
     """
     An object which can recover ZKAPAuthorizer state from a replica.
     """
 
-    def recover(set_state: SetState, cap: str, cursor: Cursor) -> None:
+    def recover(set_state: SetState, cap: str, cursor: Cursor) -> Awaitable:
         """
         Begin the recovery process into the given store.
 
@@ -112,45 +118,15 @@ class IRecoverer(Interface):
         """
 
 
-class ILocalRecoverer(Interface):
+class IRecoverer(Interface):
     """
-    An object which can recover ZKAPAuthorizer state from some internal state
-    it holds.
-    """
-
-    def recover(set_state: SetState, cursor: Cursor) -> None:
-        pass
-
-
-@implementer(IRecoverer)
-@define(frozen=True)
-class TahoeLAFSCapRecoverer:
-    """
-    An ``IRecoverer`` that downloads an object identified by a Tahoe-LAFS
-    capability and recovers the state by synchronously (TODO: asynchronous)
-    importing the data it contains.
+    Like ``ISynchronousRecoverer`` but expected to operate asynchronously.
     """
 
-    _treq: HTTPClient
-    _node_config: _Config
-
-    def recover(self, set_state, cap, cursor):
-        api_root = self._node_config.get_config_path("node.url")
-        snapshot_path = self._node_config.get_private_path("snapshot.sql")
-
-        async def download_and_recover():
-            try:
-                set_state(RecoveryState(stage=RecoveryStages.downloading))
-                await download(self._treq, snapshot_path, api_root, cap)
-                set_state(RecoveryState(stage=RecoveryStages.importing))
-                LocalSnapshotRecoverer(snapshot_path).recover(cursor)
-                set_state(RecoveryState(stage=RecoveryStages.succeeded))
-            except Exception as e:
-                set_state(
-                    RecoveryState(stage=RecoveryStages.failed, failure_reason=str(e))
-                )
-
-        download_and_recover()
+    def recover(set_state: SetState, cap: str, cursor: Cursor) -> Awaitable:
+        """
+        Like ``ISynchronousRecoverer.recover`` but asynchronous.
+        """
 
 
 @implementer(IStatefulRecoverer)
@@ -161,28 +137,50 @@ class StatefulRecoverer:
     recovery process.
     """
 
-    _state: RecoveryState
     _recoverer: IRecoverer
+    _state: RecoveryState = RecoveryState(stage=RecoveryStages.inactive)
 
-    def recover(self, cap, cursor):
-        new_state = self._recoverer.recover(cap, cursor)
-        if new_state is not None:
-            self._state = new_state
-        return None
+    async def recover(self, cap, cursor):
+        if self._state.stage != RecoveryStages.inactive:
+            raise AlreadyRecovering()
+
+        self._set_state(RecoveryState(stage=RecoveryStages.started))
+        try:
+            await self._recoverer.recover(self._set_state, cap, cursor)
+        except Exception as e:
+            self._set_state(
+                RecoveryState(stage=RecoveryStages.failed, failure_reason=str(e))
+            )
+        else:
+            self._set_state(RecoveryState(stage=RecoveryStages.succeeded))
+
+    def _set_state(self, state):
+        self._state = state
 
     def state(self):
         return self._state
 
 
-@implementer(ILocalRecoverer)
+@implementer(IRecoverer)
 @define
 class NullRecoverer:
     """
     An ``IRecoverer`` that does nothing.
     """
 
-    def recover(self, cursor):
-        return None
+    async def recover(self, set_state, cap, cursor):
+        pass
+
+
+@implementer(IRecoverer)
+@define
+class BrokenRecoverer:
+    """
+    An ``IRecoverer`` with a ``recover`` method that raises exceptions.
+    """
+
+    async def recover(self, set_state, cap, cursor):
+        raise Exception("BrokenRecoverer does what it says.")
 
 
 def canned_recoverer(state):
@@ -191,8 +189,8 @@ def canned_recoverer(state):
     it to (without actually doing anything).
     """
     return StatefulRecoverer(
-        state,
         NullRecoverer(),
+        state,
     )
 
 
@@ -219,7 +217,7 @@ def success_recoverer():
     )
 
 
-@implementer(ILocalRecoverer)
+@implementer(ISynchronousRecoverer)
 @define
 class MemorySnapshotRecoverer:
     """
@@ -229,27 +227,65 @@ class MemorySnapshotRecoverer:
 
     _statements: List[str]
 
-    def recover(self, cursor):
+    def recover(self, set_state, cap, cursor):
         """
         Synchronously execute our statement list against the given cursor.
         """
         for sql in self._statements:
             cursor.execute(sql)
-        return RecoveryState(stage=RecoveryStages.succeeded)
+        set_state(RecoveryState(stage=RecoveryStages.succeeded))
 
 
-@implementer(ILocalRecoverer)
+@implementer(ISynchronousRecoverer)
 @define
-class LocalSnapshotRecoverer:
+class SynchronousStorageSnapshotRecoverer:
     """
     An ``IRecoverer`` that synchronously loads a snapshot from the local
-    filesystem into the database.
+    synchronous storage into the database.
     """
 
-    _snapshot: FilePath
+    _open: Callable[[str], TextIO]
 
-    def recover(self, cursor):
+    def recover(self, set_state, cap, cursor):
         """
         Synchronously execute statements read from the snapshot path against the
         given cursor.
         """
+        with self._open(cap) as f:
+            statements = list(f)
+        MemorySnapshotRecoverer(statements).recover(set_state, cap, cursor)
+
+
+@implementer(IRecoverer)
+@define(frozen=True)
+class TahoeLAFSRecoverer:
+    """
+    An ``IRecoverer`` that downloads an object identified by a Tahoe-LAFS
+    capability and recovers the state by synchronously (TODO: asynchronous)
+    importing the data it contains.
+    """
+
+    _treq: HTTPClient
+    _node_config: _Config
+    _download: Callable[[HTTPClient, FilePath, DecodedURL, str], Awaitable] = download
+
+    @property
+    def _api_root(self):
+        return self._node_config.get_config_path("node.url")
+
+    @property
+    def _snapshot_path(self):
+        return FilePath(self._node_config.get_private_path("snapshot.sql"))
+
+    async def recover(self, set_state, cap, cursor):
+        """
+        Download data for the given capability into the node's private directory.
+        Then load it into a database using the given cursor.
+        """
+        set_state(RecoveryState(stage=RecoveryStages.downloading))
+        await self._download(self._treq, self._snapshot_path, self._api_root, cap)
+
+        set_state(RecoveryState(stage=RecoveryStages.importing))
+        opener = partial(open, self._snapshot_path.path, "rt")
+        sync_recoverer = SynchronousStorageSnapshotRecoverer(opener)
+        sync_recoverer.recover(set_state, cap, cursor)

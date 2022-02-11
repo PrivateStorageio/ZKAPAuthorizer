@@ -2,10 +2,14 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
+from io import StringIO
 from sqlite3 import Connection, connect
-from typing import Dict
+from typing import Callable, Dict
 
-from hypothesis import assume, note, settings
+from allmydata.node import config_from_string
+from attrs import Factory, define, field
+from fixtures import TempDir
+from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -13,18 +17,38 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from hypothesis.strategies import data, lists, randoms, sampled_from
+from hypothesis.strategies import data, lists, randoms, sampled_from, text
 from testtools import TestCase
-from testtools.matchers import AfterPreprocessing, Equals
+from testtools.matchers import (
+    AfterPreprocessing,
+    Always,
+    Equals,
+    IsInstance,
+    MatchesStructure,
+)
+from testtools.twistedsupport import failed, succeeded
+from twisted.internet.defer import ensureDeferred, inlineCallbacks
+from twisted.python.filepath import FilePath
+from zope.interface import implementer
 
 from .._sql import Table, create_table
-from ..recover import MemorySnapshotRecoverer, RecoveryStages
+from ..recover import (
+    AlreadyRecovering,
+    BrokenRecoverer,
+    IRecoverer,
+    ISynchronousRecoverer,
+    MemorySnapshotRecoverer,
+    NullRecoverer,
+    RecoveryStages,
+    StatefulRecoverer,
+    SynchronousStorageSnapshotRecoverer,
+    TahoeLAFSRecoverer,
+)
 from .strategies import deletes, inserts, sql_identifiers, tables, updates
 
 
 def snapshot(connection: Connection):
     for statement in connection.iterdump():
-        note("iterdump: {!r}".format(statement))
         yield statement + "\n"
 
 
@@ -42,10 +66,11 @@ class SnapshotMachine(RuleBasedStateMachine):
     updates, row deletions, etc.
     """
 
-    def __init__(self, case):
+    def __init__(self, case, make_recoverer):
         super().__init__()
         self.case = case
         self.connection = connect(":memory:")
+        self.make_recoverer = make_recoverer
 
         self.tables: Dict[str, Table] = {}
 
@@ -57,8 +82,15 @@ class SnapshotMachine(RuleBasedStateMachine):
         """
         statements = list(snapshot(self.connection))
         new = connect(":memory:")
-        recoverer = MemorySnapshotRecoverer(statements)
-        state = recoverer.recover(new)
+        recoverer = self.make_recoverer(statements)
+
+        state = None
+
+        def set_state(new_state):
+            nonlocal state
+            state = new_state
+
+        recoverer.recover(set_state, None, new)
         self.case.assertThat(
             state.stage,
             Equals(RecoveryStages.succeeded),
@@ -109,18 +141,267 @@ class SnapshotMachine(RuleBasedStateMachine):
                 self.connection.execute(change.statement(), change.arguments())
 
 
-class SnapshotTests(TestCase):
+def run_snapshot_machine(
+    case: TestCase, make_recoverer: Callable[[], ISynchronousRecoverer]
+) -> None:
     """
-    Tests for recovery from a database snapshot in a local file.
+    Run ``SnapshotMachine`` as a unit test.
+    """
+    # Many shallow runs are probably more useful than fewer deep runs.  That
+    # is, exercise breadth in preference to depth.
+    #
+    # Also try to play along with any profile that has been loaded.
+    max_examples = settings.default.max_examples * 10
+    stateful_step_count = int(max(1, settings.default.stateful_step_count / 10))
+
+    run_state_machine_as_test(
+        lambda: SnapshotMachine(case, make_recoverer),
+        settings=settings(
+            max_examples=max_examples,
+            stateful_step_count=stateful_step_count,
+        ),
+    )
+
+
+class MemorySnapshotRecovererTests(TestCase):
+    """
+    Tests for ``MemorySnapshotRecoverer``.
     """
 
     def test_snapshots(self):
-        run_state_machine_as_test(
-            lambda: SnapshotMachine(self),
-            settings=settings(
-                # Many shallow runs are probably more useful than fewer deep
-                # runs.  That is, exercise breadth in preference to depth.
-                max_examples=1000,
-                stateful_step_count=5,
+        """
+        Test the snapshot/recovery system using a ``MemorySnapshotRecoverer``.
+        """
+        run_snapshot_machine(self, MemorySnapshotRecoverer)
+
+
+@implementer(IRecoverer)
+@define
+class _AsyncRecovererWrapper:
+    """
+    Adapt ``ISynchronousRecoverer`` to ``IRecoverer``.
+    """
+
+    _wrapped: ISynchronousRecoverer
+
+    async def recover(self, set_state, cap, cursor):
+        self._wrapped.recover(set_state, cap, cursor)
+
+
+class RecovererTestsMixin:
+    """
+    A mixin defining interface tests that any ``IRecoverer`` implementation
+    should pass.
+    """
+
+    def upload(self, data: bytes) -> str:
+        raise NotImplementedError()
+
+    def make_recoverer(self, cap: str) -> IRecoverer:
+        raise NotImplementedError()
+
+    @inlineCallbacks
+    def test_recover(self):
+        """
+        ````IRecoverer.recover`` loads statements from its path into the cursor
+        given.
+        """
+        statements = [
+            # Some DDL
+            "CREATE TABLE [foo] ( [a] INT );",
+            # Some DML
+            "INSERT INTO [foo] ([a]) VALUES (1);",
+        ]
+
+        # Construct a database we can use to create a snapshot.
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+            for statement in statements:
+                cursor.execute(statement)
+
+            snapshot_statements = list(snapshot(conn))
+
+        # Create the object under test - the recoverer which can recover from
+        # this snapshot.
+        recoverer = self.make_recoverer()
+
+        # Put the snapshot somewhere the recoverer will be able to find it.
+        cap = self.upload(("\n".join(snapshot_statements) + "\n").encode("ascii"))
+
+        # Create a database we can recover the snapshot into.
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+
+            # Do the recovery.
+            yield ensureDeferred(recoverer.recover(lambda state: None, cap, cursor))
+
+            # A snapshot of the recovered database should be the same as a
+            # snapshot of the original.
+            self.assertThat(
+                list(snapshot(conn)),
+                Equals(snapshot_statements),
+            )
+
+
+@define
+class MemoryGrid:
+    _counter: int = 0
+    _snapshots: Dict[str, str] = field(default=Factory(dict))
+
+    def upload(self, data: bytes) -> str:
+        cap = str(self._counter)
+        self._snapshots[cap] = data
+        self._counter += 1
+        return cap
+
+    def download(self, cap: str) -> bytes:
+        return self._snapshots[cap]
+
+
+class SynchronousStorageSnapshotRecovererTests(TestCase, RecovererTestsMixin):
+    """
+    Tests for ``SynchronousStorageSnapshotRecoverer``.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.grid = MemoryGrid()
+        self.upload = self.grid.upload
+
+    def make_recoverer(self) -> SynchronousStorageSnapshotRecoverer:
+        """
+        Create a ``SynchronousStorageSnapshotRecoverer`` that resolves
+        capabilities from the ``MemoryGrid``.
+        """
+
+        def open_from_grid(cap):
+            return StringIO(self.grid.download(cap).decode("ascii"))
+
+        # FilesystemSnapshotRecoverer is an ISynchronousRecoverer so wrap it
+        # up to make it look like an IRecoverer.  This doesn't actually make
+        # it asynchronous, of course, but makes the interfaces line up.
+        return _AsyncRecovererWrapper(
+            SynchronousStorageSnapshotRecoverer(
+                open_from_grid,
             ),
         )
+
+
+class TahoeLAFSRecovererTests(TestCase, RecovererTestsMixin):
+    """
+    Tests for ``TahoeLAFSRecoverer``.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.grid = MemoryGrid()
+        self.upload = self.grid.upload
+        self.node_dir = FilePath(self.useFixture(TempDir()).join("node"))
+        self.node_dir.child("private").makedirs()
+
+    def make_recoverer(self) -> TahoeLAFSRecoverer:
+        """
+        Create a ``TahoeLAFSRecoverer`` which can see an immutable object
+        containing the given statements.
+        """
+
+        async def download(client, outpath, api_root, cap):
+            try:
+                obj = self.grid.download(cap)
+            except KeyError:
+                raise Exception("no such capability")
+            else:
+                outpath.setContent(obj)
+
+        treq = object()
+        node_config = config_from_string(self.node_dir.path, "", "")
+        return TahoeLAFSRecoverer(treq, node_config, download)
+
+    @inlineCallbacks
+    def test_recover_failed(self):
+        """
+        If the snapshot data cannot be found then ``IRecoverer.recover`` reports a
+        final state of ``RecoveryStages.failed``.
+        """
+        recoverer = self.make_recoverer()
+
+        # Just invent a capability.  There will be no associated data and so
+        # recovery will fail.
+        cap = "abcdef"
+
+        states = []
+        record_state = states.append
+
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+
+            yield ensureDeferred(recoverer.recover(record_state, cap, cursor))
+
+            self.assertThat(
+                states[-1],
+                MatchesStructure(
+                    stage=RecoveryStages.failed,
+                ),
+            )
+
+
+class StatefulRecovererTests(TestCase):
+    """
+    Tests for ``StatefulRecoverer``.
+    """
+
+    @given(text())
+    def test_succeeded_after_recover(self, cap):
+        """
+        ``StatefulRecoverer`` automatically progresses to the succeeded stage when
+        the wrapped recoverer completes without exception.
+        """
+        recoverer = StatefulRecoverer(NullRecoverer())
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+            first = ensureDeferred(recoverer.recover(cap, cursor))
+            self.assertThat(
+                first,
+                succeeded(Always()),
+            )
+            self.assertThat(
+                recoverer.state().stage,
+                Equals(RecoveryStages.succeeded),
+            )
+
+    @given(text())
+    def test_failed_after_recover(self, cap):
+        """
+        ``StatefulRecoverer`` automatically progresses to the failed stage when
+        the wrapped recoverer completes with an exception.
+        """
+        recoverer = StatefulRecoverer(BrokenRecoverer())
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+            first = ensureDeferred(recoverer.recover(cap, cursor))
+            self.assertThat(
+                first,
+                succeeded(Always()),
+            )
+            self.assertThat(recoverer.state().stage, Equals(RecoveryStages.failed))
+
+    @given(text())
+    def test_cannot_recover_twice(self, cap):
+        """
+        A second call to ``StatefulRecoverer.recover`` fails with
+        ``AlreadyRecovering``.
+        """
+        recoverer = StatefulRecoverer(NullRecoverer())
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+            ensureDeferred(recoverer.recover(cap, cursor))
+            second = ensureDeferred(recoverer.recover(cap, cursor))
+            self.assertThat(
+                second,
+                failed(
+                    AfterPreprocessing(
+                        lambda f: f.value,
+                        IsInstance(AlreadyRecovering),
+                    ),
+                ),
+            )
