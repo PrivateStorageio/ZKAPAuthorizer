@@ -50,7 +50,7 @@ from .lease_maintenance import (
     maintain_leases_from_root,
 )
 from .model import VoucherStore
-from .recover import TahoeLAFSCapRecoverer
+from .recover import TahoeLAFSRecoverer
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -187,7 +187,7 @@ class ZKAPAuthorizer(object):
         if reactor is None:
             from twisted.internet import reactor
 
-        recoverer = TahoeLAFSCapRecoverer(treq, node_config)
+        recoverer = TahoeLAFSRecoverer(treq, node_config)
 
         return resource_from_configuration(
             node_config,
