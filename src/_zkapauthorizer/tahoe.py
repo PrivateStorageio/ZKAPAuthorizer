@@ -12,7 +12,7 @@ from twisted.python.filepath import FilePath
 
 async def upload(
     client: HTTPClient, inpath: FilePath, api_root: DecodedURL
-) -> Awaitable[str]:
+) -> Awaitable:  # Awaitable[str] but this requires Python 3.9
     """
     Upload data from the given path and return the resulting capability.
     """
@@ -26,7 +26,7 @@ async def upload(
 
 async def download(
     client: HTTPClient, outpath: FilePath, api_root: DecodedURL, cap: str
-) -> Awaitable[None]:
+) -> Awaitable:  # Awaitable[None] but this requires Python 3.9
     """
     Download the object identified by the given capability to the given path.
     """
