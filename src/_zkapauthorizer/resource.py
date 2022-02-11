@@ -121,6 +121,8 @@ def from_configuration(
             None,
         )
     if recoverer is None:
+        # We can't figure out how to do recovery from here so if we're not
+        # given a recoverer we'll always fail recovery attempts.
         recoverer = fail_recoverer()
 
     default_token_count = get_token_count(
