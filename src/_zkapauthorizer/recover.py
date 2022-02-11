@@ -18,6 +18,12 @@ from zope.interface import Interface, implementer
 from .tahoe import download
 
 
+class AlreadyRecovering(Exception):
+    """
+    A recovery attempt is already in-progress so another one cannot be made.
+    """
+
+
 class RecoveryStages(Enum):
     """
     Constants representing the different stages a recovery process may have
@@ -59,6 +65,32 @@ class RecoveryState:
         return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 
+class IStatefulRecoverer(Interface):
+    """
+    An object which can recover ZKAPAuthorizer state from a replica and report
+    on the status of this recovery.
+    """
+
+    def recover(cap: str, cursor: Cursor) -> None:
+        """
+        Begin the recovery process using the given database cursor.
+
+        :param cap: The Tahoe-LAFS read-capability which can be used to
+            retrieve the replica.
+
+        :param cursor: A database cursor which can be used to populate the
+            database with recovered state.
+
+        :raise AlreadyRecovering: If recovery has already been attempted
+            (successfully or otherwise).
+        """
+
+    def state() -> RecoveryState:
+        """
+        Get the current state of the recovery attempt.
+        """
+
+
 SetState = Callable[[RecoveryState], None]
 
 
@@ -71,20 +103,22 @@ class IRecoverer(Interface):
         """
         Begin the recovery process into the given store.
 
-        :raise ValueError: If recovery has already been attempted
-            (successfully or otherwise).
-        """
+        :param set_state: A callable which can be used to report on recovery
+            progress.
 
+        :param cap: See ``IStatefulRecoverer.recover``
 
-class IStatefulRecoverer(IRecoverer):
-    def state() -> RecoveryState:
-        """
-        Get the current state of the recovery attempt.
+        :param cursor: See ``IStatefulRecoverer.recover``
         """
 
 
 class ILocalRecoverer(Interface):
-    def recover(cursor: Cursor) -> None:
+    """
+    An object which can recover ZKAPAuthorizer state from some internal state
+    it holds.
+    """
+
+    def recover(set_state: SetState, cursor: Cursor) -> None:
         pass
 
 
