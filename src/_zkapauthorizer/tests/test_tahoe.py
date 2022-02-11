@@ -3,6 +3,7 @@ Tests for ``_zkapauthorizer.tahoe``.
 """
 
 from subprocess import Popen, check_output
+from sys import executable
 from tempfile import mkdtemp
 from time import sleep
 from typing import Iterator, Optional
@@ -101,7 +102,9 @@ class TahoeStorage:
         """
         self.create_output = check_output(
             [
-                "tahoe",
+                executable,
+                "-m",
+                "allmydata",
                 "create-node",
                 "--webport=tcp:port=0",
                 "--hostname=127.0.0.1",
@@ -116,7 +119,7 @@ class TahoeStorage:
         Start the node child process.
         """
         self.process = Popen(
-            ["tahoe", "run", self.node_dir.path],
+            [executable, "-m", "allmydata", "run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
