@@ -25,6 +25,11 @@ from .fixtures import Treq
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
 RETRY_DELAY = [0.3] * 100
 
+# An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
+# runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
+# `PATH`.
+TAHOE = [executable, "-m", "allmydata"]
+
 
 def wait_for_path(path: FilePath, retry: Iterator[float] = RETRY_DELAY) -> None:
     """
@@ -101,10 +106,8 @@ class TahoeStorage:
         Create the node directory.
         """
         self.create_output = check_output(
-            [
-                executable,
-                "-m",
-                "allmydata",
+            TAHOE
+            + [
                 "create-node",
                 "--webport=tcp:port=0",
                 "--hostname=127.0.0.1",
@@ -119,7 +122,7 @@ class TahoeStorage:
         Start the node child process.
         """
         self.process = Popen(
-            [executable, "-m", "allmydata", "run", self.node_dir.path],
+            TAHOE + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
@@ -203,8 +206,8 @@ class TahoeClient:
         Create the node directory and write the necessary configuration to it.
         """
         self.create_output = check_output(
-            [
-                "tahoe",
+            TAHOE
+            + [
                 "create-node",
                 "--webport=tcp:port=0",
                 "--hostname=127.0.0.1",
@@ -228,7 +231,7 @@ class TahoeClient:
         Start the node child process.
         """
         self.process = Popen(
-            ["tahoe", "run", self.node_dir.path],
+            TAHOE + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
