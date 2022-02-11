@@ -24,6 +24,7 @@ In the future it should also allow users to read statistics about token usage.
 from json import loads
 
 import attr
+from twisted.internet.defer import ensureDeferred
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -208,7 +209,7 @@ class RecoverResource(Resource):
 
         try:
             self.store.call_if_empty(
-                lambda conn: self.recoverer.recover(cap_str, conn),
+                lambda conn: ensureDeferred(self.recoverer.recover(cap_str, conn)),
             )
         except NotEmpty:
             request.setResponseCode(409)
