@@ -182,21 +182,34 @@ class BrokenRecoverer:
         raise Exception("BrokenRecoverer does what it says.")
 
 
+@implementer(IRecoverer)
+@define
+class _CannedRecoverer:
+    """
+    An ``IRecoverer`` with a ``recover`` method that always sets one
+    hard-coded state.
+    """
+
+    _state: RecoveryState
+
+    async def recover(self, set_state, cap, cursor):
+        set_state(self._state)
+
+
 def canned_recoverer(state):
     """
-    An ``IStatefulRecoverer`` that always immediately claims whatever you tell
-    it to (without actually doing anything).
+    An ``IStatefulRecoverer`` that always claims whatever state you tell it to
+    (without actually doing anything) as soon as recovery is attempted.
     """
     return StatefulRecoverer(
-        NullRecoverer(),
-        state,
+        _CannedRecoverer(state),
     )
 
 
 def fail_recoverer():
     """
-    An ``IRecoverer`` that always immediately claims to have failed (without
-    actually doing anything).
+    An ``IRecoverer`` that always claims to have failed (without actually
+    doing anything) as soon as recovery is attempted.
     """
     return canned_recoverer(
         RecoveryState(
@@ -208,11 +221,11 @@ def fail_recoverer():
 
 def success_recoverer():
     """
-    An ``IRecoverer`` that always immediately claims to have succeeded
-    (without actually doing anything).
+    An ``IRecoverer`` that always claims to have succeeded (without actually
+    doing anything) as soon as recovery is attempted.
     """
-    return canned_recoverer(
-        RecoveryState(stage=RecoveryStages.succeeded),
+    return StatefulRecoverer(
+        NullRecoverer(),
     )
 
 

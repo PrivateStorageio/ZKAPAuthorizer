@@ -86,7 +86,13 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import RecoveryStages, RecoveryState, canned_recoverer, success_recoverer
+from ..recover import (
+    RecoveryStages,
+    RecoveryState,
+    StatefulRecoverer,
+    fail_recoverer,
+    success_recoverer,
+)
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -579,7 +585,7 @@ class RecoverTests(TestCase):
         self._request_test(
             {b"content-type": [b"application/cbor"]},
             self.GOOD_REQUEST_BODY,
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -591,7 +597,7 @@ class RecoverTests(TestCase):
         self._request_test(
             self.GOOD_REQUEST_HEADER,
             b"some bytes that are not json",
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -604,7 +610,7 @@ class RecoverTests(TestCase):
             self.GOOD_REQUEST_HEADER,
             # This is almost right but has an extra property.
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -616,7 +622,7 @@ class RecoverTests(TestCase):
         self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": []}),
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -628,7 +634,7 @@ class RecoverTests(TestCase):
         self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": "hello world"}),
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -640,7 +646,7 @@ class RecoverTests(TestCase):
         self._request_test(
             self.GOOD_REQUEST_HEADER,
             dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
-            None,
+            fail_recoverer,
             400,
         )
 
@@ -649,12 +655,11 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is a string then the
         endpoint returns a 202 response.
         """
-        recoverer = success_recoverer()
         expected_status = 202
         self._request_test(
             self.GOOD_REQUEST_HEADER,
             self.GOOD_REQUEST_BODY,
-            recoverer,
+            success_recoverer,
             expected_status,
         )
 
@@ -663,14 +668,14 @@ class RecoverTests(TestCase):
         api_auth_token=api_auth_tokens(),
     )
     def _request_test(
-        self, get_config, api_auth_token, headers, body, recoverer, expected_status
+        self, get_config, api_auth_token, headers, body, get_recoverer, expected_status
     ):
         config = get_config_with_api_token(
             self.useFixture(TempDir()),
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now, recoverer=recoverer)
+        root = root_from_config(config, datetime.now, recoverer=get_recoverer())
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -697,7 +702,12 @@ class RecoverTests(TestCase):
         status information about the recovery.
         """
         reason = "some interesting information"
-        recoverer = canned_recoverer(
+        recoverer = StatefulRecoverer(
+            # The inner recoverer doesn't matter because we'll put the
+            # stateful recoverer into a state where it won't try to use it.
+            None,
+            # This fail state is what we should see come back from the
+            # resource.
             RecoveryState(stage=RecoveryStages.failed, failure_reason=reason),
         )
 
@@ -722,7 +732,10 @@ class RecoverTests(TestCase):
                     headers_matcher=application_json(),
                     body_matcher=AfterPreprocessing(
                         loads,
-                        Equals({"stage": "failed", "failure-reason": reason}),
+                        Equals({
+                            "stage": "failed",
+                            "failure-reason": reason,
+                        }),
                     ),
                 )
             ),
