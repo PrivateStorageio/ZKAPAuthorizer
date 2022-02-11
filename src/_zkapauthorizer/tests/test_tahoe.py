@@ -53,9 +53,6 @@ def read_text(path: FilePath) -> str:
 
 
 class TemporaryDirectoryResource(TestResourceManager):
-    def clean(self, resource):
-        resource.remove()
-
     def make(self, dependency_resources):
         return FilePath(mkdtemp())
 
