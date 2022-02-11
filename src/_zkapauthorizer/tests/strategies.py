@@ -1222,12 +1222,20 @@ _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
 _sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
 
 # Here's how you can build values that match certain storage type affinities.
+# SQLite3 will actually allow us to store values of any type in any column but
+# it might coerce certain values based on the column affinity.  This means,
+# for example, that inserting the string "0" into an INT affinity column will
+# result in the integer 0 coming out later.  If we allowed such values to be
+# generated it would be very much harder to determine, in general, that values
+# are being handled correctly.  It would probably eventually be desirable to
+# exercise such cases but I'm not very worried about them since that logic is
+# all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
     StorageAffinity.TEXT: text(),
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
-    StorageAffinity.NUMERIC: one_of(_sql_integer, text(), binary(), _sql_floats),
+    StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
 }
 
 
