@@ -7,7 +7,6 @@ __all__ = [
 
 from collections.abc import Awaitable
 from enum import Enum, auto
-from functools import partial
 from sqlite3 import Cursor
 from typing import Callable, List, Optional, TextIO
 
@@ -286,6 +285,9 @@ class TahoeLAFSRecoverer:
         await self._download(self._treq, self._snapshot_path, self._api_root, cap)
 
         set_state(RecoveryState(stage=RecoveryStages.importing))
-        opener = partial(open, self._snapshot_path.path, "rt")
+
+        def opener(cap):
+            return open(self._snapshot_path.path, "rt")
+
         sync_recoverer = SynchronousStorageSnapshotRecoverer(opener)
         sync_recoverer.recover(set_state, cap, cursor)
