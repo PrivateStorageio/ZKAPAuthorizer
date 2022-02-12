@@ -45,14 +45,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-        "200": # OK
+        "202": # ACCEPTED
           description: >-
-            Recovery from the replica has succeeded.
+            The request to attempt recovery has been accepted.  The recovery
+            attempt is underway.  GET this resource to receive gets about its
+            progress.
           content:
             application/json:
               schema:
                 type: "object"
                 properties: {}
+    get:
+      description: >-
+        Get details about any recovery attempt which may be underway.
+
+      responses:
+        "200": # OK
+          description: >-
+            Describe the status of the recovery system.
+
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/RecoveryStatus"
 
   /storage-plugins/privatestorageio-zkapauthz-v1/replicate:
     get:
@@ -124,7 +139,20 @@ components:
             This is the capability which can be submitted in order to initiate
             a recovery from the replica.
 
+    RecoveryStatus:
+      type: "object"
+      properties:
+        "stage":
+          type: "string"
+          description: >-
+            A short string indicating where the system is in the recovery
+            process right now.
 
+        "failure_reason":
+          type: "string"
+          description: >-
+            If recovery has failed, a human-meaningful description of the
+            reason for the failure.
 
   responses:
     ErrorResponse:
