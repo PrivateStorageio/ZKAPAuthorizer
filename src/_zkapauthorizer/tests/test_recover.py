@@ -19,15 +19,9 @@ from hypothesis.stateful import (
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from, text
 from testtools import TestCase
-from testtools.matchers import (
-    AfterPreprocessing,
-    Always,
-    Equals,
-    IsInstance,
-    MatchesStructure,
-)
+from testtools.matchers import AfterPreprocessing, Always, Equals, IsInstance
 from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import ensureDeferred, inlineCallbacks
+from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
@@ -200,7 +194,6 @@ class RecovererTestsMixin:
     def make_recoverer(self, cap: str) -> IRecoverer:
         raise NotImplementedError()
 
-    @inlineCallbacks
     def test_recover(self):
         """
         ````IRecoverer.recover`` loads statements from its path into the cursor
@@ -232,9 +225,13 @@ class RecovererTestsMixin:
         with connect(":memory:") as conn:
             cursor = conn.cursor()
 
-            # Do the recovery.
-            yield ensureDeferred(recoverer.recover(lambda state: None, cap, cursor))
-
+            self.assertThat(
+                # Do the recovery.
+                Deferred.fromCoroutine(
+                    recoverer.recover(lambda state: None, cap, cursor),
+                ),
+                succeeded(Always()),
+            )
             # A snapshot of the recovered database should be the same as a
             # snapshot of the original.
             self.assertThat(
@@ -287,6 +284,10 @@ class SynchronousStorageSnapshotRecovererTests(TestCase, RecovererTestsMixin):
         )
 
 
+class NoSuchCapability(Exception):
+    pass
+
+
 class TahoeLAFSRecovererTests(TestCase, RecovererTestsMixin):
     """
     Tests for ``TahoeLAFSRecoverer``.
@@ -309,19 +310,22 @@ class TahoeLAFSRecovererTests(TestCase, RecovererTestsMixin):
             try:
                 obj = self.grid.download(cap)
             except KeyError:
-                raise Exception("no such capability")
+                raise NoSuchCapability()
             else:
                 outpath.setContent(obj)
 
+        # treq is used by the real download function but we're supplying our
+        # own that doesn't need it, so value here should be irrelevant.  maybe
+        # the http client should be implied by the download API rather than a
+        # parameter it accepts?
         treq = object()
         node_config = config_from_string(self.node_dir.path, "", "")
         return TahoeLAFSRecoverer(treq, node_config, download)
 
-    @inlineCallbacks
     def test_recover_failed(self):
         """
-        If the snapshot data cannot be found then ``IRecoverer.recover`` reports a
-        final state of ``RecoveryStages.failed``.
+        If the snapshot data cannot be found then ``IRecoverer.recover`` raises
+        the underlying exception.
         """
         recoverer = self.make_recoverer()
 
@@ -334,13 +338,20 @@ class TahoeLAFSRecovererTests(TestCase, RecovererTestsMixin):
 
         with connect(":memory:") as conn:
             cursor = conn.cursor()
-
-            yield ensureDeferred(recoverer.recover(record_state, cap, cursor))
-
+            # We expect the recoverer to fail with the exception raised by the
+            # downloader for now.  Later we probably want it to inspect the
+            # exception and sometimes take a different action.  It will
+            # probably never recognize our test-only NoSuchCapability
+            # exception though.
             self.assertThat(
-                states[-1],
-                MatchesStructure(
-                    stage=RecoveryStages.failed,
+                Deferred.fromCoroutine(
+                    recoverer.recover(record_state, cap, cursor),
+                ),
+                failed(
+                    AfterPreprocessing(
+                        lambda f: f.value,
+                        IsInstance(NoSuchCapability),
+                    ),
                 ),
             )
 
@@ -359,7 +370,7 @@ class StatefulRecovererTests(TestCase):
         recoverer = StatefulRecoverer(NullRecoverer())
         with connect(":memory:") as conn:
             cursor = conn.cursor()
-            first = ensureDeferred(recoverer.recover(cap, cursor))
+            first = Deferred.fromCoroutine(recoverer.recover(cap, cursor))
             self.assertThat(
                 first,
                 succeeded(Always()),
@@ -378,7 +389,7 @@ class StatefulRecovererTests(TestCase):
         recoverer = StatefulRecoverer(BrokenRecoverer())
         with connect(":memory:") as conn:
             cursor = conn.cursor()
-            first = ensureDeferred(recoverer.recover(cap, cursor))
+            first = Deferred.fromCoroutine(recoverer.recover(cap, cursor))
             self.assertThat(
                 first,
                 succeeded(Always()),
@@ -394,8 +405,11 @@ class StatefulRecovererTests(TestCase):
         recoverer = StatefulRecoverer(NullRecoverer())
         with connect(":memory:") as conn:
             cursor = conn.cursor()
-            ensureDeferred(recoverer.recover(cap, cursor))
-            second = ensureDeferred(recoverer.recover(cap, cursor))
+            self.assertThat(
+                Deferred.fromCoroutine(recoverer.recover(cap, cursor)),
+                succeeded(Always()),
+            )
+            second = Deferred.fromCoroutine(recoverer.recover(cap, cursor))
             self.assertThat(
                 second,
                 failed(

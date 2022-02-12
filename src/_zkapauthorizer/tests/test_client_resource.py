@@ -732,10 +732,12 @@ class RecoverTests(TestCase):
                     headers_matcher=application_json(),
                     body_matcher=AfterPreprocessing(
                         loads,
-                        Equals({
-                            "stage": "failed",
-                            "failure-reason": reason,
-                        }),
+                        Equals(
+                            {
+                                "stage": "failed",
+                                "failure-reason": reason,
+                            }
+                        ),
                     ),
                 )
             ),
