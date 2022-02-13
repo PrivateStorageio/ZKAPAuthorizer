@@ -242,17 +242,28 @@ class RecovererTestsMixin:
 
 @define
 class MemoryGrid:
+    """
+    An extremely simplified in-memory model of a Tahoe-LAFS storage grid.
+    This object allows data to be "uploaded" to it and produces capability
+    strings which can then be used to "download" the data from it later on.
+
+    :ivar _counter: An internal counter used to support the creation of
+        capability strings.
+
+    :ivar _objects: Storage for all data which has been "uploaded", as a
+        mapping from the capability strings to the values.
+    """
     _counter: int = 0
-    _snapshots: Dict[str, str] = field(default=Factory(dict))
+    _objects: Dict[str, str] = field(default=Factory(dict))
 
     def upload(self, data: bytes) -> str:
         cap = str(self._counter)
-        self._snapshots[cap] = data
+        self._objects[cap] = data
         self._counter += 1
         return cap
 
     def download(self, cap: str) -> bytes:
-        return self._snapshots[cap]
+        return self._objects[cap]
 
 
 class SynchronousStorageSnapshotRecovererTests(TestCase, RecovererTestsMixin):
