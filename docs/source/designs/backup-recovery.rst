@@ -368,7 +368,7 @@ See the `OpenAPI specification <backup-recovery-openapi.html>`_.
 Sample Sessions
 ~~~~~~~~~~~~~~~
 
-The expected interaction pattern involves two API calls.
+The expected interaction pattern involves API calls to three endpoints.
 
 #. Early in the Tahoe-LAFS client node setup/configuration process,
    configure replication:
