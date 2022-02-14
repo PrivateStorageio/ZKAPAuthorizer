@@ -162,10 +162,20 @@ class TahoeStorageManager(TestResourceManager):
 
     resources = [("node_dir", TemporaryDirectoryResource())]
 
+    # This doesn't clean up the given resource - it cleans up the global
+    # runtime environment in which that resource was created - by destroying
+    # anything associated with it which Python will not automatically clean up
+    # when the Python objects are garbage collected.
     def clean(self, storage):
+        """
+        Kill the storage node child process.
+        """
         storage.process.kill()
 
     def make(self, dependency_resources):
+        """
+        Create and run a brand new Tahoe-LAFS storage node.
+        """
         storage = TahoeStorage(**dependency_resources)
         storage.run()
         return storage
@@ -254,10 +264,17 @@ class TahoeClientManager(TestResourceManager):
         ("node_dir", TemporaryDirectoryResource()),
     ]
 
+    # See note on TahoeStorageManager.clean
     def clean(self, client):
+        """
+        Kill the client node child process.
+        """
         client.process.kill()
 
     def make(self, dependency_resources):
+        """
+        Create and run a brand new Tahoe-LAFS client node.
+        """
         client = TahoeClient(**dependency_resources)
         client.run()
         return client
