@@ -28,8 +28,6 @@ pkgs.mkShell {
   PYTHONDONTWRITEBYTECODE = "1";
 
   buildInputs = [
-    # Provide the linting tools for interactive usage.
-    lint-python
     # Supply all of the runtime and testing dependencies.
     python-env
   ];
