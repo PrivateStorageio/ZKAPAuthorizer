@@ -18,18 +18,22 @@ Hypothesis strategies for property testing.
 
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
+from functools import partial
+from typing import List
 from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
     characters,
     datetimes,
     dictionaries,
     fixed_dictionaries,
+    floats,
     integers,
     just,
     lists,
@@ -61,6 +65,7 @@ from ..model import (
     Unpaid,
     Voucher,
 )
+from .sql import Column, Delete, Insert, StorageAffinity, Table, Update
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
@@ -1083,3 +1088,202 @@ def ristretto_signing_keys():
         keys,
         whitespace,
     )
+
+
+@attr.s(frozen=True)
+class _VoucherInsert(object):
+    """
+    Represent the insertion of a single voucher.
+    """
+
+    voucher: bytes = attr.ib()
+    expected_tokens: int = attr.ib(validator=attr.validators.gt(0))
+    counter: int = attr.ib(validator=attr.validators.ge(0))
+    tokens: List[RandomToken] = attr.ib()
+
+
+@attr.s(frozen=True)
+class _ExistingState(object):
+    """
+    Represent some state which could already exist in a ``VoucherStore``.
+    """
+
+    vouchers: List[_VoucherInsert] = attr.ib()
+
+
+def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
+    """
+    Build possible existing states of a ``VoucherStore``.
+
+    :param min_vouchers: The minimum number of vouchers to place into the
+        state, inclusive.
+
+    :param max_vouchers: The maximum number of vouchers to place into the
+        state, inclusive.
+    """
+    # Pick a number of vouchers to build and a number of tokens for them each
+    # to have.
+    num_vouchers_and_tokens_strategy = tuples(
+        integers(min_value=min_vouchers, max_value=max_vouchers),
+        integers(min_value=1, max_value=128),
+    )
+
+    def build_vouchers_and_tokens(num_vouchers_and_tokens):
+        num_vouchers, tokens_per_voucher = num_vouchers_and_tokens
+        # Now build enough tokens to spread across all of the vouchers.
+        tokens = lists(
+            random_tokens(),
+            # Generate a simple multiple so each voucher can have the same
+            # number which is pretty realistic.
+            min_size=num_vouchers * tokens_per_voucher,
+            max_size=num_vouchers * tokens_per_voucher,
+            unique=True,
+        )
+        # And the voucher strings themselves.
+        vouchers_strategy = lists(
+            vouchers(),
+            min_size=num_vouchers,
+            max_size=num_vouchers,
+            unique=True,
+        )
+        # Pass them both onwards.
+        return tuples(vouchers_strategy, tokens)
+
+    vouchers_and_tokens = num_vouchers_and_tokens_strategy.flatmap(
+        build_vouchers_and_tokens
+    )
+
+    def build_voucher_inserts(vouchers_and_tokens):
+        vouchers, tokens = vouchers_and_tokens
+        tokens_per_voucher = len(tokens) // len(vouchers)
+
+        voucher_strategies = []
+        for n, v in enumerate(vouchers):
+            voucher_strategies.append(
+                builds(
+                    _VoucherInsert,
+                    voucher=just(v),
+                    expected_tokens=integers(
+                        min_value=tokens_per_voucher, max_value=tokens_per_voucher * 2
+                    ),
+                    counter=integers(min_value=0, max_value=15),
+                    tokens=just(
+                        tokens[n * tokens_per_voucher : (n + 1) * tokens_per_voucher]
+                    ),
+                )
+            )
+
+        return tuples(*voucher_strategies)
+
+    voucher_inserts = vouchers_and_tokens.flatmap(build_voucher_inserts)
+
+    return builds(
+        _ExistingState,
+        vouchers=voucher_inserts,
+    )
+
+
+def sql_identifiers() -> SearchStrategy[str]:
+    """
+    Build strings suitable for use as SQLite3 identifiers.
+    """
+    return text(
+        min_size=1,
+        alphabet=characters(
+            # Control characters are largely illegal.
+            # Names are case insensitive so don't even generate uppercase.
+            blacklist_categories=("Cs", "Lu"),
+            # Maybe ] should be allowed but I don't know how to quote it.  '
+            # certainly should be but Python sqlite3 module has lots of
+            # problems with it.
+            blacklist_characters=("\x00", "]", "'"),
+        ),
+    )
+
+
+def tables() -> SearchStrategy[Table]:
+    """
+    Build objects describing tables in a SQLite3 database.
+    """
+    return builds(
+        Table,
+        columns=lists(
+            tuples(
+                sql_identifiers(),
+                builds(Column),
+            ),
+            min_size=1,
+            unique_by=lambda x: x[0],
+        ),
+    )
+
+
+# Python has unbounded integers but SQLite3 integers must fall into this
+# range.
+_sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
+
+# SQLite3 can do infinity and NaN but I don't know how to get them through the
+# Python interface.  SQLite3 can do 64 bit floats but it only guarantees 15
+# digits of precision (maybe only for its base 10 string representations?)
+# which causes values requiring greater precision to fail to round-trip.  The
+# SQLite3 docs are quite clear about what one should expect from floating
+# point values, anyway:
+#
+#    Floating point values are approximate.
+#
+# https://www.sqlite.org/floatingpoint.html
+_sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
+
+# Here's how you can build values that match certain storage type affinities.
+# SQLite3 will actually allow us to store values of any type in any column but
+# it might coerce certain values based on the column affinity.  This means,
+# for example, that inserting the string "0" into an INT affinity column will
+# result in the integer 0 coming out later.  If we allowed such values to be
+# generated it would be very much harder to determine, in general, that values
+# are being handled correctly.  It would probably eventually be desirable to
+# exercise such cases but I'm not very worried about them since that logic is
+# all very well tested inside SQLite3 itself.
+_storage_affinity_strategies = {
+    StorageAffinity.INT: _sql_integer,
+    StorageAffinity.TEXT: text(),
+    StorageAffinity.BLOB: binary(),
+    StorageAffinity.REAL: _sql_floats,
+    StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
+}
+
+
+def inserts(name: str, table: Table) -> SearchStrategy[Insert]:
+    """
+    Build objects describing row insertions into the given table.
+    """
+    return builds(
+        partial(Insert, table_name=name, table=table),
+        fields=tuples(
+            *(
+                _storage_affinity_strategies[column.affinity]
+                for (_, column) in table.columns
+            )
+        ),
+    )
+
+
+def updates(name: str, table: Table) -> SearchStrategy[Update]:
+    """
+    Build objects describing row updates in the given table.
+    """
+    return builds(
+        partial(Update, table_name=name, table=table),
+        fields=tuples(
+            *(
+                _storage_affinity_strategies[column.affinity]
+                for (_, column) in table.columns
+            )
+        ),
+    )
+
+
+def deletes(name, table):
+    """
+    Build objects describing row deletions from the given table.
+    """
+    return just(Delete(table_name=name))
