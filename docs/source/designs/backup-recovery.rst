@@ -368,7 +368,7 @@ See the `OpenAPI specification <backup-recovery-openapi.html>`_.
 Sample Sessions
 ~~~~~~~~~~~~~~~
 
-The expected interaction pattern involves two API calls.
+The expected interaction pattern involves API calls to three endpoints.
 
 #. Early in the Tahoe-LAFS client node setup/configuration process,
    configure replication:
@@ -396,10 +396,21 @@ The expected interaction pattern involves two API calls.
 
       {"recovery-capability": "URI:DIR-RO:xxxx"}
 
-      200 OK
+      202 Accepted
       Content-Type: application/json
 
       {}
+
+#. The recovery status can now be polled:
+
+   .. code-block:: html
+
+      GET /storage-plugins/privatestorageio-zkapauthz-v1/recover
+
+      200 OK
+      Content-Type: application/json
+
+      {"stage": "succeeded"}
 
 #. The new Tahoe-LAFS client node now has the same ZKAPAuthorizer state as it did prior to lose of the original instance.
 
