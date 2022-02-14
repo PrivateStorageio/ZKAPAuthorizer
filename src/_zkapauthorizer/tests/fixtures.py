@@ -20,9 +20,15 @@ from base64 import b64encode
 
 import attr
 from allmydata.storage.server import StorageServer
+from attrs import define, field
 from fixtures import Fixture, TempDir
-from twisted.internet.task import Clock
+from testtools import TestCase
+from treq.client import HTTPClient
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.interfaces import IReactorTime
+from twisted.internet.task import Clock, deferLater
 from twisted.python.filepath import FilePath
+from twisted.web.client import Agent, HTTPConnectionPool
 
 from ..controller import DummyRedeemer, PaymentController
 from ..model import VoucherStore, memory_connect, open_and_initialize
@@ -129,3 +135,54 @@ class ConfiglessMemoryVoucherStore(Fixture):
         ).redeem(
             voucher,
         )
+
+
+@define
+class Treq(Fixture):
+    """
+    Offer a facility for creating an ``HTTPClient`` which does real I/O using
+    a Twisted reactor and is automatically cleaned up.
+    """
+
+    reactor: IReactorTime
+
+    # We require a TestCase that supports asynchronous cleanups because
+    # Fixtures can't handle them natively.
+    case: TestCase
+
+    pool: HTTPConnectionPool = field()
+
+    @pool.default
+    def _pool(self):
+        return HTTPConnectionPool(self.reactor)
+
+    def _setUp(self):
+        # Make sure connections from the connection pool are cleaned up at the
+        # end of the test.
+        self.case.addCleanup(self._cleanup)
+
+    def client(self) -> HTTPClient:
+        """
+        Get a new client object.
+        """
+        return HTTPClient(Agent(self.reactor, self.pool))
+
+    @inlineCallbacks
+    def _cleanup(self) -> Deferred:
+        """
+        Clean up reactor event-sources allocated by ``HTTPConnectionPool``.
+        """
+        # Close any connections that are idling in the connection pool.
+        yield self.pool.closeCachedConnections()
+
+        # There may be connections which were *just* finished with.  Their
+        # `loseConnection` has been called but the connection hasn't actually been
+        # lost yet.  If their buffers are actually empty then they will close
+        # after the reactor gets another look at them.  Unfortunately it is
+        # unspecified how long after `loseConnection` the connection will actually
+        # be lost (the protocol is told via its connectionLost method but the
+        # connection pool does not expose that information to us).  Empirically, a
+        # couple of reactor iterations (or whatever the equivalent is on this
+        # reactor) seems to be enough.  If it's not, sorry.
+        yield deferLater(self.reactor, 0, lambda: None)
+        yield deferLater(self.reactor, 0, lambda: None)
