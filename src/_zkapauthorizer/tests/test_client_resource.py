@@ -58,6 +58,7 @@ from testtools.matchers import (
     MatchesAll,
     MatchesAny,
     MatchesStructure,
+    Not,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
@@ -66,7 +67,6 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
 from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTHORIZED
 from twisted.web.http_headers import Headers
-from twisted.web.resource import IResource, getChildForRequest
 
 from .. import NAME
 from .. import __file__ as package_init_file
@@ -92,7 +92,7 @@ from ..storage_common import (
     required_passes,
 )
 from .json import loads
-from .matchers import Provides, between, matches_response
+from .matchers import between, matches_response
 from .strategies import (
     api_auth_tokens,
     client_doublespendredeemer_configurations,
@@ -103,7 +103,6 @@ from .strategies import (
     direct_tahoe_configs,
     posix_timestamps,
     request_paths,
-    requests,
     share_parameters,
     tahoe_configs,
     vouchers,
@@ -402,27 +401,44 @@ class ResourceTests(TestCase):
 
     @given(
         tahoe_configs(),
-        requests(
-            sampled_from(
-                [
-                    [b"unblinded-token"],
-                    [b"voucher"],
-                    [b"version"],
-                ]
-            )
+        sampled_from(
+            [
+                [b"voucher"],
+                [b"version"],
+            ]
         ),
+        api_auth_tokens(),
     )
-    def test_reachable(self, get_config, request):
+    def test_reachable(self, get_config, request_path, api_auth_token):
         """
         A resource is reachable at a child of the resource returned by
         ``from_configuration``.
         """
-        tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join("tahoe"), "tub.port")
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
         root = root_from_config(config, datetime.now)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"GET",
+            b"http://127.0.0.1/" + b"/".join(request_path),
+        )
+
+        matches_status = matches_response(
+            code_matcher=Not(
+                MatchesAny(
+                    Equals(404),
+                    between(500, 599),
+                )
+            ),
+        )
         self.assertThat(
-            getChildForRequest(root, request),
-            Provides([IResource]),
+            requesting,
+            succeeded(matches_status),
         )
 
     @given(
