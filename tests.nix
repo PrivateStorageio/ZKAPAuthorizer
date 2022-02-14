@@ -42,6 +42,8 @@ let
         isort == 5.10.1
         black == 21.12b0
         flake8 == 4.0.1
+        flake8-isort
+        flake8-black
       '';
     };
 
@@ -53,8 +55,6 @@ let
       mkdir -p $out
 
       pushd ${zkapauthorizer.src}
-      ${lint-python}/bin/black --check src
-      ${lint-python}/bin/isort --check src
       ${lint-python}/bin/flake8 src
       popd
 
