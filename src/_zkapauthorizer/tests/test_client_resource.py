@@ -92,7 +92,7 @@ from ..storage_common import (
     required_passes,
 )
 from .json import loads
-from .matchers import Provides, between, matches_response
+from .matchers import between, matches_response
 from .strategies import (
     api_auth_tokens,
     client_doublespendredeemer_configurations,
@@ -103,7 +103,6 @@ from .strategies import (
     direct_tahoe_configs,
     posix_timestamps,
     request_paths,
-    requests,
     share_parameters,
     tahoe_configs,
     vouchers,
