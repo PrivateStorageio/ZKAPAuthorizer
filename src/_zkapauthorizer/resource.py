@@ -22,7 +22,11 @@ In the future it should also allow users to read statistics about token usage.
 """
 
 from json import loads
+from typing import Callable
 
+import attr
+from attr import Factory
+from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -35,8 +39,10 @@ from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
+from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
+from .recover import Downloader, StatefulRecoverer
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -85,6 +91,7 @@ def get_token_count(
 def from_configuration(
     node_config,
     store,
+    get_downloader,
     redeemer=None,
     clock=None,
 ):
@@ -116,6 +123,7 @@ def from_configuration(
             None,
             None,
         )
+
     default_token_count = get_token_count(
         NAME,
         node_config,
@@ -143,6 +151,7 @@ def from_configuration(
         authorizationless_resource_tree(
             store,
             controller,
+            get_downloader,
             calculate_price,
         ),
     )
@@ -151,9 +160,75 @@ def from_configuration(
     return root
 
 
+@attr.s
+class RecoverResource(Resource):
+    """
+    Implement the endpoint for triggering local state recovery from a remote
+    replica.
+    """
+
+    _log = Logger()
+
+    store: VoucherStore = attr.ib()
+    get_downloader: Callable[[str], Downloader] = attr.ib()
+    recoverer: StatefulRecoverer = attr.ib(default=Factory(StatefulRecoverer))
+
+    def __attrs_post_init__(self):
+        Resource.__init__(self)
+
+    def render_GET(self, request):
+        application_json(request)
+        return dumps_utf8(self.recoverer.state().marshal())
+
+    def render_POST(self, request):
+        from allmydata.uri import ReadonlyDirectoryURI, from_string
+
+        if wrong_content_type(request, "application/json"):
+            return NOT_DONE_YET
+
+        try:
+            body = loads(request.content.read())
+        except:
+            request.setResponseCode(400)
+            return b"could not parse json"
+
+        if body.keys() != {"recovery-capability"}:
+            request.setResponseCode(400)
+            return b"json did not have expected properties"
+
+        cap_str = body["recovery-capability"]
+        if not isinstance(cap_str, str):
+            request.setResponseCode(400)
+            return b"recovery-capability must be a read-only dircap string"
+
+        cap = from_string(cap_str)
+        if not isinstance(cap, ReadonlyDirectoryURI):
+            request.setResponseCode(400)
+            return b"recovery-capability must be a read-only dircap string"
+
+        try:
+            downloader = self.get_downloader(cap)
+            self.store.call_if_empty(
+                lambda cursor: Deferred.fromCoroutine(
+                    self.recoverer.recover(downloader, cursor)
+                ),
+            )
+        except NotEmpty:
+            request.setResponseCode(409)
+            return b"there is existing local state"
+        except:
+            self._log.error("recovery failed")
+            request.setResponseCode(500)
+            return b""
+
+        request.setResponseCode(202)
+        return b""
+
+
 def authorizationless_resource_tree(
     store,
     controller,
+    get_downloader: Callable[[str], Downloader],
     calculate_price,
 ):
     """
@@ -163,11 +238,20 @@ def authorizationless_resource_tree(
     :param VoucherStore store: The store to use.
     :param PaymentController controller: The payment controller to use.
 
+    :param get_downloader: A callable which accepts a replica identifier and
+        can download the replica data.
+
     :param IResource calculate_price: The resource for the price calculation endpoint.
 
     :return IResource: The root of the resource hierarchy.
     """
     root = Resource()
+
+    root.putChild(
+        b"recover",
+        RecoverResource(store, get_downloader),
+    )
+
     root.putChild(
         b"voucher",
         _VoucherCollection(

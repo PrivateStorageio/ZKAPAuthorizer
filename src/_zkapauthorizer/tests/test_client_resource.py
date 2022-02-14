@@ -17,6 +17,7 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
+from base64 import b32encode
 from datetime import datetime
 from io import BytesIO
 from typing import Optional, Set
@@ -85,6 +86,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
+from ..recover import make_fail_downloader, noop_downloader
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -101,6 +103,7 @@ from .strategies import (
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    existing_states,
     posix_timestamps,
     request_paths,
     share_parameters,
@@ -191,7 +194,16 @@ def invalid_bodies():
     )
 
 
-def root_from_config(config, now):
+fail_downloader = make_fail_downloader(Exception("test double downloader failure"))
+get_fail_downloader = lambda cap: fail_downloader
+get_noop_downloader = lambda cap: noop_downloader
+
+
+def root_from_config(
+    config,
+    now,
+    get_downloader=get_fail_downloader,
+):
     """
     Create a client root resource from a Tahoe-LAFS configuration.
 
@@ -209,6 +221,7 @@ def root_from_config(config, now):
             now,
             memory_connect,
         ),
+        get_downloader=get_downloader,
         clock=Clock(),
     )
 
@@ -473,6 +486,276 @@ class ResourceTests(TestCase):
                         Equals({"version": zkapauthorizer_version}),
                     ),
                 ),
+            ),
+        )
+
+
+class RecoverTests(TestCase):
+    """
+    Tests for the ``/recover`` endpoint.
+    """
+
+    # These are syntactically valid, at least.
+    readkey = b32encode(b"x" * 16).decode("ascii").strip("=").lower()
+    fingerprint = b32encode(b"y" * 32).decode("ascii").strip("=").lower()
+
+    GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
+    GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
+    GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_internal_server_error(self, get_config, api_auth_token):
+        """
+        If recovery fails for some unrecognized reason the endpoint returns a 500
+        response.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+
+        def broken_get_downloader(cap):
+            raise Exception("Oops")
+
+        root = root_from_config(config, datetime.now, broken_get_downloader)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            headers=self.GOOD_REQUEST_HEADER,
+            data=BytesIO(self.GOOD_REQUEST_BODY),
+        )
+
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(500))),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+        existing_states(min_vouchers=1),
+    )
+    def test_conflict(self, get_config, api_auth_token, existing_state):
+        """
+        If there is state in the local database the endpoint returns a 409
+        response.
+        """
+
+        def create(store, state):
+            for ins in state.vouchers:
+                store.add(
+                    ins.voucher, ins.expected_tokens, ins.counter, lambda: ins.tokens
+                )
+
+            # blinded tokens
+            # double spent voucher
+            # invalid unblinded tokens
+
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now)
+        create(root.store, existing_state)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            headers=self.GOOD_REQUEST_HEADER,
+            data=BytesIO(self.GOOD_REQUEST_BODY),
+        )
+
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(409))),
+        )
+
+    def test_bad_content_type(self):
+        """
+        If the request Content-Type is not ``application/json`` then the endpoint
+        returns a 400 response.
+        """
+
+        self._request_test(
+            {b"content-type": [b"application/cbor"]},
+            self.GOOD_REQUEST_BODY,
+            get_fail_downloader,
+            400,
+        )
+
+    def test_undecodeable_body(self):
+        """
+        If the request body cannot be decoded as JSON then the endpoint returns a
+        400 response.
+        """
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            b"some bytes that are not json",
+            get_fail_downloader,
+            400,
+        )
+
+    def test_wrong_properties(self):
+        """
+        If the JSON object represented by the request body doesn't match the
+        expected structure then the endpoint returns a 400 response.
+        """
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            # This is almost right but has an extra property.
+            dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
+            get_fail_downloader,
+            400,
+        )
+
+    def test_recovery_capability_not_a_string(self):
+        """
+        If the ``recovery-capability`` property value is not a string then the
+        endpoint returns a 400 response.
+        """
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": []}),
+            get_fail_downloader,
+            400,
+        )
+
+    def test_not_a_capability(self):
+        """
+        If the ``recovery-capability`` property value is not a capability string
+        then the endpoint returns a 400 response.
+        """
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": "hello world"}),
+            get_fail_downloader,
+            400,
+        )
+
+    def test_not_a_readonly_dircap(self):
+        """
+        If the ``recovery-capability`` property value is not a read-only directory
+        capability string then the endpoint returns a 400 response.
+        """
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
+            get_fail_downloader,
+            400,
+        )
+
+    def test_accepted(self):
+        """
+        If the ``recovery-capability`` property value is a string then the
+        endpoint returns a 202 response.
+        """
+        expected_status = 202
+        self._request_test(
+            self.GOOD_REQUEST_HEADER,
+            self.GOOD_REQUEST_BODY,
+            get_noop_downloader,
+            expected_status,
+        )
+
+    @given(
+        get_config=tahoe_configs(),
+        api_auth_token=api_auth_tokens(),
+    )
+    def _request_test(
+        self,
+        get_config,
+        api_auth_token,
+        headers,
+        body,
+        make_downloader,
+        expected_status,
+    ):
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        root = root_from_config(config, datetime.now, make_downloader)
+        agent = RequestTraversalAgent(root)
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/recover",
+            headers=headers,
+            data=BytesIO(body),
+        )
+        self.assertThat(
+            requesting,
+            succeeded(matches_response(code_matcher=Equals(expected_status))),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_get_status(self, get_config, api_auth_token):
+        """
+        The endpoint responds to a **GET** request with OK and a body containing
+        status information about the recovery.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        reason = "some interesting information"
+        fail_downloader = make_fail_downloader(Exception(reason))
+        get_fail_downloader = lambda cap: fail_downloader
+        root = root_from_config(config, datetime.now, get_fail_downloader)
+        agent = RequestTraversalAgent(root)
+
+        # Kick off the recovery attempt.
+        self.assertThat(
+            authorized_request(
+                api_auth_token,
+                agent,
+                b"POST",
+                b"http://127.0.0.1/recover",
+                headers=self.GOOD_REQUEST_HEADER,
+                data=BytesIO(self.GOOD_REQUEST_BODY),
+            ),
+            succeeded(Always()),
+        )
+
+        # Now inspect the recoverer's reported state.
+        requesting = authorized_request(
+            api_auth_token,
+            agent,
+            b"GET",
+            b"http://127.0.0.1/recover",
+        )
+        self.assertThat(
+            requesting,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(OK),
+                    headers_matcher=application_json(),
+                    body_matcher=AfterPreprocessing(
+                        loads,
+                        Equals(
+                            {
+                                "stage": "failed",
+                                "failure-reason": reason,
+                            }
+                        ),
+                    ),
+                )
             ),
         )
 
