@@ -58,6 +58,7 @@ from twisted.python.runtime import platform
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
+    NotEmpty,
     NotEnoughTokens,
     Pass,
     Pending,
@@ -81,6 +82,98 @@ from .strategies import (
     vouchers,
     zkaps,
 )
+
+
+def fail(cursor):
+    raise Exception("Should not be called")
+
+
+class VoucherStoreCallIfEmptyTests(TestCase):
+    """
+    Tests for ``VoucherStore.call_if_empty``.
+    """
+
+    def setup_example(self):
+        self.store_fixture = self.useFixture(
+            ConfiglessMemoryVoucherStore(get_now=datetime.now),
+        )
+
+    def test_empty(self):
+        """
+        If a ``VoucherStore`` is instantiated and there was no existing database
+        then it is empty.
+        """
+        self.setup_example()
+
+        def side_effect(cursor):
+            cursor.execute("CREATE TABLE [it_ran] (a INT)")
+            cursor.execute("INSERT INTO [it_ran] VALUES (1)")
+            return True
+
+        self.assertThat(
+            self.store_fixture.store.call_if_empty(side_effect),
+            Equals(True),
+        )
+        rows = list(
+            self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
+        )
+        self.assertThat(rows, HasLength(1))
+
+    @given(
+        voucher=vouchers(),
+        tokens=lists(random_tokens(), min_size=1, max_size=10, unique=True),
+    )
+    def test_not_empty_if_any_vouchers(self, voucher, tokens):
+        """
+        If there are any vouchers in the database a ``VoucherStore`` is using then
+        it is not empty.
+        """
+        self.store_fixture.store.add(
+            voucher,
+            expected_tokens=len(tokens),
+            counter=0,
+            get_tokens=lambda: tokens,
+        )
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
+
+    @given(
+        voucher=vouchers(),
+        num_passes=integers(min_value=1, max_value=10),
+    )
+    def test_not_empty_if_any_spendable_tokens(self, voucher, num_passes):
+        """
+        If there are spendable ZKAPs in the database a ``VoucherStore`` is using
+        then it is not empty.
+        """
+        d = self.store_fixture.redeem(voucher, num_passes)
+        self.assertThat(d, succeeded(Always()))
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
+
+    @given(
+        voucher=vouchers(),
+        num_passes=integers(min_value=1, max_value=10),
+    )
+    def test_not_empty_if_any_unspendable_tokens(self, voucher, num_passes):
+        """
+        If there are unspendable ZKAPs in the database a ``VoucherStore`` is using
+        then it is not empty.
+        """
+        d = self.store_fixture.redeem(voucher, num_passes)
+        self.assertThat(d, succeeded(Always()))
+
+        tokens = self.store_fixture.store.get_unblinded_tokens(num_passes)
+        self.store_fixture.store.invalidate_unblinded_tokens("anything", tokens)
+
+        self.assertThat(
+            lambda: self.store_fixture.store.call_if_empty(fail),
+            raises(NotEmpty),
+        )
 
 
 class VoucherStoreTests(TestCase):
@@ -317,6 +410,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     Transition rules for a state machine corresponding to the state of
     unblinded tokens in a ``VoucherStore`` - usable, in-use, spent, invalid,
     etc.
+
+    :ivar num_vouchers_redeemed: The total number of vouchers that have been
+        redeemed successfully by this machine.
     """
 
     def __init__(self, case):
@@ -328,6 +424,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
         self.configless.setUp()
 
+        self.num_vouchers_redeemed: int = 0
         self.available = 0
         self.using = []
         self.spent = []
@@ -355,6 +452,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
             succeeded(Always()),
         )
         self.available += num_passes
+        self.num_vouchers_redeemed += 1
 
     @rule(num_passes=pass_counts())
     def get_passes(self, num_passes):
@@ -477,6 +575,23 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
             self.configless.store.count_unblinded_tokens(),
             Equals(self.available),
         )
+
+    @invariant()
+    def check_empty(self):
+        """
+        ``VoucherStore.call_if_empty`` succeeds until any voucher is redeemed and
+        then raises ``NotEmpty``.
+        """
+        if self.num_vouchers_redeemed == 0:
+            self.case.assertThat(
+                self.configless.store.call_if_empty(lambda cursor: True),
+                Equals(True),
+            )
+        else:
+            self.case.assertThat(
+                lambda: self.configless.store.call_if_empty(fail),
+                raises(NotEmpty),
+            )
 
     @invariant()
     def report_state(self):
