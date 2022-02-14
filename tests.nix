@@ -34,18 +34,26 @@ let
       _.hypothesis.postUnpack = "";
     };
 
-    lint-python = mach-nix.mkPython {
-      python = "python39";
-      # Pin these narrowly so that lint rules only change when we specifically
-      # want them to.
-      requirements = ''
-        isort == 5.10.1
-        black == 21.12b0
-        flake8 == 4.0.1
-        flake8-isort
-        flake8-black
+    lint-env = let
+      lint-python = mach-nix.mkPython {
+        python = "python39";
+        # Pin these narrowly so that lint rules only change when we specifically
+        # want them to.
+        requirements = ''
+          isort == 5.10.1
+          black == 21.12b0
+          flake8 == 4.0.1
+          flake8-isort
+          flake8-black
+        '';
+      };
+    in
+      pkgs.runCommand "lint" {} ''
+        mkdir -p $out/bin
+        ln -s ${lint-python}/bin/black $out/bin
+        ln -s ${lint-python}/bin/flake8 $out/bin
+        ln -s ${lint-python}/bin/isort $out/bin
       '';
-    };
 
     tests = pkgs.runCommand "zkapauthorizer-tests" {
       passthru = {
@@ -55,7 +63,7 @@ let
       mkdir -p $out
 
       pushd ${zkapauthorizer.src}
-      ${lint-python}/bin/flake8 src
+      ${lint-env}/bin/flake8 src
       popd
 
       ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
@@ -72,5 +80,5 @@ let
     '';
 in
 {
-  inherit privatestorage lint-python tests;
+  inherit privatestorage lint-env tests;
 }

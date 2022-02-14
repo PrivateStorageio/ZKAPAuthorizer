@@ -3,7 +3,7 @@
 { ... }@args:
 let
   tests = import ./tests.nix args;
-  inherit (tests) privatestorage lint-python;
+  inherit (tests) privatestorage lint-env;
   inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
 
   python-env = mach-nix.mkPython {
@@ -29,7 +29,7 @@ pkgs.mkShell {
 
   buildInputs = [
     # Provide the linting tools for interactive usage.
-    lint-python
+    lint-env
     # Supply all of the runtime and testing dependencies.
     python-env
   ];
