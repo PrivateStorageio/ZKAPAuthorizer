@@ -430,16 +430,17 @@ class ResourceTests(TestCase):
         )
 
         matches_status = matches_response(
-            code_matcher=Not(MatchesAny(
-                Equals(404),
-                between(500, 599),
-            )),
+            code_matcher=Not(
+                MatchesAny(
+                    Equals(404),
+                    between(500, 599),
+                )
+            ),
         )
         self.assertThat(
             requesting,
             succeeded(matches_status),
         )
-
 
     @given(
         tahoe_configs(),
