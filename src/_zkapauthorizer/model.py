@@ -20,8 +20,9 @@ the storage plugin.
 from datetime import datetime
 from functools import wraps
 from json import loads
-from sqlite3 import OperationalError
+from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
+from typing import Callable
 
 import attr
 from aniso8601 import parse_datetime
@@ -38,6 +39,13 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
+
+
+class NotEmpty(Exception):
+    """
+    The precondition that there be no non-trivial state in the database was
+    not met.
+    """
 
 
 class ILeaseMaintenanceObserver(Interface):
@@ -176,6 +184,7 @@ def with_cursor(f):
             cursor.execute("BEGIN IMMEDIATE TRANSACTION")
             return f(self, cursor, *a, **kw)
 
+    with_cursor.wrapped = f
     return with_cursor
 
 
@@ -237,6 +246,22 @@ class VoucherStore(object):
             now,
             conn,
         )
+
+    @with_cursor
+    def call_if_empty(self, cursor, f: Callable[[Cursor], None]) -> None:
+        """
+        Transactionally determine that the database is empty and call the given
+        function if it is or raise ``NotEmpty`` if it is not.
+        """
+        # After redeemed-voucher garbage collection is implemented, this won't
+        # be enough of a check.  We should check the unblinded-tokens table
+        # (or call `count_unblinded_tokens`) and the
+        # `invalid-unblinded-tokens` table and maybe also look at lease
+        # maintenance spending.
+        if self.list.wrapped(self, cursor) == []:
+            return f(cursor)
+        else:
+            raise NotEmpty()
 
     @with_cursor
     def get(self, cursor, voucher):
