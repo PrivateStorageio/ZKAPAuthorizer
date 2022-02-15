@@ -70,6 +70,20 @@ class TemporaryDirectoryResource(TestResourceManager):
         return True
 
 
+def setup_exit_trigger(node_dir: FilePath) -> None:
+    """
+    Touch the Tahoe-LAFS exit trigger path beneath the given node directory.
+
+    This will make sure that if we fail to clean up the node process it won't
+    hang around indefinitely.  When the node starts up and sees this file, it
+    will begin checking it periodically and exit if it is ever older than 2
+    minutes.  Our tests should take less than 2 minutes so we don't even
+    bother to update the mtime again.  If we crash somewhere then at least the
+    node will exit no more than 2 minutes later.
+    """
+    node_dir.child("exit_trigger").touch()
+
+
 @define
 class TahoeStorage:
     """
@@ -117,6 +131,7 @@ class TahoeStorage:
             text=True,
             encoding="utf-8",
         )
+        setup_exit_trigger(self.node_dir)
 
     def start(self):
         """
@@ -230,6 +245,7 @@ class TahoeClient:
             text=True,
             encoding="utf-8",
         )
+        setup_exit_trigger(self.node_dir)
         with open(
             self.node_dir.descendant(["private", "servers.yaml"]).path, "wt"
         ) as f:
