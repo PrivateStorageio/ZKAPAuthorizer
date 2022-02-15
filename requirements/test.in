@@ -3,5 +3,13 @@ fixtures
 testtools
 testresources
 hypothesis
-pyflakes
 openapi_spec_validator
+
+# Lint requirements
+# Pin these narrowly so that lint rules only change when we specifically
+# want them to.
+isort == 5.10.1
+black == 21.12b0
+flake8 == 4.0.1
+flake8-isort
+flake8-black
