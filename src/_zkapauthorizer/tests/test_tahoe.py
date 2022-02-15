@@ -2,6 +2,7 @@
 Tests for ``_zkapauthorizer.tahoe``.
 """
 
+from asyncio import run
 from subprocess import Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
@@ -13,13 +14,13 @@ from fixtures import TempDir
 from hyperlink import DecodedURL
 from testresources import TestResourceManager, setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Equals
+from testtools.matchers import Equals, Is, raises
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from twisted.internet.defer import ensureDeferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..tahoe import download, upload
+from ..tahoe import async_retry, download, upload
 from .fixtures import Treq
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
@@ -317,4 +318,72 @@ class UploadDownloadTestCase(TestCase):
         self.assertThat(
             inpath.getContent(),
             Equals(outpath.getContent()),
+        )
+
+
+class AsyncRetryTests(TestCase):
+    """
+    Tests for ``async_retry``.
+    """
+
+    def test_success(self):
+        """
+        If the decorated function returns a coroutine that returns a value then
+        the coroutine returned by the decorator function returns the same
+        value.
+        """
+        result = object()
+
+        @async_retry([lambda exc: True])
+        async def decorated():
+            return result
+
+        coro = decorated()
+        self.assertThat(
+            run(coro),
+            Is(result),
+        )
+
+    def test_not_matched_failure(self):
+        """
+        If the decorated function returns a coroutine that raises an exception not
+        matched by any of the matchers then the coroutine returned by the
+        decorator function raises the same exception.
+        """
+
+        class Exc(Exception):
+            pass
+
+        @async_retry([lambda exc: False])
+        async def decorated():
+            raise Exc()
+
+        coro = decorated()
+        self.assertThat(
+            lambda: run(coro),
+            raises(Exc),
+        )
+
+    def test_matched_failure(self):
+        """
+        If the decorated function returns a coroutine that raises an exception
+        that is matched by one of the matchers then function is called again
+        and the same logic applied to its result.
+        """
+
+        fail = True
+        result = object()
+
+        @async_retry([lambda exc: True])
+        async def decorated():
+            nonlocal fail
+            if fail:
+                fail = False
+                raise Exception()
+            return result
+
+        coro = decorated()
+        self.assertThat(
+            run(coro),
+            Is(result),
         )
