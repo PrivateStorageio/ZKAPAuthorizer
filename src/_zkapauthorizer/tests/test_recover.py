@@ -153,8 +153,7 @@ class StatefulRecovererTests(TestCase):
     Tests for ``StatefulRecoverer``.
     """
 
-    @given(text())
-    def test_succeeded_after_recover(self, cap):
+    def test_succeeded_after_recover(self):
         """
         ``StatefulRecoverer`` automatically progresses to the succeeded stage when
         recovery completes without exception.
@@ -174,8 +173,7 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    @given(text())
-    def test_failed_after_download_failed(self, cap):
+    def test_failed_after_download_failed(self):
         """
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         download fails with an exception.
@@ -196,8 +194,7 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    @given(text())
-    def test_failed_after_recover_failed(self, cap):
+    def test_failed_after_recover_failed(self):
         """
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         recovery fails with an exception.
@@ -218,8 +215,7 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    @given(text())
-    def test_cannot_recover_twice(self, cap):
+    def test_cannot_recover_twice(self):
         """
         A second call to ``StatefulRecoverer.recover`` fails with
         ``AlreadyRecovering``.
