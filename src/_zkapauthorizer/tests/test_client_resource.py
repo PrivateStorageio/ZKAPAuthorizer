@@ -750,7 +750,7 @@ class RecoverTests(TestCase):
                         loads,
                         Equals(
                             {
-                                "stage": "failed",
+                                "stage": "download_failed",
                                 "failure-reason": reason,
                             }
                         ),

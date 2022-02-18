@@ -15,8 +15,9 @@ __all__ = [
 
 from collections.abc import Awaitable
 from enum import Enum, auto
+from io import BytesIO
 from sqlite3 import Cursor
-from typing import Callable, Dict, Optional
+from typing import BinaryIO, Callable, Dict, Iterator, Optional
 
 from attrs import define
 
@@ -49,7 +50,9 @@ class RecoveryStages(Enum):
     downloading = auto()
     importing = auto()
     succeeded = auto()
-    failed = auto()
+
+    download_failed = auto()
+    import_failed = auto()
 
 
 @define(frozen=True)
@@ -108,18 +111,35 @@ class StatefulRecoverer:
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
         try:
-            await download(self._set_state)
+            downloaded_data = await download(self._set_state)
         except Exception as e:
             self._set_state(
-                RecoveryState(stage=RecoveryStages.failed, failure_reason=str(e))
+                RecoveryState(
+                    stage=RecoveryStages.download_failed, failure_reason=str(e)
+                )
             )
-        else:
-            self._set_state(RecoveryState(stage=RecoveryStages.succeeded))
+            return
 
-    def _set_state(self, state):
+        try:
+            recover(statements_from_download(downloaded_data), cursor)
+        except Exception as e:
+            self._set_state(
+                RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
+            )
+            return
+
+        self._set_state(RecoveryState(stage=RecoveryStages.succeeded))
+
+    def _set_state(self, state: RecoveryState) -> None:
+        """
+        Change the recovery state.
+        """
         self._state = state
 
-    def state(self):
+    def state(self) -> RecoveryState:
+        """
+        Get the latest recovery state.
+        """
         return self._state
 
 
@@ -134,7 +154,32 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     return fail_downloader
 
 
-async def noop_downloader(set_state: SetState) -> Awaitable:
+def make_canned_downloader(data: bytes) -> Downloader:
     """
-    A downloader that does nothing and then succeeds.
+    Make a downloader that always immediately succeeds with the given value.
     """
+    assert isinstance(data, bytes)
+
+    async def canned_downloader(set_state: SetState) -> Awaitable:
+        return BytesIO(data)
+
+    return canned_downloader
+
+
+# A downloader that does nothing and then succeeds with an empty string.
+noop_downloader = make_canned_downloader(b"")
+
+
+def statements_from_download(data: BinaryIO) -> Iterator[str]:
+    """
+    Read the SQL statements which constitute the replica from a byte string.
+    """
+    return data.read().decode("ascii").splitlines()
+
+
+def recover(statements: Iterator[str], cursor) -> None:
+    """
+    Synchronously execute our statement list against the given cursor.
+    """
+    for sql in statements:
+        cursor.execute(sql)
