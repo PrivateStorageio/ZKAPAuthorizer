@@ -727,31 +727,31 @@ class VoucherTests(TestCase):
         )
 
 
-def paired_tokens(data, sizes=integers(min_value=1, max_value=1000)):
+def paired_tokens(num_tokens=integers(min_value=1, max_value=1000)):
     """
-    Draw two lists of the same length, one of random tokens and one of
-    unblinded tokens.
+    Build tuples of two lists of the same length, one of random tokens and one
+    of unblinded tokens.
 
     :rtype: ([RandomTokens], [UnblindedTokens])
     """
-    num_tokens = data.draw(sizes)
-    r = data.draw(
-        lists(
-            random_tokens(),
-            min_size=num_tokens,
-            max_size=num_tokens,
-            unique=True,
+
+    def pairs(num):
+        return tuples(
+            lists(
+                random_tokens(),
+                min_size=num,
+                max_size=num,
+                unique=True,
+            ),
+            lists(
+                unblinded_tokens(),
+                min_size=num,
+                max_size=num,
+                unique=True,
+            ),
         )
-    )
-    u = data.draw(
-        lists(
-            unblinded_tokens(),
-            min_size=num_tokens,
-            max_size=num_tokens,
-            unique=True,
-        )
-    )
-    return r, u
+
+    return num_tokens().flatmap(pairs)
 
 
 class UnblindedTokenStoreTests(TestCase):
@@ -959,22 +959,31 @@ class UnblindedTokenStoreTests(TestCase):
         )
 
     @given(
-        tahoe_configs(),
-        datetimes(),
-        vouchers(),
-        dummy_ristretto_keys(),
-        booleans(),
-        integers(min_value=1),
-        data(),
+        get_config=tahoe_configs(),
+        now=datetimes(),
+        voucher_value=vouchers(),
+        public_key=dummy_ristretto_keys(),
+        completed=booleans(),
+        extra_bits=integers(min_value=1, max_value=128),
+        extra_fuzz=integers(min_value=1),
+        tokens=paired_tokens(),
     )
     def test_not_enough_unblinded_tokens(
-        self, get_config, now, voucher_value, public_key, completed, extra, data
+        self,
+        get_config,
+        now,
+        voucher_value,
+        public_key,
+        completed,
+        extra_bits,
+        extra_fuzz,
+        tokens,
     ):
         """
         ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
         greater than the number of unblinded tokens in the store.
         """
-        random, unblinded = paired_tokens(data)
+        random, unblinded = tokens
         num_tokens = len(random)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
@@ -985,6 +994,19 @@ class UnblindedTokenStoreTests(TestCase):
             completed,
             spendable=True,
         )
+        # Compute a number of "extra" tokens to request -- tokens that won't
+        # be available -- in a way that tries to distribute that number across
+        # a very large range.  We know that the implementation has a boundary
+        # around 2 ** 63 and using a simple integers() strategy for extra,
+        # Hypothesis usually tries examples on both sides of that boundary -
+        # but not always.  *Most* of the numbers between 1 and 2 ** 63 are
+        # invalid in exactly the same way (as far as I know) but I'd still
+        # like to try them out a bit.
+        #
+        # Better factoring for this would probably be to have a
+        # exponential_integers() strategy... Maybe?
+        extra = 2 ** extra_bits
+        extra += extra_fuzz % extra
         self.assertThat(
             lambda: store.get_unblinded_tokens(num_tokens + extra),
             raises(NotEnoughTokens),
