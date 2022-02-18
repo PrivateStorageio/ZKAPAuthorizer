@@ -173,6 +173,29 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
+    def test_state_recovered(self):
+        """
+        After ``StatefulRecoverer`` reaches the ``succeeded`` state the state
+        represented by the downloaded snapshot is present in the database
+        itself.
+        """
+        snapshot = (
+            b"CREATE TABLE [succeeded] ( [a] TEXT );\n"
+            b"INSERT INTO [succeeded] ([a]) VALUES ('yes');\n"
+        )
+        downloader = make_canned_downloader(snapshot)
+        recoverer = StatefulRecoverer()
+        with connect(":memory:") as conn:
+            cursor = conn.cursor()
+            first = Deferred.fromCoroutine(recoverer.recover(downloader, cursor))
+            self.assertThat(first, succeeded(Always()))
+
+            cursor.execute("SELECT * FROM [succeeded]")
+            self.assertThat(
+                cursor.fetchall(),
+                Equals([("yes",)]),
+            )
+
     def test_failed_after_download_failed(self):
         """
         ``StatefulRecoverer`` automatically progresses to the failed stage when
