@@ -751,7 +751,7 @@ def paired_tokens(num_tokens=integers(min_value=1, max_value=1000)):
             ),
         )
 
-    return num_tokens().flatmap(pairs)
+    return num_tokens.flatmap(pairs)
 
 
 class UnblindedTokenStoreTests(TestCase):
