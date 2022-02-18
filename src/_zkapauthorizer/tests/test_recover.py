@@ -5,7 +5,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from sqlite3 import Connection, connect
 from typing import Dict, Iterator
 
-from hypothesis import assume, given, note, settings
+from hypothesis import assume, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -13,7 +13,7 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from hypothesis.strategies import data, lists, randoms, sampled_from, text
+from hypothesis.strategies import data, lists, randoms, sampled_from
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
