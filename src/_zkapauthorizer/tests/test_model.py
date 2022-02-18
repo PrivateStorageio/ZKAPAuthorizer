@@ -791,15 +791,15 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
         dummy_ristretto_keys(),
         booleans(),
-        data(),
+        paired_tokens(),
     )
     def test_unblinded_tokens_round_trip(
-        self, get_config, now, voucher_value, public_key, completed, data
+        self, get_config, now, voucher_value, public_key, completed, tokens
     ):
         """
         Unblinded tokens that are added to the store can later be retrieved and counted.
         """
-        random_tokens, unblinded_tokens = paired_tokens(data)
+        random_tokens, unblinded_tokens = tokens
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(
@@ -830,32 +830,16 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
         dummy_ristretto_keys(),
         integers(min_value=1, max_value=100),
-        data(),
+        paired_tokens(),
     )
     def test_mark_vouchers_redeemed(
-        self, get_config, now, voucher_value, public_key, num_tokens, data
+        self, get_config, now, voucher_value, public_key, num_tokens, tokens
     ):
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
         """
-        random = data.draw(
-            lists(
-                random_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
-        unblinded = data.draw(
-            lists(
-                unblinded_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
-
+        random, unblinded = tokens
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
@@ -909,30 +893,15 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
         dummy_ristretto_keys(),
         integers(min_value=1, max_value=100),
-        data(),
+        paired_tokens(),
     )
     def test_mark_spent_vouchers_double_spent(
-        self, get_config, now, voucher_value, public_key, num_tokens, data
+        self, get_config, now, voucher_value, public_key, num_tokens, tokens
     ):
         """
         A voucher which has already been spent cannot be marked as double-spent.
         """
-        random = data.draw(
-            lists(
-                random_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
-        unblinded = data.draw(
-            lists(
-                unblinded_tokens(),
-                min_size=num_tokens,
-                max_size=num_tokens,
-                unique=True,
-            ),
-        )
+        random, unblinded = tokens
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
