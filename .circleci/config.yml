@@ -201,7 +201,13 @@ jobs:
             #
             # Further, we want the "doc" output built as well because that's
             # where the coverage data ends up.
-            nix-build tests.nix \
+            #
+            # Also explicitly specify the number of cores to use such that it
+            # only slightly exceeds what CircleCI advertises for the resource
+            # class (defined above) we're using.  The CircleCI environment
+            # looks like it has many more cores than are actually usable by
+            # our build.
+            nix-build --cores 5 tests.nix \
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
