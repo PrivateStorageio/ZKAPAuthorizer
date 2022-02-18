@@ -21,18 +21,39 @@ let
     inherit (privatestorage) pkgs mach-nix zkapauthorizer;
     inherit (pkgs) lib;
     hypothesisProfile' = if hypothesisProfile == null then "default" else hypothesisProfile;
-    defaultTrialArgs = [ "--rterrors" ] ++ (lib.optional (! collectCoverage) "--jobs=$(($NIX_BUILD_CORES > 8 ? 8 : $NIX_BUILD_CORES))");
+    defaultTrialArgs = [ "--rterrors" "--jobs=$NIX_BUILD_CORES" ];
     trialArgs' = if trialArgs == null then defaultTrialArgs else trialArgs;
     extraTrialArgs = builtins.concatStringsSep " " trialArgs';
     testSuite' = if testSuite == null then "_zkapauthorizer" else testSuite;
 
+    coveragerc = builtins.path {
+      name = "coveragerc";
+      path = ./.coveragerc;
+    };
+    coverage-env = lib.optionalString collectCoverage "COVERAGE_PROCESS_START=${coveragerc}";
+    coverage-cmd = lib.optionalString collectCoverage "coverage run --debug=config --rcfile=${coveragerc} --module";
+
     python = mach-nix.mkPython {
       inherit (zkapauthorizer.meta.mach-nix) python providers;
-      requirements =
-        builtins.readFile ./requirements/test.in;
+      requirements = ''
+        ${builtins.readFile ./requirements/test.in}
+        ${if collectCoverage then "coverage_enable_subprocess" else ""}
+      '';
       packagesExtra = [ zkapauthorizer ];
       _.hypothesis.postUnpack = "";
     };
+
+    lint = pkgs.runCommand "zkapauthorizer-lint" {
+      passthru = {
+        inherit python;
+      };
+    } ''
+      pushd ${zkapauthorizer.src}
+      ${python}/bin/flake8 src
+      popd
+
+      touch $out
+      '';
 
     tests = pkgs.runCommand "zkapauthorizer-tests" {
       passthru = {
@@ -41,23 +62,20 @@ let
     } ''
       mkdir -p $out
 
-      pushd ${zkapauthorizer.src}
-      ${python}/bin/flake8 src
-      popd
-
-      ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'} ${python}/bin/python -m ${if collectCoverage
-        then "coverage run --debug=config --rcfile=${zkapauthorizer.src}/.coveragerc --module"
-        else ""
-      } twisted.trial ${extraTrialArgs} ${testSuite'}
+      export ZKAPAUTHORIZER_HYPOTHESIS_PROFILE=${hypothesisProfile'}
+      ${coverage-env} ${python}/bin/python -m ${coverage-cmd} twisted.trial ${extraTrialArgs} ${testSuite'}
 
       ${lib.optionalString collectCoverage
         ''
           mkdir -p "$out/coverage"
           cp -v .coverage.* "$out/coverage"
+          ${python}/bin/python -m coverage combine
+          cp -v .coverage "$out/coverage"
+          ${python}/bin/python -m coverage html -d "$out/htmlcov"
         ''
       }
     '';
 in
 {
-  inherit privatestorage tests;
+  inherit privatestorage lint tests;
 }
