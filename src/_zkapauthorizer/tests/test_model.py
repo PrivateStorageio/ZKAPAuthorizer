@@ -829,17 +829,17 @@ class UnblindedTokenStoreTests(TestCase):
         datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
-        integers(min_value=1, max_value=100),
         paired_tokens(),
     )
     def test_mark_vouchers_redeemed(
-        self, get_config, now, voucher_value, public_key, num_tokens, tokens
+        self, get_config, now, voucher_value, public_key, tokens
     ):
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
         """
         random, unblinded = tokens
+        num_tokens = len(random)
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
@@ -892,11 +892,10 @@ class UnblindedTokenStoreTests(TestCase):
         datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
-        integers(min_value=1, max_value=100),
         paired_tokens(),
     )
     def test_mark_spent_vouchers_double_spent(
-        self, get_config, now, voucher_value, public_key, num_tokens, tokens
+        self, get_config, now, voucher_value, public_key, tokens
     ):
         """
         A voucher which has already been spent cannot be marked as double-spent.
