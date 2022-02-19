@@ -67,3 +67,38 @@ def _configure_hypothesis():
 
 
 _configure_hypothesis()
+
+
+def _monkeypatch_tahoe_3874():
+    # Fix https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3874
+    from allmydata.testing.web import _FakeTahoeUriHandler
+    from hyperlink import DecodedURL
+    from twisted.web import http
+
+    def render_GET(self, request):
+        uri = DecodedURL.from_text(request.uri.decode("utf8"))
+        capability = None
+        for arg, value in uri.query:
+            if arg == "uri":
+                capability = value.encode("ascii")
+        # it's legal to use the form "/uri/<capability>"
+        if capability is None and request.postpath and request.postpath[0]:
+            capability = request.postpath[0]
+
+        # if we don't yet have a capability, that's an error
+        if capability is None:
+            request.setResponseCode(http.BAD_REQUEST)
+            return b"GET /uri requires uri="
+
+        # the user gave us a capability; if our Grid doesn't have any
+        # data for it, that's an error.
+        if capability not in self.data:
+            request.setResponseCode(http.BAD_REQUEST)
+            return "No data for '{}'".format(capability.decode("ascii"))
+
+        return self.data[capability]
+
+    _FakeTahoeUriHandler.render_GET = render_GET
+
+
+_monkeypatch_tahoe_3874()
