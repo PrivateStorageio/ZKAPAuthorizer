@@ -45,9 +45,10 @@ def _not_enough_servers(exc: Exception) -> bool:
     Match the exception that is raised when the Tahoe-LAFS client node is not
     connected to enough servers to satisfy the encoding configuration.
     """
-    return isinstance(
-        exc, TahoeAPIError
-    ) and "allmydata.interfaces.NoServersError" in str(exc)
+    return isinstance(exc, TahoeAPIError) and (
+        "allmydata.interfaces.NoServersError" in str(exc)
+        or "allmydata.mutable.common.NotEnoughServersError" in str(exc)
+    )
 
 
 @define
