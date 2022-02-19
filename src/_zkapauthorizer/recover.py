@@ -19,7 +19,19 @@ from io import BytesIO
 from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Dict, Iterator, Optional
 
+from allmydata.node import _Config
 from attrs import define
+from hyperlink import DecodedURL
+from treq.client import HTTPClient
+from twisted.python.filepath import FilePath
+
+from .tahoe import download
+
+
+class SnapshotMissing(Exception):
+    """
+    No snapshot was not found in the replica directory.
+    """
 
 
 class AlreadyRecovering(Exception):
@@ -183,3 +195,42 @@ def recover(statements: Iterator[str], cursor) -> None:
     """
     for sql in statements:
         cursor.execute(sql)
+
+
+async def tahoe_lafs_downloader(
+    treq: HTTPClient,
+    node_config: _Config,
+    recovery_cap: str,
+    set_state: SetState,
+) -> Awaitable:  # Awaitable[FilePath]
+    """
+    Download replica data from the given replica directory capability into the
+    node's private directory.
+    """
+    api_root = DecodedURL.from_text(
+        FilePath(node_config.get_config_path("node.url")).getContent().decode("ascii")
+    )
+    snapshot_path = FilePath(node_config.get_private_path("snapshot.sql"))
+
+    set_state(RecoveryState(stage=RecoveryStages.downloading))
+    await download(treq, snapshot_path, api_root, recovery_cap, ["snapshot.sql"])
+    return snapshot_path
+
+
+def get_tahoe_lafs_downloader(
+    httpclient: HTTPClient, node_config: _Config
+) -> Callable[[str], Downloader]:
+    """
+    Bind some parameters to ``tahoe_lafs_downloader`` in a convenient way.
+
+    :return: A callable that accepts a Tahoe-LAFS capability string and
+        returns a downloader for that capability.
+    """
+
+    def get_downloader(cap_str):
+        def downloader(set_state):
+            return tahoe_lafs_downloader(httpclient, node_config, cap_str, set_state)
+
+        return downloader
+
+    return get_downloader

@@ -5,7 +5,9 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from sqlite3 import Connection, connect
 from typing import Dict, Iterator
 
-from hypothesis import assume, note, settings
+from allmydata.testing.web import create_fake_tahoe_root, create_tahoe_treq_client
+from fixtures import TempDir
+from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -24,18 +26,27 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred
+from twisted.python.filepath import FilePath
 
 from ..recover import (
     AlreadyRecovering,
     RecoveryStages,
     StatefulRecoverer,
+    get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
     recover,
 )
 from .sql import Table, create_table
-from .strategies import deletes, inserts, sql_identifiers, tables, updates
+from .strategies import (
+    deletes,
+    inserts,
+    sql_identifiers,
+    tables,
+    tahoe_configs,
+    updates,
+)
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
@@ -261,3 +272,34 @@ class StatefulRecovererTests(TestCase):
                     ),
                 ),
             )
+
+
+class TahoeLAFSDownloaderTests(TestCase):
+    """
+    Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
+    """
+
+    @given(tahoe_configs())
+    def test_get_downloader(self, get_config):
+        """
+        ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
+        used to download objects using a Tahoe-LAFS client.
+        """
+        tempdir = self.useFixture(TempDir())
+        nodedir = FilePath(tempdir.join("node"))
+        config = get_config(nodedir.path, "tub.port")
+        # The downloader wants to figure out the node's api root.
+        nodedir.child("private").makedirs()
+        nodedir.child("node.url").setContent(b"http://localhost/")
+        root = create_fake_tahoe_root()
+        cap_str = root.add_data(b"URI:DIR2-RO:", b"snapshot data").decode("ascii")
+        httpclient = create_tahoe_treq_client(root)
+        get_downloader = get_tahoe_lafs_downloader(httpclient, config)
+        download = get_downloader(cap_str)
+
+        self.assertThat(
+            Deferred.fromCoroutine(download(lambda state: None)),
+            succeeded(
+                AfterPreprocessing(lambda fp: fp.getContent(), Equals(b"snapshot data"))
+            ),
+        )
