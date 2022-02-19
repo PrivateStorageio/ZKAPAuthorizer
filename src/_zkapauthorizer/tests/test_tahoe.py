@@ -137,8 +137,9 @@ class TahoeStorage:
         """
         Start the node child process.
         """
+        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
         self.process = Popen(
-            TAHOE + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
@@ -257,8 +258,9 @@ class TahoeClient:
         """
         Start the node child process.
         """
+        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
         self.process = Popen(
-            TAHOE + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
