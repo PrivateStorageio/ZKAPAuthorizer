@@ -14,13 +14,13 @@ from fixtures import TempDir
 from hyperlink import DecodedURL
 from testresources import TestResourceManager, setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Equals, Is, raises
+from testtools.matchers import Equals, Is, Not, raises
 from testtools.twistedsupport import AsynchronousDeferredRunTest
-from twisted.internet.defer import ensureDeferred, inlineCallbacks
+from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..tahoe import async_retry, download, upload
+from ..tahoe import async_retry, download, link, make_directory, upload
 from .fixtures import Treq
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
@@ -299,6 +299,9 @@ class TahoeClientManager(TestResourceManager):
         return client
 
 
+_client_manager = TahoeClientManager()
+
+
 class UploadDownloadTestCase(TestCase):
     """
     Tests for ``upload`` and ``download``.
@@ -308,7 +311,7 @@ class UploadDownloadTestCase(TestCase):
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
     # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", TahoeClientManager())]
+    resources = [("client", _client_manager)]
 
     def setUp(self):
         super().setUp()
@@ -336,6 +339,84 @@ class UploadDownloadTestCase(TestCase):
         self.assertThat(
             inpath.getContent(),
             Equals(outpath.getContent()),
+        )
+
+
+class DirectoryTests(TestCase):
+    """
+    Tests for directory-related functionality.
+    """
+
+    # Support test methods that return a Deferred.
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
+
+    # Get a Tahoe-LAFS client node connected to a storage node.
+    resources = [("client", _client_manager)]
+
+    def setUp(self):
+        super().setUp()
+        setUpResources(self, self.resources, None)
+        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
+        # AsynchronousDeferredRunTest sets reactor on us.
+        self.httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+
+    @inlineCallbacks
+    def test_make_directory(self):
+        """
+        ``make_directory`` returns a coroutine that completes with the capability
+        of a new, empty directory.
+        """
+        dir_cap = yield Deferred.fromCoroutine(
+            make_directory(self.httpclient, self.client.node_url)
+        )
+
+        # If we can download it, consider that success.
+        outpath = FilePath(self.useFixture(TempDir()).join("dir_contents"))
+        yield Deferred.fromCoroutine(
+            download(self.httpclient, outpath, self.client.node_url, dir_cap)
+        )
+        self.assertThat(outpath.getContent(), Not(Equals(b"")))
+
+    @inlineCallbacks
+    def test_link(self):
+        """
+        ``link`` adds an entry to a directory.
+        """
+        tmp = FilePath(self.useFixture(TempDir()).path)
+        inpath = tmp.child("source")
+        inpath.setContent(b"some content")
+
+        dir_cap = yield Deferred.fromCoroutine(
+            make_directory(self.httpclient, self.client.node_url)
+        )
+        entry_name = "foo"
+        entry_cap = yield Deferred.fromCoroutine(
+            upload(self.httpclient, inpath, self.client.node_url),
+        )
+        yield Deferred.fromCoroutine(
+            link(
+                self.httpclient,
+                self.client.node_url,
+                dir_cap,
+                entry_name,
+                entry_cap,
+            ),
+        )
+
+        outpath = tmp.child("destination")
+        yield Deferred.fromCoroutine(
+            download(
+                self.httpclient,
+                outpath,
+                self.client.node_url,
+                dir_cap,
+                child_path=[entry_name],
+            ),
+        )
+
+        self.assertThat(
+            outpath.getContent(),
+            Equals(inpath.getContent()),
         )
 
 
