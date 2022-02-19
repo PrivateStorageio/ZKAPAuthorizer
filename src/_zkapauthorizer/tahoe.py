@@ -141,6 +141,7 @@ async def download(
         raise TahoeAPIError("get", uri, resp.code, content)
 
 
+@async_retry([_not_enough_servers])
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
@@ -156,6 +157,7 @@ async def make_directory(
     raise TahoeAPIError("post", uri, resp.code, content)
 
 
+@async_retry([_not_enough_servers])
 async def link(
     client: HTTPClient,
     api_root: DecodedURL,
