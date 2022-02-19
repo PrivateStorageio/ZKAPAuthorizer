@@ -208,7 +208,10 @@ async def tahoe_lafs_downloader(
     node's private directory.
     """
     api_root = DecodedURL.from_text(
-        FilePath(node_config.get_config_path("node.url")).getContent().decode("ascii")
+        FilePath(node_config.get_config_path("node.url"))
+        .getContent()
+        .decode("ascii")
+        .strip()
     )
     snapshot_path = FilePath(node_config.get_private_path("snapshot.sql"))
 

@@ -5,9 +5,9 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from sqlite3 import Connection, connect
 from typing import Dict, Iterator
 
-from allmydata.testing.web import create_fake_tahoe_root, create_tahoe_treq_client
+from allmydata.client import read_config
 from fixtures import TempDir
-from hypothesis import assume, given, note, settings
+from hypothesis import assume, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -16,6 +16,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from
+from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -24,8 +25,8 @@ from testtools.matchers import (
     IsInstance,
     MatchesStructure,
 )
-from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import Deferred
+from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 
 from ..recover import (
@@ -38,15 +39,11 @@ from ..recover import (
     noop_downloader,
     recover,
 )
+from ..tahoe import link, make_directory, upload
+from .fixtures import Treq
 from .sql import Table, create_table
-from .strategies import (
-    deletes,
-    inserts,
-    sql_identifiers,
-    tables,
-    tahoe_configs,
-    updates,
-)
+from .strategies import deletes, inserts, sql_identifiers, tables, updates
+from .test_tahoe import _client_manager
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
@@ -279,27 +276,53 @@ class TahoeLAFSDownloaderTests(TestCase):
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    @given(tahoe_configs())
-    def test_get_downloader(self, get_config):
+    # Support test methods that return a Deferred.
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
+
+    # Get a Tahoe-LAFS client node connected to a storage node.
+    resources = [("client", _client_manager)]
+
+    def setUp(self):
+        super().setUp()
+        setUpResources(self, self.resources, None)
+        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
+
+    @inlineCallbacks
+    def test_get_downloader(self):
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
         """
-        tempdir = self.useFixture(TempDir())
-        nodedir = FilePath(tempdir.join("node"))
-        config = get_config(nodedir.path, "tub.port")
-        # The downloader wants to figure out the node's api root.
-        nodedir.child("private").makedirs()
-        nodedir.child("node.url").setContent(b"http://localhost/")
-        root = create_fake_tahoe_root()
-        cap_str = root.add_data(b"URI:DIR2-RO:", b"snapshot data").decode("ascii")
-        httpclient = create_tahoe_treq_client(root)
-        get_downloader = get_tahoe_lafs_downloader(httpclient, config)
-        download = get_downloader(cap_str)
+        snapshot_path = FilePath(self.useFixture(TempDir()).join("snapshot-source"))
+        snapshot_path.setContent(b"snapshot data")
 
+        config = read_config(self.client.node_dir.path, "tub.port")
+        # AsynchronousDeferredRunTest sets reactor on us.
+        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+
+        replica_dir_cap_str = yield Deferred.fromCoroutine(
+            make_directory(httpclient, self.client.node_url),
+        )
+        snapshot_cap_str = yield Deferred.fromCoroutine(
+            upload(httpclient, snapshot_path, self.client.node_url)
+        )
+        yield Deferred.fromCoroutine(
+            link(
+                httpclient,
+                self.client.node_url,
+                replica_dir_cap_str,
+                "snapshot.sql",
+                snapshot_cap_str,
+            )
+        )
+
+        get_downloader = get_tahoe_lafs_downloader(httpclient, config)
+        download = get_downloader(replica_dir_cap_str)
+
+        downloaded_snapshot_path = yield Deferred.fromCoroutine(
+            download(lambda state: None)
+        )
         self.assertThat(
-            Deferred.fromCoroutine(download(lambda state: None)),
-            succeeded(
-                AfterPreprocessing(lambda fp: fp.getContent(), Equals(b"snapshot data"))
-            ),
+            downloaded_snapshot_path.getContent(),
+            Equals(snapshot_path.getContent()),
         )
