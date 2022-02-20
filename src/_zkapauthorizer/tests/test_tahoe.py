@@ -9,18 +9,29 @@ from tempfile import mkdtemp
 from time import sleep
 from typing import Iterator, Optional
 
+from allmydata.test.strategies import write_capabilities
 from attrs import define
 from fixtures import TempDir
 from hyperlink import DecodedURL
+from hypothesis import given
+from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import TestResourceManager, setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Equals, Is, raises
+from testtools.matchers import Equals, Is, Not, raises
 from testtools.twistedsupport import AsynchronousDeferredRunTest
-from twisted.internet.defer import ensureDeferred, inlineCallbacks
+from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..tahoe import async_retry, download, upload
+from ..tahoe import (
+    TahoeAPIError,
+    _scrub_cap,
+    async_retry,
+    download,
+    link,
+    make_directory,
+    upload,
+)
 from .fixtures import Treq
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
@@ -63,7 +74,7 @@ class TemporaryDirectoryResource(TestResourceManager):
     def make(self, dependency_resources):
         return FilePath(mkdtemp())
 
-    def isDirty(self, resource):
+    def isDirty(self):
         # Can't detect when the directory is written to, so assume it
         # can never be reused.  We could list the directory, but that might
         # not catch it being open as a cwd etc.
@@ -137,8 +148,9 @@ class TahoeStorage:
         """
         Start the node child process.
         """
+        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
         self.process = Popen(
-            TAHOE + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
@@ -187,6 +199,7 @@ class TahoeStorageManager(TestResourceManager):
         Kill the storage node child process.
         """
         storage.process.kill()
+        storage.process.wait()
 
     def make(self, dependency_resources):
         """
@@ -257,8 +270,9 @@ class TahoeClient:
         """
         Start the node child process.
         """
+        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
         self.process = Popen(
-            TAHOE + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
@@ -287,6 +301,7 @@ class TahoeClientManager(TestResourceManager):
         Kill the client node child process.
         """
         client.process.kill()
+        client.process.wait()
 
     def make(self, dependency_resources):
         """
@@ -295,6 +310,49 @@ class TahoeClientManager(TestResourceManager):
         client = TahoeClient(**dependency_resources)
         client.run()
         return client
+
+
+class TahoeAPIErrorTests(TestCase):
+    """
+    Tests for ``TahoeAPIError``.
+    """
+
+    @given(cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")))
+    def test_scrub_cap(self, cap):
+        """
+        ``_scrub_cap`` returns a different string than it is called with.
+        """
+        self.assertThat(
+            _scrub_cap(cap),
+            Not(Equals(cap)),
+        )
+
+    @given(
+        scheme=sampled_from(["http", "https"]),
+        host=sampled_from(["127.0.0.1", "localhost", "example.invalid"]),
+        port=integers(min_value=1, max_value=2 ** 16 - 1),
+        query=lists(tuples(text(), text())),
+        path_extra=lists(text()),
+        cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")),
+    )
+    def test_scrubbed_url(self, scheme, host, port, query, path_extra, cap):
+        """
+        ``TahoeAPIError.url`` has capability strings scrubbed from it to avoid
+        accidentally leaking secrets in logs.
+        """
+        original_path = ("uri", cap) + tuple(path_extra)
+        original = DecodedURL().replace(
+            scheme=scheme, host=host, port=port, path=original_path, query=query
+        )
+        expected_path = ("uri", _scrub_cap(cap)) + tuple(path_extra)
+        expected = original.replace(path=expected_path)
+
+        original_exc = TahoeAPIError("get", original, 200, "")
+        expected_exc = TahoeAPIError("get", expected, 200, "")
+        self.assertThat(original_exc, Equals(expected_exc))
+
+
+_client_manager = TahoeClientManager()
 
 
 class UploadDownloadTestCase(TestCase):
@@ -306,7 +364,7 @@ class UploadDownloadTestCase(TestCase):
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
     # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", TahoeClientManager())]
+    resources = [("client", _client_manager)]
 
     def setUp(self):
         super().setUp()
@@ -334,6 +392,84 @@ class UploadDownloadTestCase(TestCase):
         self.assertThat(
             inpath.getContent(),
             Equals(outpath.getContent()),
+        )
+
+
+class DirectoryTests(TestCase):
+    """
+    Tests for directory-related functionality.
+    """
+
+    # Support test methods that return a Deferred.
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
+
+    # Get a Tahoe-LAFS client node connected to a storage node.
+    resources = [("client", _client_manager)]
+
+    def setUp(self):
+        super().setUp()
+        setUpResources(self, self.resources, None)
+        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
+        # AsynchronousDeferredRunTest sets reactor on us.
+        self.httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+
+    @inlineCallbacks
+    def test_make_directory(self):
+        """
+        ``make_directory`` returns a coroutine that completes with the capability
+        of a new, empty directory.
+        """
+        dir_cap = yield Deferred.fromCoroutine(
+            make_directory(self.httpclient, self.client.node_url)
+        )
+
+        # If we can download it, consider that success.
+        outpath = FilePath(self.useFixture(TempDir()).join("dir_contents"))
+        yield Deferred.fromCoroutine(
+            download(self.httpclient, outpath, self.client.node_url, dir_cap)
+        )
+        self.assertThat(outpath.getContent(), Not(Equals(b"")))
+
+    @inlineCallbacks
+    def test_link(self):
+        """
+        ``link`` adds an entry to a directory.
+        """
+        tmp = FilePath(self.useFixture(TempDir()).path)
+        inpath = tmp.child("source")
+        inpath.setContent(b"some content")
+
+        dir_cap = yield Deferred.fromCoroutine(
+            make_directory(self.httpclient, self.client.node_url)
+        )
+        entry_name = "foo"
+        entry_cap = yield Deferred.fromCoroutine(
+            upload(self.httpclient, inpath, self.client.node_url),
+        )
+        yield Deferred.fromCoroutine(
+            link(
+                self.httpclient,
+                self.client.node_url,
+                dir_cap,
+                entry_name,
+                entry_cap,
+            ),
+        )
+
+        outpath = tmp.child("destination")
+        yield Deferred.fromCoroutine(
+            download(
+                self.httpclient,
+                outpath,
+                self.client.node_url,
+                dir_cap,
+                child_path=[entry_name],
+            ),
+        )
+
+        self.assertThat(
+            outpath.getContent(),
+            Equals(inpath.getContent()),
         )
 
 

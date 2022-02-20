@@ -2,12 +2,14 @@
 A library for interacting with a Tahoe-LAFS node.
 """
 
+from base64 import b32encode
 from collections.abc import Awaitable
 from functools import wraps
-from typing import Callable, List
+from hashlib import sha256
+from typing import Callable, Iterable, List, Optional
 
 import treq
-from attrs import define
+from attrs import define, field
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
@@ -45,12 +47,42 @@ def _not_enough_servers(exc: Exception) -> bool:
     Match the exception that is raised when the Tahoe-LAFS client node is not
     connected to enough servers to satisfy the encoding configuration.
     """
-    return isinstance(
-        exc, TahoeAPIError
-    ) and "allmydata.interfaces.NoServersError" in str(exc)
+    return isinstance(exc, TahoeAPIError) and (
+        "allmydata.interfaces.NoServersError" in str(exc)
+        or "allmydata.mutable.common.NotEnoughServersError" in str(exc)
+    )
 
 
-@define
+def _scrub_cap(cap: str) -> str:
+    """
+    Return a new string that cannot be used to recover the input string but
+    can usually be distinguished from the scrubbed version of a different
+    input string.
+    """
+    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6].lower()
+    return f"URI:SCRUBBED:{scrubbed}"
+
+
+def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
+    """
+    Return a new URL that is like ``url`` but has all capability strings in it
+    replaced with distinct but unusable substitutes.
+    """
+    # One form is like /uri/<cap>
+    if (
+        len(url.path) > 1
+        and url.path[0] == "uri"
+        and not url.path[1].startswith("URI:SCRUBBED:")
+    ):
+        cap = url.path[1]
+        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + url.path[2:])
+        return new
+
+    # That is the only form we use at the moment, in fact.
+    return url
+
+
+@define(frozen=True, auto_exc=False)
 class TahoeAPIError(Exception):
     """
     Some error was reported from a Tahoe-LAFS HTTP API.
@@ -59,6 +91,8 @@ class TahoeAPIError(Exception):
     :ivar body: The HTTP response body.
     """
 
+    method: str
+    url: DecodedURL = field(converter=_scrub_caps_from_url)
     status: int
     body: str
 
@@ -88,16 +122,21 @@ async def upload(
     :raise: If there is a problem uploading the data -- except for
         unavailability of storage servers -- then some exception is raised.
     """
+    uri = api_root.child("uri")
     with inpath.open() as f:
-        resp = await client.put(api_root.child("uri"), f)
+        resp = await client.put(uri, f)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code in (200, 201):
         return content
-    raise TahoeAPIError(resp.code, content)
+    raise TahoeAPIError("put", uri, resp.code, content)
 
 
 async def download(
-    client: HTTPClient, outpath: FilePath, api_root: DecodedURL, cap: str
+    client: HTTPClient,
+    outpath: FilePath,
+    api_root: DecodedURL,
+    cap: str,
+    child_path: Optional[Iterable[str]] = None,
 ) -> Awaitable:  # Awaitable[None] but this requires Python 3.9
     """
     Download the object identified by the given capability to the given path.
@@ -119,11 +158,57 @@ async def download(
     """
     outtemp = outpath.temporarySibling()
 
-    resp = await client.get(api_root.child("uri", cap).to_text())
+    uri = api_root.child("uri").child(cap)
+    if child_path is not None:
+        for segment in child_path:
+            uri = uri.child(segment)
+
+    resp = await client.get(uri)
     if resp.code == 200:
         with outtemp.open("w") as f:
             await treq.collect(resp, f.write)
         outtemp.moveTo(outpath)
     else:
         content = (await treq.content(resp)).decode("utf-8")
-        raise TahoeAPIError(resp.code, content)
+        raise TahoeAPIError("get", uri, resp.code, content)
+
+
+@async_retry([_not_enough_servers])
+async def make_directory(
+    client: HTTPClient,
+    api_root: DecodedURL,
+) -> Awaitable:  # Awaitable[str] but this requires Python 3.9
+    """
+    Create a new mutable directory and return the write capability string.
+    """
+    uri = api_root.child("uri").add("t", "mkdir")
+    resp = await client.post(uri)
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code == 200:
+        return content
+    raise TahoeAPIError("post", uri, resp.code, content)
+
+
+@async_retry([_not_enough_servers])
+async def link(
+    client: HTTPClient,
+    api_root: DecodedURL,
+    dir_cap: str,
+    entry_name: str,
+    entry_cap: str,
+) -> Awaitable:
+    """
+    Link an object into a directory.
+
+    :param dir_cap: The capability string of the directory in which to create
+        the link.
+
+    :param entry_cap: The capability string of the object to link in to the
+        directory.
+    """
+    uri = api_root.child("uri").child(dir_cap).child(entry_name).add("t", "uri")
+    resp = await client.put(uri, data=entry_cap.encode("ascii"))
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code == 200:
+        return None
+    raise TahoeAPIError("put", uri, resp.code, content)

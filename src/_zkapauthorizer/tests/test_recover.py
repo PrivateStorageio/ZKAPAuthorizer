@@ -5,6 +5,8 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from sqlite3 import Connection, connect
 from typing import Dict, Iterator
 
+from allmydata.client import read_config
+from fixtures import TempDir
 from hypothesis import assume, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -14,6 +16,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from
+from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -22,20 +25,25 @@ from testtools.matchers import (
     IsInstance,
     MatchesStructure,
 )
-from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import Deferred
+from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.python.filepath import FilePath
 
 from ..recover import (
     AlreadyRecovering,
     RecoveryStages,
     StatefulRecoverer,
+    get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
     recover,
 )
+from ..tahoe import link, make_directory, upload
+from .fixtures import Treq
 from .sql import Table, create_table
 from .strategies import deletes, inserts, sql_identifiers, tables, updates
+from .test_tahoe import _client_manager
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
@@ -137,7 +145,7 @@ class StatefulRecoverTests(TestCase):
         #
         # Also try to play along with any profile that has been loaded.
         max_examples = settings.default.max_examples * 10
-        stateful_step_count = int(max(1, settings.default.stateful_step_count / 10))
+        stateful_step_count = int(max(3, settings.default.stateful_step_count / 10))
 
         run_state_machine_as_test(
             lambda: SnapshotMachine(self),
@@ -261,3 +269,60 @@ class StatefulRecovererTests(TestCase):
                     ),
                 ),
             )
+
+
+class TahoeLAFSDownloaderTests(TestCase):
+    """
+    Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
+    """
+
+    # Support test methods that return a Deferred.
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
+
+    # Get a Tahoe-LAFS client node connected to a storage node.
+    resources = [("client", _client_manager)]
+
+    def setUp(self):
+        super().setUp()
+        setUpResources(self, self.resources, None)
+        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
+
+    @inlineCallbacks
+    def test_get_downloader(self):
+        """
+        ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
+        used to download objects using a Tahoe-LAFS client.
+        """
+        snapshot_path = FilePath(self.useFixture(TempDir()).join("snapshot-source"))
+        snapshot_path.setContent(b"snapshot data")
+
+        config = read_config(self.client.node_dir.path, "tub.port")
+        # AsynchronousDeferredRunTest sets reactor on us.
+        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+
+        replica_dir_cap_str = yield Deferred.fromCoroutine(
+            make_directory(httpclient, self.client.node_url),
+        )
+        snapshot_cap_str = yield Deferred.fromCoroutine(
+            upload(httpclient, snapshot_path, self.client.node_url)
+        )
+        yield Deferred.fromCoroutine(
+            link(
+                httpclient,
+                self.client.node_url,
+                replica_dir_cap_str,
+                "snapshot.sql",
+                snapshot_cap_str,
+            )
+        )
+
+        get_downloader = get_tahoe_lafs_downloader(httpclient, config)
+        download = get_downloader(replica_dir_cap_str)
+
+        downloaded_snapshot_path = yield Deferred.fromCoroutine(
+            download(lambda state: None)
+        )
+        self.assertThat(
+            downloaded_snapshot_path.getContent(),
+            Equals(snapshot_path.getContent()),
+        )
