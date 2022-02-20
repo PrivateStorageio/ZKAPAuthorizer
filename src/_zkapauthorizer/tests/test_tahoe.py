@@ -63,7 +63,7 @@ class TemporaryDirectoryResource(TestResourceManager):
     def make(self, dependency_resources):
         return FilePath(mkdtemp())
 
-    def isDirty(self, resource):
+    def isDirty(self):
         # Can't detect when the directory is written to, so assume it
         # can never be reused.  We could list the directory, but that might
         # not catch it being open as a cwd etc.
