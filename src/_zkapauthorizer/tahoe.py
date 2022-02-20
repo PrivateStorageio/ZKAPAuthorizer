@@ -59,7 +59,7 @@ def _scrub_cap(cap: str) -> str:
     can usually be distinguished from the scrubbed version of a different
     input string.
     """
-    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6]
+    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6].lower()
     return f"URI:SCRUBBED:{scrubbed}"
 
 
