@@ -2,12 +2,14 @@
 A library for interacting with a Tahoe-LAFS node.
 """
 
+from base64 import b32encode
 from collections.abc import Awaitable
 from functools import wraps
+from hashlib import sha256
 from typing import Callable, Iterable, List, Optional
 
 import treq
-from attrs import define
+from attrs import define, field
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
@@ -51,7 +53,36 @@ def _not_enough_servers(exc: Exception) -> bool:
     )
 
 
-@define
+def _scrub_cap(cap: str) -> str:
+    """
+    Return a new string that cannot be used to recover the input string but
+    can usually be distinguished from the scrubbed version of a different
+    input string.
+    """
+    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6]
+    return f"URI:SCRUBBED:{scrubbed}"
+
+
+def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
+    """
+    Return a new URL that is like ``url`` but has all capability strings in it
+    replaced with distinct but unusable substitutes.
+    """
+    # One form is like /uri/<cap>
+    if (
+        len(url.path) > 1
+        and url.path[0] == "uri"
+        and not url.path[1].startswith("URI:SCRUBBED:")
+    ):
+        cap = url.path[1]
+        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + url.path[2:])
+        return new
+
+    # That is the only form we use at the moment, in fact.
+    return url
+
+
+@define(frozen=True, auto_exc=False)
 class TahoeAPIError(Exception):
     """
     Some error was reported from a Tahoe-LAFS HTTP API.
@@ -61,7 +92,7 @@ class TahoeAPIError(Exception):
     """
 
     method: str
-    url: DecodedURL
+    url: DecodedURL = field(converter=_scrub_caps_from_url)
     status: int
     body: str
 

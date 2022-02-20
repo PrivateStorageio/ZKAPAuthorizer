@@ -9,9 +9,12 @@ from tempfile import mkdtemp
 from time import sleep
 from typing import Iterator, Optional
 
+from allmydata.test.strategies import write_capabilities
 from attrs import define
 from fixtures import TempDir
 from hyperlink import DecodedURL
+from hypothesis import given
+from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import TestResourceManager, setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import Equals, Is, Not, raises
@@ -20,7 +23,15 @@ from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..tahoe import async_retry, download, link, make_directory, upload
+from ..tahoe import (
+    TahoeAPIError,
+    _scrub_cap,
+    async_retry,
+    download,
+    link,
+    make_directory,
+    upload,
+)
 from .fixtures import Treq
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
@@ -299,6 +310,46 @@ class TahoeClientManager(TestResourceManager):
         client = TahoeClient(**dependency_resources)
         client.run()
         return client
+
+
+class TahoeAPIErrorTests(TestCase):
+    """
+    Tests for ``TahoeAPIError``.
+    """
+
+    @given(cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")))
+    def test_scrub_cap(self, cap):
+        """
+        ``_scrub_cap`` returns a different string than it is called with.
+        """
+        self.assertThat(
+            _scrub_cap(cap),
+            Not(Equals(cap)),
+        )
+
+    @given(
+        scheme=sampled_from(["http", "https"]),
+        host=sampled_from(["127.0.0.1", "localhost", "example.invalid"]),
+        port=integers(min_value=1, max_value=2 ** 16 - 1),
+        query=lists(tuples(text(), text())),
+        path_extra=lists(text()),
+        cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")),
+    )
+    def test_scrubbed_url(self, scheme, host, port, query, path_extra, cap):
+        """
+        ``TahoeAPIError.url`` has capability strings scrubbed from it to avoid
+        accidentally leaking secrets in logs.
+        """
+        original_path = ("uri", cap) + tuple(path_extra)
+        original = DecodedURL().replace(
+            scheme=scheme, host=host, port=port, path=original_path, query=query
+        )
+        expected_path = ("uri", _scrub_cap(cap)) + tuple(path_extra)
+        expected = original.replace(path=expected_path)
+
+        original_exc = TahoeAPIError("get", original, 200, "")
+        expected_exc = TahoeAPIError("get", expected, 200, "")
+        self.assertThat(original_exc, Equals(expected_exc))
 
 
 _client_manager = TahoeClientManager()
