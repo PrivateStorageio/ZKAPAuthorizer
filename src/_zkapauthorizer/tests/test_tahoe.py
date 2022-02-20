@@ -188,6 +188,7 @@ class TahoeStorageManager(TestResourceManager):
         Kill the storage node child process.
         """
         storage.process.kill()
+        storage.process.wait()
 
     def make(self, dependency_resources):
         """
@@ -289,6 +290,7 @@ class TahoeClientManager(TestResourceManager):
         Kill the client node child process.
         """
         client.process.kill()
+        client.process.wait()
 
     def make(self, dependency_resources):
         """
