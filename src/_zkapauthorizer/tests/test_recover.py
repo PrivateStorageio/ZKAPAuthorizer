@@ -145,7 +145,7 @@ class StatefulRecoverTests(TestCase):
         #
         # Also try to play along with any profile that has been loaded.
         max_examples = settings.default.max_examples * 10
-        stateful_step_count = int(max(1, settings.default.stateful_step_count / 10))
+        stateful_step_count = int(max(3, settings.default.stateful_step_count / 10))
 
         run_state_machine_as_test(
             lambda: SnapshotMachine(self),
