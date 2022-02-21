@@ -48,7 +48,7 @@ from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
 from .fixtures import Treq
 from .matchers import matches_capability
 from .resources import client_manager
-from .sql import Table, create_table
+from .sql import Table, create_table, escape
 from .strategies import (
     api_auth_tokens,
     deletes,
@@ -73,9 +73,45 @@ def equals_db(reference: Connection):
     :return: A matcher for a SQLite3 connection to a database with the same
         state as the reference connection's database.
     """
+
+    def structured_dump(db):
+        tables = list(structured_dump_tables(db))
+        for (name, sql) in tables:
+            yield sql
+            yield from structured_dump_table(db, name)
+
+    def structured_dump_tables(db):
+        curs = db.cursor()
+        curs.execute(
+            """
+            SELECT [name], [sql]
+            FROM [sqlite_master]
+            WHERE [sql] NOT NULL and [type] == 'table'
+            ORDER BY [name]
+            """
+        )
+        yield from iter(curs)
+
+    def structured_dump_table(db, table_name):
+        curs = db.cursor()
+        curs.execute(f"PRAGMA table_info({escape(table_name)})")
+
+        columns = list(
+            (name, type_) for (cid, name, type_, notnull, dftl_value, pk) in list(curs)
+        )
+        column_names = ", ".join(escape(name) for (name, type_) in columns)
+        curs.execute(
+            f"""
+            SELECT {column_names}
+            FROM {escape(table_name)}
+            """
+        )
+        for rows in iter(lambda: curs.fetchmany(1024), []):
+            yield from rows
+
     return AfterPreprocessing(
-        lambda actual: list(actual.iterdump()),
-        Equals(list(reference.iterdump())),
+        lambda actual: list(structured_dump(actual)),
+        Equals(list(structured_dump(reference))),
     )
 
 
