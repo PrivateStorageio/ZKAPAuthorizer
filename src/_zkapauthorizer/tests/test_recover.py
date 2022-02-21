@@ -41,9 +41,9 @@ from ..recover import (
 )
 from ..tahoe import link, make_directory, upload
 from .fixtures import Treq
+from .resources import client_manager
 from .sql import Table, create_table
 from .strategies import deletes, inserts, sql_identifiers, tables, updates
-from .test_tahoe import _client_manager
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
@@ -280,7 +280,7 @@ class TahoeLAFSDownloaderTests(TestCase):
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
     # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", _client_manager)]
+    resources = [("client", client_manager)]
 
     def setUp(self):
         super().setUp()
