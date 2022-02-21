@@ -9,7 +9,7 @@ from typing import Dict, Iterator, Tuple, Union
 from allmydata.client import read_config
 from attrs import define, field
 from fixtures import TempDir
-from hypothesis import assume, given, note, settings
+from hypothesis import assume, given, note, reproduce_failure, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -279,6 +279,9 @@ class StatefulRecoverTests(TestCase):
     Stateful tests for ``recover``.
     """
 
+    @reproduce_failure(
+        "6.37.0", b"AXicY2BkYGAAYxDBwAykmEAcRpAgM1gYpgIJHGSAKGZgAAALiwDc"
+    )
     def test_recover(self):
         """
         Test the snapshot/recovery system using ``SnapshotMachine``.
