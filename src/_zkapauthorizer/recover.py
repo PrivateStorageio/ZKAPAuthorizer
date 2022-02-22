@@ -19,13 +19,11 @@ from io import BytesIO
 from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Dict, Iterator, Optional
 
-from allmydata.node import _Config
 from attrs import define
-from treq.client import HTTPClient
-from twisted.python.filepath import FilePath
+from twisted.python.lockfile import FilesystemLock
 
-from .config import read_node_url
-from .tahoe import download
+from .config import REPLICA_RWCAP_BASENAME
+from .tahoe import Tahoe, attenuate_writecap
 
 
 class SnapshotMissing(Exception):
@@ -204,8 +202,7 @@ def recover(statements: Iterator[str], cursor) -> None:
 
 
 async def tahoe_lafs_downloader(
-    treq: HTTPClient,
-    node_config: _Config,
+    client: Tahoe,
     recovery_cap: str,
     set_state: SetState,
 ) -> Awaitable:  # Awaitable[FilePath]
@@ -213,17 +210,14 @@ async def tahoe_lafs_downloader(
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    api_root = read_node_url(node_config)
-    snapshot_path = FilePath(node_config.get_private_path("snapshot.sql"))
+    snapshot_path = client.get_private_path("snapshot.sql")
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
-    await download(treq, snapshot_path, api_root, recovery_cap, ["snapshot.sql"])
+    await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
     return snapshot_path
 
 
-def get_tahoe_lafs_downloader(
-    httpclient: HTTPClient, node_config: _Config
-) -> Callable[[str], Downloader]:
+def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:
     """
     Bind some parameters to ``tahoe_lafs_downloader`` in a convenient way.
 
@@ -233,7 +227,7 @@ def get_tahoe_lafs_downloader(
 
     def get_downloader(cap_str):
         def downloader(set_state):
-            return tahoe_lafs_downloader(httpclient, node_config, cap_str, set_state)
+            return tahoe_lafs_downloader(client, cap_str, set_state)
 
         return downloader
 
@@ -245,3 +239,40 @@ async def fail_setup_replication():
     A replication setup function that always fails.
     """
     raise Exception("Test not set up for replication")
+
+
+async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable:
+    """
+    Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
+    the given configuration to replicate its state onto Tahoe-LAFS storage
+    servers using that Tahoe-LAFS node.
+    """
+    # Find the configuration path for this node's replica.
+    config_path = client.get_private_path(REPLICA_RWCAP_BASENAME)
+
+    # Take an advisory lock on the configuration path to avoid concurrency
+    # shennanigans.
+    config_lock = FilesystemLock(config_path.path + ".lock")
+    config_lock.lock()
+    try:
+
+        # Check to see if there is already configuration.
+        if config_path.exists():
+            raise ReplicationAlreadySetup()
+
+        # Create a directory with it
+        rw_cap = await client.make_directory()
+
+        # Store the resulting write-cap in the node's private directory
+        config_path.setContent(rw_cap.encode("ascii"))
+
+    finally:
+        # On success and failure, release the lock since we're done with the
+        # file for now.
+        config_lock.unlock()
+
+    # Attenuate it to a read-cap
+    rocap = attenuate_writecap(rw_cap)
+
+    # Return the read-cap
+    return rocap
