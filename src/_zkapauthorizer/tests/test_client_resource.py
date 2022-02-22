@@ -66,7 +66,16 @@ from treq.testing import RequestTraversalAgent
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
-from twisted.web.http import BAD_REQUEST, NOT_FOUND, NOT_IMPLEMENTED, OK, UNAUTHORIZED
+from twisted.web.http import (
+    BAD_REQUEST,
+    CONFLICT,
+    CREATED,
+    INTERNAL_SERVER_ERROR,
+    NOT_FOUND,
+    NOT_IMPLEMENTED,
+    OK,
+    UNAUTHORIZED,
+)
 from twisted.web.http_headers import Headers
 
 from .. import NAME
@@ -86,7 +95,12 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import make_fail_downloader, noop_downloader
+from ..recover import (
+    ReplicationAlreadySetup,
+    fail_setup_replication,
+    make_fail_downloader,
+    noop_downloader,
+)
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -94,7 +108,7 @@ from ..storage_common import (
     required_passes,
 )
 from .json import loads
-from .matchers import between, matches_response
+from .matchers import between, matches_json, matches_response
 from .strategies import (
     api_auth_tokens,
     client_doublespendredeemer_configurations,
@@ -203,6 +217,7 @@ def root_from_config(
     config,
     now,
     get_downloader=get_fail_downloader,
+    setup_replication=fail_setup_replication,
 ):
     """
     Create a client root resource from a Tahoe-LAFS configuration.
@@ -222,6 +237,7 @@ def root_from_config(
             memory_connect,
         ),
         get_downloader=get_downloader,
+        setup_replication=setup_replication,
         clock=Clock(),
     )
 
@@ -481,9 +497,135 @@ class ResourceTests(TestCase):
             succeeded(
                 matches_response(
                     code_matcher=Equals(OK),
-                    body_matcher=AfterPreprocessing(
-                        loads,
+                    body_matcher=matches_json(
                         Equals({"version": zkapauthorizer_version}),
+                    ),
+                ),
+            ),
+        )
+
+
+class ReplicateTests(TestCase):
+    """
+    Tests for the ``/replicate`` endpoint.
+    """
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_already_configured(self, get_config, api_auth_token):
+        """
+        If replication has already been configured then the endpoint returns a
+        response with a 409 status code.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+
+        async def setup_replication():
+            raise ReplicationAlreadySetup()
+
+        root = root_from_config(
+            config, datetime.now, setup_replication=setup_replication
+        )
+        agent = RequestTraversalAgent(root)
+        configuring = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/replicate",
+        )
+        self.assertThat(
+            configuring,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(CONFLICT),
+                ),
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_internal_server_error(self, get_config, api_auth_token):
+        """
+        If there is an unexpected exception setting up replication then the
+        endpoint returns a response with a 500 status code.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+
+        async def setup_replication():
+            raise Exception("surprise bug")
+
+        root = root_from_config(
+            config, datetime.now, setup_replication=setup_replication
+        )
+        agent = RequestTraversalAgent(root)
+        configuring = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/replicate",
+        )
+        self.assertThat(
+            configuring,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(INTERNAL_SERVER_ERROR),
+                ),
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_created(self, get_config, api_auth_token):
+        """
+        On successful replica configuration, the endpoint returns a response with
+        a 201 status code and an application/json-encoded body containing a
+        read-only directory capability.
+        """
+        config = get_config_with_api_token(
+            self.useFixture(TempDir()),
+            get_config,
+            api_auth_token,
+        )
+        cap_ro = "URI:DIR2-RO:aaaa:bbbb"
+
+        async def setup_replication():
+            return cap_ro
+
+        root = root_from_config(
+            config, datetime.now, setup_replication=setup_replication
+        )
+        agent = RequestTraversalAgent(root)
+        configuring = authorized_request(
+            api_auth_token,
+            agent,
+            b"POST",
+            b"http://127.0.0.1/replicate",
+        )
+        self.assertThat(
+            configuring,
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(CREATED),
+                    headers_matcher=application_json(),
+                    body_matcher=matches_json(
+                        Equals(
+                            {
+                                "recovery-capability": cap_ro,
+                            }
+                        ),
                     ),
                 ),
             ),
@@ -746,8 +888,7 @@ class RecoverTests(TestCase):
                 matches_response(
                     code_matcher=Equals(OK),
                     headers_matcher=application_json(),
-                    body_matcher=AfterPreprocessing(
-                        loads,
+                    body_matcher=matches_json(
                         Equals(
                             {
                                 "stage": "download_failed",
@@ -1605,8 +1746,7 @@ class CalculatePriceTests(TestCase):
                 matches_response(
                     code_matcher=Equals(OK),
                     headers_matcher=application_json(),
-                    body_matcher=AfterPreprocessing(
-                        loads,
+                    body_matcher=matches_json(
                         Equals(
                             {
                                 "price": expected_price,

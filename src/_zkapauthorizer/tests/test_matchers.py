@@ -16,11 +16,13 @@
 Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
+from json import dumps
+
 from testtools import TestCase
-from testtools.matchers import Is, Not
+from testtools.matchers import Always, Equals, Is, Not
 from zope.interface import Interface, implementer
 
-from .matchers import Provides, returns
+from .matchers import Provides, matches_json, returns
 
 
 class IX(Interface):
@@ -93,4 +95,50 @@ class ReturnsTests(TestCase):
         self.assertThat(
             returns(Is(result)).match(lambda: other),
             Not(Is(None)),
+        )
+
+
+class MatchesJSONTests(TestCase):
+    """
+    Tests for ``matches_json``.
+    """
+
+    def test_non_string(self):
+        """
+        If the value given isn't a string then ``matches_json`` does not match.
+        """
+        self.assertThat(
+            matches_json(Always()).match(object()),
+            Not(Is(None)),
+        )
+
+    def test_unparseable(self):
+        """
+        If the value can't be parsed as JSON then ``matches_json`` does not match.
+        """
+        self.assertThat(
+            matches_json(Always()).match("not json"),
+            Not(Is(None)),
+        )
+
+    def test_does_not_match(self):
+        """
+        If the parsed value isn't matched by the given matcher then
+        ``matches_json`` does not match.
+        """
+        expected = {"hello": "world"}
+        self.assertThat(
+            matches_json(Not(Equals(expected))).match(dumps(expected)),
+            Not(Is(None)),
+        )
+
+    def test_matches(self):
+        """
+        If the parsed value is matched by the given matcher then ``matches_json``
+        matches.
+        """
+        expected = {"hello": "world"}
+        self.assertThat(
+            matches_json(Equals(expected)).match(dumps(expected)),
+            Is(None),
         )
