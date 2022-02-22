@@ -18,6 +18,7 @@ let
     requirements =
       ''
       ${builtins.readFile ./requirements/test.in}
+      ${builtins.readFile ./requirements/elpy.in}
       ${zkapauthorizer.requirements}
       '';
   };
@@ -26,6 +27,10 @@ pkgs.mkShell {
   # Avoid leaving .pyc all over the source tree when manually triggering tests
   # runs.
   PYTHONDONTWRITEBYTECODE = "1";
+
+  # Put this source tree into the Python import path, too, for a `setup.py
+  # develop`-like experience.
+  PYTHONPATH = "${builtins.toString ./.}/src";
 
   buildInputs = [
     # Supply all of the runtime and testing dependencies.
