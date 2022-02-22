@@ -18,6 +18,7 @@ let
     requirements =
       ''
       ${builtins.readFile ./requirements/test.in}
+      ${builtins.readFile ./requirements/elpy.in}
       ${zkapauthorizer.requirements}
       '';
   };

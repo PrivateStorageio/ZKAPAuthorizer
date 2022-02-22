@@ -1,0 +1,4 @@
+# support elpy
+pip
+setuptools
+jedi
