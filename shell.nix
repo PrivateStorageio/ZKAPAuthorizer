@@ -27,6 +27,10 @@ pkgs.mkShell {
   # runs.
   PYTHONDONTWRITEBYTECODE = "1";
 
+  # Put this source tree into the Python import path, too, for a `setup.py
+  # develop`-like experience.
+  PYTHONPATH = "${builtins.toString ./.}/src";
+
   buildInputs = [
     # Supply all of the runtime and testing dependencies.
     python-env
