@@ -24,8 +24,8 @@ In the future it should also allow users to read statistics about token usage.
 from json import loads
 from typing import Callable
 
-from twisted.internet.defer import Deferred
 from attr import Factory, define, field
+from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.web.http import ACCEPTED, BAD_REQUEST, CONFLICT, INTERNAL_SERVER_ERROR
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource

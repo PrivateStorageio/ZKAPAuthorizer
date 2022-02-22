@@ -24,8 +24,8 @@ from attrs import define
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 
-from .tahoe import download
 from .config import read_node_url
+from .tahoe import download
 
 
 class SnapshotMissing(Exception):
