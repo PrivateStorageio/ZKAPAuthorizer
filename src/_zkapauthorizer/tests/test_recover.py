@@ -39,7 +39,7 @@ from ..recover import (
     noop_downloader,
     recover,
 )
-from ..tahoe import link, make_directory, upload
+from ..tahoe import Tahoe, link, make_directory, upload
 from .fixtures import Treq
 from .resources import client_manager
 from .sql import Table, create_table
@@ -316,7 +316,8 @@ class TahoeLAFSDownloaderTests(TestCase):
             )
         )
 
-        get_downloader = get_tahoe_lafs_downloader(httpclient, config)
+        tahoeclient = Tahoe(httpclient, config)
+        get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
         downloaded_snapshot_path = yield Deferred.fromCoroutine(

@@ -10,6 +10,7 @@ from typing import Callable, Dict, Iterable, List, Optional
 
 import treq
 from allmydata.node import _Config
+from allmydata.uri import from_string as capability_from_string
 from allmydata.util.base32 import b2a as b32encode
 from attrs import Factory, define, field
 from hyperlink import DecodedURL
