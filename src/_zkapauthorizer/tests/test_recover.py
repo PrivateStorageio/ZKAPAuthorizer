@@ -58,7 +58,6 @@ from .strategies import (
     tahoe_configs,
     updates,
 )
-from .test_client_resource import get_config_with_api_token
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
