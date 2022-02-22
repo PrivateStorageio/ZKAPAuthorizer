@@ -43,11 +43,8 @@ from zope.interface import implementer
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import lease_maintenance_from_tahoe_config
 from .controller import get_redeemer
-from .lease_maintenance import (
-    SERVICE_NAME,
-    lease_maintenance_service,
-    maintain_leases_from_root,
-)
+from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
+from .lease_maintenance import lease_maintenance_service, maintain_leases_from_root
 from .model import VoucherStore
 from .recover import make_fail_downloader
 from .resource import from_configuration as resource_from_configuration
@@ -226,25 +223,35 @@ def make_safe_writer(metrics_path, registry):
 _init_storage = _Client.__dict__["init_storage"]
 
 
-def maintenance_init_storage(self, announceable_storage_servers):
+def _attach_zkapauthorizer_services(self, announceable_storage_servers):
     """
     A monkey-patched version of ``_Client.init_storage`` which also
-    initializes the lease maintenance service.
+    initializes ZKAPAuthorizer's services.
     """
     from twisted.internet import reactor
 
+    # Make sure the original work happens.
     result = _init_storage(self, announceable_storage_servers)
-    _maybe_attach_maintenance_service(reactor, self)
+
+    # Hook up our services.
+    for name, create in _SERVICES:
+        _maybe_attach_service(
+            reactor,
+            self,
+            name,
+            create,
+        )
+
     return result
 
 
-_Client.init_storage = maintenance_init_storage
+_Client.init_storage = _attach_zkapauthorizer_services
 
 
-def _maybe_attach_maintenance_service(reactor, client_node):
+def _maybe_attach_service(reactor, client_node, name, make_service):
     """
-    Check for an existing lease maintenance service and if one is not found,
-    create one.
+    Check for an existing service and if one is not found create one and
+    attach it to the client service.
 
     :param allmydata.client._Client client_node: The client node to check and,
         possibly, modify.  A lease maintenance service is added to it if and
@@ -252,32 +259,32 @@ def _maybe_attach_maintenance_service(reactor, client_node):
     """
     try:
         # If there is already one we don't need another.
-        client_node.getServiceNamed(SERVICE_NAME)
+        client_node.getServiceNamed(name)
     except KeyError:
         # There isn't one so make it and add it.
-        _log.info("Creating new lease maintenance service")
-        _create_maintenance_service(
-            reactor,
-            client_node.config,
-            client_node,
-        ).setServiceParent(client_node)
-    except Exception:
-        _log.failure("Attaching maintenance service to client node")
+        _log.info(f"Creating new {name} service")
+        try:
+            service = make_service(
+                reactor,
+                client_node,
+            )
+        except:
+            _log.failure(f"Attaching {name} service to client node")
+        else:
+            service.setServiceParent(client_node)
     else:
-        _log.info("Found existing lease maintenance service")
+        _log.info(f"Found existing {name} service")
 
 
-def _create_maintenance_service(reactor, node_config, client_node):
+def _create_maintenance_service(reactor, client_node):
     """
     Create a lease maintenance service to be attached to the given client
     node.
 
-    :param allmydata.node._Config node_config: The configuration for the node
-        the lease maintenance service will be attached to.
-
     :param allmydata.client._Client client_node: The client node the lease
         maintenance service will be attached to.
     """
+    node_config = client_node.config
 
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
@@ -307,6 +314,11 @@ def _create_maintenance_service(reactor, node_config, client_node):
         random,
         lease_maint_config=maint_config,
     )
+
+
+_SERVICES = [
+    (MAINTENANCE_SERVICE_NAME, _create_maintenance_service),
+]
 
 
 def get_root_nodes(client_node, node_config) -> List[IFilesystemNode]:
