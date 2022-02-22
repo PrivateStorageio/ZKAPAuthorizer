@@ -24,11 +24,10 @@ In the future it should also allow users to read statistics about token usage.
 from json import loads
 from typing import Callable
 
-import attr
-from attr import Factory
+from attr import Factory, define, field
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
-from twisted.web.http import BAD_REQUEST
+from twisted.web.http import ACCEPTED, BAD_REQUEST, CONFLICT, INTERNAL_SERVER_ERROR
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
@@ -160,7 +159,7 @@ def from_configuration(
     return root
 
 
-@attr.s
+@define
 class RecoverResource(Resource):
     """
     Implement the endpoint for triggering local state recovery from a remote
@@ -169,9 +168,9 @@ class RecoverResource(Resource):
 
     _log = Logger()
 
-    store: VoucherStore = attr.ib()
-    get_downloader: Callable[[str], Downloader] = attr.ib()
-    recoverer: StatefulRecoverer = attr.ib(default=Factory(StatefulRecoverer))
+    store: VoucherStore = field()
+    get_downloader: Callable[[str], Downloader] = field()
+    recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
 
     def __attrs_post_init__(self):
         Resource.__init__(self)
@@ -189,21 +188,21 @@ class RecoverResource(Resource):
         try:
             body = loads(request.content.read())
         except:
-            request.setResponseCode(400)
+            request.setResponseCode(BAD_REQUEST)
             return b"could not parse json"
 
         if body.keys() != {"recovery-capability"}:
-            request.setResponseCode(400)
+            request.setResponseCode(BAD_REQUEST)
             return b"json did not have expected properties"
 
         cap_str = body["recovery-capability"]
         if not isinstance(cap_str, str):
-            request.setResponseCode(400)
+            request.setResponseCode(BAD_REQUEST)
             return b"recovery-capability must be a read-only dircap string"
 
         cap = from_string(cap_str)
         if not isinstance(cap, ReadonlyDirectoryURI):
-            request.setResponseCode(400)
+            request.setResponseCode(BAD_REQUEST)
             return b"recovery-capability must be a read-only dircap string"
 
         try:
@@ -214,14 +213,14 @@ class RecoverResource(Resource):
                 ),
             )
         except NotEmpty:
-            request.setResponseCode(409)
+            request.setResponseCode(CONFLICT)
             return b"there is existing local state"
         except:
             self._log.error("recovery failed")
-            request.setResponseCode(500)
+            request.setResponseCode(INTERNAL_SERVER_ERROR)
             return b""
 
-        request.setResponseCode(202)
+        request.setResponseCode(ACCEPTED)
         return b""
 
 

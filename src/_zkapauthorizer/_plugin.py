@@ -23,7 +23,6 @@ from functools import partial
 from typing import Callable, List
 from weakref import WeakValueDictionary
 
-import attr
 from allmydata.client import _Client
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
@@ -31,6 +30,7 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
 )
 from allmydata.node import MissingConfigEntry
+from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
@@ -56,30 +56,29 @@ _log = Logger()
 
 
 @implementer(IAnnounceableStorageServer)
-@attr.s
+@define
 class AnnounceableStorageServer(object):
-    announcement = attr.ib()
-    storage_server = attr.ib()
+    announcement = field()
+    storage_server = field()
 
 
 @implementer(IFoolscapStoragePlugin)
-@attr.s
+@define
 class ZKAPAuthorizer(object):
     """
     A storage plugin which provides a token-based access control mechanism on
     top of the Tahoe-LAFS built-in storage server interface.
 
-    :ivar WeakValueDictionary _stores: A mapping from node directories to this
-        plugin's database connections for those nodes.  The existence of any
-        kind of attribute to reference database connections (not so much the
-        fact that it is a WeakValueDictionary; if it were just a weakref the
-        same would be true) probably reflects an error in the interface which
-        forces different methods to use instance state to share a database
-        connection.
+    :ivar _stores: A mapping from node directories to this plugin's database
+        connections for those nodes.  The existence of any kind of attribute
+        to reference database connections (not so much the fact that it is a
+        WeakValueDictionary; if it were just a weakref the same would be true)
+        probably reflects an error in the interface which forces different
+        methods to use instance state to share a database connection.
     """
 
-    name = attr.ib()
-    _stores = attr.ib(default=attr.Factory(WeakValueDictionary))
+    name: str
+    _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
 
     def _get_store(self, node_config):
         """
