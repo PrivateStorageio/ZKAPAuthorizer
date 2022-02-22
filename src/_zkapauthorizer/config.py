@@ -20,6 +20,8 @@ from datetime import timedelta
 from typing import Optional
 
 from allmydata.node import _Config
+from hyperlink import DecodedURL
+from twisted.python.filepath import FilePath
 
 from . import NAME
 from .lease_maintenance import LeaseMaintenanceConfig
@@ -36,6 +38,18 @@ class _EmptyConfig(object):
 
 
 empty_config = _EmptyConfig()
+
+
+def read_node_url(config: _Config) -> DecodedURL:
+    """
+    Get the root of the node's HTTP API.
+    """
+    return DecodedURL.from_text(
+        FilePath(config.get_config_path("node.url"))
+        .getContent()
+        .decode("ascii")
+        .strip()
+    )
 
 
 def lease_maintenance_from_tahoe_config(node_config):

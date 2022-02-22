@@ -21,11 +21,11 @@ from typing import BinaryIO, Callable, Dict, Iterator, Optional
 
 from allmydata.node import _Config
 from attrs import define
-from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 
 from .tahoe import download
+from .config import read_node_url
 
 
 class SnapshotMissing(Exception):
@@ -207,12 +207,7 @@ async def tahoe_lafs_downloader(
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    api_root = DecodedURL.from_text(
-        FilePath(node_config.get_config_path("node.url"))
-        .getContent()
-        .decode("ascii")
-        .strip()
-    )
+    api_root = read_node_url(node_config)
     snapshot_path = FilePath(node_config.get_private_path("snapshot.sql"))
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
