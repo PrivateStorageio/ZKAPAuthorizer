@@ -247,3 +247,23 @@ def matches_json(matcher=Always()):
             return matcher.match(value)
 
     return Matcher()
+
+
+def matches_capability(type_matcher):
+    """
+    Return a matcher for a unicode string representing a Tahoe-LAFS capability
+    that has a type matched by ``type_matcher``.
+    """
+
+    def get_cap_type(cap: str) -> str:
+        if not isinstance(cap, str):
+            raise Exception(f"expected str cap, got {cap!r}")
+        pieces = cap.split(":")
+        if len(pieces) > 1 and pieces[0] == "URI":
+            return pieces[1]
+        return None
+
+    return AfterPreprocessing(
+        get_cap_type,
+        type_matcher,
+    )

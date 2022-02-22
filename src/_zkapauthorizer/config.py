@@ -26,6 +26,10 @@ from twisted.python.filepath import FilePath
 from . import NAME
 from .lease_maintenance import LeaseMaintenanceConfig
 
+# The basename of the replica read-write capability file in the node's private
+# directory, if replication is configured.
+REPLICA_RWCAP_BASENAME = NAME + ".replica-rwcap"
+
 
 class _EmptyConfig(object):
     """

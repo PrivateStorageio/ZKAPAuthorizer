@@ -317,6 +317,9 @@ class _MemoryTahoe:
     def _nodedir_default(self):
         return FilePath(mkdtemp(suffix=".memory-tahoe"))
 
+    def __attrs_post_init__(self):
+        self._nodedir.child("private").makedirs()
+
     def get_private_path(self, name: str) -> FilePath:
         """
         Get the path to a file in a private directory dedicated to this instance
@@ -333,3 +336,11 @@ class _MemoryTahoe:
 
     async def make_directory(self):
         return self._grid.make_directory()
+
+
+def attenuate_writecap(rw_cap: str) -> str:
+    """
+    Get a read-only capability corresponding to the same data as the given
+    read-write capability.
+    """
+    return capability_from_string(rw_cap).get_readonly().to_string().decode("ascii")

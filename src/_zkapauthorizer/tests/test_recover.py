@@ -2,12 +2,13 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
+from asyncio import run
 from sqlite3 import Connection, connect
 from typing import Dict, Iterator
 
 from allmydata.client import read_config
 from fixtures import TempDir
-from hypothesis import assume, note, settings
+from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -29,21 +30,35 @@ from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succee
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 
+from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     AlreadyRecovering,
     RecoveryStages,
+    ReplicationAlreadySetup,
     StatefulRecoverer,
+    attenuate_writecap,
     get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
     recover,
+    setup_tahoe_lafs_replication,
 )
-from ..tahoe import Tahoe, link, make_directory, upload
+from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
 from .fixtures import Treq
+from .matchers import matches_capability
 from .resources import client_manager
 from .sql import Table, create_table
-from .strategies import deletes, inserts, sql_identifiers, tables, updates
+from .strategies import (
+    api_auth_tokens,
+    deletes,
+    inserts,
+    sql_identifiers,
+    tables,
+    tahoe_configs,
+    updates,
+)
+from .test_client_resource import get_config_with_api_token
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
@@ -326,4 +341,66 @@ class TahoeLAFSDownloaderTests(TestCase):
         self.assertThat(
             downloaded_snapshot_path.getContent(),
             Equals(snapshot_path.getContent()),
+        )
+
+
+class SetupTahoeLAFSReplicationTests(TestCase):
+    """
+    Tests for ``setup_tahoe_lafs_replication``.
+    """
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_already_setup(self, get_config, api_auth_token):
+        """
+        If replication is already set up, ``setup_tahoe_lafs_replication`` signals
+        failure with ``ReplicationAlreadySetup``.
+        """
+        grid = MemoryGrid()
+        client = grid.client()
+        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(b"URI:DIR2:stuff")
+        self.assertThat(
+            Deferred.fromCoroutine(setup_tahoe_lafs_replication(client)),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(ReplicationAlreadySetup),
+                ),
+            ),
+        )
+
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_setup(self, get_config, api_auth_token):
+        """
+        If replication was not previously set up then
+        ``setup_tahoe_lafs_replication`` signals success with a read-only
+        directory capability string that it has just created and written to
+        the node private directory.
+        """
+        grid = MemoryGrid()
+        client = grid.client()
+
+        ro_cap = run(setup_tahoe_lafs_replication(client))
+        self.assertThat(ro_cap, matches_capability(Equals("DIR2-RO")))
+
+        # Memory grid lets us download directory cap as a dict.  Kind of bogus
+        # but use it for now.
+        self.assertThat(
+            grid.download(ro_cap),
+            Equals({}),
+        )
+
+        # Peek inside the node private state to make sure the capability was
+        # written.
+        self.assertThat(
+            client.get_private_path(REPLICA_RWCAP_BASENAME).getContent(),
+            AfterPreprocessing(
+                attenuate_writecap,
+                Equals(ro_cap),
+            ),
         )
