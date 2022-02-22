@@ -2,17 +2,21 @@
 A library for interacting with a Tahoe-LAFS node.
 """
 
-from base64 import b32encode
 from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
-from typing import Callable, Iterable, List, Optional
+from tempfile import mkdtemp
+from typing import Callable, Dict, Iterable, List, Optional
 
 import treq
-from attrs import define, field
+from allmydata.node import _Config
+from allmydata.util.base32 import b2a as b32encode
+from attrs import Factory, define, field
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
+
+from .config import read_node_url
 
 
 def async_retry(matchers: List[Callable[[Exception], bool]]):
@@ -59,7 +63,7 @@ def _scrub_cap(cap: str) -> str:
     can usually be distinguished from the scrubbed version of a different
     input string.
     """
-    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6].lower()
+    scrubbed = b32encode(sha256(cap.encode("ascii")).digest())[:6]
     return f"URI:SCRUBBED:{scrubbed}"
 
 
@@ -212,3 +216,119 @@ async def link(
     if resp.code == 200:
         return None
     raise TahoeAPIError("put", uri, resp.code, content)
+
+
+@define
+class Tahoe(object):
+    """
+    An object with simple bindings to Tahoe-LAFS HTTP APIs for some
+    operations.
+
+    Application code using this API lends itself well to being tested against
+    the objects returned by ``MemoryGrid.client``.
+    """
+
+    client: HTTPClient
+    _node_config: _Config
+
+    @property
+    def _api_root(self):
+        # The reading of node.url is intentionally delayed until it is
+        # required for the benefit of test code that doesn't ever make any
+        # requests and also doesn't fully populate the node's filesystem
+        # state.
+        return read_node_url(self._node_config)
+
+    def get_private_path(self, name: str) -> FilePath:
+        """
+        Get the path to a file in the node's private directory.
+        """
+        return FilePath(self._node_config.get_private_path(name))
+
+    def download(self, outpath, cap, child_path):
+        return download(self.client, outpath, self._api_root, cap, child_path)
+
+    def upload(self, inpath):
+        return upload(self.client, inpath, self._api_root)
+
+    def make_directory(self):
+        return make_directory(self.client, self._api_root)
+
+
+@define
+class MemoryGrid:
+    """
+    An extremely simplified in-memory model of a Tahoe-LAFS storage grid.
+    This object allows data to be "uploaded" to it and produces capability
+    strings which can then be used to "download" the data from it later on.
+
+    :ivar _counter: An internal counter used to support the creation of
+        capability strings.
+
+    :ivar _objects: Storage for all data which has been "uploaded", as a
+        mapping from the capability strings to the values.
+    """
+
+    _counter: int = 0
+    _objects: Dict[str, str] = field(default=Factory(dict))
+
+    def client(self):
+        """
+        Create a ``Tahoe``-alike that is backed by this object instead of by a
+        real Tahoe-LAFS storage grid.
+        """
+        return _MemoryTahoe(self)
+
+    def upload(self, data: bytes) -> str:
+        cap = str(self._counter)
+        self._objects[cap] = data
+        self._counter += 1
+        return cap
+
+    def download(self, cap: str) -> bytes:
+        return self._objects[cap]
+
+    def make_directory(self) -> str:
+        def encode(s: bytes):
+            return b32encode(s.encode("ascii")).decode("ascii")
+
+        writekey = encode("{:016x}".format(self._counter))
+        fingerprint = encode("{:032x}".format(self._counter))
+
+        self._counter += 1
+        cap = f"URI:DIR2:{writekey}:{fingerprint}"
+        rocap = capability_from_string(cap).get_readonly().to_string().decode("ascii")
+        self._objects[cap] = self._objects[rocap] = {}
+
+        return cap
+
+
+@define
+class _MemoryTahoe:
+    """
+    An in-memory implementation of the ``Tahoe`` API.
+    """
+
+    _grid: MemoryGrid
+    _nodedir: FilePath = field()
+
+    @_nodedir.default
+    def _nodedir_default(self):
+        return FilePath(mkdtemp(suffix=".memory-tahoe"))
+
+    def get_private_path(self, name: str) -> FilePath:
+        """
+        Get the path to a file in a private directory dedicated to this instance
+        (there is no Tahoe node directory to look in).
+        """
+        return self._nodedir.child("private").child(name)
+
+    async def download(self, outpath, cap, child_path):
+        assert len(child_path) == 0
+        outpath.setContent(self._grid.download(cap))
+
+    async def upload(self, inpath):
+        return self._grid.upload(inpath.getContent())
+
+    async def make_directory(self):
+        return self._grid.make_directory()
