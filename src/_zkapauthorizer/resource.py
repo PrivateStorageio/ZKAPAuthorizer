@@ -24,9 +24,8 @@ In the future it should also allow users to read statistics about token usage.
 from json import loads
 from typing import Callable
 
-import attr
-from attr import Factory
 from twisted.internet.defer import Deferred
+from attr import Factory, define, field
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -160,7 +159,7 @@ def from_configuration(
     return root
 
 
-@attr.s
+@define
 class RecoverResource(Resource):
     """
     Implement the endpoint for triggering local state recovery from a remote
@@ -169,9 +168,9 @@ class RecoverResource(Resource):
 
     _log = Logger()
 
-    store: VoucherStore = attr.ib()
-    get_downloader: Callable[[str], Downloader] = attr.ib()
-    recoverer: StatefulRecoverer = attr.ib(default=Factory(StatefulRecoverer))
+    store: VoucherStore = field()
+    get_downloader: Callable[[str], Downloader] = field()
+    recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
 
     def __attrs_post_init__(self):
         Resource.__init__(self)
