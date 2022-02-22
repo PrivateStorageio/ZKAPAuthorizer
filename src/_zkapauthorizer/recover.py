@@ -40,6 +40,12 @@ class AlreadyRecovering(Exception):
     """
 
 
+class ReplicationAlreadySetup(Exception):
+    """
+    An attempt was made to setup of replication but it is already set up.
+    """
+
+
 class RecoveryStages(Enum):
     """
     Constants representing the different stages a recovery process may have
@@ -232,3 +238,10 @@ def get_tahoe_lafs_downloader(
         return downloader
 
     return get_downloader
+
+
+async def fail_setup_replication():
+    """
+    A replication setup function that always fails.
+    """
+    raise Exception("Test not set up for replication")

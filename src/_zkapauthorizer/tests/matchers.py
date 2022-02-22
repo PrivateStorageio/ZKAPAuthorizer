@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 from datetime import datetime
+from json import loads
 
 import attr
 from testtools.matchers import (
@@ -228,3 +229,21 @@ def matches_spent_passes(public_key_hash, spent_passes):
             }
         ),
     )
+
+
+def matches_json(matcher=Always()):
+    """
+    Return a matcher for a JSON string which can be decoded to an object
+    matched by the given matcher.
+    """
+
+    class Matcher:
+        def match(self, s):
+            try:
+                value = loads(s)
+            except Exception as e:
+                return Mismatch(f"Failed to decode {str(s)[:80]!r}: {e}")
+
+            return matcher.match(value)
+
+    return Matcher()

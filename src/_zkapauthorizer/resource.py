@@ -21,13 +21,20 @@ vouchers for fresh tokens.
 In the future it should also allow users to read statistics about token usage.
 """
 
+from collections.abc import Awaitable
 from json import loads
 from typing import Callable
 
 from attr import Factory, define, field
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
-from twisted.web.http import ACCEPTED, BAD_REQUEST, CONFLICT, INTERNAL_SERVER_ERROR
+from twisted.web.http import (
+    ACCEPTED,
+    BAD_REQUEST,
+    CONFLICT,
+    CREATED,
+    INTERNAL_SERVER_ERROR,
+)
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
@@ -41,7 +48,7 @@ from .controller import PaymentController, get_redeemer
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import Downloader, StatefulRecoverer
+from .recover import Downloader, ReplicationAlreadySetup, StatefulRecoverer
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -91,6 +98,7 @@ def from_configuration(
     node_config,
     store,
     get_downloader,
+    setup_replication,
     redeemer=None,
     clock=None,
 ):
@@ -151,12 +159,55 @@ def from_configuration(
             store,
             controller,
             get_downloader,
+            setup_replication,
             calculate_price,
         ),
     )
     root.store = store
     root.controller = controller
     return root
+
+
+@define
+class ReplicateResource(Resource):
+    """
+    Integrate the replication configuration implementation with the HTTP
+    interface.
+
+    :ivar _setup: The callable the resource will use to do the actual setup
+        work.
+    """
+
+    _setup: Callable[[], Awaitable]
+
+    _log = Logger()
+
+    def __attrs_post_init__(self):
+        Resource.__init__(self)
+
+    def render_POST(self, request):
+        self._setup_replication(request)
+        return NOT_DONE_YET
+
+    @inlineCallbacks
+    def _setup_replication(self, request):
+        """
+        Call the replication setup function and asynchronously deliver its result
+        as a response to the given request.
+        """
+        try:
+            cap_str = yield Deferred.fromCoroutine(self._setup())
+        except ReplicationAlreadySetup:
+            request.setResponseCode(CONFLICT)
+        except:
+            self._log.error("replication setup failed")
+            request.setResponseCode(INTERNAL_SERVER_ERROR)
+        else:
+            application_json(request)
+            request.setResponseCode(CREATED)
+            request.write(dumps_utf8({"recovery-capability": cap_str}))
+
+        request.finish()
 
 
 @define
@@ -228,6 +279,7 @@ def authorizationless_resource_tree(
     store,
     controller,
     get_downloader: Callable[[str], Downloader],
+    setup_replication: Callable[[], str],
     calculate_price,
 ):
     """
@@ -250,7 +302,10 @@ def authorizationless_resource_tree(
         b"recover",
         RecoverResource(store, get_downloader),
     )
-
+    root.putChild(
+        b"replicate",
+        ReplicateResource(setup_replication),
+    )
     root.putChild(
         b"voucher",
         _VoucherCollection(
