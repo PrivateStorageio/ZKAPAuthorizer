@@ -142,7 +142,9 @@ class _EqualsEnough:
                     )
                 for (actual_field, reference_field) in zip(actual_row, reference_row):
                     if isinstance(actual_field, float):
-                        if abs(actual_field - reference_field) > float_info.epsilon:
+                        if abs(actual_field - reference_field) > (
+                            10 * float_info.epsilon
+                        ):
                             return Mismatch(
                                 "Row {} float {} too far from reference {}".format(
                                     n, actual_field, reference_field
