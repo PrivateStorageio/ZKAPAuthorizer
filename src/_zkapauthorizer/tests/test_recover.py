@@ -4,11 +4,12 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from asyncio import run
 from sqlite3 import Connection, connect
+from sys import float_info
 from typing import Dict, Iterator
 
 from allmydata.client import read_config
 from fixtures import TempDir
-from hypothesis import assume, given, note, reproduce_failure, settings
+from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -25,6 +26,7 @@ from testtools.matchers import (
     Equals,
     IsInstance,
     MatchesStructure,
+    Mismatch,
 )
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
@@ -106,13 +108,56 @@ def equals_db(reference: Connection):
             FROM {escape(table_name)}
             """
         )
+
         for rows in iter(lambda: curs.fetchmany(1024), []):
-            yield from rows
+            for row in rows:
+                yield "INSERT", table_name, row
 
     return AfterPreprocessing(
         lambda actual: list(structured_dump(actual)),
-        Equals(list(structured_dump(reference))),
+        _EqualsEnough(list(structured_dump(reference))),
     )
+
+
+class _EqualsEnough:
+    def __init__(self, reference):
+        self.reference = reference
+
+    def match(self, actual):
+        def compare_row(n, actual, reference):
+            if actual[:1] == ("INSERT",):
+                actual_name, actual_row = actual[1:]
+                reference_name, reference_row = reference[1:]
+                if actual_name != reference_name:
+                    return Mismatch(
+                        "Row {} table name {} != {}".format(
+                            n, actual_name, reference_name
+                        )
+                    )
+                if len(actual_row) != len(reference_row):
+                    return Mismatch(
+                        "Row {} length {} != {}".format(
+                            n, len(actual_row), len(reference_row)
+                        )
+                    )
+                for (actual_field, reference_field) in zip(actual_row, reference_row):
+                    if isinstance(actual_field, float):
+                        if abs(actual_field - reference_field) > float_info.epsilon:
+                            return Mismatch(
+                                "Row {} float {} too far from reference {}".format(
+                                    n, actual_field, reference_field
+                                )
+                            )
+            else:
+                if actual != reference:
+                    return Mismatch(
+                        "Row {} fields {} != {}".format(n, actual, reference)
+                    )
+
+        for n, (a, r) in enumerate(zip(actual, self.reference)):
+            mismatch = compare_row(n, a, r)
+            if mismatch is not None:
+                return mismatch
 
 
 class SnapshotMachine(RuleBasedStateMachine):

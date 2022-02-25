@@ -1223,16 +1223,10 @@ def tables() -> SearchStrategy[Table]:
 _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
 
 # SQLite3 can do infinity and NaN but I don't know how to get them through the
-# Python interface.  SQLite3 can do 64 bit floats but it only guarantees 15
-# digits of precision (maybe only for its base 10 string representations?)
-# which causes values requiring greater precision to fail to round-trip.  The
-# SQLite3 docs are quite clear about what one should expect from floating
-# point values, anyway:
-#
-#    Floating point values are approximate.
+# Python interface.
 #
 # https://www.sqlite.org/floatingpoint.html
-_sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
+_sql_floats = floats(allow_infinity=False, allow_nan=False, width=64)
 
 # Here's how you can build values that match certain storage type affinities.
 # SQLite3 will actually allow us to store values of any type in any column but
