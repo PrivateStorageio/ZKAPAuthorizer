@@ -233,9 +233,6 @@ class StatefulRecoverTests(TestCase):
     Stateful tests for ``recover``.
     """
 
-    @reproduce_failure(
-        "6.37.0", b"AXicY2BkYGAAYxDBwAykmEAcRpAgM1gYpgIJHGSAKGZgAAALiwDc"
-    )
     def test_recover(self):
         """
         Test the snapshot/recovery system using ``SnapshotMachine``.
