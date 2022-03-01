@@ -1220,6 +1220,8 @@ def tables() -> SearchStrategy[Table]:
 
 # Python has unbounded integers but SQLite3 integers must fall into this
 # range.
+#
+# https://www.sqlite.org/floatingpoint.html#how_sqlite_stores_numbers
 _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
 
 # SQLite3 can do infinity and NaN but I don't know how to get them through the
