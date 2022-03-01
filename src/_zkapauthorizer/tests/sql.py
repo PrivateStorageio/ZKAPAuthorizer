@@ -17,10 +17,16 @@ class StorageAffinity(Enum):
     column.
     """
 
+    # Notably, this excludes REAL because I don't know how to get floating
+    # point values to round-trip through the snapshot/recover implementation
+    # on Windows.  ZKAPAuthorizer itself doesn't need REAL / floating point
+    # values so this limitation doesn't bother us in practice (ideally
+    # something somewhere would enforce this so no one accidentally starts
+    # using floating point values thinking the system will handle them).
+
     INT = auto()
     TEXT = auto()
     BLOB = auto()
-    REAL = auto()
     NUMERIC = auto()
 
 
