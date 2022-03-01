@@ -1236,6 +1236,18 @@ _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
 # https://www.sqlite.org/floatingpoint.html
 _sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
 
+# Exclude surrogates because SQLite3 uses UTF-8 and we don't need them.  Also
+# they have to come in correctly formed pairs to be legal anyway and it's
+# inconvenient to do that with text.
+#
+# Exclude nul characters because SQLite3 only sort of supports them.  You may
+# insert nul characters but don't expect to be able to read them or anything
+# following them back.
+# https://sqlite.org/nulinstr.html
+_sql_text = text(
+    alphabet=characters(blacklist_categories={"Cs"}, blacklist_characters={"\0"})
+)
+
 # Here's how you can build values that match certain storage type affinities.
 # SQLite3 will actually allow us to store values of any type in any column but
 # it might coerce certain values based on the column affinity.  This means,
@@ -1247,7 +1259,7 @@ _sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: text(),
+    StorageAffinity.TEXT: _sql_text,
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
