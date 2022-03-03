@@ -17,12 +17,15 @@ Tests for ``_zkapauthorizer.tests.matchers``.
 """
 
 from json import dumps
+from math import isfinite, nextafter
 
+from hypothesis import assume, given
+from hypothesis.strategies import booleans, floats, integers
 from testtools import TestCase
 from testtools.matchers import Always, Equals, Is, Not
 from zope.interface import Interface, implementer
 
-from .matchers import Provides, matches_json, returns
+from .matchers import Provides, matches_float_within_distance, matches_json, returns
 
 
 class IX(Interface):
@@ -141,4 +144,85 @@ class MatchesJSONTests(TestCase):
         self.assertThat(
             matches_json(Equals(expected)).match(dumps(expected)),
             Is(None),
+        )
+
+
+def _get_float_at_distance(reference: float, distance: int, negative: bool) -> float:
+    """
+    Get a floating point value that is a certain ULP distance from the
+    reference value.
+
+    :param reference: The reference value that will be at the indicated
+        distance from the result.
+
+    :param distance: The ULP distance from the reference to the result.
+
+    :param negative: If true then the result will be towards negative infinity
+        from the reference, otherwise it will be towards positive infinity.
+
+    :return: The new value
+    """
+    towards = float("inf")
+    if negative:
+        towards *= -1
+    actual = reference
+    for n in range(distance):
+        actual = nextafter(actual, towards)
+    return actual
+
+
+class MatchFloatWithinDistanceTests(TestCase):
+    """
+    Tests for ``matches_float_within_distance``.
+    """
+
+    def test_nan_rejected(self):
+        """
+        A reference or actual value of NaN never matches because the distance is
+        undefined.
+        """
+        nan = float("nan")
+        self.expectThat(
+            matches_float_within_distance(nan, 0).match(0.0),
+            Not(Is(None)),
+        )
+        self.expectThat(
+            matches_float_within_distance(0.0, 0).match(nan),
+            Not(Is(None)),
+        )
+
+    @given(floats(allow_nan=False), integers(min_value=0, max_value=100), booleans())
+    def test_within_distance(self, reference, distance, negative):
+        """
+        If the distance from the reference to the goal is within the distance
+        constraint then the match is successful.
+        """
+        actual = _get_float_at_distance(reference, distance, negative)
+        self.assertThat(
+            matches_float_within_distance(reference, distance).match(actual),
+            Is(None),
+        )
+
+    @given(floats(allow_nan=False), integers(min_value=0, max_value=100), booleans())
+    def test_not_within_distance(self, reference, distance, negative):
+        """
+        If the distance from the reference to the goal is greater than the
+        distance constraint then the match fails.
+        """
+        not_quite = _get_float_at_distance(reference, distance, negative)
+
+        # If we already hit infinity then we don't have enough room to go the
+        # distance represented by this example.
+        assume(isfinite(not_quite))
+
+        # It's fine for *this* value to be infinity since it's the last one we
+        # need to compute.
+        actual = _get_float_at_distance(not_quite, 1, negative)
+
+        # If we can't take the last step and get to a new value then we
+        assume(actual != not_quite)
+
+        self.assertThat(
+            matches_float_within_distance(reference, distance).match(actual),
+            Not(Is(None)),
         )
