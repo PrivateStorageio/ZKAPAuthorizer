@@ -19,7 +19,7 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
 from functools import partial
-from typing import List
+from typing import Dict, List
 from urllib.parse import quote
 
 import attr
@@ -1216,6 +1216,15 @@ def tables() -> SearchStrategy[Table]:
             unique_by=lambda x: x[0],
         ),
     )
+
+
+def sql_schemas(dict_kwargs=None) -> SearchStrategy[Dict[str, Table]]:
+    """
+    Build objects describing multiple tables in a SQLite3 database.
+    """
+    if dict_kwargs is None:
+        dict_kwargs = {}
+    return dictionaries(keys=sql_identifiers(), values=tables(), **dict_kwargs)
 
 
 # Python has unbounded integers but SQLite3 integers must fall into this

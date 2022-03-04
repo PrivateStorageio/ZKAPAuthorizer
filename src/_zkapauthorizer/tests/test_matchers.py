@@ -18,14 +18,33 @@ Tests for ``_zkapauthorizer.tests.matchers``.
 
 from json import dumps
 from math import isfinite, nextafter
+from sqlite3 import connect
 
 from hypothesis import assume, given
-from hypothesis.strategies import booleans, floats, integers
+from hypothesis.strategies import (
+    booleans,
+    fixed_dictionaries,
+    floats,
+    integers,
+    just,
+    lists,
+    sampled_from,
+    tuples,
+)
 from testtools import TestCase
-from testtools.matchers import Always, Equals, Is, Not
+from testtools.matchers import Always, Annotate, Equals, Is, Not
 from zope.interface import Interface, implementer
 
-from .matchers import Provides, matches_float_within_distance, matches_json, returns
+from ._sql_matchers import structured_dump
+from .matchers import (
+    Provides,
+    equals_database,
+    matches_float_within_distance,
+    matches_json,
+    returns,
+)
+from .sql import create_table
+from .strategies import inserts, sql_schemas
 
 
 class IX(Interface):
@@ -225,4 +244,128 @@ class MatchFloatWithinDistanceTests(TestCase):
         self.assertThat(
             matches_float_within_distance(reference, distance).match(actual),
             Not(Is(None)),
+        )
+
+
+class EqualsDatabase(TestCase):
+    """
+    Tests for the ``equals_database`` matcher.
+    """
+
+    def setup_example(self):
+        self.a = connect(":memory:")
+        self.b = connect(":memory:")
+
+    @given(sql_schemas())
+    def test_same_schema(self, tables):
+        """
+        Two databases with the same schema match.
+        """
+        for db in [self.a, self.b]:
+            for name, table in tables.items():
+                db.execute(create_table(name, table))
+
+        self.assertThat(
+            equals_database(self.a).match(self.b),
+            Is(None),
+        )
+
+    @given(sql_schemas(), sql_schemas())
+    def test_different_schema(self, schema_a, schema_b):
+        """
+        Two databases with different schemas do not match.
+        """
+        assume(schema_a != schema_b)
+        for db, schema in [(self.a, schema_a), (self.b, schema_b)]:
+            for name, table in schema.items():
+                db.execute(create_table(name, table))
+
+        self.assertThat(
+            self.a,
+            Annotate(
+                f"\ndb a: {list(structured_dump(self.a))}"
+                f"\ndb b: {list(structured_dump(self.b))}",
+                Not(equals_database(self.b)),
+            ),
+        )
+
+    @given(
+        sql_schemas(dict_kwargs={"min_size": 1}).flatmap(
+            lambda schema: tuples(
+                # Pass along the schema so the test can create it.
+                just(schema),
+                # Build some arbitrary amount of data that fits into the
+                # schema so there are rows of data involved.
+                fixed_dictionaries(
+                    {
+                        name: lists(inserts(name, table))
+                        for (name, table) in schema.items()
+                    }
+                ),
+                # Create one more row of data which will be used to make the
+                # databases differ.
+                sampled_from(sorted(schema.items())).flatmap(
+                    lambda item: inserts(*item),
+                ),
+            ),
+        )
+    )
+    def test_different_rows(self, schema_and_common_and_different):
+        """
+        Two databases with the same schema but different rows in their tables do
+        not match.
+        """
+        schema, common_inserts, different_insert = schema_and_common_and_different
+        for name, table in schema.items():
+            sql = create_table(name, table)
+            for db in [self.a, self.b]:
+                db.execute(sql)
+
+        for name, statements in common_inserts.items():
+            for stmt in statements:
+                for db in [self.a, self.b]:
+                    db.execute(stmt.statement(), stmt.arguments())
+
+        self.a.execute(different_insert.statement(), different_insert.arguments())
+
+        self.assertThat(
+            self.a,
+            Not(equals_database(self.b)),
+        )
+
+    @given(
+        sql_schemas(dict_kwargs={"min_size": 1}).flatmap(
+            lambda schema: tuples(
+                # Pass along the schema so the test can create it.
+                just(schema),
+                # Build some arbitrary amount of data that fits into the
+                # schema so there are rows of data involved.
+                fixed_dictionaries(
+                    {
+                        name: lists(inserts(name, table))
+                        for (name, table) in schema.items()
+                    }
+                ),
+            ),
+        )
+    )
+    def test_same_rows(self, schema_and_common):
+        """
+        Two databases with the same schema and the same rows in their tables
+        match.
+        """
+        schema, common_inserts = schema_and_common
+        for name, table in schema.items():
+            sql = create_table(name, table)
+            for db in [self.a, self.b]:
+                db.execute(sql)
+
+        for name, statements in common_inserts.items():
+            for stmt in statements:
+                for db in [self.a, self.b]:
+                    db.execute(stmt.statement(), stmt.arguments())
+
+        self.assertThat(
+            equals_database(self.b).match(self.a),
+            Is(None),
         )

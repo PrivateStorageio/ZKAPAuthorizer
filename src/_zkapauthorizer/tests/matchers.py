@@ -23,6 +23,7 @@ __all__ = [
     "matches_version_dictionary",
     "between",
     "leases_current",
+    "equals_database",
     "matches_float_within_distance",
 ]
 
@@ -53,6 +54,7 @@ from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
 from ._float_matchers import matches_float_within_distance
+from ._sql_matchers import equals_database
 
 
 @attr.s
