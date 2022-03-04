@@ -46,7 +46,7 @@ from ..recover import (
 )
 from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
 from .fixtures import Treq
-from .matchers import matches_capability
+from .matchers import equals_database, matches_capability
 from .resources import client_manager
 from .sql import Table, create_table
 from .strategies import (
@@ -66,17 +66,6 @@ def snapshot(connection: Connection) -> Iterator[str]:
     """
     for statement in connection.iterdump():
         yield statement + "\n"
-
-
-def equals_db(reference: Connection):
-    """
-    :return: A matcher for a SQLite3 connection to a database with the same
-        state as the reference connection's database.
-    """
-    return AfterPreprocessing(
-        lambda actual: list(actual.iterdump()),
-        Equals(list(reference.iterdump())),
-    )
 
 
 class SnapshotMachine(RuleBasedStateMachine):
@@ -103,7 +92,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         recover(statements, new)
         self.case.assertThat(
             new,
-            equals_db(reference=self.connection),
+            equals_database(reference=self.connection),
             "source (reference) database iterdump does not equal "
             "sink (actual) database iterdump",
         )
