@@ -366,6 +366,8 @@ class EqualsDatabase(TestCase):
     # let's help it keep an eye on them in the future, too.
     @_float_example(1.12589990684262408748e15)
     @_float_example(1.12589990684262430953e15)
+    @_float_example(1.31194610730744920523e-10)
+    @_float_example(1.31194610730744898319e-10)
     def test_same_rows(self, schema_and_common):
         """
         Two databases with the same schema and the same rows in their tables
