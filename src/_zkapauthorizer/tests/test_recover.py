@@ -145,12 +145,12 @@ class SnapshotMachine(RuleBasedStateMachine):
                 self.connection.execute(statement, args)
 
 
-class StatefulRecoverTests(TestCase):
+class RecoverTests(TestCase):
     """
-    Stateful tests for ``recover``.
+    Tests for ``recover``.
     """
 
-    def test_recover(self):
+    def test_stateful(self):
         """
         Test the snapshot/recovery system using ``SnapshotMachine``.
         """
