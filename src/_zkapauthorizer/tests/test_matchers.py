@@ -247,7 +247,7 @@ class MatchFloatWithinDistanceTests(TestCase):
         )
 
 
-def _float_example(f):
+def _float_example(fs):
     """
     Help create Hypothesis examples for certain floating point cases.
     """
@@ -255,7 +255,7 @@ def _float_example(f):
     return example(
         (
             {"0": t},
-            {"0": [Insert("0", t, (f,))]},
+            {"0": [Insert("0", t, (f,)) for f in fs]},
         )
     )
 
@@ -364,10 +364,15 @@ class EqualsDatabase(TestCase):
     )
     # Add some known problematic cases.  Hypothesis found these originally but
     # let's help it keep an eye on them in the future, too.
-    @_float_example(1.12589990684262408748e15)
-    @_float_example(1.12589990684262430953e15)
-    @_float_example(1.31194610730744920523e-10)
-    @_float_example(1.31194610730744898319e-10)
+    @_float_example(
+        [
+            1.311946107307449e-10,
+            1.1466443538665771e-05,
+            1.500589370727539,
+            1125899906842624.0,
+            5.192298096474867e33,
+        ]
+    )
     def test_same_rows(self, schema_and_common):
         """
         Two databases with the same schema and the same rows in their tables
