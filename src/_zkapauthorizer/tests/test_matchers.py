@@ -375,11 +375,32 @@ class EqualsDatabase(TestCase):
     # let's help it keep an eye on them in the future, too.
     @_float_example(
         [
+            # Some examples our CI found
             1.311946107307449e-10,
             1.1466443538665771e-05,
             1.500589370727539,
             1125899906842624.0,
             5.192298096474867e33,
+        ]
+    )
+    @_float_example(
+        [
+            # Examples from Rick Regan's blog post that are broken on Windows.
+            1e-23,
+            8.533e68,
+            4.1006e-184,
+            9.998e307,
+            9.9538452227e-280,
+            6.47660115e-260,
+        ]
+    )
+    @_float_example(
+        [
+            # Examples from Rick Regan's blog post that are broken on Linux.
+            7.4e47,
+            5.92e48,
+            7.35e66,
+            8.32116e55,
         ]
     )
     def test_same_rows(self, schema_and_common):
