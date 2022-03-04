@@ -20,7 +20,7 @@ from json import dumps
 from math import isfinite, nextafter
 from sqlite3 import connect
 
-from hypothesis import assume, given
+from hypothesis import assume, example, given
 from hypothesis.strategies import (
     booleans,
     fixed_dictionaries,
@@ -43,7 +43,7 @@ from .matchers import (
     matches_json,
     returns,
 )
-from .sql import create_table
+from .sql import Column, Insert, StorageAffinity, Table, create_table
 from .strategies import inserts, sql_schemas
 
 
@@ -247,6 +247,19 @@ class MatchFloatWithinDistanceTests(TestCase):
         )
 
 
+def _float_example(f):
+    """
+    Help create Hypothesis examples for certain floating point cases.
+    """
+    t = Table([("0", Column(StorageAffinity.REAL))])
+    return example(
+        (
+            {"0": t},
+            {"0": [Insert("0", t, (f,))]},
+        )
+    )
+
+
 class EqualsDatabase(TestCase):
     """
     Tests for the ``equals_database`` matcher.
@@ -349,6 +362,10 @@ class EqualsDatabase(TestCase):
             ),
         )
     )
+    # Add some known problematic cases.  Hypothesis found these originally but
+    # let's help it keep an eye on them in the future, too.
+    @_float_example(1.12589990684262408748e15)
+    @_float_example(1.12589990684262430953e15)
     def test_same_rows(self, schema_and_common):
         """
         Two databases with the same schema and the same rows in their tables
