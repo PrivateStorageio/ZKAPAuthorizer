@@ -18,7 +18,7 @@ Tests for ``_zkapauthorizer.tests.matchers``.
 
 from json import dumps
 from math import isfinite, nextafter
-from sqlite3 import connect
+from sqlite3 import Connection, connect
 
 from hypothesis import assume, example, given
 from hypothesis.strategies import (
@@ -260,26 +260,35 @@ def _float_example(fs):
     )
 
 
+def copy(src_db: Connection) -> Connection:
+    """
+    Return an in-memory SQLite3 database that is a copy of the given database.
+    """
+    db = connect(":memory:")
+    list(map(db.execute, src_db.iterdump()))
+    return db
+
+
 class EqualsDatabase(TestCase):
     """
     Tests for the ``equals_database`` matcher.
     """
 
     def setup_example(self):
-        self.a = connect(":memory:")
-        self.b = connect(":memory:")
+        self.original = connect(":memory:")
 
     @given(sql_schemas())
     def test_same_schema(self, tables):
         """
         Two databases with the same schema match.
         """
-        for db in [self.a, self.b]:
-            for name, table in tables.items():
-                db.execute(create_table(name, table))
+        for name, table in tables.items():
+            self.original.execute(create_table(name, table))
+
+        copied = copy(self.original)
 
         self.assertThat(
-            equals_database(self.a).match(self.b),
+            equals_database(self.original).match(copied),
             Is(None),
         )
 
@@ -289,16 +298,17 @@ class EqualsDatabase(TestCase):
         Two databases with different schemas do not match.
         """
         assume(schema_a != schema_b)
-        for db, schema in [(self.a, schema_a), (self.b, schema_b)]:
+        other = connect(":memory:")
+        for db, schema in [(self.original, schema_a), (other, schema_b)]:
             for name, table in schema.items():
                 db.execute(create_table(name, table))
 
         self.assertThat(
-            self.a,
+            self.original,
             Annotate(
-                f"\ndb a: {list(structured_dump(self.a))}"
-                f"\ndb b: {list(structured_dump(self.b))}",
-                Not(equals_database(self.b)),
+                f"\ndb a: {list(structured_dump(self.original))}"
+                f"\ndb b: {list(structured_dump(other))}",
+                Not(equals_database(other)),
             ),
         )
 
@@ -331,19 +341,18 @@ class EqualsDatabase(TestCase):
         schema, common_inserts, different_insert = schema_and_common_and_different
         for name, table in schema.items():
             sql = create_table(name, table)
-            for db in [self.a, self.b]:
-                db.execute(sql)
+            self.original.execute(sql)
 
         for name, statements in common_inserts.items():
             for stmt in statements:
-                for db in [self.a, self.b]:
-                    db.execute(stmt.statement(), stmt.arguments())
+                self.original.execute(stmt.statement(), stmt.arguments())
 
-        self.a.execute(different_insert.statement(), different_insert.arguments())
+        copied = copy(self.original)
+        copied.execute(different_insert.statement(), different_insert.arguments())
 
         self.assertThat(
-            self.a,
-            Not(equals_database(self.b)),
+            self.original,
+            Not(equals_database(copied)),
         )
 
     @given(
@@ -381,15 +390,15 @@ class EqualsDatabase(TestCase):
         schema, common_inserts = schema_and_common
         for name, table in schema.items():
             sql = create_table(name, table)
-            for db in [self.a, self.b]:
-                db.execute(sql)
+            self.original.execute(sql)
 
         for name, statements in common_inserts.items():
             for stmt in statements:
-                for db in [self.a, self.b]:
-                    db.execute(stmt.statement(), stmt.arguments())
+                self.original.execute(stmt.statement(), stmt.arguments())
+
+        copied = copy(self.original)
 
         self.assertThat(
-            equals_database(self.b).match(self.a),
+            equals_database(copied).match(self.original),
             Is(None),
         )
