@@ -34,9 +34,14 @@ def equals_database(reference: Connection):
     # accumulate.
 
     return AfterPreprocessing(
-        lambda actual: list(structured_dump(actual)),
-        _MatchesDump(list(structured_dump(reference))),
+        lambda actual: list(actual.iterdump()),
+        Equals(list(reference.iterdump())),
     )
+
+    # return AfterPreprocessing(
+    #     lambda actual: list(structured_dump(actual)),
+    #     _MatchesDump(list(structured_dump(reference))),
+    # )
 
 
 def structured_dump(db: Connection) -> Iterator[Tuple]:
