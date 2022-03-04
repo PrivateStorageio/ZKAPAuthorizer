@@ -110,7 +110,7 @@ class _MatchStatement:
             # https://www.exploringbinary.com/incorrect-decimal-to-floating-point-conversion-in-sqlite/
             # https://www.mail-archive.com/sqlite-users@mailinglists.sqlite.org/msg56817.html
             # https://www.sqlite.org/src/tktview?name=1248e6cda8
-            return matches_float_within_distance(reference, 2)
+            return matches_float_within_distance(reference, 3)
 
         if actual[:1] == ("INSERT",):
             if self.reference[:1] != ("INSERT",):
