@@ -49,9 +49,6 @@ class _MatchFloatWithinDistance(object):
     max_distance: int
 
     def match(self, actual):
-        if self.reference != actual:
-            return Mismatch(f"{self.reference} != {actual}")
-        return None
         try:
             distance = unit_of_least_precision_distance(
                 self.reference, actual, self.max_distance
