@@ -265,6 +265,16 @@ def copy(src_db: Connection) -> Connection:
     Return an in-memory SQLite3 database that is a copy of the given database.
     """
     db = connect(":memory:")
+    # This round-trips all of the data through strings (in the form of SQL
+    # statements with literal rather than bound arguments).  This is like what
+    # we do in the actual replica/recovery system so we do it here, too.  It
+    # is the source of some error in floating point values on Windows so we
+    # also go to a lot of effort to account for those errors in the test suite
+    # - but we don't actually correct them.
+    #
+    # Anyway, if we switched away from a textual replica format then we could
+    # stop round-tripping through strings like this and drop a lot of
+    # complexity related to fudging minor floating point imprecision.
     list(map(db.execute, src_db.iterdump()))
     return db
 
