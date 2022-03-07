@@ -95,7 +95,7 @@ class RecoveryState:
 SetState = Callable[[RecoveryState], None]
 
 # An object which can retrieve remote ZKAPAuthorizer state.
-Downloader = Callable[[SetState], Awaitable[BytesIO]]
+Downloader = Callable[[SetState], Awaitable[BinaryIO]]
 
 
 @define
@@ -165,7 +165,7 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> Awaitable[BytesIO]:
+    async def fail_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
         raise reason
 
     return fail_downloader
@@ -177,7 +177,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
     """
     assert isinstance(data, bytes)
 
-    async def canned_downloader(set_state: SetState) -> Awaitable[BytesIO]:
+    async def canned_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
         return BytesIO(data)
 
     return canned_downloader
