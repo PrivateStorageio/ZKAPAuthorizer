@@ -393,6 +393,8 @@ class EqualsDatabase(TestCase):
             5.192298096474867e33,
             # This one has a distance of 3
             -1.1919735848895067e-35,
+            # This one has a distance of 4
+            1.4958557609758284e-299,
         ]
     )
     @_float_example(

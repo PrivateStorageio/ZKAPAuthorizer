@@ -107,7 +107,7 @@ def _get_matcher(reference, actual):
         # https://www.exploringbinary.com/incorrect-decimal-to-floating-point-conversion-in-sqlite/
         # https://www.mail-archive.com/sqlite-users@mailinglists.sqlite.org/msg56817.html
         # https://www.sqlite.org/src/tktview?name=1248e6cda8
-        return matches_float_within_distance(reference, 3)
+        return matches_float_within_distance(reference, 4)
     return Equals(reference)
 
 
