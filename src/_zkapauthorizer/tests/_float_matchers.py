@@ -22,6 +22,12 @@ def unit_of_least_precision_distance(
         ** 64.  You probably want to limit the amount of work done to a much
         smaller distance.
     """
+    # Sometimes a value is exactly an integer and may come out of some system
+    # as an int instead of a float.  We can deal with that so let it through.
+    # Provide an early error for any other types, though.
+    if not isinstance(start, (int, float)) or not isinstance(goal, (int, float)):
+        raise TypeError(f"requires ints or floats, got {start!r} and {goal!r} instead")
+
     if isnan(start) or isnan(goal):
         raise ValueError("Cannot find distance to or from NaN")
 

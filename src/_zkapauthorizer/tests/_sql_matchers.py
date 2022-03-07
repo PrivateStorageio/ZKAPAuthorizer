@@ -9,7 +9,7 @@ from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 
 from ._float_matchers import matches_float_within_distance
-from .sql import escape
+from .sql import Insert, escape
 
 SQLType = Union[int, float, str, bytes, None]
 
@@ -86,7 +86,29 @@ def _structured_dump_table(
 
     for rows in iter(lambda: curs.fetchmany(1024), []):
         for row in rows:
-            yield "INSERT", table_name, row
+            # We have no representation of the table right now so we'll just
+            # leave it out.  This still gives us a convenient container for
+            # the other values.
+            yield Insert(table_name, None, row)
+
+
+def _get_matcher(reference, actual):
+    """
+    Return a matcher suitable for comparing the two values for equality.
+
+    All this does is use ``matches_float_within_distance`` if either value is a
+    float.  Otherwise, it uses ``Equals``.
+    """
+    if isinstance(reference, float) or isinstance(actual, float):
+        # We can't compare floats for exact equality, not for the usual reason
+        # but because of limitations of SQLite3's support for floats.  This is
+        # particularly bad on Windows.
+        #
+        # https://www.exploringbinary.com/incorrect-decimal-to-floating-point-conversion-in-sqlite/
+        # https://www.mail-archive.com/sqlite-users@mailinglists.sqlite.org/msg56817.html
+        # https://www.sqlite.org/src/tktview?name=1248e6cda8
+        return matches_float_within_distance(reference, 3)
+    return Equals(reference)
 
 
 @define
@@ -99,42 +121,25 @@ class _MatchStatement:
     reference = field()
 
     def match(self, actual):
-        def match_field(reference):
-            if not isinstance(reference, float):
-                return Equals(reference)
-
-            # We can't compare floats for exact equality, not for the usual
-            # reason but because of limitations of SQLite3's support for
-            # floats.  This is particularly bad on Windows.
-            #
-            # https://www.exploringbinary.com/incorrect-decimal-to-floating-point-conversion-in-sqlite/
-            # https://www.mail-archive.com/sqlite-users@mailinglists.sqlite.org/msg56817.html
-            # https://www.sqlite.org/src/tktview?name=1248e6cda8
-            return matches_float_within_distance(reference, 3)
-
-        if actual[:1] == ("INSERT",):
-            if self.reference[:1] != ("INSERT",):
-                return Mismatch(
-                    f"{actual} != {self.reference}",
-                )
+        if isinstance(actual, Insert) and isinstance(self.reference, Insert):
             # Match an insert-type statement.
-            actual_name, actual_row = actual[1:]
-            reference_name, reference_row = self.reference[1:]
-            if actual_name != reference_name:
+            if actual.table_name != self.reference.table_name:
                 return Mismatch(
-                    f"table name {actual_name} != {reference_name}",
+                    f"table name {actual} != {self.reference}",
                 )
-            if len(actual_row) != len(reference_row):
+            if len(actual.fields) != len(self.reference.fields):
                 return Mismatch(
-                    f"length {len(actual_row)} != {len(reference_row)}",
+                    f"length {len(actual.fields)} != {len(self.reference.fields)}",
                 )
-            for (actual_field, reference_field) in zip(actual_row, reference_row):
-                matcher = match_field(reference_field)
+            for (actual_field, reference_field) in zip(
+                actual.fields, self.reference.fields
+            ):
+                matcher = _get_matcher(reference_field, actual_field)
                 mismatch = matcher.match(actual_field)
                 if mismatch is not None:
                     return mismatch
         else:
-            # Match a DDL statement
+            # Match something else by equality.
             return Equals(self.reference).match(actual)
 
 
@@ -148,7 +153,7 @@ class _MatchesDump:
 
     def match(self, actual):
         for n, (a, r) in enumerate(zip(actual, self.reference)):
-            mismatch = Annotate(f"row {n}", _MatchStatement(r)).match(a)
+            mismatch = Annotate(f"row #{n}", _MatchStatement(r)).match(a)
             if mismatch is not None:
                 return mismatch
 
