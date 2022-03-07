@@ -259,11 +259,6 @@ workflows:
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
-        name: "macOS tests python 3.8 xcode 11.7.0"
-        py-version: "3.8"
-        xcode-version: "11.7.0"
-
-    - "macos-tests":
         name: "macOS tests python 3.9 xcode 12.3.0"
         py-version: "3.9"
         xcode-version: "12.3.0"

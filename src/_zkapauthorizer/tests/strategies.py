@@ -19,7 +19,7 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
 from functools import partial
-from typing import List
+from typing import Dict, List
 from urllib.parse import quote
 
 import attr
@@ -1218,21 +1218,36 @@ def tables() -> SearchStrategy[Table]:
     )
 
 
+def sql_schemas(dict_kwargs=None) -> SearchStrategy[Dict[str, Table]]:
+    """
+    Build objects describing multiple tables in a SQLite3 database.
+    """
+    if dict_kwargs is None:
+        dict_kwargs = {}
+    return dictionaries(keys=sql_identifiers(), values=tables(), **dict_kwargs)
+
+
 # Python has unbounded integers but SQLite3 integers must fall into this
 # range.
 _sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
 
 # SQLite3 can do infinity and NaN but I don't know how to get them through the
-# Python interface.  SQLite3 can do 64 bit floats but it only guarantees 15
-# digits of precision (maybe only for its base 10 string representations?)
-# which causes values requiring greater precision to fail to round-trip.  The
-# SQLite3 docs are quite clear about what one should expect from floating
-# point values, anyway:
-#
-#    Floating point values are approximate.
+# Python interface.
 #
 # https://www.sqlite.org/floatingpoint.html
-_sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
+_sql_floats = floats(allow_infinity=False, allow_nan=False, width=64)
+
+# Exclude surrogates because SQLite3 uses UTF-8 and we don't need them.  Also
+# they have to come in correctly formed pairs to be legal anyway and it's
+# inconvenient to do that with text.
+#
+# Exclude nul characters because SQLite3 only sort of supports them.  You may
+# insert nul characters but don't expect to be able to read them or anything
+# following them back.
+# https://sqlite.org/nulinstr.html
+_sql_text = text(
+    alphabet=characters(blacklist_categories={"Cs"}, blacklist_characters={"\0"})
+)
 
 # Here's how you can build values that match certain storage type affinities.
 # SQLite3 will actually allow us to store values of any type in any column but
@@ -1245,7 +1260,7 @@ _sql_floats = floats(allow_infinity=False, allow_nan=False, width=32)
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: text(),
+    StorageAffinity.TEXT: _sql_text,
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
