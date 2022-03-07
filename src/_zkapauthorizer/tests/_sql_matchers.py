@@ -3,7 +3,7 @@ Testtools matchers related to SQL functionality.
 """
 
 from sqlite3 import Connection
-from typing import Iterator, Tuple, Union
+from typing import Iterator, Union
 
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
@@ -39,7 +39,7 @@ def equals_database(reference: Connection):
     )
 
 
-def structured_dump(db: Connection) -> Iterator[Tuple]:
+def structured_dump(db: Connection) -> Iterator[tuple]:
     """
     Dump the whole database, schema and rows, without trying to do any string
     formatting.
@@ -50,7 +50,7 @@ def structured_dump(db: Connection) -> Iterator[Tuple]:
         yield from _structured_dump_table(db, name)
 
 
-def _structured_dump_tables(db: Connection) -> Iterator[Tuple[str, str]]:
+def _structured_dump_tables(db: Connection) -> Iterator[tuple[str, str]]:
     curs = db.cursor()
     curs.execute(
         """
@@ -65,7 +65,7 @@ def _structured_dump_tables(db: Connection) -> Iterator[Tuple[str, str]]:
 
 def _structured_dump_table(
     db: Connection, table_name: str
-) -> Iterator[Tuple[str, str, Tuple[SQLType, ...]]]:
+) -> Iterator[tuple[str, str, tuple[SQLType, ...]]]:
     """
     Dump a single database table's rows without trying to do any string
     formatting.

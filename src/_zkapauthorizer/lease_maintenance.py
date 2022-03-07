@@ -20,7 +20,7 @@ refresh leases on all shares reachable from a root.
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Dict, Iterable
+from typing import Any, Callable, Iterable
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
@@ -449,14 +449,14 @@ class LeaseMaintenanceConfig(object):
         on a lease without renewing it.
     """
 
-    crawl_interval_mean: datetime.timedelta = attr.ib()
-    crawl_interval_range: datetime.timedelta = attr.ib()
-    min_lease_remaining: datetime.timedelta = attr.ib()
+    crawl_interval_mean: timedelta = attr.ib()
+    crawl_interval_range: timedelta = attr.ib()
+    min_lease_remaining: timedelta = attr.ib()
 
 
 def lease_maintenance_config_to_dict(
     lease_maint_config: LeaseMaintenanceConfig,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     return {
         "lease.crawl-interval.mean": _format_duration(
             lease_maint_config.crawl_interval_mean,
@@ -478,7 +478,7 @@ def _parse_duration(duration_str: str) -> timedelta:
     return timedelta(seconds=int(duration_str))
 
 
-def lease_maintenance_config_from_dict(d: Dict[str, str]) -> LeaseMaintenanceConfig:
+def lease_maintenance_config_from_dict(d: dict[str, str]) -> LeaseMaintenanceConfig:
     return LeaseMaintenanceConfig(
         crawl_interval_mean=_parse_duration(d["lease.crawl-interval.mean"]),
         crawl_interval_range=_parse_duration(d["lease.crawl-interval.range"]),

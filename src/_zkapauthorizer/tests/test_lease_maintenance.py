@@ -17,7 +17,6 @@ Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, List
 
 import attr
 from allmydata.client import SecretHolder
@@ -94,12 +93,12 @@ class DummyStorageServer(object):
     """
 
     clock = attr.ib()
-    buckets: Dict[bytes, Dict[int, ShareStat]] = attr.ib()
+    buckets: dict[bytes, dict[int, ShareStat]] = attr.ib()
     lease_seed = attr.ib()
 
     def stat_shares(
-        self, storage_indexes: List[bytes]
-    ) -> Deferred[List[Dict[int, ShareStat]]]:
+        self, storage_indexes: list[bytes]
+    ) -> Deferred[list[dict[int, ShareStat]]]:
         return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
 
     def get_lease_seed(self):

@@ -6,7 +6,6 @@ to support testing the replication/recovery system.
 """
 
 from enum import Enum, auto
-from typing import Any, List, Tuple
 
 from attrs import define
 
@@ -44,7 +43,7 @@ class Table:
     :ivar columns: The columns that make up this table.
     """
 
-    columns: List[Tuple[str, Column]]
+    columns: list[tuple[str, Column]]
 
 
 @define(frozen=True)
@@ -61,7 +60,7 @@ class Insert:
 
     table_name: str
     table: Table
-    fields: Tuple[Any]
+    fields: tuple[...]
 
     def statement(self):
         names = ", ".join((escape(name) for (name, _) in self.table.columns))
@@ -92,7 +91,7 @@ class Update:
 
     table_name: str
     table: Table
-    fields: Tuple[Any]
+    fields: tuple[...]
 
     def statement(self):
         field_names = list(name for (name, _) in self.table.columns)

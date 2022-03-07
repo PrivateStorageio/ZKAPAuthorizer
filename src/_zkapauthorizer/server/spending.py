@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple
+from typing import Any
 
 import attr
 from challenge_bypass_ristretto import PublicKey
@@ -12,7 +12,7 @@ class ISpender(Interface):
     An ``ISpender`` can records spent ZKAPs and reports double spends.
     """
 
-    def mark_as_spent(public_key: PublicKey, passes: List[bytes]) -> None:
+    def mark_as_spent(public_key: PublicKey, passes: list[bytes]) -> None:
         """
         Record the given ZKAPs (associated to the given public key as having
         been spent.
@@ -43,7 +43,7 @@ class RecordingSpender(object):
     _recorder = attr.ib(validator=attr.validators.instance_of(_SpendingData))
 
     @classmethod
-    def make(cls) -> Tuple[_SpendingData, ISpender]:
+    def make(cls) -> tuple[_SpendingData, ISpender]:
         recorder = _SpendingData()
         return recorder, cls(recorder)
 

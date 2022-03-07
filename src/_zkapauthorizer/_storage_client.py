@@ -21,7 +21,7 @@ implemented in ``_storage_server.py``.
 """
 
 from functools import partial, wraps
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import attr
 from allmydata.interfaces import IStorageServer
@@ -45,20 +45,20 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
-Secrets = Tuple[bytes, bytes, bytes]
-TestWriteVectors = Dict[
+Secrets = tuple[bytes, bytes, bytes]
+TestWriteVectors = dict[
     int,
-    Tuple[
-        List[
-            Tuple[int, int, bytes, bytes],
+    tuple[
+        list[
+            tuple[int, int, bytes, bytes],
         ],
-        List[
-            Tuple[int, bytes],
+        list[
+            tuple[int, bytes],
         ],
         Optional[int],
     ],
 ]
-ReadVector = List[Tuple[int, int]]
+ReadVector = list[tuple[int, int]]
 
 
 class IncorrectStorageServerReference(Exception):

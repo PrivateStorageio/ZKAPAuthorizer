@@ -29,7 +29,7 @@ __all__ = [
 
 from datetime import datetime
 from json import loads
-from typing import List
+from typing import GenericAlias
 
 import attr
 from testtools.matchers import (
@@ -219,8 +219,8 @@ def matches_response(
 
 
 def matches_spent_passes(
-    public_key_hash: bytes, spent_passes: List[Pass]
-) -> Matcher[_SpendingData]:
+    public_key_hash: bytes, spent_passes: list[Pass]
+) -> GenericAlias(Matcher, (_SpendingData,)):
     """
     Returns a matcher for _SpendingData that checks whether the
     spent pass match the given public key and passes.

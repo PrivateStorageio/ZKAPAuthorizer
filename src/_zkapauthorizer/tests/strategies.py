@@ -19,7 +19,6 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Dict, List
 from urllib.parse import quote
 
 import attr
@@ -1099,7 +1098,7 @@ class _VoucherInsert(object):
     voucher: bytes = attr.ib()
     expected_tokens: int = attr.ib(validator=attr.validators.gt(0))
     counter: int = attr.ib(validator=attr.validators.ge(0))
-    tokens: List[RandomToken] = attr.ib()
+    tokens: list[RandomToken] = attr.ib()
 
 
 @attr.s(frozen=True)
@@ -1108,7 +1107,7 @@ class _ExistingState(object):
     Represent some state which could already exist in a ``VoucherStore``.
     """
 
-    vouchers: List[_VoucherInsert] = attr.ib()
+    vouchers: list[_VoucherInsert] = attr.ib()
 
 
 def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
@@ -1218,7 +1217,7 @@ def tables() -> SearchStrategy[Table]:
     )
 
 
-def sql_schemas(dict_kwargs=None) -> SearchStrategy[Dict[str, Table]]:
+def sql_schemas(dict_kwargs=None) -> SearchStrategy[dict[str, Table]]:
     """
     Build objects describing multiple tables in a SQLite3 database.
     """

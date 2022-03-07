@@ -20,7 +20,7 @@ from functools import partial
 from itertools import islice
 from os import SEEK_CUR
 from struct import pack
-from typing import Callable, Dict, List, Set
+from typing import Callable
 
 import attr
 from challenge_bypass_ristretto import RandomToken, SigningKey
@@ -136,7 +136,7 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
         )
 
 
-def integer_passes(limit: int) -> Callable[[bytes, int], List[int]]:
+def integer_passes(limit: int) -> Callable[[bytes, int], list[int]]:
     """
     :return: A function which can be used to get a number of passes.  The
         function accepts a unicode request-binding message and an integer
@@ -156,7 +156,7 @@ def integer_passes(limit: int) -> Callable[[bytes, int], List[int]]:
 
 def get_passes(
     message: bytes, count: int, signing_key: SigningKey
-) -> List[RandomToken]:
+) -> list[RandomToken]:
     """
     :param bytes message: Request-binding message for PrivacyPass.
 
@@ -222,13 +222,13 @@ class _PassFactory(object):
         via ``IPassGroup.reset``.
     """
 
-    _get_passes: Callable[[bytes, int], List[bytes]] = attr.ib()
+    _get_passes: Callable[[bytes, int], list[bytes]] = attr.ib()
 
-    returned: List[int] = attr.ib(default=attr.Factory(list), init=False)
-    in_use: Set[int] = attr.ib(default=attr.Factory(set), init=False)
-    invalid: Dict[int, str] = attr.ib(default=attr.Factory(dict), init=False)
-    spent: Set[int] = attr.ib(default=attr.Factory(set), init=False)
-    issued: Set[int] = attr.ib(default=attr.Factory(set), init=False)
+    returned: list[int] = attr.ib(default=attr.Factory(list), init=False)
+    in_use: set[int] = attr.ib(default=attr.Factory(set), init=False)
+    invalid: dict[int, str] = attr.ib(default=attr.Factory(dict), init=False)
+    spent: set[int] = attr.ib(default=attr.Factory(set), init=False)
+    issued: set[int] = attr.ib(default=attr.Factory(set), init=False)
 
     def get(self, message: bytes, num_passes: int) -> PassGroup:
         passes = []

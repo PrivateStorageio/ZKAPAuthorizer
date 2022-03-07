@@ -17,7 +17,7 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
 from sqlite3 import Cursor
-from typing import BinaryIO, Callable, Dict, Iterator, Optional
+from typing import BinaryIO, Callable, Iterator, Optional
 
 from attrs import define
 from twisted.python.filepath import FilePath
@@ -87,7 +87,7 @@ class RecoveryState:
     stage: RecoveryStages = RecoveryStages.inactive
     failure_reason: Optional[str] = None
 
-    def marshal(self) -> Dict[str, Optional[str]]:
+    def marshal(self) -> dict[str, Optional[str]]:
         return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 

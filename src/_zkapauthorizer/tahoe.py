@@ -6,7 +6,7 @@ from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
 from tempfile import mkdtemp
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Iterable, Optional
 
 import treq
 from allmydata.node import _Config
@@ -20,7 +20,7 @@ from twisted.python.filepath import FilePath
 from .config import read_node_url
 
 
-def async_retry(matchers: List[Callable[[Exception], bool]]):
+def async_retry(matchers: list[Callable[[Exception], bool]]):
     """
     Decorate a function with automatic retry behavior for certain cases.
 
@@ -271,7 +271,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: Dict[str, str] = field(default=Factory(dict))
+    _objects: dict[str, str] = field(default=Factory(dict))
 
     def client(self):
         """

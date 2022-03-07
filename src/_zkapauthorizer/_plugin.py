@@ -20,7 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from typing import Callable, List
+from typing import Callable
 from weakref import WeakValueDictionary
 
 from allmydata.client import _Client
@@ -324,7 +324,7 @@ _SERVICES = [
 ]
 
 
-def get_root_nodes(client_node, node_config) -> List[IFilesystemNode]:
+def get_root_nodes(client_node, node_config) -> list[IFilesystemNode]:
     """
     Get the configured starting points for lease maintenance traversal.
     """

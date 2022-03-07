@@ -27,7 +27,7 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import attr
 from allmydata.interfaces import TestAndWriteVectorsForShares
@@ -212,8 +212,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     )
     _public_key = attr.ib(init=False)
     _metric_spending_successes = attr.ib(init=False)
-    _bucket_writer_disconnect_markers: Dict[
-        BucketWriter, Tuple[IRemoteReference, Any]
+    _bucket_writer_disconnect_markers: dict[
+        BucketWriter, tuple[IRemoteReference, Any]
     ] = attr.ib(
         init=False,
         default=attr.Factory(dict),
@@ -429,8 +429,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             )
 
     def remote_stat_shares(
-        self, storage_indexes_or_slots: List[bytes]
-    ) -> List[Dict[int, ShareStat]]:
+        self, storage_indexes_or_slots: list[bytes]
+    ) -> list[dict[int, ShareStat]]:
         return list(
             dict(get_share_stats(self._original, storage_index_or_slot, None))
             for storage_index_or_slot in storage_indexes_or_slots
@@ -593,7 +593,7 @@ def check_pass_quantity_for_lease(
     storage_index: bytes,
     validation: _ValidationResult,
     storage_server: ZKAPAuthorizerStorageServer,
-) -> Dict[int, int]:
+) -> dict[int, int]:
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
