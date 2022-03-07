@@ -142,8 +142,9 @@ class ValidationResultTests(TestCase):
             )
 
 
-def read_spending_success_histogram_total(storage_server):
-    # type: (ZKAPAuthorizerStorageServer) -> int
+def read_spending_success_histogram_total(
+    storage_server: ZKAPAuthorizerStorageServer,
+) -> int:
     """
     Read the total number of values across all buckets of the spending success
     metric histogram.
@@ -154,8 +155,9 @@ def read_spending_success_histogram_total(storage_server):
     return sum(b.get() for b in buckets)
 
 
-def read_spending_success_histogram_bucket(storage_server, num_passes):
-    # type: (ZKAPAuthorizerStorageServer, int) -> int
+def read_spending_success_histogram_bucket(
+    storage_server: ZKAPAuthorizerStorageServer, num_passes: int
+) -> int:
     """
     Read the value of a single bucket of the spending success metric
     histogram.

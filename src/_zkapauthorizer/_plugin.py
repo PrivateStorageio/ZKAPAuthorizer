@@ -201,8 +201,9 @@ class ZKAPAuthorizer(object):
         )
 
 
-def make_safe_writer(metrics_path, registry):
-    # type: (str, CollectorRegistry) -> Callable[[], None]
+def make_safe_writer(
+    metrics_path: str, registry: CollectorRegistry
+) -> Callable[[], None]:
     """
     Make a no-argument callable that writes metrics from the given registry to
     the given path.  The callable will log errors writing to the path and not

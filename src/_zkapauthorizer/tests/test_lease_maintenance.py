@@ -94,11 +94,12 @@ class DummyStorageServer(object):
     """
 
     clock = attr.ib()
-    buckets = attr.ib()  # type: Dict[bytes, Dict[int, ShareStat]]
+    buckets: Dict[bytes, Dict[int, ShareStat]] = attr.ib()
     lease_seed = attr.ib()
 
-    def stat_shares(self, storage_indexes):
-        # type: (List[bytes]) -> Deferred[List[Dict[int, ShareStat]]]
+    def stat_shares(
+        self, storage_indexes: List[bytes]
+    ) -> Deferred[List[Dict[int, ShareStat]]]:
         return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
 
     def get_lease_seed(self):
@@ -115,8 +116,13 @@ class SharesAlreadyExist(Exception):
     pass
 
 
-def create_share(storage_server, storage_index, sharenum, size, lease_expiration):
-    # type: (DummyStorageServer, bytes, int, int, int) -> None
+def create_share(
+    storage_server: DummyStorageServer,
+    storage_index: bytes,
+    sharenum: int,
+    size: int,
+    lease_expiration: int,
+) -> None:
     """
     Add a share to a storage index ("bucket").
 

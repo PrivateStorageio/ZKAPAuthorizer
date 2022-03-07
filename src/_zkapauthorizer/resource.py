@@ -178,7 +178,7 @@ class ReplicateResource(Resource):
         work.
     """
 
-    _setup: Callable[[], Awaitable]
+    _setup: Callable[[], Awaitable[str]]
 
     _log = Logger()
 

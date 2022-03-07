@@ -20,7 +20,7 @@ refresh leases on all shares reachable from a root.
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
@@ -221,8 +221,7 @@ def renew_leases_on_server(
             yield renew_lease(renewal_secret, cancel_secret, storage_index, server)
 
 
-def soonest_expiration(stats):
-    # type: (Iterable[ShareStat]) -> ShareStat
+def soonest_expiration(stats: Iterable[ShareStat]) -> ShareStat:
     """
     :return: The share stat from ``stats`` with a lease which expires before
         all others.
@@ -321,7 +320,7 @@ class _FuzzyTimerService(Service):
     operation = attr.ib()
     initial_interval = attr.ib()
     sample_interval_distribution = attr.ib()
-    get_config = attr.ib()  # type: () -> Any
+    get_config: Callable[[], Any] = attr.ib()
     reactor = attr.ib()
 
     def startService(self):
@@ -450,13 +449,14 @@ class LeaseMaintenanceConfig(object):
         on a lease without renewing it.
     """
 
-    crawl_interval_mean = attr.ib()  # type: datetime.timedelta
-    crawl_interval_range = attr.ib()  # type: datetime.timedelta
-    min_lease_remaining = attr.ib()  # type: datetime.timedelta
+    crawl_interval_mean: datetime.timedelta = attr.ib()
+    crawl_interval_range: datetime.timedelta = attr.ib()
+    min_lease_remaining: datetime.timedelta = attr.ib()
 
 
-def lease_maintenance_config_to_dict(lease_maint_config):
-    # type: (LeaseMaintenanceConfig) -> Dict[str, str]
+def lease_maintenance_config_to_dict(
+    lease_maint_config: LeaseMaintenanceConfig,
+) -> Dict[str, str]:
     return {
         "lease.crawl-interval.mean": _format_duration(
             lease_maint_config.crawl_interval_mean,
@@ -470,18 +470,15 @@ def lease_maintenance_config_to_dict(lease_maint_config):
     }
 
 
-def _format_duration(td):
-    # type: (timedelta) -> str
+def _format_duration(td: timedelta) -> str:
     return str(int(td.total_seconds()))
 
 
-def _parse_duration(duration_str):
-    # type: (str) -> timedelta
+def _parse_duration(duration_str: str) -> timedelta:
     return timedelta(seconds=int(duration_str))
 
 
-def lease_maintenance_config_from_dict(d):
-    # type: (Dict[str, str]) -> LeaseMaintenanceConfig
+def lease_maintenance_config_from_dict(d: Dict[str, str]) -> LeaseMaintenanceConfig:
     return LeaseMaintenanceConfig(
         crawl_interval_mean=_parse_duration(d["lease.crawl-interval.mean"]),
         crawl_interval_range=_parse_duration(d["lease.crawl-interval.range"]),

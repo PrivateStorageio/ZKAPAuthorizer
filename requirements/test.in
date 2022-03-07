@@ -13,3 +13,8 @@ black == 21.12b0
 flake8 == 4.0.1
 flake8-isort
 flake8-black
+
+
+# the type shed...
+types-cryptography
+types-PyYAML
