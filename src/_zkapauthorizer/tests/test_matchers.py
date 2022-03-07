@@ -400,6 +400,7 @@ class EqualsDatabase(TestCase):
     @_float_example(
         [
             # Examples from Rick Regan's blog post that are broken on Windows.
+            # https://www.exploringbinary.com/incorrect-decimal-to-floating-point-conversion-in-sqlite/
             1e-23,
             8.533e68,
             4.1006e-184,
