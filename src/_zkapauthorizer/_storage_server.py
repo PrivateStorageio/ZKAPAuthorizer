@@ -27,7 +27,7 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import attr
 from allmydata.interfaces import TestAndWriteVectorsForShares
@@ -212,8 +212,8 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     )
     _public_key = attr.ib(init=False)
     _metric_spending_successes = attr.ib(init=False)
-    _bucket_writer_disconnect_markers: Dict[
-        BucketWriter, Tuple[IRemoteReference, Any]
+    _bucket_writer_disconnect_markers: dict[
+        BucketWriter, tuple[IRemoteReference, Any]
     ] = attr.ib(
         init=False,
         default=attr.Factory(dict),
@@ -428,8 +428,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
                 get_share_sizes(self._original, storage_index_or_slot, sharenums)
             )
 
-    def remote_stat_shares(self, storage_indexes_or_slots):
-        # type: (List[bytes]) -> List[Dict[int, ShareStat]]
+    def remote_stat_shares(
+        self, storage_indexes_or_slots: list[bytes]
+    ) -> list[dict[int, ShareStat]]:
         return list(
             dict(get_share_stats(self._original, storage_index_or_slot, None))
             for storage_index_or_slot in storage_indexes_or_slots
@@ -588,9 +589,11 @@ def check_pass_quantity(pass_value, validation, share_sizes):
 
 
 def check_pass_quantity_for_lease(
-    pass_value, storage_index, validation, storage_server
-):
-    # type: (int, bytes, _ValidationResult, ZKAPAuthorizerStorageServer) -> Dict[int, int]
+    pass_value: int,
+    storage_index: bytes,
+    validation: _ValidationResult,
+    storage_server: ZKAPAuthorizerStorageServer,
+) -> dict[int, int]:
     """
     Check that the given number of passes is sufficient to add or renew a
     lease for one period for the given storage index.
@@ -811,8 +814,7 @@ def stat_slot(storage_server, slot, sharepath):
     )
 
 
-def get_lease_expiration(sharepath):
-    # type: (str) -> Optional[int]
+def get_lease_expiration(sharepath: str) -> Optional[int]:
     """
     Get the latest lease expiration time for the share at the given path, or
     ``None`` if there are no leases on it.
@@ -892,8 +894,9 @@ def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, no
             )
 
 
-def get_share_path(storage_server, storage_index, sharenum):
-    # type: (StorageServer, bytes, int) -> FilePath
+def get_share_path(
+    storage_server: StorageServer, storage_index: bytes, sharenum: int
+) -> FilePath:
     """
     Get the path to the given storage server's storage for the given share.
     """
@@ -904,8 +907,9 @@ def get_share_path(storage_server, storage_index, sharenum):
     )
 
 
-def share_has_active_leases(storage_server, storage_index, sharenum, now):
-    # type: (StorageServer, bytes, int, float) -> bool
+def share_has_active_leases(
+    storage_server: StorageServer, storage_index: bytes, sharenum: int, now: float
+) -> bool:
     """
     Determine whether the given share on the given server has an unexpired
     lease or not.
@@ -918,8 +922,13 @@ def share_has_active_leases(storage_server, storage_index, sharenum, now):
     return any(lease.get_expiration_time() > now for lease in share.get_leases())
 
 
-def get_writev_price(storage_server, pass_value, storage_index, tw_vectors, now):
-    # type: (StorageServer, int, bytes, TestAndWriteVectorsForShares, float) -> int
+def get_writev_price(
+    storage_server: StorageServer,
+    pass_value: int,
+    storage_index: bytes,
+    tw_vectors: TestAndWriteVectorsForShares,
+    now: float,
+) -> int:
     """
     Determine the price to execute the given test/write vectors.
     """

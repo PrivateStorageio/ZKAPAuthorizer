@@ -6,7 +6,7 @@ from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
 from tempfile import mkdtemp
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Iterable, Optional
 
 import treq
 from allmydata.node import _Config
@@ -20,7 +20,7 @@ from twisted.python.filepath import FilePath
 from .config import read_node_url
 
 
-def async_retry(matchers: List[Callable[[Exception], bool]]):
+def async_retry(matchers: list[Callable[[Exception], bool]]):
     """
     Decorate a function with automatic retry behavior for certain cases.
 
@@ -105,7 +105,7 @@ class TahoeAPIError(Exception):
 @async_retry([_not_enough_servers])
 async def upload(
     client: HTTPClient, inpath: FilePath, api_root: DecodedURL
-) -> Awaitable:  # Awaitable[str] but this requires Python 3.9
+) -> Awaitable[str]:
     """
     Upload data from the given path and return the resulting capability.
 
@@ -142,7 +142,7 @@ async def download(
     api_root: DecodedURL,
     cap: str,
     child_path: Optional[Iterable[str]] = None,
-) -> Awaitable:  # Awaitable[None] but this requires Python 3.9
+) -> Awaitable[None]:
     """
     Download the object identified by the given capability to the given path.
 
@@ -182,7 +182,7 @@ async def download(
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-) -> Awaitable:  # Awaitable[str] but this requires Python 3.9
+) -> Awaitable[str]:
     """
     Create a new mutable directory and return the write capability string.
     """
@@ -201,7 +201,7 @@ async def link(
     dir_cap: str,
     entry_name: str,
     entry_cap: str,
-) -> Awaitable:
+) -> Awaitable[None]:
     """
     Link an object into a directory.
 
@@ -271,7 +271,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: Dict[str, str] = field(default=Factory(dict))
+    _objects: dict[str, str] = field(default=Factory(dict))
 
     def client(self):
         """

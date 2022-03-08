@@ -20,7 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from typing import Callable, List
+from typing import Callable
 from weakref import WeakValueDictionary
 
 from allmydata.client import _Client
@@ -201,8 +201,9 @@ class ZKAPAuthorizer(object):
         )
 
 
-def make_safe_writer(metrics_path, registry):
-    # type: (str, CollectorRegistry) -> Callable[[], None]
+def make_safe_writer(
+    metrics_path: str, registry: CollectorRegistry
+) -> Callable[[], None]:
     """
     Make a no-argument callable that writes metrics from the given registry to
     the given path.  The callable will log errors writing to the path and not
@@ -323,7 +324,7 @@ _SERVICES = [
 ]
 
 
-def get_root_nodes(client_node, node_config) -> List[IFilesystemNode]:
+def get_root_nodes(client_node, node_config) -> list[IFilesystemNode]:
     """
     Get the configured starting points for lease maintenance traversal.
     """

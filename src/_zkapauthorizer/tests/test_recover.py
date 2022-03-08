@@ -4,7 +4,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from asyncio import run
 from sqlite3 import Connection, connect
-from typing import Dict, Iterator
+from typing import Iterator
 
 from allmydata.client import read_config
 from fixtures import TempDir
@@ -79,7 +79,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         super().__init__()
         self.case = case
         self.connection = connect(":memory:")
-        self.tables: Dict[str, Table] = {}
+        self.tables: dict[str, Table] = {}
 
     @invariant()
     def snapshot_equals_database(self):

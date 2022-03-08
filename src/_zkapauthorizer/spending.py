@@ -18,7 +18,7 @@ A module for logic controlling the manner in which ZKAPs are spent.
 
 from __future__ import annotations
 
-from typing import Callable, List, Tuple
+from typing import Callable
 
 import attr
 from zope.interface import Attribute, Interface, implementer
@@ -116,19 +116,19 @@ class PassGroup(object):
 
     _message: bytes = attr.ib(validator=attr.validators.instance_of(bytes))
     _factory: IPassFactory = attr.ib(validator=attr.validators.provides(IPassFactory))
-    _tokens: List[Tuple[UnblindedToken, Pass]] = attr.ib(
+    _tokens: list[tuple[UnblindedToken, Pass]] = attr.ib(
         validator=attr.validators.instance_of(list)
     )
 
     @property
-    def passes(self) -> List[Pass]:
+    def passes(self) -> list[Pass]:
         return list(pass_ for (unblinded_token, pass_) in self._tokens)
 
     @property
-    def unblinded_tokens(self) -> List[UnblindedToken]:
+    def unblinded_tokens(self) -> list[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices: List[int]) -> (PassGroup, PassGroup):
+    def split(self, select_indices: list[int]) -> (PassGroup, PassGroup):
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
@@ -165,12 +165,12 @@ class SpendingController(object):
     attempts when necessary.
     """
 
-    get_unblinded_tokens: Callable[[int], List[UnblindedToken]] = attr.ib()
-    discard_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
-    invalidate_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
-    reset_unblinded_tokens: Callable[[List[UnblindedToken]], None] = attr.ib()
+    get_unblinded_tokens: Callable[[int], list[UnblindedToken]] = attr.ib()
+    discard_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
+    invalidate_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
+    reset_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
 
-    tokens_to_passes: Callable[[bytes, List[UnblindedToken]], List[Pass]] = attr.ib()
+    tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]] = attr.ib()
 
     @classmethod
     def for_store(cls, tokens_to_passes, store):

@@ -17,7 +17,7 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 """
 
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from allmydata.node import _Config
 from hyperlink import DecodedURL
@@ -56,8 +56,7 @@ def read_node_url(config: _Config) -> DecodedURL:
     )
 
 
-def lease_maintenance_from_tahoe_config(node_config):
-    # type: (_Config) -> LeaseMaintenanceConfig
+def lease_maintenance_from_tahoe_config(node_config: _Config) -> LeaseMaintenanceConfig:
     """
     Return a ``LeaseMaintenanceConfig`` representing the values from the given
     configuration object.
@@ -131,7 +130,7 @@ def get_configured_lease_duration(node_config):
     return int(upper_bound - min_time_remaining)
 
 
-def _read_duration(cfg, option, default):
+def _read_duration(cfg: _Config, option: str, default: Any) -> Optional[timedelta]:
     """
     Read an integer number of seconds from the ZKAPAuthorizer section of a
     Tahoe-LAFS config.
@@ -142,7 +141,6 @@ def _read_duration(cfg, option, default):
     :return: ``None`` if the option is missing, otherwise the parsed duration
         as a ``timedelta``.
     """
-    # type: (_Config, str) -> Optional[timedelta]
     section_name = "storageclient.plugins." + NAME
     value_str = cfg.get_config(
         section=section_name,

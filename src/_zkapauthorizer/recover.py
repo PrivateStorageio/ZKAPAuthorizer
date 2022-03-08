@@ -17,9 +17,10 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
 from sqlite3 import Cursor
-from typing import BinaryIO, Callable, Dict, Iterator, Optional
+from typing import BinaryIO, Callable, Iterator, Optional
 
 from attrs import define
+from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
@@ -86,7 +87,7 @@ class RecoveryState:
     stage: RecoveryStages = RecoveryStages.inactive
     failure_reason: Optional[str] = None
 
-    def marshal(self) -> Dict[str, Optional[str]]:
+    def marshal(self) -> dict[str, Optional[str]]:
         return {"stage": self.stage.name, "failure-reason": self.failure_reason}
 
 
@@ -94,7 +95,7 @@ class RecoveryState:
 SetState = Callable[[RecoveryState], None]
 
 # An object which can retrieve remote ZKAPAuthorizer state.
-Downloader = Callable[[SetState], Awaitable]
+Downloader = Callable[[SetState], Awaitable[BinaryIO]]
 
 
 @define
@@ -110,7 +111,7 @@ class StatefulRecoverer:
         self,
         download: Downloader,
         cursor: Cursor,
-    ) -> Awaitable:
+    ) -> Awaitable[None]:
         """
         Begin the recovery process.
 
@@ -164,7 +165,7 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> Awaitable:
+    async def fail_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
         raise reason
 
     return fail_downloader
@@ -176,7 +177,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
     """
     assert isinstance(data, bytes)
 
-    async def canned_downloader(set_state: SetState) -> Awaitable:
+    async def canned_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
         return BytesIO(data)
 
     return canned_downloader
@@ -205,7 +206,7 @@ async def tahoe_lafs_downloader(
     client: Tahoe,
     recovery_cap: str,
     set_state: SetState,
-) -> Awaitable:  # Awaitable[FilePath]
+) -> Awaitable[FilePath]:
     """
     Download replica data from the given replica directory capability into the
     node's private directory.
@@ -241,7 +242,7 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable:
+async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage

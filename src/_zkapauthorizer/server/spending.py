@@ -12,8 +12,7 @@ class ISpender(Interface):
     An ``ISpender`` can records spent ZKAPs and reports double spends.
     """
 
-    def mark_as_spent(public_key, passes):
-        # type: (PublicKey, list[bytes]) -> None
+    def mark_as_spent(public_key: PublicKey, passes: list[bytes]) -> None:
         """
         Record the given ZKAPs (associated to the given public key as having
         been spent.
@@ -44,8 +43,7 @@ class RecordingSpender(object):
     _recorder = attr.ib(validator=attr.validators.instance_of(_SpendingData))
 
     @classmethod
-    def make(cls):
-        # type: () -> (_SpendingData, ISpender)
+    def make(cls) -> tuple[_SpendingData, ISpender]:
         recorder = _SpendingData()
         return recorder, cls(recorder)
 
@@ -55,8 +53,9 @@ class RecordingSpender(object):
         )
 
 
-def get_spender(config, reactor, registry):
-    # type: (dict[str, Any], IReactorTime, CollectorRegistry) -> ISpender
+def get_spender(
+    config: dict[str, Any], reactor: IReactorTime, registry: CollectorRegistry
+) -> ISpender:
     """
     Return an :py:`ISpender` to be used with the given storage server configuration.
     """

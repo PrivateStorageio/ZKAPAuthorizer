@@ -23,7 +23,6 @@ from functools import partial
 from hashlib import sha256
 from json import loads
 from operator import delitem, setitem
-from typing import List
 
 import attr
 import challenge_bypass_ristretto
@@ -103,7 +102,7 @@ class RedemptionResult(object):
         the redemption process.
     """
 
-    unblinded_tokens: List[UnblindedToken] = attr.ib(
+    unblinded_tokens: list[UnblindedToken] = attr.ib(
         validator=attr.validators.instance_of(list),
     )
     public_key: str = attr.ib(

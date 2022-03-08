@@ -20,7 +20,7 @@ plugin.
 from base64 import b32encode
 from datetime import datetime
 from io import BytesIO
-from typing import Optional, Set
+from typing import Optional
 from urllib.parse import quote
 
 import attr
@@ -1503,7 +1503,7 @@ class VoucherTests(TestCase):
         )
 
 
-def mime_types(blacklist: Optional[Set[str]] = None) -> SearchStrategy[str]:
+def mime_types(blacklist: Optional[set[str]] = None) -> SearchStrategy[str]:
     """
     Build MIME types as b"major/minor" byte strings.
 
