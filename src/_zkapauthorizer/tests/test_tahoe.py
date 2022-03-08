@@ -11,9 +11,14 @@ from hypothesis import given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Equals, Is, Not, raises
+from testtools.matchers import ContainsDict, Equals, Is, Not, raises
 from testtools.twistedsupport import AsynchronousDeferredRunTest
-from twisted.internet.defer import Deferred, ensureDeferred, inlineCallbacks
+from twisted.internet.defer import (
+    Deferred,
+    ensureDeferred,
+    gatherResults,
+    inlineCallbacks,
+)
 from twisted.python.filepath import FilePath
 
 from ..tahoe import (
@@ -134,6 +139,88 @@ class DirectoryTestsMixin:
         outpath = FilePath(self.useFixture(TempDir()).join("dir_contents"))
         yield Deferred.fromCoroutine(tahoe.download(outpath, dir_cap, None))
         self.assertThat(outpath.getContent(), Not(Equals(b"")))
+
+    @inlineCallbacks
+    def test_list_directory(self):
+        """
+        ``list_directory`` returns a coroutine that completes with a list of
+        direct child entries in the given directory.
+        """
+        tahoe = self.get_client()
+
+        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+
+        inpath = FilePath(self.useFixture(TempDir()).join("list_directory"))
+        inpath.makedirs()
+
+        entry_names = range(5)
+
+        def file_content(n):
+            return b"x" * (n + 1)
+
+        async def upload(n):
+            p = inpath.child(str(n))
+            p.setContent(file_content(n))
+            cap = await tahoe.upload(p)
+            await tahoe.link(dir_cap, str(n), cap)
+
+        # Populate it a little
+        yield gatherResults([Deferred.fromCoroutine(upload(n)) for n in entry_names])
+
+        # Put another directory in it too.
+        inner_dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        yield Deferred.fromCoroutine(tahoe.link(dir_cap, "directory", inner_dir_cap))
+
+        # Read it back
+        children = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+
+        self.expectThat(
+            set(children), Equals({"directory"} | set(map(str, entry_names)))
+        )
+        for name in entry_names:
+            kind, details = children[str(name)]
+            self.expectThat(
+                kind,
+                Equals("filenode"),
+            )
+            self.expectThat(
+                details["size"],
+                Equals(len(file_content(name))),
+                f"child {name} has unexpected size",
+            )
+
+        kind, details = children["directory"]
+        self.expectThat(kind, Equals("dirnode"))
+        self.expectThat(
+            details,
+            ContainsDict(
+                {
+                    "rw_uri": Equals(inner_dir_cap),
+                }
+            ),
+        )
+
+    @inlineCallbacks
+    def test_list_not_a_directory(self):
+        """
+        ``list_directory`` returns a coroutine that raises ``ValueError`` when
+        called with a capability that is not a directory capability.
+        """
+        tahoe = self.get_client()
+
+        # Upload not-a-directory
+        inpath = FilePath(self.useFixture(TempDir()).join("list_directory"))
+        inpath.setContent(b"hello world")
+
+        filecap = yield Deferred.fromCoroutine(tahoe.upload(inpath))
+
+        d = Deferred.fromCoroutine(tahoe.list_directory(filecap))
+        try:
+            result = yield d
+        except ValueError:
+            pass
+        else:
+            self.fail(f"expected ValueError, got {result!r}")
 
     @inlineCallbacks
     def test_link(self):

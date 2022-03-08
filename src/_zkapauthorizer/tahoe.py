@@ -5,8 +5,9 @@ A library for interacting with a Tahoe-LAFS node.
 from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
+from json import loads
 from tempfile import mkdtemp
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.node import _Config
@@ -181,6 +182,28 @@ async def download(
 
 
 @async_retry([_not_enough_servers])
+async def list_directory(
+    client: HTTPClient,
+    api_root: DecodedURL,
+    dir_cap: str,
+) -> Awaitable[dict[str, dict[str, dict]]]:
+    """
+    Read the direct children of a directory.
+    """
+    if not dir_cap.startswith("URI:DIR2"):
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+
+    uri = api_root.child("uri").child(dir_cap).child("").add("t", "json")
+    resp = await client.get(uri)
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code == 200:
+        kind, details = loads(content)
+        return details["children"]
+
+    raise TahoeAPIError("get", uri, resp.code, content)
+
+
+@async_retry([_not_enough_servers])
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
@@ -257,11 +280,17 @@ class Tahoe(object):
     def make_directory(self):
         return make_directory(self.client, self._api_root)
 
+    def list_directory(self, dir_cap):
+        return list_directory(self.client, self._api_root, dir_cap)
+
     def link(self, dir_cap, entry_name, entry_cap):
         return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
 
 CapStr = str
+FSEntry = Union[CapStr, dict[CapStr, "FSEntry"]]
+
+
 @define
 class MemoryGrid:
     """
@@ -277,7 +306,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[str, str] = field(default=Factory(dict))
+    _objects: dict[CapStr, FSEntry] = field(default=Factory(dict))
 
     def client(self):
         """
@@ -314,6 +343,24 @@ class MemoryGrid:
         assert not d.is_readonly()
         assert d.is_mutable()
         self._objects[dir_cap][entry_name] = entry_cap
+
+    def list_directory(self, dir_cap):
+        def kind(entry):
+            if isinstance(entry, dict):
+                return "dirnode"
+            return "filenode"
+
+        def describe(cap):
+            obj = self._objects[cap]
+            if kind(obj) == "dirnode":
+                return ["dirnode", {"rw_uri": cap}]
+            return ["filenode", {"size": len(obj)}]
+
+        dir_entries = self._objects[dir_cap]
+        if kind(dir_entries) == "dirnode":
+            return {name: describe(entry) for (name, entry) in dir_entries.items()}
+
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
 
 
 @define
@@ -361,6 +408,9 @@ class _MemoryTahoe:
 
     async def link(self, dir_cap, entry_name, entry_cap):
         return self._grid.link(dir_cap, entry_name, entry_cap)
+
+    async def list_directory(self, dir_cap):
+        return self._grid.list_directory(dir_cap)
 
 
 def attenuate_writecap(rw_cap: CapStr) -> CapStr:
