@@ -8,11 +8,14 @@ from tempfile import mkdtemp
 from time import sleep
 from typing import Iterator, Optional
 
+from allmydata.client import config_from_string
 from attrs import define
 from hyperlink import DecodedURL
 from testresources import TestResourceManager
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
+
+from ..config import _Config as Config
 
 # An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
 # runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
@@ -212,6 +215,16 @@ class TahoeClient:
     create_output: Optional[str] = None
     process: Optional[Popen] = None
     node_url: Optional[FilePath] = None
+
+    def read_config(self) -> Config:
+        """
+        Read this client node's configuration file into a configuration object.
+        """
+        return config_from_string(
+            self.node_dir.path,
+            "tub.port",
+            self.node_dir.child("tahoe.cfg").getContent(),
+        )
 
     def run(self):
         """

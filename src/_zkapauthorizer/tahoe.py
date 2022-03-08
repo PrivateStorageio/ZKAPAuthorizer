@@ -18,6 +18,7 @@ from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 
+from ._json import dumps_utf8
 from .config import read_node_url
 
 
@@ -256,6 +257,9 @@ class Tahoe(object):
     def make_directory(self):
         return make_directory(self.client, self._api_root)
 
+    def link(self, dir_cap, entry_name, entry_cap):
+        return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
+
 
 @define
 class MemoryGrid:
@@ -304,6 +308,12 @@ class MemoryGrid:
 
         return cap
 
+    def link(self, dir_cap, entry_name, entry_cap):
+        d = capability_from_string(dir_cap)
+        assert not d.is_readonly()
+        assert d.is_mutable()
+        self._objects[dir_cap][entry_name] = entry_cap
+
 
 @define
 class _MemoryTahoe:
@@ -329,14 +339,27 @@ class _MemoryTahoe:
         return self._nodedir.child("private").child(name)
 
     async def download(self, outpath, cap, child_path):
-        assert len(child_path) == 0
-        outpath.setContent(self._grid.download(cap))
+        d = self._grid.download(cap)
+        if child_path is not None:
+            for p in child_path:
+                assert cap.startswith("URI:DIR2")
+                cap = d[p]
+                d = self._grid.download(cap)
+        if isinstance(d, dict):
+            # It is a directory.  Encode it somehow so it fits in the file.
+            # This is not the same encoding as Tahoe-LAFS itself uses for
+            # directories.
+            d = dumps_utf8(d)
+        outpath.setContent(d)
 
     async def upload(self, inpath):
         return self._grid.upload(inpath.getContent())
 
     async def make_directory(self):
         return self._grid.make_directory()
+
+    async def link(self, dir_cap, entry_name, entry_cap):
+        return self._grid.link(dir_cap, entry_name, entry_cap)
 
 
 def attenuate_writecap(rw_cap: str) -> str:
