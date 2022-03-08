@@ -19,7 +19,7 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 from datetime import timedelta
 from typing import Any, Optional
 
-from allmydata.node import _Config
+from allmydata.node import _Config as Config
 from attrs import define
 from hyperlink import DecodedURL
 from twisted.python.filepath import FilePath
@@ -50,7 +50,7 @@ class EmptyConfig:
 empty_config = EmptyConfig()
 
 
-def read_node_url(config: _Config) -> DecodedURL:
+def read_node_url(config: Config) -> DecodedURL:
     """
     Get the root of the node's HTTP API.
     """
@@ -62,7 +62,7 @@ def read_node_url(config: _Config) -> DecodedURL:
     )
 
 
-def read_duration(cfg: _Config, option: str, default: Any) -> Optional[timedelta]:
+def read_duration(cfg: Config, option: str, default: Any) -> Optional[timedelta]:
     """
     Read an integer number of seconds from the ZKAPAuthorizer section of a
     Tahoe-LAFS config.

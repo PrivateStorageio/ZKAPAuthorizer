@@ -57,22 +57,68 @@ __all__ = [
     "snapshot",
 ]
 
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from sqlite3 import Connection, Cursor
-from typing import Callable, Iterator
+from typing import Iterator
 
-from attrs import define
+from attrs import define, field
 from compose import compose
+from twisted.application.service import Service
+from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
-from .config import REPLICA_RWCAP_BASENAME
-from .tahoe import Tahoe, attenuate_writecap
+from .config import REPLICA_RWCAP_BASENAME, Config
+from .tahoe import Tahoe, attenuate_writecap, get_tahoe_client
 
 
 class ReplicationAlreadySetup(Exception):
     """
     An attempt was made to setup of replication but it is already set up.
     """
+
+
+def replication_service(reactor, node, store):
+    """
+    Return a service which implements the replication process documented in
+    the ``backup-recovery`` design document:
+    """
+    return _ReplicationService(reactor, node.config.store)
+
+
+SERVICE_NAME = "replication-service"
+
+
+@define
+class _ReplicationService(Service):
+    name = SERVICE_NAME
+
+    _reactor = field()
+    _config: Config
+    _store: "VoucherStore"
+
+    _tahoe: Tahoe = field()
+    _replica_dircap: str = field()
+
+    @_tahoe.default
+    def _tahoe_default(self):
+        return get_tahoe_client(self._reactor, self._config)
+
+    @_replica_dircap.default
+    def _replica_dircap_default(self):
+        return self._tahoe.get_private_path(REPLICA_RWCAP_BASENAME)
+
+    def startService(self):
+        # 1. Put the store into replication mode.
+        # 2. If necessary, create and upload a snapshot.
+
+        upload_snapshot(self._replica_dircap, self._tahoe, self._store)
+        # 3. As necessary, upload the event stream.
+        # 4. Repeat 2-3 as beneficial for total committed storage.
+        self._store.observe_event_stream(self._event_stream_observer)
+
+    def _event_stream_observer(self, event_stream_size):
+        if event_stream_size > 570000:
+            upload_event_stream(self._replica_dircap, self._tahoe, self._store)
 
 
 async def fail_setup_replication():
@@ -246,3 +292,62 @@ def connection_to_statements(connection: Connection) -> Iterator[str]:
 snapshot: Callable[[Connection], bytes] = compose(
     b"".join, statements_to_snapshot, connection_to_statements
 )
+
+
+async def write_snapshot(
+    get_private_path: Callable[[str], FilePath], statements: list[str]
+) -> FilePath:
+    path = get_private_path("temp")
+    with open(path.path, "wt") as f:
+        f.writelines(statements)
+    return path
+
+
+async def upload_event_stream(
+    replica_dircap: str, tahoe: Tahoe, store: "VoucherStore"
+) -> Awaitable[None]:
+    path = await write_snapshot(store.event_stream())
+    entry_cap = await tahoe.upload(path)
+    await tahoe.link(replica_dircap, "event-stream-XXXX", entry_cap)
+
+
+async def upload_snapshot(replica_dircap, tahoe, store):
+    """
+    Create a database snapshot and store it on a Tahoe-LAFS grid.
+    """
+    path = await write_snapshot(store.snapshot())
+    entry_cap = await tahoe.upload(path)
+    await tahoe.link(replica_dircap, "snapshot", entry_cap)
+
+
+@define
+class Snapshot:
+    """
+    Represent a database snapshot.
+
+    :ivar name: The name of this snapshot in the replica directory.
+    :ivar size: The unencoded stored size of this snapshot.
+    :ivar ro_cap: A read-only capability to the snapshot.
+    """
+
+    name: str
+    size: int
+    ro_cap: str
+
+
+@define
+class ReplicaState:
+    snapshots: list[Snapshot]
+
+
+async def read_replica_state(replica_dircap, tahoe) -> Awaitable[ReplicaState]:
+    snapshots = []
+    children = await tahoe.list_directory(replica_dircap)
+    for name, child in children.items():
+        if name.startswith("snapshot-"):
+            snapshots.append(Snapshot(name, child["size"], child["ro_uri"]))
+    return ReplicaState(snapshots)
+
+
+# XXX circular
+from .model import VoucherStore

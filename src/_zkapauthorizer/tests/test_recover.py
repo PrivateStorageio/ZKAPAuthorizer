@@ -2,7 +2,6 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
-from asyncio import run
 from io import BytesIO
 from sqlite3 import connect
 
@@ -19,19 +18,11 @@ from hypothesis.stateful import (
 from hypothesis.strategies import data, lists, randoms, sampled_from, text
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import (
-    AfterPreprocessing,
-    Always,
-    Equals,
-    Is,
-    IsInstance,
-    MatchesStructure,
-)
-from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
+from testtools.matchers import Always, Equals, Is, MatchesStructure
+from testtools.twistedsupport import AsynchronousDeferredRunTest, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 
-from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
     StatefulRecoverer,
@@ -42,26 +33,13 @@ from ..recover import (
     recover,
     statements_from_snapshot,
 )
-from ..replicate import (
-    ReplicationAlreadySetup,
-    setup_tahoe_lafs_replication,
-    snapshot,
-    statements_to_snapshot,
-)
+from ..replicate import snapshot, statements_to_snapshot
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, link, make_directory, upload
+from ..tahoe import Tahoe, link, make_directory, upload
 from .fixtures import Treq
-from .matchers import equals_database, matches_capability
+from .matchers import equals_database
 from .resources import client_manager
-from .strategies import (
-    api_auth_tokens,
-    deletes,
-    inserts,
-    sql_identifiers,
-    tables,
-    tahoe_configs,
-    updates,
-)
+from .strategies import deletes, inserts, sql_identifiers, tables, updates
 
 
 class SnapshotEncodingTests(TestCase):
@@ -353,66 +331,4 @@ class TahoeLAFSDownloaderTests(TestCase):
         self.assertThat(
             downloaded_snapshot_path.getContent(),
             Equals(snapshot_path.getContent()),
-        )
-
-
-class SetupTahoeLAFSReplicationTests(TestCase):
-    """
-    Tests for ``setup_tahoe_lafs_replication``.
-    """
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-    )
-    def test_already_setup(self, get_config, api_auth_token):
-        """
-        If replication is already set up, ``setup_tahoe_lafs_replication`` signals
-        failure with ``ReplicationAlreadySetup``.
-        """
-        grid = MemoryGrid()
-        client = grid.client()
-        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(b"URI:DIR2:stuff")
-        self.assertThat(
-            Deferred.fromCoroutine(setup_tahoe_lafs_replication(client)),
-            failed(
-                AfterPreprocessing(
-                    lambda f: f.value,
-                    IsInstance(ReplicationAlreadySetup),
-                ),
-            ),
-        )
-
-    @given(
-        tahoe_configs(),
-        api_auth_tokens(),
-    )
-    def test_setup(self, get_config, api_auth_token):
-        """
-        If replication was not previously set up then
-        ``setup_tahoe_lafs_replication`` signals success with a read-only
-        directory capability string that it has just created and written to
-        the node private directory.
-        """
-        grid = MemoryGrid()
-        client = grid.client()
-
-        ro_cap = run(setup_tahoe_lafs_replication(client))
-        self.assertThat(ro_cap, matches_capability(Equals("DIR2-RO")))
-
-        # Memory grid lets us download directory cap as a dict.  Kind of bogus
-        # but use it for now.
-        self.assertThat(
-            grid.download(ro_cap),
-            Equals({}),
-        )
-
-        # Peek inside the node private state to make sure the capability was
-        # written.
-        self.assertThat(
-            client.get_private_path(REPLICA_RWCAP_BASENAME).getContent(),
-            AfterPreprocessing(
-                attenuate_writecap,
-                Equals(ro_cap),
-            ),
         )
