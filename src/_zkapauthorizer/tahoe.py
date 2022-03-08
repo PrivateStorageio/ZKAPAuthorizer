@@ -16,6 +16,7 @@ from attrs import Factory, define, field
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
+from twisted.web.client import Agent
 
 from .config import read_node_url
 
@@ -344,3 +345,17 @@ def attenuate_writecap(rw_cap: str) -> str:
     read-write capability.
     """
     return capability_from_string(rw_cap).get_readonly().to_string().decode("ascii")
+
+
+def get_tahoe_client(reactor, node_config: _Config) -> Tahoe:
+    """
+    Return a Tahoe-LAFS client appropriate for the given node configuration.
+
+    :param reactor: The reactor the client will use for I/O.
+
+    :param node_config: The Tahoe-LAFS client node configuration for the
+        client (giving, for example, the root URI of the node's HTTP API).
+    """
+    agent = Agent(reactor)
+    http_client = HTTPClient(agent)
+    return Tahoe(http_client, node_config)
