@@ -338,13 +338,13 @@ class MemoryGrid:
 
         return cap
 
-    def link(self, dir_cap, entry_name, entry_cap):
+    def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
         d = capability_from_string(dir_cap)
         assert not d.is_readonly()
         assert d.is_mutable()
         self._objects[dir_cap][entry_name] = entry_cap
 
-    def list_directory(self, dir_cap):
+    def list_directory(self, dir_cap: CapStr) -> dict[CapStr, FSEntry]:
         def kind(entry):
             if isinstance(entry, dict):
                 return "dirnode"
