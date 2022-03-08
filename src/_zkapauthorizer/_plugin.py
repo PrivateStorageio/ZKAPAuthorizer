@@ -46,11 +46,12 @@ from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import lease_maintenance_service, maintain_leases_from_root
 from .model import VoucherStore
-from .recover import fail_setup_replication, make_fail_downloader
+from .recover import make_fail_downloader, setup_tahoe_lafs_replication
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
+from .tahoe import get_tahoe_client
 
 _log = Logger()
 
@@ -189,7 +190,10 @@ class ZKAPAuthorizer(object):
                 )
             )
 
-        setup_replication = fail_setup_replication
+        setup_replication = partial(
+            setup_tahoe_lafs_replication,
+            get_tahoe_client(reactor, node_config),
+        )
 
         return resource_from_configuration(
             node_config,
