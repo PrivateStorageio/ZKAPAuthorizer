@@ -261,6 +261,7 @@ class Tahoe(object):
         return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
 
+CapStr = str
 @define
 class MemoryGrid:
     """
@@ -285,16 +286,16 @@ class MemoryGrid:
         """
         return _MemoryTahoe(self)
 
-    def upload(self, data: bytes) -> str:
+    def upload(self, data: bytes) -> CapStr:
         cap = str(self._counter)
         self._objects[cap] = data
         self._counter += 1
         return cap
 
-    def download(self, cap: str) -> bytes:
+    def download(self, cap: CapStr) -> bytes:
         return self._objects[cap]
 
-    def make_directory(self) -> str:
+    def make_directory(self) -> CapStr:
         def encode(s: bytes):
             return b32encode(s.encode("ascii")).decode("ascii")
 
@@ -362,7 +363,7 @@ class _MemoryTahoe:
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
 
-def attenuate_writecap(rw_cap: str) -> str:
+def attenuate_writecap(rw_cap: CapStr) -> CapStr:
     """
     Get a read-only capability corresponding to the same data as the given
     read-write capability.
