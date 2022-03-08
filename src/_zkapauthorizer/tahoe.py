@@ -333,7 +333,7 @@ class MemoryGrid:
 
         self._counter += 1
         cap = f"URI:DIR2:{writekey}:{fingerprint}"
-        rocap = capability_from_string(cap).get_readonly().to_string().decode("ascii")
+        rocap = attenuate_writecap(cap)
         self._objects[cap] = self._objects[rocap] = {}
 
         return cap
