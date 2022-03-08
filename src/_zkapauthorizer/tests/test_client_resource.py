@@ -434,6 +434,10 @@ class ResourceTests(TestCase):
             [
                 [b"voucher"],
                 [b"version"],
+                [b"recover"],
+                [b"replicate"],
+                [b"lease-maintenance"],
+                [b"calculate-price"],
             ]
         ),
         api_auth_tokens(),
