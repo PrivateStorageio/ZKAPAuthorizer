@@ -5,8 +5,9 @@ A library for interacting with a Tahoe-LAFS node.
 from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
+from json import loads
 from tempfile import mkdtemp
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.node import _Config
@@ -18,6 +19,7 @@ from treq.client import HTTPClient
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 
+from ._json import dumps_utf8
 from .config import read_node_url
 
 
@@ -88,7 +90,7 @@ def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
     return url
 
 
-@define(frozen=True, auto_exc=False)
+@define(auto_exc=False)
 class TahoeAPIError(Exception):
     """
     Some error was reported from a Tahoe-LAFS HTTP API.
@@ -101,6 +103,12 @@ class TahoeAPIError(Exception):
     url: DecodedURL = field(converter=_scrub_caps_from_url)
     status: int
     body: str
+
+
+class NotWriteableError(Exception):
+    """
+    An attempt was made to write to something which is not writeable.
+    """
 
 
 @async_retry([_not_enough_servers])
@@ -180,6 +188,28 @@ async def download(
 
 
 @async_retry([_not_enough_servers])
+async def list_directory(
+    client: HTTPClient,
+    api_root: DecodedURL,
+    dir_cap: str,
+) -> Awaitable[dict[str, dict[str, dict]]]:
+    """
+    Read the direct children of a directory.
+    """
+    if not dir_cap.startswith("URI:DIR2"):
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+
+    uri = api_root.child("uri").child(dir_cap).child("").add("t", "json")
+    resp = await client.get(uri)
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code == 200:
+        kind, details = loads(content)
+        return details["children"]
+
+    raise TahoeAPIError("get", uri, resp.code, content)
+
+
+@async_retry([_not_enough_servers])
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
@@ -217,6 +247,10 @@ async def link(
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
         return None
+
+    if resp.code == 500 and "allmydata.mutable.common.NotWriteableError" in content:
+        raise NotWriteableError()
+
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
@@ -256,6 +290,16 @@ class Tahoe(object):
     def make_directory(self):
         return make_directory(self.client, self._api_root)
 
+    def list_directory(self, dir_cap):
+        return list_directory(self.client, self._api_root, dir_cap)
+
+    def link(self, dir_cap, entry_name, entry_cap):
+        return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
+
+
+CapStr = str
+FSEntry = Union[CapStr, dict[CapStr, "FSEntry"]]
+
 
 @define
 class MemoryGrid:
@@ -272,7 +316,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[str, str] = field(default=Factory(dict))
+    _objects: dict[CapStr, FSEntry] = field(default=Factory(dict))
 
     def client(self):
         """
@@ -281,16 +325,16 @@ class MemoryGrid:
         """
         return _MemoryTahoe(self)
 
-    def upload(self, data: bytes) -> str:
+    def upload(self, data: bytes) -> CapStr:
         cap = str(self._counter)
         self._objects[cap] = data
         self._counter += 1
         return cap
 
-    def download(self, cap: str) -> bytes:
+    def download(self, cap: CapStr) -> bytes:
         return self._objects[cap]
 
-    def make_directory(self) -> str:
+    def make_directory(self) -> CapStr:
         def encode(s: bytes):
             return b32encode(s.encode("ascii")).decode("ascii")
 
@@ -299,10 +343,45 @@ class MemoryGrid:
 
         self._counter += 1
         cap = f"URI:DIR2:{writekey}:{fingerprint}"
-        rocap = capability_from_string(cap).get_readonly().to_string().decode("ascii")
+        rocap = attenuate_writecap(cap)
         self._objects[cap] = self._objects[rocap] = {}
 
         return cap
+
+    def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
+        d = capability_from_string(dir_cap)
+        if d.is_readonly():
+            raise NotWriteableError()
+        self._objects[dir_cap][entry_name] = entry_cap
+
+    def list_directory(self, dir_cap: CapStr) -> dict[CapStr, FSEntry]:
+        def kind(entry):
+            if isinstance(entry, dict):
+                return "dirnode"
+            return "filenode"
+
+        def describe(cap):
+            obj = self._objects[cap]
+            if kind(obj) == "dirnode":
+                return ["dirnode", {"rw_uri": cap}]
+            return ["filenode", {"size": len(obj)}]
+
+        dir_entries = self._objects[dir_cap]
+        if kind(dir_entries) == "dirnode":
+            return {name: describe(entry) for (name, entry) in dir_entries.items()}
+
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+
+
+_no_children_message = (
+    "\n<html>\n"
+    "  <head><title>400 - Files have no children named 'somepath'</title></head>\n"
+    "  <body>\n"
+    "    <h1>Files have no children named {path!r}'</h1>\n"
+    "    <p>no details</p>\n"
+    "  </body>\n"
+    "</html>\n"
+)
 
 
 @define
@@ -329,8 +408,22 @@ class _MemoryTahoe:
         return self._nodedir.child("private").child(name)
 
     async def download(self, outpath, cap, child_path):
-        assert len(child_path) == 0
-        outpath.setContent(self._grid.download(cap))
+        d = self._grid.download(cap)
+        if child_path is not None:
+            for p in child_path:
+                if cap.startswith("URI:DIR2"):
+                    cap = d[p]
+                    d = self._grid.download(cap)
+                else:
+                    raise TahoeAPIError(
+                        "get", DecodedURL(), 400, _no_children_message.format(path=p)
+                    )
+        if isinstance(d, dict):
+            # It is a directory.  Encode it somehow so it fits in the file.
+            # This is not the same encoding as Tahoe-LAFS itself uses for
+            # directories.
+            d = dumps_utf8(d)
+        outpath.setContent(d)
 
     async def upload(self, inpath):
         return self._grid.upload(inpath.getContent())
@@ -338,8 +431,14 @@ class _MemoryTahoe:
     async def make_directory(self):
         return self._grid.make_directory()
 
+    async def link(self, dir_cap, entry_name, entry_cap):
+        return self._grid.link(dir_cap, entry_name, entry_cap)
 
-def attenuate_writecap(rw_cap: str) -> str:
+    async def list_directory(self, dir_cap):
+        return self._grid.list_directory(dir_cap)
+
+
+def attenuate_writecap(rw_cap: CapStr) -> CapStr:
     """
     Get a read-only capability corresponding to the same data as the given
     read-write capability.
