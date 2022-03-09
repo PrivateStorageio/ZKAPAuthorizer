@@ -90,7 +90,7 @@ def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
     return url
 
 
-@define(frozen=True, auto_exc=False)
+@define(auto_exc=False)
 class TahoeAPIError(Exception):
     """
     Some error was reported from a Tahoe-LAFS HTTP API.
