@@ -11,27 +11,64 @@ from hypothesis import given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import ContainsDict, Equals, Is, Not, raises
+from testtools.matchers import Contains, ContainsDict, Equals, Is, Not, raises
 from testtools.twistedsupport import AsynchronousDeferredRunTest
-from twisted.internet.defer import (
-    Deferred,
-    ensureDeferred,
-    gatherResults,
-    inlineCallbacks,
-)
+from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 
 from ..tahoe import (
     MemoryGrid,
+    NotWriteableError,
     Tahoe,
     TahoeAPIError,
     _scrub_cap,
     async_retry,
-    download,
-    upload,
+    attenuate_writecap,
 )
 from .fixtures import Treq
 from .resources import client_manager
+
+
+class IntegrationMixin:
+    """
+    Mixin for integration tests for ``Tahoe`` against a real Tahoe-LAFS client
+    node.
+    """
+
+    # Get a Tahoe-LAFS client node connected to a storage node.
+    resources = [("client", client_manager)]
+
+    def setUp(self):
+        super().setUp()
+        setUpResources(self, self.resources, None)
+        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
+
+    def get_client(self):
+        """
+        Create a new ``Tahoe`` instance talking to the Tahoe client node managed
+        by our ``client`` resource manager.
+        """
+        # AsynchronousDeferredRunTest sets reactor on us.
+        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+        return Tahoe(httpclient, self.client.read_config())
+
+
+class MemoryMixin:
+    """
+    Mixin for tests for the in-memory Tahoe client API test double provided by
+    ``MemoryGrid``.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.grid = MemoryGrid()
+
+    def get_client(self):
+        """
+        Create a new Tahoe client object pointed at the ``MemoryGrid`` created in
+        set up.
+        """
+        return self.grid.client()
 
 
 class TahoeAPIErrorTests(TestCase):
@@ -74,21 +111,13 @@ class TahoeAPIErrorTests(TestCase):
         self.assertThat(original_exc, Equals(expected_exc))
 
 
-class UploadDownloadTestCase(TestCase):
+class UploadDownloadTestsMixin:
     """
-    Tests for ``upload`` and ``download``.
+    A mixin defining tests for ``upload`` and ``download``.
     """
 
     # Support test methods that return a Deferred.
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
-
-    # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", client_manager)]
-
-    def setUp(self):
-        super().setUp()
-        setUpResources(self, self.resources, None)
-        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
 
     @inlineCallbacks
     def test_found(self):
@@ -96,8 +125,7 @@ class UploadDownloadTestCase(TestCase):
         If the identified object can be downloaded then it is written to the given
         path.
         """
-        # AsynchronousDeferredRunTest sets reactor on us.
-        client = self.useFixture(Treq(self.reactor, case=self)).client()
+        client = self.get_client()
 
         workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
         workdir.makedirs()
@@ -105,13 +133,55 @@ class UploadDownloadTestCase(TestCase):
         inpath.setContent(b"abc" * 1024)
         outpath = workdir.child("downloaded")
 
-        cap = yield ensureDeferred(upload(client, inpath, self.client.node_url))
-        yield ensureDeferred(download(client, outpath, self.client.node_url, cap))
+        cap = yield Deferred.fromCoroutine(client.upload(inpath))
+        yield Deferred.fromCoroutine(client.download(outpath, cap, None))
 
         self.assertThat(
             inpath.getContent(),
             Equals(outpath.getContent()),
         )
+
+    @inlineCallbacks
+    def test_not_directory(self):
+        """
+        If a child path is given and the identified object is not a directory then ...
+        """
+        client = self.get_client()
+
+        workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
+        workdir.makedirs()
+        inpath = workdir.child("uploaded")
+        inpath.setContent(b"abc" * 1024)
+        outpath = workdir.child("downloaded")
+
+        cap = yield Deferred.fromCoroutine(client.upload(inpath))
+
+        d = Deferred.fromCoroutine(client.download(outpath, cap, ["somepath"]))
+        try:
+            result = yield d
+        except TahoeAPIError as e:
+            self.assertThat(e.method, Equals("get"))
+            self.assertThat(e.status, Equals(400))
+            self.assertThat(
+                e.body,
+                Contains("Files have no children named"),
+            )
+        else:
+            self.fail(f"Expected TahoeAPIError, got {result!r}")
+
+
+class UploadDownloadIntegrationTests(
+    IntegrationMixin, UploadDownloadTestsMixin, TestCase
+):
+    """
+    Integration tests for ``Tahoe`` against a real Tahoe-LAFS client node.
+    """
+
+
+class UploadDownloadMemoryTests(MemoryMixin, UploadDownloadTestsMixin, TestCase):
+    """
+    In-memory tests for ``Tahoe`` against a real Tahoe-LAFS client node.
+    """
 
 
 class DirectoryTestsMixin:
@@ -258,46 +328,37 @@ class DirectoryTestsMixin:
             Equals(inpath.getContent()),
         )
 
-
-class DirectoryIntegrationTests(DirectoryTestsMixin, TestCase):
-    """
-    Integration tests for ``Tahoe`` against a real Tahoe-LAFS client node.
-    """
-
-    # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", client_manager)]
-
-    def setUp(self):
-        super().setUp()
-        setUpResources(self, self.resources, None)
-        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
-
-    def get_client(self):
+    @inlineCallbacks
+    def test_link_readonly(self):
         """
-        Create a new ``Tahoe`` instance talking to the Tahoe client node managed
-        by our ``client`` resource manager.
+        If ``link`` is passed a read-only directory capability then it returns a
+        coroutine that raises ``NotWriteableError``.
         """
-        # AsynchronousDeferredRunTest sets reactor on us.
-        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
-        return Tahoe(httpclient, self.client.read_config())
+        tahoe = self.get_client()
+        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        ro_dir_cap = attenuate_writecap(dir_cap)
+
+        d = Deferred.fromCoroutine(tahoe.link(ro_dir_cap, "self", dir_cap))
+        try:
+            result = yield d
+        except NotWriteableError:
+            pass
+        else:
+            self.fail(
+                f"Expected link to fail with NotWriteableError, got {result!r} instead"
+            )
 
 
-class DirectoryMemoryTests(TestCase, DirectoryTestsMixin):
+class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
     """
-    Tests for the in-memory Tahoe client API test double provided by
-    ``MemoryGrid``.
+    Integration tests for directory-related functionality.
     """
 
-    def setUp(self):
-        super().setUp()
-        self.grid = MemoryGrid()
 
-    def get_client(self):
-        """
-        Create a new Tahoe client object pointed at the ``MemoryGrid`` created in
-        set up.
-        """
-        return self.grid.client()
+class DirectoryMemoryTests(MemoryMixin, DirectoryTestsMixin, TestCase):
+    """
+    In-memory tests for directory-related functionality.
+    """
 
 
 class AsyncRetryTests(TestCase):

@@ -105,6 +105,12 @@ class TahoeAPIError(Exception):
     body: str
 
 
+class NotWriteableError(Exception):
+    """
+    An attempt was made to write to something which is not writeable.
+    """
+
+
 @async_retry([_not_enough_servers])
 async def upload(
     client: HTTPClient, inpath: FilePath, api_root: DecodedURL
@@ -241,6 +247,10 @@ async def link(
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
         return None
+
+    if resp.code == 500 and "allmydata.mutable.common.NotWriteableError" in content:
+        raise NotWriteableError()
+
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
@@ -340,8 +350,8 @@ class MemoryGrid:
 
     def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
         d = capability_from_string(dir_cap)
-        assert not d.is_readonly()
-        assert d.is_mutable()
+        if d.is_readonly():
+            raise NotWriteableError()
         self._objects[dir_cap][entry_name] = entry_cap
 
     def list_directory(self, dir_cap: CapStr) -> dict[CapStr, FSEntry]:
@@ -361,6 +371,17 @@ class MemoryGrid:
             return {name: describe(entry) for (name, entry) in dir_entries.items()}
 
         raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+
+
+_no_children_message = (
+    "\n<html>\n"
+    "  <head><title>400 - Files have no children named 'somepath'</title></head>\n"
+    "  <body>\n"
+    "    <h1>Files have no children named {path!r}'</h1>\n"
+    "    <p>no details</p>\n"
+    "  </body>\n"
+    "</html>\n"
+)
 
 
 @define
@@ -390,9 +411,13 @@ class _MemoryTahoe:
         d = self._grid.download(cap)
         if child_path is not None:
             for p in child_path:
-                assert cap.startswith("URI:DIR2")
-                cap = d[p]
-                d = self._grid.download(cap)
+                if cap.startswith("URI:DIR2"):
+                    cap = d[p]
+                    d = self._grid.download(cap)
+                else:
+                    raise TahoeAPIError(
+                        "get", DecodedURL(), 400, _no_children_message.format(path=p)
+                    )
         if isinstance(d, dict):
             # It is a directory.  Encode it somehow so it fits in the file.
             # This is not the same encoding as Tahoe-LAFS itself uses for
