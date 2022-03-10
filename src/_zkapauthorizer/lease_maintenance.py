@@ -37,7 +37,7 @@ from twisted.python.log import err
 from zope.interface import implementer
 
 from .config import Config, read_duration
-from .controller import bracket
+from .control import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
 

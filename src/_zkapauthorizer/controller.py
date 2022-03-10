@@ -39,6 +39,7 @@ from zope.interface import Interface, implementer
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._stack import less_limited_stack
+from .control import bracket
 from .model import Error as model_Error
 from .model import Pass
 from .model import Pending as model_Pending
@@ -1005,33 +1006,3 @@ _REDEEMERS = {
     "error": ErrorRedeemer.make,
     "ristretto": RistrettoRedeemer.make,
 }
-
-
-@inlineCallbacks
-def bracket(first, last, between):
-    """
-    Invoke an action between two other actions.
-
-    :param first: A no-argument function that may return a Deferred.  It is
-        called first.
-
-    :param last: A no-argument function that may return a Deferred.  It is
-        called last.
-
-    :param between: A no-argument function that may return a Deferred.  It is
-        called after ``first`` is done and completes before ``last`` is called.
-
-    :return Deferred: A ``Deferred`` which fires with the result of
-        ``between``.
-    """
-    yield first()
-    try:
-        result = yield between()
-    except GeneratorExit:
-        raise
-    except:
-        yield last()
-        raise
-    else:
-        yield last()
-        returnValue(result)
