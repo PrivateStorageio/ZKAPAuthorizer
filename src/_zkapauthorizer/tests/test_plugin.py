@@ -65,7 +65,7 @@ from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
 from twisted.web.resource import IResource
 
-from twisted.plugins.zkapauthorizer import storage_server
+from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
 from .._plugin import get_root_nodes, load_signing_key
@@ -160,7 +160,7 @@ class GetRRefTests(TestCase):
 
 class PluginTests(TestCase):
     """
-    Tests for ``twisted.plugins.zkapauthorizer.storage_server``.
+    Tests for ``twisted.plugins.zkapauthorizer.storage_server_plugin``.
     """
 
     def test_discoverable(self):
@@ -169,15 +169,15 @@ class PluginTests(TestCase):
         """
         self.assertThat(
             getPlugins(IFoolscapStoragePlugin),
-            Contains(storage_server),
+            Contains(storage_server_plugin),
         )
 
     def test_provides_interface(self):
         """
-        ``storage_server`` provides ``IFoolscapStoragePlugin``.
+        ``storage_server_plugin`` provides ``IFoolscapStoragePlugin``.
         """
         self.assertThat(
-            storage_server,
+            storage_server_plugin,
             Provides([IFoolscapStoragePlugin]),
         )
 
@@ -192,10 +192,10 @@ class ServerPluginTests(TestCase):
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_announceable(self, configuration):
         """
-        ``storage_server.get_storage_server`` returns an instance which provides
-        ``IAnnounceableStorageServer``.
+        ``storage_server_plugin.get_storage_server`` returns an instance which
+        provides ``IAnnounceableStorageServer``.
         """
-        storage_server_deferred = storage_server.get_storage_server(
+        storage_server_deferred = storage_server_plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -208,10 +208,10 @@ class ServerPluginTests(TestCase):
     def test_returns_referenceable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server.get_storage_server`` provides ``IReferenceable`` and
-        ``IRemotelyCallable``.
+        ``storage_server_plugin.get_storage_server`` provides
+        ``IReferenceable`` and ``IRemotelyCallable``.
         """
-        storage_server_deferred = storage_server.get_storage_server(
+        storage_server_deferred = storage_server_plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -229,10 +229,10 @@ class ServerPluginTests(TestCase):
     def test_returns_serializable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server.get_storage_server`` can be serialized by a banana
-        Broker (for Foolscap).
+        ``storage_server_plugin.get_storage_server`` can be serialized by a
+        banana Broker (for Foolscap).
         """
-        storage_server_deferred = storage_server.get_storage_server(
+        storage_server_deferred = storage_server_plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -252,12 +252,12 @@ class ServerPluginTests(TestCase):
     def test_returns_hashable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server.get_storage_server`` is hashable for use as a Python
-        dictionary key.
+        ``storage_server_plugin.get_storage_server`` is hashable for use as a
+        Python dictionary key.
 
         This is another requirement of Foolscap.
         """
-        storage_server_deferred = storage_server.get_storage_server(
+        storage_server_deferred = storage_server_plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -288,7 +288,7 @@ class ServerPluginTests(TestCase):
             "ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }
         announceable = extract_result(
-            storage_server.get_storage_server(
+            storage_server_plugin.get_storage_server(
                 configuration,
                 get_anonymous_storage_server,
                 reactor=clock,
@@ -365,7 +365,7 @@ class ClientPluginTests(TestCase):
             "tub.port",
         )
 
-        storage_client = storage_server.get_storage_client(
+        storage_client = storage_server_plugin.get_storage_client(
             node_config,
             announcement,
             get_rref,
@@ -393,7 +393,7 @@ class ClientPluginTests(TestCase):
         self.addDetail("config", text_content(config_text.getvalue()))
         self.addDetail("announcement", text_content(str(announcement)))
         self.assertThat(
-            lambda: storage_server.get_storage_client(
+            lambda: storage_server_plugin.get_storage_client(
                 node_config,
                 announcement,
                 get_rref,
@@ -432,7 +432,7 @@ class ClientPluginTests(TestCase):
             "tub.port",
         )
 
-        storage_client = storage_server.get_storage_client(
+        storage_client = storage_server_plugin.get_storage_client(
             node_config,
             announcement,
             partial(get_rref, RIStorageServer),
@@ -499,7 +499,7 @@ class ClientPluginTests(TestCase):
             succeeded(Always()),
         )
 
-        storage_client = storage_server.get_storage_client(
+        storage_client = storage_server_plugin.get_storage_client(
             node_config,
             announcement,
             get_rref,
@@ -554,7 +554,7 @@ class ClientResourceTests(TestCase):
         nodedir = tempdir.join("node")
         config = get_config(nodedir, "tub.port")
         self.assertThat(
-            storage_server.get_client_resource(
+            storage_server_plugin.get_client_resource(
                 config,
                 reactor=Clock(),
             ),
