@@ -8,7 +8,9 @@ from fixtures import TempDir
 from testtools import TestCase
 from testtools.matchers import Equals, raises
 
+from ..recover import recover
 from ..replicate import connect_with_replication
+from .matchers import equals_database
 
 
 class ReplicationConnectionTests(TestCase):
@@ -151,4 +153,29 @@ class ReplicationConnectionTests(TestCase):
         self.assertThat(
             cursor.fetchmany(2),
             Equals([]),
+        )
+
+    def test_snapshot(self):
+        """
+        The state of the database is available via the connection's ``snapshot``
+        method.
+        """
+        dbpath_a = self.useFixture(TempDir()).join("db.sqlite")
+        conn_a = connect_with_replication(connect, dbpath_a)
+        with conn_a:
+            cursor = conn_a.cursor()
+            cursor.execute('CREATE TABLE "foo" ("a" INT)')
+            cursor.execute('INSERT INTO "foo" VALUES (?)', (1,))
+
+        snapshot = conn_a.snapshot()
+
+        dbpath_b = self.useFixture(TempDir()).join("db.sqlite")
+        conn_b = connect_with_replication(connect, dbpath_b)
+
+        with conn_b:
+            recover(snapshot, conn_b.cursor())
+
+        self.assertThat(
+            conn_a,
+            equals_database(conn_b),
         )
