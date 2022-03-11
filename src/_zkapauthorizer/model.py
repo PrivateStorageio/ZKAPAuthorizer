@@ -18,7 +18,7 @@ the storage plugin.
 """
 
 from datetime import datetime
-from functools import wraps
+from functools import partial, wraps
 from json import loads
 from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
@@ -32,6 +32,7 @@ from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .replicate import connect_with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -94,7 +95,7 @@ class NotEnoughTokens(Exception):
 CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
 
-def open_and_initialize(path, connect=None):
+def open_and_initialize(path, connect):
     """
     Open a SQLite3 database for use as a voucher store.
 
@@ -105,8 +106,6 @@ def open_and_initialize(path, connect=None):
 
     :return: A SQLite3 connection object for the database at the given path.
     """
-    if connect is None:
-        connect = _connect
     try:
         path.parent().makedirs(ignoreExistingDirectory=True)
     except OSError as e:
@@ -136,9 +135,10 @@ def open_and_initialize(path, connect=None):
         run_schema_upgrades(schema_upgrades, cursor)
 
         # Create some tables that only exist (along with their contents) for
-        # this connection.  These are outside of the schema because they are not
-        # persistent.  We can change them any time we like without worrying about
-        # upgrade logic because we re-create them on every connection.
+        # this connection.  These are outside of the schema because they are
+        # not persistent.  We can change them any time we like without
+        # worrying about upgrade logic because we re-create them on every
+        # connection.
         cursor.execute(
             """
             -- Track tokens in use by the process holding this connection.
@@ -155,9 +155,9 @@ def open_and_initialize(path, connect=None):
         )
         cursor.execute(
             """
-            -- Track tokens that we want to remove from the database.  Mainly just
-            -- works around the awkward DB-API interface for dealing with deleting
-            -- many rows.
+            -- Track tokens that we want to remove from the database.  Mainly
+            -- just works around the awkward DB-API interface for dealing with
+            -- deleting many rows.
             CREATE TEMPORARY TABLE [to-discard] (
                 [unblinded-token] text
             )
@@ -165,8 +165,8 @@ def open_and_initialize(path, connect=None):
         )
         cursor.execute(
             """
-            -- Track tokens that we want to remove from the [in-use] set.  Similar
-            -- to [to-discard].
+            -- Track tokens that we want to remove from the [in-use] set.
+            -- Similar to [to-discard].
             CREATE TEMPORARY TABLE [to-reset] (
                 [unblinded-token] text
             )
@@ -266,10 +266,16 @@ class VoucherStore(object):
         :param connect: An alternate database connection function.  This is
             primarily for the purposes of the test suite.
         """
+        if connect is None:
+            connect = _connect
+
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
-            connect=connect,
+            # Make sure we always have a replication-enabled connection even
+            # if we're not doing replication yet because we might want to turn
+            # it on later.
+            partial(connect_with_replication, _connect),
         )
         return cls(
             get_configured_pass_value(node_config),
