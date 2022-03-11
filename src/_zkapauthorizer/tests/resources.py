@@ -264,6 +264,9 @@ class TahoeClient:
         Start the node child process.
         """
         eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
+        # Unfortunately we don't notice if this command crashes because of
+        # some bug.  In that case the test will just hang and fail after
+        # timing out.
         self.process = Popen(
             TAHOE + eliot + ["run", self.node_dir.path],
             stdout=self.node_dir.child("stdout").open("wb"),

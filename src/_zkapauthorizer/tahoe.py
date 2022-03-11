@@ -16,6 +16,7 @@ from allmydata.util.base32 import b2a as b32encode
 from attrs import Factory, define, field
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
+from twisted.internet.error import ConnectionRefusedError
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 
@@ -59,6 +60,15 @@ def _not_enough_servers(exc: Exception) -> bool:
         "allmydata.interfaces.NoServersError" in str(exc)
         or "allmydata.mutable.common.NotEnoughServersError" in str(exc)
     )
+
+
+def _connection_refused(exc: Exception) -> bool:
+    """
+    Match the exception that is raised when the Tahoe-LAFS client node does
+    not accept the API call connection attempt.
+    """
+    # Note this is the exception from Twisted, not the builtin exception.
+    return isinstance(exc, ConnectionRefusedError)
 
 
 def _scrub_cap(cap: str) -> str:
@@ -111,7 +121,10 @@ class NotWriteableError(Exception):
     """
 
 
-@async_retry([_not_enough_servers])
+_common_tahoe_errors = [_not_enough_servers, _connection_refused]
+
+
+@async_retry(_common_tahoe_errors)
 async def upload(
     client: HTTPClient, inpath: FilePath, api_root: DecodedURL
 ) -> Awaitable[str]:
@@ -187,7 +200,7 @@ async def download(
         raise TahoeAPIError("get", uri, resp.code, content)
 
 
-@async_retry([_not_enough_servers])
+@async_retry(_common_tahoe_errors)
 async def list_directory(
     client: HTTPClient,
     api_root: DecodedURL,
@@ -209,7 +222,7 @@ async def list_directory(
     raise TahoeAPIError("get", uri, resp.code, content)
 
 
-@async_retry([_not_enough_servers])
+@async_retry(_common_tahoe_errors)
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
@@ -225,7 +238,7 @@ async def make_directory(
     raise TahoeAPIError("post", uri, resp.code, content)
 
 
-@async_retry([_not_enough_servers])
+@async_retry(_common_tahoe_errors)
 async def link(
     client: HTTPClient,
     api_root: DecodedURL,
