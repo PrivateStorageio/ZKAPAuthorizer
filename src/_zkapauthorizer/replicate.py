@@ -159,6 +159,9 @@ class _ReplicationCapableCursor:
     def fetchall(self):
         return self._cursor.fetchall()
 
+    def fetchmany(self, n):
+        return self._cursor.fetchmany(n)
+
     def fetchone(self):
         return self._cursor.fetchone()
 

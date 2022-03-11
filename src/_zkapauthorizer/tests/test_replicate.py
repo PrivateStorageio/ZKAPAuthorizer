@@ -127,3 +127,28 @@ class ReplicationConnectionTests(TestCase):
             cursor.fetchone(),
             Equals(None),
         )
+
+    def test_fetchmany(self):
+        """
+        The connection's cursor objects have a ``fetchmany`` method that operates
+        in the usual way.
+        """
+        conn = connect_with_replication(connect, ":memory:")
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+        cursor.execute('CREATE TABLE "foo" ("a" INT)')
+        cursor.executemany('INSERT INTO "foo" VALUES (?)', [(3,), (5,), (7,)])
+
+        cursor.execute('SELECT "a" FROM "foo"')
+        self.assertThat(
+            cursor.fetchmany(2),
+            Equals([(3,), (5,)]),
+        )
+        self.assertThat(
+            cursor.fetchmany(2),
+            Equals([(7,)]),
+        )
+        self.assertThat(
+            cursor.fetchmany(2),
+            Equals([]),
+        )
