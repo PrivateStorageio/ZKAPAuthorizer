@@ -34,12 +34,14 @@ from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
+from twisted.application.service import IService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
+from . import NAME
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import lease_maintenance_from_tahoe_config
 from .controller import get_redeemer
@@ -240,11 +242,16 @@ def _attach_zkapauthorizer_services(self, announceable_storage_servers):
     # Make sure the original work happens.
     result = _init_storage(self, announceable_storage_servers)
 
+    # Find the database relevant to this node.  The global state, the weakref
+    # lookup... these things are not great.
+    store = storage_server_plugin._get_store(self.config)
+
     # Hook up our services.
     for name, create in _SERVICES:
         _maybe_attach_service(
             reactor,
             self,
+            store,
             name,
             create,
         )
@@ -255,7 +262,9 @@ def _attach_zkapauthorizer_services(self, announceable_storage_servers):
 _Client.init_storage = _attach_zkapauthorizer_services
 
 
-def _maybe_attach_service(reactor, client_node, name, make_service):
+def _maybe_attach_service(
+    reactor, client_node, store: VoucherStore, name: str, make_service
+) -> None:
     """
     Check for an existing service and if one is not found create one and
     attach it to the client service.
@@ -274,6 +283,7 @@ def _maybe_attach_service(reactor, client_node, name, make_service):
             service = make_service(
                 reactor,
                 client_node,
+                store,
             )
         except:
             _log.failure(f"Attaching {name} service to client node")
@@ -283,7 +293,7 @@ def _maybe_attach_service(reactor, client_node, name, make_service):
         _log.info(f"Found existing {name} service")
 
 
-def _create_maintenance_service(reactor, client_node):
+def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IService:
     """
     Create a lease maintenance service to be attached to the given client
     node.
@@ -295,10 +305,6 @@ def _create_maintenance_service(reactor, client_node):
 
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
-
-    from twisted.plugins.zkapauthorizer import storage_server
-
-    store = storage_server._get_store(node_config)
 
     maint_config = lease_maintenance_from_tahoe_config(node_config)
 
@@ -358,3 +364,9 @@ def load_signing_key(path):
         key read.
     """
     return SigningKey.decode_base64(path.getContent().strip())
+
+
+# Create the global plugin object, re-exported elsewhere so Twisted can
+# discover it.  We'll also use it here since it carries some state that we
+# sometimes need to dig up and can't easily get otherwise.
+storage_server_plugin = ZKAPAuthorizer(name=NAME)
