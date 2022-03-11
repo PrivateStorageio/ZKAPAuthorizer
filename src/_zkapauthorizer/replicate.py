@@ -59,16 +59,20 @@ __all__ = [
 
 from collections.abc import Awaitable, Callable
 from sqlite3 import Connection, Cursor
-from typing import Iterator
+from typing import Iterator, Union
 
 from attrs import define, field
 from compose import compose
+from sqlparse import parse
+from sqlparse.sql import Token
+from sqlparse.tokens import Name
 from twisted.application.service import Service
+from twisted.internet.defer import CancelledError, Deferred
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
-from .config import REPLICA_RWCAP_BASENAME, Config
-from .tahoe import Tahoe, attenuate_writecap, get_tahoe_client
+from .config import REPLICA_RWCAP_BASENAME, Config, _Config
+from .tahoe import CapStr, Tahoe, attenuate_writecap, get_tahoe_client
 
 
 class ReplicationAlreadySetup(Exception):
@@ -77,12 +81,33 @@ class ReplicationAlreadySetup(Exception):
     """
 
 
+SQLType = Union[int, float, str, bytes, None]
+
+
+@define
+class Change:
+    """
+    Represent an item in a replication event stream as a SQL statement string
+    and its arguments.
+    """
+
+    statement: str
+    arguments: tuple[SQLType, ...]
+
+
+EventStream = list[Change]
+
+
+def event_stream_to_bytes(event_stream):
+    return b""
+
+
 def replication_service(reactor, node, store):
     """
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document:
     """
-    return _ReplicationService(reactor, node.config.store)
+    return _ReplicationService(reactor, node.config, store)
 
 
 SERVICE_NAME = "replication-service"
@@ -90,35 +115,95 @@ SERVICE_NAME = "replication-service"
 
 @define
 class _ReplicationService(Service):
+    """
+    Perform all activity related to maintaining a remote replica of the local
+    ZKAPAuthorizer database.
+
+    :ivar _reactor: The reactor to use for this activity.
+
+    :ivar _config: The Tahoe-LAFS configuration for the node this service runs
+        in.
+
+    :ivar _tahoe: A Tahoe-LAFS client to perform upload/download operations
+        for replica maintenance.
+
+    :ivar _replica_dircap: A Tahoe-LAFS read-write directory capability
+    """
+
     name = SERVICE_NAME
 
     _reactor = field()
     _config: Config
-    _store: "VoucherStore"
-
     _tahoe: Tahoe = field()
     _replica_dircap: str = field()
+    _conn: "ReplicationCapableConnection" = field()
 
-    @_tahoe.default
-    def _tahoe_default(self):
-        return get_tahoe_client(self._reactor, self._config)
-
-    @_replica_dircap.default
-    def _replica_dircap_default(self):
-        return self._tahoe.get_private_path(REPLICA_RWCAP_BASENAME)
+    _replicating: Deferred = field(init=False, default=None)
 
     def startService(self):
-        # 1. Put the store into replication mode.
-        # 2. If necessary, create and upload a snapshot.
+        # Tell the store to initiate replication when appropriate.
+        self._replicating = self._conn.run_replication(
+            lambda conn, replica_dircap: replicate(
+                self._reactor,
+                get_tahoe_client(self._reactor, self._config),
+                conn,
+                replica_dircap,
+            ),
+        )
 
-        upload_snapshot(self._replica_dircap, self._tahoe, self._store)
-        # 3. As necessary, upload the event stream.
-        # 4. Repeat 2-3 as beneficial for total committed storage.
-        self._store.observe_event_stream(self._event_stream_observer)
+    def stopService(self):
+        replicating = self._replicating
+        self._replicating = None
 
-    def _event_stream_observer(self, event_stream_size):
-        if event_stream_size > 570000:
-            upload_event_stream(self._replica_dircap, self._tahoe, self._store)
+        def catch_cancelled(err):
+            err.trap(CancelledError)
+            return None
+
+        replicating.addErrback(catch_cancelled)
+        replicating.cancel()
+        return replicating
+
+
+async def replicate(
+    reactor,
+    tahoe: Tahoe,
+    conn: ReplicationCapableConnection,
+    replica_dircap: CapStr,
+) -> Awaitable[None]:
+    # 1. If there is no up to date snapshot
+    if await snapshot_needed(replica_dircap, tahoe):
+        # then create and upload one.
+        await upload_snapshot(replica_dircap, tahoe, conn)
+
+    # 2. As necessary, upload the event stream.
+    conn.observe_event_stream(
+        # XXX this callback should be run in a transaction?
+        lambda conn, event_stream: event_stream_observer(
+            replica_dircap,
+            tahoe,
+            conn,
+            event_stream,
+        ),
+    )
+
+
+async def snapshot_needed(replica_dircap, tahoe) -> Awaitable[bool]:
+    """
+    Determine whether the remote replica is in need of a new snapshot.
+    """
+    entries = await tahoe.list_directory(replica_dircap)
+    return "snapshot" not in entries
+
+
+async def event_stream_observer(replica_dircap, tahoe, event_stream):
+    """
+    Observe changes to the database event stream and upload them when they are
+    large or urgent.
+    """
+    # XXX fix hard-coded 570000
+    if event_stream.urgent or event_stream.size > 570000:
+        await upload_event_stream(replica_dircap, tahoe, event_stream)
+        event_stream.mark_uploaded()
 
 
 async def fail_setup_replication():
@@ -140,6 +225,8 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
     config_lock = FilesystemLock(config_path.path + ".lock")
+
+    #### XXX this needs to return True
     config_lock.lock()
     try:
 
@@ -304,18 +391,27 @@ async def write_snapshot(
 
 
 async def upload_event_stream(
-    replica_dircap: str, tahoe: Tahoe, store: "VoucherStore"
+    replica_dircap: str,
+    tahoe: Tahoe,
+    event_stream: EventStream,
 ) -> Awaitable[None]:
-    path = await write_snapshot(store.event_stream())
+    """
+    Upload one
+    """
+    path = await write_snapshot(event_stream_to_bytes(event_stream))
     entry_cap = await tahoe.upload(path)
-    await tahoe.link(replica_dircap, "event-stream-XXXX", entry_cap)
+    await tahoe.link(
+        replica_dircap, f"event-stream-{event_stream.sequence_number}", entry_cap
+    )
 
 
-async def upload_snapshot(replica_dircap, tahoe, store):
+async def upload_snapshot(
+    replica_dircap: CapStr, tahoe: Tahoe, conn: ReplicationCapableConnection
+) -> Awaitable[None]:
     """
     Create a database snapshot and store it on a Tahoe-LAFS grid.
     """
-    path = await write_snapshot(store.snapshot())
+    path = await write_snapshot(snapshot(conn))
     entry_cap = await tahoe.upload(path)
     await tahoe.link(replica_dircap, "snapshot", entry_cap)
 
@@ -349,5 +445,20 @@ async def read_replica_state(replica_dircap, tahoe) -> Awaitable[ReplicaState]:
     return ReplicaState(snapshots)
 
 
-# XXX circular
-from .model import VoucherStore
+def statement_mutates(statement):
+    (statement,) = parse(statement)
+    return statement.tokens[0].normalized not in {"SELECT"}
+
+
+def record(conn, statement, row):
+    recordmany(conn, statement, [row])
+
+
+def event_stream_statement(conn, statement, row):
+    pass
+
+
+def recordmany(conn, statement, rows):
+    for row in rows:
+        sql = event_stream_statement(conn, statement, row)
+        conn.execute("INSERT INTO [event-stream] VALUES (?)", (sql,))

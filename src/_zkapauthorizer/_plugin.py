@@ -52,7 +52,8 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore
 from .recover import make_fail_downloader
-from .replicate import setup_tahoe_lafs_replication
+from .replicate import SERVICE_NAME as REPLICATION_SERVICE_NAME
+from .replicate import replication_service, setup_tahoe_lafs_replication
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -335,6 +336,7 @@ def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IS
 
 _SERVICES = [
     (MAINTENANCE_SERVICE_NAME, _create_maintenance_service),
+    (REPLICATION_SERVICE_NAME, replication_service),
 ]
 
 

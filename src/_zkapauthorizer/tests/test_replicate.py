@@ -7,7 +7,8 @@ from io import BytesIO
 from sqlite3 import OperationalError, ProgrammingError, connect
 
 from fixtures import TempDir
-from hypothesis import given
+from hypothesis import given, note
+from hypothesis.strategies import just, lists, one_of, tuples
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, IsInstance, raises
 from testtools.twistedsupport import failed
@@ -17,12 +18,22 @@ from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import recover
 from ..replicate import (
     ReplicationAlreadySetup,
+    event_stream_statement,
     setup_tahoe_lafs_replication,
     with_replication,
 )
 from ..tahoe import MemoryGrid, attenuate_writecap
 from .matchers import equals_database, matches_capability
-from .strategies import api_auth_tokens, tahoe_configs
+from .sql import create_table
+from .strategies import (
+    api_auth_tokens,
+    deletes,
+    inserts,
+    sql_identifiers,
+    tables,
+    tahoe_configs,
+    updates,
+)
 
 
 class ReplicationConnectionTests(TestCase):
@@ -258,4 +269,58 @@ class SetupTahoeLAFSReplicationTests(TestCase):
                 attenuate_writecap,
                 Equals(ro_cap),
             ),
+        )
+
+
+class EventStreamStatementTests(TestCase):
+    """
+    Tests for ``event_stream_statement``.
+    """
+
+    @given(
+        tuples(sql_identifiers(), tables()).flatmap(
+            lambda name_and_table: tuples(
+                just(name_and_table),
+                lists(inserts(*name_and_table)),
+                one_of(
+                    [
+                        inserts(*name_and_table),
+                        updates(*name_and_table),
+                        deletes(*name_and_table),
+                    ]
+                ),
+            ),
+        ),
+    )
+    def test_same_modification(self, schema_and_inserts_and_statement):
+        """
+        The SQL statement returned by ``event_stream_statement`` makes the same
+        changes to a database as the original statement and arguments.
+        """
+        (name, table), inserts, statement = schema_and_inserts_and_statement
+
+        db_a = connect(":memory:")
+        db_b = connect(":memory:")
+
+        for db in [db_a, db_b]:
+            db.execute(create_table(name, table))
+
+        # Prepare the database with some data that could be modified.
+        for insert in inserts:
+            db_a.execute(insert.statement(), insert.arguments())
+            db_b.execute(insert.statement(), insert.arguments())
+
+        note(statement.statement())
+        sql = event_stream_statement(db_a, statement.statement(), statement.arguments())
+        note(sql)
+
+        # Execute the original and "bound" forms of the statement against the
+        # two databases so we can observe their consequences.
+        db_a.execute(statement.statement(), statement.arguments())
+        db_b.execute(sql)
+
+        # The consequences should be the same.
+        self.assertThat(
+            db_a,
+            equals_database(db_b),
         )

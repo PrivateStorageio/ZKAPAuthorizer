@@ -127,7 +127,8 @@ def escape_identifier(string: str) -> str:
     """
     Escape an arbitrary string for use as a SQLite3 identifier.
     """
-    return f"[{string}]"
+    quoted_quotes = string.replace("'", "''")
+    return f"'{quoted_quotes}'"
 
 
 def column_ddl(name: str, column: Column) -> str:

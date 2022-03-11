@@ -328,7 +328,7 @@ The replication process is as follows:
    #. The read capability is returned to the external caller.
 
 #. If there is not a sufficiently up-to-date snapshot [1]_ on the grid then one is created [7]_ in the *replica directory*.
-   Any obsolete snapshots [2]_ in the *replica directory* are pruned.
+   Any obsolete snapshots [2]_ in the *replica directory* are pruned [20]_.
 
 #. As the application runs the event stream is recorded [3]_ locally in the database.
 
@@ -629,3 +629,5 @@ Footnotes
 	This is not a catastrophic failure mode since even as it progresses the old replica directory remains available for recovery.
 
 .. [19] In this document "mutable" refers to Tahoe-LAFS SDMF or MDMF capabilities.
+
+.. [20] There should be some coordination with the lease maintenance system so that the timing of obsolete snapshot and event stream cleanup can be optimal with respect to lease renewal.

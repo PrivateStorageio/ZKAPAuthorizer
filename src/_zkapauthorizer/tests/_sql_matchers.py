@@ -3,15 +3,14 @@ Testtools matchers related to SQL functionality.
 """
 
 from sqlite3 import Connection
-from typing import Iterator, Union
+from typing import Iterator
 
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 
+from ..replicate import SQLType
 from ..sql import Insert, escape_identifier
 from ._float_matchers import matches_float_within_distance
-
-SQLType = Union[int, float, str, bytes, None]
 
 
 def equals_database(reference: Connection):

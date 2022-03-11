@@ -34,6 +34,7 @@ from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .replicate import with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -294,6 +295,9 @@ class VoucherStore(object):
         database state.
         """
         return self._connection.snapshot()
+
+    def turn_on_replication(self):
+        self._connection.turn_on_replication()
 
     @with_cursor_async
     async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
@@ -1248,7 +1252,3 @@ class Voucher(object):
             "state": state,
             "version": 1,
         }
-
-
-# XXX circular
-from .replicate import with_replication

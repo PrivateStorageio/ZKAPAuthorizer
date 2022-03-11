@@ -65,6 +65,8 @@ class _MatchFloatWithinDistance(object):
                 f"from {self.reference} - search abandoned "
                 f"(allowed distance is {self.distance})",
             )
+        except TypeError:
+            return Mismatch(f"something is not a float {actual} {self.reference}")
         else:
             if distance > self.distance:
                 return Mismatch(
