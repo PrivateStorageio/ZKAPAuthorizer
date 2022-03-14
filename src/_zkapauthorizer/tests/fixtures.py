@@ -186,3 +186,32 @@ class Treq(Fixture):
         # reactor) seems to be enough.  If it's not, sorry.
         yield deferLater(self.reactor, 0, lambda: None)
         yield deferLater(self.reactor, 0, lambda: None)
+
+
+class DetectLeakedDescriptors(Fixture):
+    """
+    Check for file descriptors that are open at clean up time that were not
+    open at set up time and cause the test to fail if any are found.
+    """
+
+    blacklist_filenames = {
+        "privatestorageio-zkapauthz-v1.sqlite3",
+        "privatestorageio-zkapauthz-v1.sqlite3 (deleted)",
+    }
+
+    def _setUp(self):
+        self._before = FilePath("/proc/self/fd").children()
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        after = FilePath("/proc/self/fd").children()
+        extra = {
+            e.realpath()
+            for e in set(after) - set(self._before)
+            if e.realpath().basename() in self.blacklist_filenames
+        }
+        if extra:
+            # XXX VoucherStores collected, Connections collected...
+            # Underlying SQLite3 reference to file descriptor somehow not
+            # collected until later?
+            raise ValueError(extra)
