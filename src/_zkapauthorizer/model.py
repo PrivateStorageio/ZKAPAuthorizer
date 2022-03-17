@@ -170,6 +170,8 @@ def open_and_initialize(path, connect=None):
             )
             """,
         )
+
+    cursor.close()
     return conn
 
 
@@ -185,8 +187,11 @@ def with_cursor(f):
     def with_cursor(self, *a, **kw):
         with self._connection:
             cursor = self._connection.cursor()
-            cursor.execute("BEGIN IMMEDIATE TRANSACTION")
-            return f(self, cursor, *a, **kw)
+            try:
+                cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+                return f(self, cursor, *a, **kw)
+            finally:
+                cursor.close()
 
     with_cursor.wrapped = f
     return with_cursor
