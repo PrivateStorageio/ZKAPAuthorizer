@@ -442,9 +442,6 @@ class ClientPluginTests(TestCase):
             announcement,
             partial(get_rref, RIStorageServer),
         )
-        # storage_client._get_passes.__self__.get_unblinded_tokens.__self__ is
-        # a VoucherStore with a connection that leaks past the end of the
-        # test.
 
         def use_it():
             return storage_client.allocate_buckets(
@@ -491,7 +488,6 @@ class ClientPluginTests(TestCase):
         )
 
         store = VoucherStore.from_node_config(node_config, lambda: now)
-        # this VoucherStore's connection leaks past the end of the test
 
         controller = PaymentController(
             store,
@@ -513,8 +509,6 @@ class ClientPluginTests(TestCase):
             announcement,
             get_rref,
         )
-        # storage_client._get_passes.__self__.get_unblinded_tokens.__self__ is
-        # a VoucherStore with a connection that leaks past the end of the test
 
         # None of the remote methods are implemented by our fake server and I
         # would like to continue to avoid to have a real server in these
