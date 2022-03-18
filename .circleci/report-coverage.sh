@@ -1,10 +1,8 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i bash -p "curl" -p "python.withPackages (ps: [ ps.coverage ])"
 set -x
-find ./result/share/doc
-cp ./result/share/doc/*/.coverage.* ./
-python -m coverage combine
-python -m coverage report
+find ./result*/
+cp ./result*/coverage ./.coverage
 python -m coverage xml
 
 # Unfortunately, this is the recommended uploader.
