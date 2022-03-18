@@ -18,7 +18,7 @@ the storage plugin.
 """
 
 from datetime import datetime
-from functools import partial, wraps
+from functools import wraps
 from json import loads
 from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
@@ -26,13 +26,14 @@ from typing import Awaitable, Callable, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
+from compose import compose
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .replicate import connect_with_replication
+from .replicate import with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -275,7 +276,7 @@ class VoucherStore(object):
             # Make sure we always have a replication-enabled connection even
             # if we're not doing replication yet because we might want to turn
             # it on later.
-            partial(connect_with_replication, _connect),
+            compose(with_replication, _connect),
         )
         return cls(
             get_configured_pass_value(node_config),

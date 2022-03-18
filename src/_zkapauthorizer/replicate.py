@@ -115,9 +115,11 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
     return rocap
 
 
-def connect_with_replication(connect, *args, **kwargs):
-    conn = connect(*args, **kwargs)
-    return _ReplicationCapableConnection(conn)
+def with_replication(connection: Connection):
+    """
+    Wrap a replicating support layer around the given connection.
+    """
+    return _ReplicationCapableConnection(connection)
 
 
 @define
