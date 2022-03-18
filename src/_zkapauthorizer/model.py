@@ -20,11 +20,12 @@ the storage plugin.
 from datetime import datetime
 from functools import wraps
 from json import loads
-from sqlite3 import Cursor, OperationalError
+from sqlite3 import Connection, Cursor, OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, Optional, Type, TypeVar
 
 import attr
+from allmydata.node import _Config
 from aniso8601 import parse_datetime
 from compose import compose
 from twisted.logger import Logger
@@ -95,15 +96,18 @@ class NotEnoughTokens(Exception):
 # all.  The schema inside the database is versioned by yet another mechanism.
 CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
+_ConnectParamSpec = [str, int, bool, str, bool]
+_ConnectFunction = Callable[_ConnectParamSpec, Connection]
 
-def open_and_initialize(path, connect):
+
+def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection:
     """
     Open a SQLite3 database for use as a voucher store.
 
     Create the database and populate it with a schema, if it does not already
     exist.
 
-    :param FilePath path: The location of the SQLite3 database file.
+    :param path: The location of the SQLite3 database file.
 
     :return: A SQLite3 connection object for the database at the given path.
     """
@@ -237,9 +241,6 @@ class VoucherStore(object):
     """
     This class implements persistence for vouchers.
 
-    :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
-        the node that owns the persisted vouchers.
-
     :ivar now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
     """
@@ -254,13 +255,17 @@ class VoucherStore(object):
     _connection = attr.ib()
 
     @classmethod
-    def from_node_config(cls, node_config, now, connect=None):
+    def from_node_config(
+        cls: Type[_T],
+        node_config: _Config,
+        now: Callable[[], datetime],
+        connect: Optional[_ConnectFunction] = None,
+    ) -> _T:
         """
         Create or open the ``VoucherStore`` for a given node.
 
-        :param allmydata.node._Config node_config: The Tahoe-LAFS
-            configuration object for the node for which we want to open a
-            store.
+        :param node_config: The Tahoe-LAFS configuration object for the node
+            for which we want to open a store.
 
         :param now: See ``VoucherStore.now``.
 
