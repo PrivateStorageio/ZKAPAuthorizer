@@ -35,6 +35,11 @@ pkgs.mkShell {
   # develop`-like experience.
   PYTHONPATH = "${builtins.toString ./.}/src";
 
+  # Unfortunately, the source archives.  Unpack them and use `directory ...`
+  # in gdb to help it find them.
+  SQLITE_SRC = "${pkgs.sqlite.src}";
+  PYTHON_SRC = "${pythonPkg.src}";
+
   # Make pudb the default.
   PYTHONBREAKPOINT = "pudb.set_trace";
 
