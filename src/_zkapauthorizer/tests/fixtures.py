@@ -87,6 +87,14 @@ class TemporaryVoucherStore(Fixture):
             self.get_now,
             memory_connect,
         )
+        self.addCleanup(self._cleanUp)
+
+    def _cleanUp(self):
+        """
+        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
+        connection can close.
+        """
+        self.store = None
 
 
 @attr.s
