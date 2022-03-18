@@ -1,4 +1,4 @@
-# Copyright 2019 PrivateStorage.io, LLC
+# Copyright 2022 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,27 +18,26 @@ A system for replicating local SQLite3 database state to remote storage.
 Theory of Operation
 ===================
 
-A new database connection type is provided by way of a new
-``sqlite3.connect``-like function.  This connection type provides facilities
-for accomplishing two goals:
+A function to wrap a ``sqlite3.Connection`` in a new type is provided.  This
+new type provides facilities for accomplishing two goals:
 
-* It presents an expanded connection interface which includes the ability to
-  switch the database into "replicated" mode.  This is an application-facing
-  interface meant to be used when the application is ready to discharge its
-  responsibilities in the replication process.
+* It (can someday) presents an expanded connection interface which includes
+  the ability to switch the database into "replicated" mode.  This is an
+  application-facing interface meant to be used when the application is ready
+  to discharge its responsibilities in the replication process.
 
-* It exposes the usual cursor interface wrapped around the usual cursor
-  behavior combined with extra logic to record statements which change the
-  underlying database (DDL and DML statements).  This recorded data then feeds
-  into the above replication process once it is enabled.
+* It (can someday) expose the usual cursor interface wrapped around the usual
+  cursor behavior combined with extra logic to record statements which change
+  the underlying database (DDL and DML statements).  This recorded data then
+  feeds into the above replication process once it is enabled.
 
 An application's responsibilities in the replication process are to arrange
 for remote storage of "snapshots" and "event streams".  See the
 replication/recovery design document for details of these concepts.
 
-Once replication has been enabled, the application is informed whenever the
-event stream changes (respecting database transactionality) and data can be
-shipped to remote storage as desired.
+Once replication has been enabled, the application (can someday be) informed
+whenever the event stream changes (respecting database transactionality) and
+data can be shipped to remote storage as desired.
 
 It is essential to good replication performance that once replication is
 enabled all database-modifying actions are captured in the event stream.  This
@@ -52,6 +51,10 @@ __all__ = [
     "ReplicationAlreadySetup",
     "fail_setup_replication",
     "setup_tahoe_lafs_replication",
+    "with_replication",
+    "statements_to_snapshot",
+    "connection_to_statements",
+    "snapshot",
 ]
 
 from collections.abc import Awaitable
@@ -125,9 +128,21 @@ def with_replication(connection: Connection):
 
 @define
 class _ReplicationCapableConnection:
+    """
+    Wrap a ``sqlite3.Connection`` to provide additional snapshot- and
+    streaming replication-related features.
+
+    All of this type's methods are intended to behave the same way as
+    ``sqlite3.Connection``\ 's methods except they may also add some
+    additional functionality to support replication.
+    """
+
     _conn: Connection
 
     def snapshot(self):
+        """
+        :see: ``snapshot``
+        """
         return snapshot(self._conn)
 
     def close(self):
@@ -145,6 +160,15 @@ class _ReplicationCapableConnection:
 
 @define
 class _ReplicationCapableCursor:
+    """
+    Wrap a ``sqlite3.Cursor`` to provide additional streaming
+    replication-related features.
+
+    All of this type's attributes and methods are intended to behave the same
+    way as ``sqlite3.Cursor``\ 's methods except they may also add some
+    additional functionality to support replication.
+    """
+
     _cursor: Cursor
 
     @property
