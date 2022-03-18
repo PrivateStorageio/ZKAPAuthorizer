@@ -76,6 +76,7 @@ from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, VoucherStore
 from ..spending import GET_PASSES
 from .common import skipIf
+from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, raises
 from .strategies import (
@@ -353,6 +354,10 @@ class ClientPluginTests(TestCase):
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
 
+    def setUp(self):
+        super().setUp()
+        self.useFixture(DetectLeakedDescriptors())
+
     @given(tahoe_configs(), announcements())
     def test_interface(self, get_config, announcement):
         """
@@ -607,6 +612,10 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
     Tests for the plugin's initialization of the lease maintenance service.
     """
+
+    def setUp(self):
+        super().setUp()
+        self.useFixture(DetectLeakedDescriptors())
 
     def _create(self, get_config, servers_yaml, rootcap):
         """

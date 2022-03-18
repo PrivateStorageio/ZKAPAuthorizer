@@ -118,54 +118,60 @@ def open_and_initialize(path, connect=None):
     except OperationalError as e:
         raise StoreOpenError(e)
 
-    # Enforcement of foreign key constraints is off by default.  It must be
-    # enabled on a per-connection basis.  This is a helpful feature to ensure
-    # consistency so we want it enforced and we use it in our schema.
-    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
 
     with conn:
-        cursor = conn.cursor()
+        # Enforcement of foreign key constraints is off by default.  It must
+        # be enabled on a per-connection basis.  This is a helpful feature to
+        # ensure consistency so we want it enforced and we use it in our
+        # schema.
+        cursor.execute("PRAGMA foreign_keys = ON")
+
+        # Upgrade the database to the most recent version of the schema.  That
+        # is the only schema the Python code will actually work against.
         actual_version = get_schema_version(cursor)
         schema_upgrades = list(get_schema_upgrades(actual_version))
         run_schema_upgrades(schema_upgrades, cursor)
 
-    # Create some tables that only exist (along with their contents) for
-    # this connection.  These are outside of the schema because they are not
-    # persistent.  We can change them any time we like without worrying about
-    # upgrade logic because we re-create them on every connection.
-    conn.execute(
-        """
-        -- Track tokens in use by the process holding this connection.
-        CREATE TEMPORARY TABLE [in-use] (
-            [unblinded-token] text, -- The base64 encoded unblinded token.
+        # Create some tables that only exist (along with their contents) for
+        # this connection.  These are outside of the schema because they are not
+        # persistent.  We can change them any time we like without worrying about
+        # upgrade logic because we re-create them on every connection.
+        cursor.execute(
+            """
+            -- Track tokens in use by the process holding this connection.
+            CREATE TEMPORARY TABLE [in-use] (
+                [unblinded-token] text, -- The base64 encoded unblinded token.
 
-            PRIMARY KEY([unblinded-token])
-            -- A foreign key on unblinded-token to [unblinded-tokens]([token])
-            -- would be alright - however SQLite3 foreign key constraints
-            -- can't cross databases (and temporary tables are considered to
-            -- be in a different database than normal tables).
+                PRIMARY KEY([unblinded-token])
+                -- A foreign key on unblinded-token to [unblinded-tokens]([token])
+                -- would be alright - however SQLite3 foreign key constraints
+                -- can't cross databases (and temporary tables are considered to
+                -- be in a different database than normal tables).
+            )
+            """,
         )
-        """,
-    )
-    conn.execute(
-        """
-        -- Track tokens that we want to remove from the database.  Mainly just
-        -- works around the awkward DB-API interface for dealing with deleting
-        -- many rows.
-        CREATE TEMPORARY TABLE [to-discard] (
-            [unblinded-token] text
+        cursor.execute(
+            """
+            -- Track tokens that we want to remove from the database.  Mainly just
+            -- works around the awkward DB-API interface for dealing with deleting
+            -- many rows.
+            CREATE TEMPORARY TABLE [to-discard] (
+                [unblinded-token] text
+            )
+            """,
         )
-        """,
-    )
-    conn.execute(
-        """
-        -- Track tokens that we want to remove from the [in-use] set.  Similar
-        -- to [to-discard].
-        CREATE TEMPORARY TABLE [to-reset] (
-            [unblinded-token] text
+        cursor.execute(
+            """
+            -- Track tokens that we want to remove from the [in-use] set.  Similar
+            -- to [to-discard].
+            CREATE TEMPORARY TABLE [to-reset] (
+                [unblinded-token] text
+            )
+            """,
         )
-        """,
-    )
+
+    cursor.close()
     return conn
 
 
@@ -181,8 +187,11 @@ def with_cursor(f):
     def with_cursor(self, *a, **kw):
         with self._connection:
             cursor = self._connection.cursor()
-            cursor.execute("BEGIN IMMEDIATE TRANSACTION")
-            return f(self, cursor, *a, **kw)
+            try:
+                cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+                return f(self, cursor, *a, **kw)
+            finally:
+                cursor.close()
 
     with_cursor.wrapped = f
     return with_cursor

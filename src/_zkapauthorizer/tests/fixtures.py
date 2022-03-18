@@ -16,6 +16,7 @@
 Common fixtures to let the test suite focus on application logic.
 """
 
+import gc
 from base64 import b64encode
 
 import attr
@@ -86,6 +87,14 @@ class TemporaryVoucherStore(Fixture):
             self.get_now,
             memory_connect,
         )
+        self.addCleanup(self._cleanUp)
+
+    def _cleanUp(self):
+        """
+        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
+        connection can close.
+        """
+        self.store = None
 
 
 @attr.s
@@ -113,6 +122,14 @@ class ConfiglessMemoryVoucherStore(Fixture):
             now=self.get_now,
             connection=open_and_initialize(here, memory_connect),
         )
+        self.addCleanup(self._cleanUp)
+
+    def _cleanUp(self):
+        """
+        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
+        connection can close.
+        """
+        self.store = None
 
     def redeem(self, voucher, num_passes):
         """
@@ -186,3 +203,50 @@ class Treq(Fixture):
         # reactor) seems to be enough.  If it's not, sorry.
         yield deferLater(self.reactor, 0, lambda: None)
         yield deferLater(self.reactor, 0, lambda: None)
+
+
+class DetectLeakedDescriptors(Fixture):
+    """
+    Check for file descriptors that are open at clean up time that were not
+    open at set up time and cause the test to fail if any are found.
+    """
+
+    blacklist_filenames = {
+        "privatestorageio-zkapauthz-v1.sqlite3",
+        "privatestorageio-zkapauthz-v1.sqlite3 (deleted)",
+    }
+
+    def _setUp(self):
+        fdpath = FilePath("/proc/self/fd")
+        if fdpath.isdir():
+            # If it exists, we can inspect it to learn about open file
+            # descriptors.  If it doesn't, it's a bit harder and we don't
+            # bother for now.
+            self._before = fdpath.children()
+            self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        def get_leaked():
+            after = FilePath("/proc/self/fd").children()
+            return {
+                e.realpath()
+                for e in set(after) - set(self._before)
+                if e.realpath().basename() in self.blacklist_filenames
+            }
+
+        leaked = get_leaked()
+        if leaked:
+            # VoucherStore hangs off _Client which participates in a set of
+            # impressively complex cyclic references.  The reference counting
+            # collector will not clean it up so we will *always* see open file
+            # descriptors if we don't trigger the cycle collector.
+            #
+            # Garbage collection is expensive though and a lot of the test
+            # suite doesn't make any VoucherStores or _Clients.  So only
+            # trigger this if we have reason to believe something might have
+            # leaked.
+            gc.collect()
+
+            leaked = get_leaked()
+            if leaked:
+                raise ValueError(leaked)

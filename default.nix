@@ -3,6 +3,8 @@ let
 in
 { pkgs ? import sources.release2111 { }
 , pypiData ? sources.pypi-deps-db
+  # You might want more things like tkinter - in which case, you want
+  # pythonXXFull.
 , python ? "python39"
 , mach-nix ? import sources.mach-nix { inherit pkgs pypiData python; }
 , tahoe-lafs-source ? "tahoe-lafs"

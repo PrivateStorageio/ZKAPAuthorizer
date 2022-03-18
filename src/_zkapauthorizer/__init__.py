@@ -18,6 +18,12 @@ __all__ = [
     "NAME",
 ]
 
+
+# Hotfix Tahoe-LAFS #3883
+from allmydata import stats
+
+stats.eventually = lambda f: f()
+
 # The identifier for this plugin.  This appears in URLs for resources the
 # client plugin exposes, configuration files, etc.
 NAME = "privatestorageio-zkapauthz-v2"
