@@ -285,6 +285,13 @@ class VoucherStore(object):
             conn,
         )
 
+    def snapshot(self) -> bytes:
+        """
+        Create a consistent, self-contained snapshot of the underlying database
+        state.
+        """
+        return self._connection.snapshot()
+
     @with_cursor_async
     async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
         """

@@ -20,6 +20,7 @@ Tests for ``_zkapauthorizer.model``.
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
+from io import BytesIO
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
@@ -79,6 +80,7 @@ from ..recover import (
     RecoveryState,
     StatefulRecoverer,
     make_canned_downloader,
+    recover,
 )
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
@@ -96,8 +98,6 @@ from .strategies import (
 )
 
 _T = TypeVar("T")
-
-from .test_recover import snapshot, statements_to_snapshot
 
 
 async def fail(cursor):
@@ -543,6 +543,42 @@ class VoucherStoreTests(TestCase):
                 lambda: now,
             ),
             raises(StoreOpenError),
+        )
+
+
+class VoucherStoreSnapshotTests(TestCase):
+    """
+    Tests for ``VoucherStore.snapshot``.
+    """
+
+    @given(
+        posix_safe_datetimes(),
+        vouchers(),
+        integers(min_value=1, max_value=2 ** 63 - 1),
+        lists(random_tokens(), unique=True),
+    )
+    def test_vouchers(self, now, voucher, expected, tokens):
+        """
+        Vouchers are present in the snapshot.
+        """
+        store = self.useFixture(
+            ConfiglessMemoryVoucherStore(get_now=lambda: now),
+        ).store
+        store.add(voucher, expected, 0, lambda: tokens)
+        snapshot = store.snapshot()
+        connection = connect(":memory:")
+        cursor = connection.cursor()
+        with connection:
+            recover(BytesIO(snapshot), cursor)
+
+        recovered = VoucherStore(
+            store.pass_value, store.database_path, store.now, connection
+        )
+        self.assertThat(
+            recovered.get(voucher),
+            Equals(
+                Voucher(voucher, expected, now),
+            ),
         )
 
 
@@ -1179,8 +1215,7 @@ class ReplicationTests(TestCase):
                 datetime.now,
             )
         ).store
-        # XXX Use VoucherStore.snapshot once it is available
-        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(store._connection)))
+        snapshot_bytes = store.snapshot()
         downloader = make_canned_downloader(snapshot_bytes)
         recoverer = StatefulRecoverer()
 

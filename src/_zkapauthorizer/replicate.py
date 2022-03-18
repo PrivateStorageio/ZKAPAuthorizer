@@ -56,9 +56,10 @@ __all__ = [
 
 from collections.abc import Awaitable
 from sqlite3 import Connection, Cursor
-from typing import Iterator
+from typing import Callable, Iterator
 
 from attrs import define
+from compose import compose
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
@@ -177,9 +178,44 @@ class _ReplicationCapableCursor:
         self._cursor.executemany(statement, rows)
 
 
-def snapshot(connection: Connection) -> Iterator[str]:
+def netstring(bs: bytes) -> bytes:
+    """
+    Encode a single string as a netstring.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
+    """
+    return b"".join(
+        [
+            str(len(bs)).encode("ascii"),
+            b":",
+            bs,
+            b",",
+        ]
+    )
+
+
+def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
     """
     Take a snapshot of the database reachable via the given connection.
     """
+    for statement in statements:
+        # Use netstrings to frame each statement.  Statements can have
+        # embedded newlines (and CREATE TABLE statements especially tend to).
+        yield netstring(statement.strip().encode("utf-8"))
+
+
+def connection_to_statements(connection: Connection) -> Iterator[str]:
+    """
+    Create an iterator of SQL statements as strings representing a consistent,
+    self-contained snapshot of the database reachable via the given
+    connection.
+    """
     for statement in connection.iterdump():
         yield statement + "\n"
+
+
+# Convenience API for dump statements, netstring-encoding them, and
+# concatenating them all into a single byte string.
+snapshot: Callable[[Connection], bytes] = compose(
+    b"".join, statements_to_snapshot, connection_to_statements
+)

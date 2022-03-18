@@ -2,6 +2,7 @@
 Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
+from io import BytesIO
 from sqlite3 import OperationalError, ProgrammingError, connect
 
 from fixtures import TempDir
@@ -179,7 +180,7 @@ class ReplicationConnectionTests(TestCase):
         conn_b = with_replication(connect(dbpath_b))
 
         with conn_b:
-            recover(snapshot, conn_b.cursor())
+            recover(BytesIO(snapshot), conn_b.cursor())
 
         self.assertThat(
             conn_a,
