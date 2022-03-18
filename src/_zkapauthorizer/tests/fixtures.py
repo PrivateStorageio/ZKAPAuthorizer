@@ -116,16 +116,20 @@ class ConfiglessMemoryVoucherStore(Fixture):
 
     def _setUp(self):
         here = FilePath(".")
-        connection = open_and_initialize(here, memory_connect)
         self.store = VoucherStore(
             pass_value=2 ** 15,
             database_path=here,
             now=self.get_now,
-            connection=connection,
+            connection=open_and_initialize(here, memory_connect),
         )
-        # Since we opened this connection, we can take care to explicitly
-        # close it rather than relying on garbage collection.
-        self.addCleanup(connection.close)
+        self.addCleanup(self._cleanUp)
+
+    def _cleanUp(self):
+        """
+        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
+        connection can close.
+        """
+        self.store = None
 
     def redeem(self, voucher, num_passes):
         """
