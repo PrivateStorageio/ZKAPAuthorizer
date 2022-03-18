@@ -255,9 +255,9 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(side_effect)),
             succeeded(Equals(True)),
         )
-        rows = list(
-            self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
-        )
+        cursor = self.store_fixture.store._connection.cursor()
+        rows = cursor.execute("SELECT * FROM [it_ran]")
+        rows = cursor.fetchall()
         self.assertThat(rows, HasLength(1))
 
     @given(
@@ -682,12 +682,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         maybe this is a good argument for using an explicitly attached
         temporary database instead of the built-in ``temp`` database.
         """
+        cursor = self.configless.store._connection.cursor()
         with self.configless.store._connection:
-            self.configless.store._connection.execute(
-                """
-                DELETE FROM [in-use]
-                """,
-            )
+            cursor.execute("DELETE FROM [in-use]")
         self.available += len(self.using)
         del self.using[:]
 
