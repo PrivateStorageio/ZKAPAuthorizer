@@ -197,6 +197,9 @@ def netstring(bs: bytes) -> bytes:
 def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
     """
     Take a snapshot of the database reachable via the given connection.
+
+    The snapshot is consistent and write transactions on the given connection
+    are blocked until it has been completed.
     """
     for statement in statements:
         # Use netstrings to frame each statement.  Statements can have

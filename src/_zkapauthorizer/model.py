@@ -287,8 +287,8 @@ class VoucherStore(object):
 
     def snapshot(self) -> bytes:
         """
-        Create a consistent, self-contained snapshot of the underlying database
-        state.
+        Create and return a consistent, self-contained snapshot of the underlying
+        database state.
         """
         return self._connection.snapshot()
 
