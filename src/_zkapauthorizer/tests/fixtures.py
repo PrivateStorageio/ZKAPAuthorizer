@@ -217,8 +217,13 @@ class DetectLeakedDescriptors(Fixture):
     }
 
     def _setUp(self):
-        self._before = FilePath("/proc/self/fd").children()
-        self.addCleanup(self._cleanup)
+        fdpath = FilePath("/proc/self/fd")
+        if fdpath.isdir():
+            # If it exists, we can inspect it to learn about open file
+            # descriptors.  If it doesn't, it's a bit harder and we don't
+            # bother for now.
+            self._before = fdpath.children()
+            self.addCleanup(self._cleanup)
 
     def _cleanup(self):
         def get_leaked():
