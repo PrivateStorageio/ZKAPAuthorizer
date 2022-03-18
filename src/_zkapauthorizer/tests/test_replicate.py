@@ -2,7 +2,7 @@
 Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
-from sqlite3 import OperationalError, connect
+from sqlite3 import OperationalError, ProgrammingError, connect
 
 from fixtures import TempDir
 from testtools import TestCase
@@ -37,6 +37,31 @@ class ReplicationConnectionTests(TestCase):
             lambda: connect_with_replication(bogus_connect, bogus_path),
             raises(BogusDatabase(bogus_path)),
         )
+
+    def test_close(self):
+        """
+        The connection object and its cursors can be closed.
+        """
+        conn = connect_with_replication(connect, ":memory:")
+        cursor = conn.cursor()
+        cursor.close()
+        self.assertThat(
+            lambda: cursor.execute("SELECT 1"),
+            raises(ProgrammingError),
+        )
+        conn.close()
+        expected = ProgrammingError
+        try:
+            with conn:
+                pass
+        except expected:
+            pass
+        except BaseException as e:
+            self.fail(f"using connection after close, {e} raised instead of {expected}")
+        else:
+            self.fail(
+                f"using connection after close, nothing raised instead of {expected}"
+            )
 
     def test_context_manager_success(self):
         """

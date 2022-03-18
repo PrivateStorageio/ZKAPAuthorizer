@@ -127,6 +127,9 @@ class _ReplicationCapableConnection:
     def snapshot(self):
         return snapshot(self._conn)
 
+    def close(self):
+        return self._conn.close()
+
     def __enter__(self):
         return self._conn.__enter__()
 
@@ -148,6 +151,9 @@ class _ReplicationCapableCursor:
     @property
     def rowcount(self):
         return self._cursor.rowcount
+
+    def close(self):
+        return self._cursor.close()
 
     def execute(self, statement, row=None):
         if row is None:
