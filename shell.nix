@@ -5,9 +5,11 @@ let
   tests = import ./tests.nix args;
   inherit (tests) privatestorage lint-python;
   inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
+  inherit (zkapauthorizer.meta.mach-nix) python providers;
+  pythonPkg = pkgs.${python};
 
   python-env = mach-nix.mkPython {
-    inherit (zkapauthorizer.meta.mach-nix) python providers;
+    inherit python providers;
     overridesPre = [
       (
         self: super: {
@@ -38,6 +40,16 @@ pkgs.mkShell {
 
     # Supply all of the runtime and testing dependencies.
   buildInputs = [
+    # If you download a non-broken libpython.py from cpython vcs you might get
+    # useful commands like py-bt too.
+    pkgs.gdb
     python-env
+
+    # This could accidentally be the right bunch of debug symbols.  gdb seems
+    # to find them on its own.  It needs help finding source files though.  It
+    # would be nicer if we could pull the python version out of `python-env`
+    # or `tests`.  Probably we can I'm not just not sure where it is.
+    pythonPkg.debug
+    pkgs.sqlite.debug
   ];
 }
