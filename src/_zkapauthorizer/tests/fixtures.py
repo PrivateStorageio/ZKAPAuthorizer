@@ -16,6 +16,7 @@
 Common fixtures to let the test suite focus on application logic.
 """
 
+import gc
 from base64 import b64encode
 
 import attr
@@ -208,14 +209,27 @@ class DetectLeakedDescriptors(Fixture):
         self.addCleanup(self._cleanup)
 
     def _cleanup(self):
-        after = FilePath("/proc/self/fd").children()
-        extra = {
-            e.realpath()
-            for e in set(after) - set(self._before)
-            if e.realpath().basename() in self.blacklist_filenames
-        }
-        if extra:
-            # XXX VoucherStores collected, Connections collected...
-            # Underlying SQLite3 reference to file descriptor somehow not
-            # collected until later?
-            raise ValueError(extra)
+        def get_leaked():
+            after = FilePath("/proc/self/fd").children()
+            return {
+                e.realpath()
+                for e in set(after) - set(self._before)
+                if e.realpath().basename() in self.blacklist_filenames
+            }
+
+        leaked = get_leaked()
+        if leaked:
+            # VoucherStore hangs off _Client which participates in a set of
+            # impressively complex cyclic references.  The reference counting
+            # collector will not clean it up so we will *always* see open file
+            # descriptors if we don't trigger the cycle collector.
+            #
+            # Garbage collection is expensive though and a lot of the test
+            # suite doesn't make any VoucherStores or _Clients.  So only
+            # trigger this if we have reason to believe something might have
+            # leaked.
+            gc.collect()
+
+            leaked = get_leaked()
+            if leaked:
+                raise ValueError(leaked)
