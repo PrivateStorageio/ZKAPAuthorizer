@@ -20,6 +20,7 @@ from datetime import timedelta
 from typing import Any, Optional
 
 from allmydata.node import _Config
+from attrs import define
 from hyperlink import DecodedURL
 from twisted.python.filepath import FilePath
 
@@ -30,17 +31,23 @@ from . import NAME
 REPLICA_RWCAP_BASENAME = NAME + ".replica-rwcap"
 
 
-class _EmptyConfig(object):
+@define
+class EmptyConfig:
     """
     Weakly pretend to be a Tahoe-LAFS configuration object with no
     configuration.
     """
 
+    _basedir: FilePath = FilePath(".")
+
     def get_config(self, section, option, default=object(), boolean=False):
         return default
 
+    def get_private_path(self, name):
+        return self._basedir.child("private").child(name).path
 
-empty_config = _EmptyConfig()
+
+empty_config = EmptyConfig()
 
 
 def read_node_url(config: _Config) -> DecodedURL:

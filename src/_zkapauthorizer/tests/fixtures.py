@@ -31,8 +31,9 @@ from twisted.internet.task import Clock, deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
+from ..config import EmptyConfig
 from ..controller import DummyRedeemer, PaymentController
-from ..model import VoucherStore, memory_connect, open_and_initialize
+from ..model import VoucherStore, memory_connect
 
 
 @attr.s(auto_attribs=True)
@@ -115,12 +116,10 @@ class ConfiglessMemoryVoucherStore(Fixture):
         self.redeemer = DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        here = FilePath(".")
-        self.store = VoucherStore(
-            pass_value=2 ** 15,
-            database_path=here,
-            now=self.get_now,
-            connection=open_and_initialize(here, memory_connect),
+        self.store = VoucherStore.from_node_config(
+            EmptyConfig(FilePath(".")),
+            self.get_now,
+            memory_connect,
         )
         self.addCleanup(self._cleanUp)
 
