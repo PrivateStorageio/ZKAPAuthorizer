@@ -276,7 +276,7 @@ class VoucherStore(object):
             # Make sure we always have a replication-enabled connection even
             # if we're not doing replication yet because we might want to turn
             # it on later.
-            compose(with_replication, _connect),
+            compose(with_replication, connect),
         )
         return cls(
             get_configured_pass_value(node_config),
