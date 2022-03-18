@@ -19,6 +19,7 @@ let
       ''
       ${builtins.readFile ./requirements/test.in}
       ${builtins.readFile ./requirements/elpy.in}
+      ${builtins.readFile ./requirements/debug.in}
       ${zkapauthorizer.requirements}
       '';
   };
@@ -32,8 +33,11 @@ pkgs.mkShell {
   # develop`-like experience.
   PYTHONPATH = "${builtins.toString ./.}/src";
 
-  buildInputs = [
+  # Make pudb the default.
+  PYTHONBREAKPOINT = "pudb.set_trace";
+
     # Supply all of the runtime and testing dependencies.
+  buildInputs = [
     python-env
   ];
 }
