@@ -68,6 +68,9 @@ class RecoveryStages(Enum):
     importing = auto()
     succeeded = auto()
 
+    exporting = auto()
+    uploading = auto()
+
     download_failed = auto()
     import_failed = auto()
 
@@ -214,8 +217,25 @@ async def tahoe_lafs_downloader(
     snapshot_path = client.get_private_path("snapshot.sql")
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
+    # snapshot-<seqnum>.sql or something?
+
+    # maybe just: snapshot.sql (and we overwrite the thing in the
+    # mutable .. because same failure mode either way?)
+
     await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
     return snapshot_path
+
+
+async def tahoe_lafs_uploader(
+    client: Tahoe,
+    recovery_cap: str,
+    state_snapshot: binary,
+    set_state: SetState,
+) -> Awaitable[None]:
+    """
+    Upload a replica to Tahoe
+    """
+    set_state(RecoveryState(stage=RecoveryStages.uploading))
 
 
 def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:

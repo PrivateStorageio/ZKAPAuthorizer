@@ -209,6 +209,11 @@ def memory_connect(path, *a, **kw):
 _SQLITE3_INTEGER_MAX = 2 ** 63 - 1
 
 
+###
+# xxx all of zkap-authorizer's state is here (approx.)
+#
+
+
 @attr.s(frozen=True)
 class VoucherStore(object):
     """
