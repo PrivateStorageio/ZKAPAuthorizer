@@ -159,6 +159,19 @@ class WithCursorAsyncTests(TestCase):
             Equals([(1,)]),
         )
 
+    def test_db(self):
+        db = connect(":memory:")
+        cursor0 = db.cursor()
+        cursor0.execute("BEGIN IMMEDIATE TRANSACTION")
+        cursor0.execute("CREATE TABLE [foo] ([a] INT)")
+        cursor0.execute("INSERT INTO [foo] VALUES (1)")
+        # note: no close() yet
+        cursor1 = db.cursor()
+        # should cause error
+        print(cursor1.execute("select * from [foo]").fetchall())
+        cursor0.close()
+        cursor1.close()
+
     def test_async(self):
         """
         The given function can return an ``Awaitable`` and the transaction will
