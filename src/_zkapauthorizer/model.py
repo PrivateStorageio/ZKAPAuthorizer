@@ -18,7 +18,7 @@ the storage plugin.
 """
 
 from datetime import datetime
-from functools import partial, wraps
+from functools import wraps
 from json import loads
 from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
