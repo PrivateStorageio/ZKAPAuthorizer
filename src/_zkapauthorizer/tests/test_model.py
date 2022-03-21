@@ -159,7 +159,7 @@ class WithCursorAsyncTests(TestCase):
             Equals([(1,)]),
         )
 
-    def test_db(self):
+    def test_db0(self):
         db = connect(":memory:")
         cursor0 = db.cursor()
         cursor0.execute("BEGIN IMMEDIATE TRANSACTION")
@@ -171,6 +171,18 @@ class WithCursorAsyncTests(TestCase):
         print(cursor1.execute("select * from [foo]").fetchall())
         cursor0.close()
         cursor1.close()
+
+    def test_db1(self):
+        db = connect(":memory:")
+        with db as cursor0:
+            cursor0.execute("BEGIN IMMEDIATE TRANSACTION")
+            cursor0.execute("CREATE TABLE [foo] ([a] INT)")
+            cursor0.execute("INSERT INTO [foo] VALUES (1)")
+
+            # cursor0 still open
+            cursor1 = db.cursor()
+            # should cause error
+            print(cursor1.execute("select * from [foo]").fetchall())
 
     def test_async(self):
         """
