@@ -188,10 +188,14 @@ def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Awaitable[_T]:
     async def with_cursor_async(self, *a, **kw):
         with self._connection:
             cursor = self._connection.cursor()
+            print("created cursor")
             try:
+                print("start transaction")
                 cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+                print("run function")
                 return await f(self, cursor, *a, **kw)
             finally:
+                print("close cursor")
                 cursor.close()
 
     return with_cursor_async

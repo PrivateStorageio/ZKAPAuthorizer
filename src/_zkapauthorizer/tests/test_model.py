@@ -17,7 +17,6 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from asyncio import AbstractEventLoop, create_task, new_event_loop
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import wraps
@@ -93,20 +92,6 @@ from .strategies import (
 _T = TypeVar("T")
 
 
-def with_loop(f: Callable[[], Awaitable[_T]]) -> Callable[[AbstractEventLoop], _T]:
-    """
-    Create a wrapper around the given async function which calls it with a
-    new, running event loop waits on its result before returning it.
-    """
-
-    @wraps(f)
-    def g(self):
-        loop = new_event_loop()
-        return loop.run_until_complete(f(self, loop))
-
-    return g
-
-
 def fail(cursor):
     raise Exception("Should not be called")
 
@@ -174,12 +159,16 @@ class WithCursorAsyncTests(TestCase):
             Equals([(1,)]),
         )
 
-    @with_loop
-    async def test_async(self, loop):
+    def test_async(self):
         """
         The given function can return an ``Awaitable`` and the transaction will
         not be committed until it has a result.
         """
+
+        # XXX might want @with_reactor or similar?
+        #from twisted.internet import reactor
+        from twisted.internet.task import Clock
+        reactor = Clock()
 
         class Database:
             _connection: Connection = connect(":memory:")
@@ -189,23 +178,37 @@ class WithCursorAsyncTests(TestCase):
             @with_cursor_async
             async def f(self, cursor):
                 # Have an observable effect
+                print("run db stuff")
                 cursor.execute("CREATE TABLE [foo] ([a] INT)")
                 cursor.execute("INSERT INTO [foo] VALUES (1)")
                 # The transaction is still open while we wait.
+                print("awaiting")
                 await self.task
+                print("done waiting")
                 return self.expected
 
         # Start the asynchronous task but don't wait on it so that we can
         # assert stuff in parallel.
-        running = create_task(Database().f())
+        db = Database()
+        coro = db.f()
+
+        print("creating deferred")
+        coro_d = Deferred.fromCoroutine(coro)
+        print("deferred: {}".format(coro_d))
 
         # Since the asynchronous task hasn't completed, its transaction hasn't
         # committed and there is no foo table to select from.
+        print("testing cursor")
         cursor = Database._connection.cursor()
-        self.assertThat(
-            lambda: cursor.execute("SELECT [a] FROM [foo]"),
-            raises(OperationalError),
-        )
+        print(cursor)
+        print(cursor.execute("select * from [foo]").fetchall())
+        if False:
+            self.assertThat(
+                lambda: cursor.execute("SELECT [a] FROM [foo]"),
+                raises(OperationalError),
+            )
+
+        print("deferred: {}".format(coro_d))
 
         # Allow the asynchronous task to complete - which should also cause
         # the transaction to be committed.
@@ -219,7 +222,15 @@ class WithCursorAsyncTests(TestCase):
         #
         # Also, we expect to get back the value from the function we passed
         # in.
-        self.assertThat(await running, Is(Database.expected))
+
+        self.assertThat(
+            coro_d,
+            succeeded(
+                Equals(
+                    Database.expected
+                )
+            )
+        )
 
         # So we can see the table and row that were created in it.
         cursor.execute("SELECT [a] FROM [foo]")
