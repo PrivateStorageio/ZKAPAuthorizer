@@ -20,6 +20,8 @@ Tests for ``_zkapauthorizer.model``.
 from datetime import datetime, timedelta
 from errno import EACCES
 from os import mkdir
+from sqlite3 import Connection, OperationalError, connect
+from typing import TypeVar
 from unittest import skipIf
 
 from fixtures import TempDir
@@ -47,12 +49,14 @@ from testtools.matchers import (
     Always,
     Equals,
     HasLength,
+    Is,
     IsInstance,
     MatchesAll,
     MatchesStructure,
     Raises,
 )
-from testtools.twistedsupport import succeeded
+from testtools.twistedsupport import failed, succeeded
+from twisted.internet.defer import Deferred
 from twisted.python.runtime import platform
 
 from ..model import (
@@ -67,6 +71,7 @@ from ..model import (
     Voucher,
     VoucherStore,
     memory_connect,
+    with_cursor_async,
 )
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
@@ -83,9 +88,136 @@ from .strategies import (
     zkaps,
 )
 
+_T = TypeVar("T")
+
 
 def fail(cursor):
     raise Exception("Should not be called")
+
+
+class WithCursorAsyncTests(TestCase):
+    """
+    Tests for ``with_cursor_async``.
+    """
+
+    def test_exception(self):
+        """
+        A function decorated with ``with_cursor_async`` returns a coroutine that
+        raises the same exception as the decorated function and the
+        transaction is rolled back.
+        """
+
+        class SomeException(Exception):
+            pass
+
+        class Database:
+            _connection: Connection = connect(":memory:")
+
+            @with_cursor_async
+            async def f(self, cursor):
+                cursor.execute("CREATE TABLE [bad] ([a] INT)")
+                cursor.execute("INSERT INTO [bad] VALUES (1)")
+                raise SomeException()
+
+        self.assertThat(
+            Deferred.fromCoroutine(Database().f()),
+            failed(AfterPreprocessing(lambda f: f.value, IsInstance(SomeException))),
+        )
+
+        cursor = Database._connection.cursor()
+        self.assertThat(
+            lambda: cursor.execute("SELECT * FROM [bad]"),
+            raises(OperationalError),
+        )
+
+    def test_success(self):
+        """
+        A function decorated with ``with_cursor_async`` returns a coroutine that
+        succeeds with the same result as the decorated function and commits
+        the transaction.
+        """
+
+        class Database:
+            _connection: Connection = connect(":memory:")
+            expected = object()
+
+            @with_cursor_async
+            async def f(self, cursor):
+                cursor.execute("CREATE TABLE [good] ([a] INT)")
+                cursor.execute("INSERT INTO [good] VALUES (1)")
+                return self.expected
+
+        self.assertThat(
+            Deferred.fromCoroutine(Database().f()),
+            succeeded(Is(Database.expected)),
+        )
+        cursor = Database._connection.cursor()
+        cursor.execute("SELECT * FROM [good]")
+        self.assertThat(
+            cursor.fetchall(),
+            Equals([(1,)]),
+        )
+
+    def test_async(self):
+        """
+        The given function can return an ``Awaitable`` and the transaction will
+        not be committed until it has a result.
+        """
+        # If we want to observe transactional side-effects then we need
+        # transactionally independent views on the database.  For SQLite3 (at
+        # least), this means two different connections to the same database.
+        # see https://www.sqlite.org/uri.html for docs on URI-style database
+        # paths.
+        #
+        # The shared cache mode is required for two connections to the same
+        # memory-mode database.
+        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
+        dbpath = "file:async?mode=memory&cache=shared"
+        conn_a = connect(dbpath, uri=True)
+        conn_b = connect(dbpath, uri=True)
+
+        class Database:
+            _connection: Connection = conn_a
+            expected = object()
+            task = Deferred()
+
+            @with_cursor_async
+            async def f(self, cursor_a):
+                # Have an observable effect
+                cursor_a.execute("CREATE TABLE [foo] ([a] INT)")
+                cursor_a.execute("INSERT INTO [foo] VALUES (1)")
+                # The transaction is still open while we wait.
+                await self.task
+                return self.expected
+
+        # Start the asynchronous task but don't wait on it so that we can
+        # assert stuff in parallel.
+        db = Database()
+        coro_d = Deferred.fromCoroutine(db.f())
+
+        # Since the asynchronous task hasn't completed, its transaction hasn't
+        # committed and there is no foo table to select from.  A query on the
+        # second connection can confirm this.
+        cursor_b = conn_b.cursor()
+        self.assertThat(
+            lambda: cursor_b.execute("SELECT [a] FROM [foo]"),
+            raises(OperationalError),
+        )
+
+        # Allow the asynchronous task to complete - which should also cause
+        # the transaction to be committed.
+        Database.task.callback(None)
+
+        # Now we can wait for the task to finish.  Also, we expect to get back
+        # the value from the function we passed in.
+        self.assertThat(coro_d, succeeded(Equals(Database.expected)))
+
+        # So we can see the table and row that were created in it.
+        cursor_b.execute("SELECT [a] FROM [foo]")
+        self.assertThat(
+            cursor_b.fetchall(),
+            Equals([(1,)]),
+        )
 
 
 class VoucherStoreCallIfEmptyTests(TestCase):
