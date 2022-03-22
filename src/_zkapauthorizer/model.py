@@ -177,9 +177,7 @@ def open_and_initialize(path, connect=None):
     return conn
 
 
-def with_cursor_async(
-    f: Callable[[...], Awaitable[_T]]
-) -> Callable[[Cursor, ...], Awaitable[_T]]:
+def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
     """
     Like ``with_cursor`` but support decorating async functions instead.
 
