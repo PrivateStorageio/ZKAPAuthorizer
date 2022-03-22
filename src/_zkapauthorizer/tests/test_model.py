@@ -189,23 +189,30 @@ class WithCursorAsyncTests(TestCase):
         The given function can return an ``Awaitable`` and the transaction will
         not be committed until it has a result.
         """
-
-        # XXX might want @with_reactor or similar?
-        #from twisted.internet import reactor
-        from twisted.internet.task import Clock
-        reactor = Clock()
+        # If we want to observe transactional side-effects then we need
+        # transactionally independent views on the database.  For SQLite3 (at
+        # least), this means two different connections to the same database.
+        # see https://www.sqlite.org/uri.html for docs on URI-style database
+        # paths.
+        #
+        # The shared cache mode is required for two connections to the same
+        # memory-mode database.
+        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
+        dbpath = "file:async?mode=memory&cache=shared"
+        conn_a = connect(dbpath, uri=True)
+        conn_b = connect(dbpath, uri=True)
 
         class Database:
-            _connection: Connection = connect(":memory:")
+            _connection: Connection = conn_a
             expected = object()
             task = Deferred()
 
             @with_cursor_async
-            async def f(self, cursor):
+            async def f(self, cursor_a):
                 # Have an observable effect
                 print("run db stuff")
-                cursor.execute("CREATE TABLE [foo] ([a] INT)")
-                cursor.execute("INSERT INTO [foo] VALUES (1)")
+                cursor_a.execute("CREATE TABLE [foo] ([a] INT)")
+                cursor_a.execute("INSERT INTO [foo] VALUES (1)")
                 # The transaction is still open while we wait.
                 print("awaiting")
                 await self.task
@@ -222,18 +229,13 @@ class WithCursorAsyncTests(TestCase):
         print("deferred: {}".format(coro_d))
 
         # Since the asynchronous task hasn't completed, its transaction hasn't
-        # committed and there is no foo table to select from.
-        print("testing cursor")
-        cursor = Database._connection.cursor()
-        print(cursor)
-        print(cursor.execute("select * from [foo]").fetchall())
-        if False:
-            self.assertThat(
-                lambda: cursor.execute("SELECT [a] FROM [foo]"),
-                raises(OperationalError),
-            )
-
-        print("deferred: {}".format(coro_d))
+        # committed and there is no foo table to select from.  A query on the
+        # second connection can confirm this.
+        cursor_b = conn_b.cursor()
+        self.assertThat(
+            lambda: cursor_b.execute("SELECT [a] FROM [foo]"),
+            raises(OperationalError),
+        )
 
         # Allow the asynchronous task to complete - which should also cause
         # the transaction to be committed.
@@ -258,9 +260,9 @@ class WithCursorAsyncTests(TestCase):
         )
 
         # So we can see the table and row that were created in it.
-        cursor.execute("SELECT [a] FROM [foo]")
+        cursor_b.execute("SELECT [a] FROM [foo]")
         self.assertThat(
-            cursor.fetchall(),
+            cursor_b.fetchall(),
             Equals([(1,)]),
         )
 
