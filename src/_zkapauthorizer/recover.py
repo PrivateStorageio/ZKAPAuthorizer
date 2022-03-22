@@ -100,6 +100,9 @@ SetState = Callable[[RecoveryState], None]
 # An object which can retrieve remote ZKAPAuthorizer state.
 Downloader = Callable[[SetState], Awaitable[BinaryIO]]
 
+# function which can set remote ZKAPAuthorizer state.
+Uploader = Callable[[SetState], Awaitable[None]]
+
 
 @define
 class StatefulRecoverer:
@@ -195,6 +198,28 @@ def statements_from_download(data: BinaryIO) -> Iterator[str]:
     Read the SQL statements which constitute the replica from a byte string.
     """
     return data.read().decode("ascii").splitlines()
+
+
+def make_fail_uploader(reason: Exception) -> Uploader:
+    """
+    Make an uploader that always fails with the given exception.
+    """
+
+    async def fail_uploader(set_state: SetState) -> Awaitable[None]:
+        raise reason
+
+    return fail_uploader
+
+
+def make_success_uploader() -> Uploader:
+    """
+    Make an uploader that always succeeds immediately
+    """
+
+    async def success_uploader(set_state: SetState) -> Awaitable[None]:
+        return
+
+    return success_uploader
 
 
 def recover(statements: Iterator[str], cursor) -> None:

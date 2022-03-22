@@ -48,7 +48,7 @@ from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import lease_maintenance_service, maintain_leases_from_root
 from .model import VoucherStore
-from .recover import make_fail_downloader, setup_tahoe_lafs_replication
+from .recover import make_fail_downloader, setup_tahoe_lafs_replication, make_fail_uploader
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -185,12 +185,12 @@ class ZKAPAuthorizer(object):
         if reactor is None:
             from twisted.internet import reactor
 
+        work_in_progress_error = Exception(
+            "The recovery system implementation is a work in progress.",
+        )
+
         def get_downloader(cap):
-            return make_fail_downloader(
-                Exception(
-                    "The recovery system implementation is a work in progress.",
-                )
-            )
+            return make_fail_downloader(work_in_progress_error)
 
         setup_replication = partial(
             setup_tahoe_lafs_replication,
@@ -201,6 +201,7 @@ class ZKAPAuthorizer(object):
             node_config,
             store=self._get_store(node_config),
             get_downloader=get_downloader,
+            get_uploader=make_fail_uploader(work_in_progress_error),
             setup_replication=setup_replication,
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
