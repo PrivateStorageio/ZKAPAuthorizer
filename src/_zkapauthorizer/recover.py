@@ -229,13 +229,16 @@ async def tahoe_lafs_downloader(
 async def tahoe_lafs_uploader(
     client: Tahoe,
     recovery_cap: str,
-    state_snapshot: binary,
+    snapshot_data: BytesIO,
     set_state: SetState,
 ) -> Awaitable[None]:
     """
     Upload a replica to Tahoe
     """
     set_state(RecoveryState(stage=RecoveryStages.uploading))
+    # XXX need a client.upload_data or something / refactor
+    snapshot_immutable_cap = await client.upload(snapshot_data)
+    await client.link(recovery_cap, "snapshot.sql", snapshot_immutable_cap)
 
 
 def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:
