@@ -258,9 +258,9 @@ class RecoverResource(Resource):
 
         try:
             downloader = self.get_downloader(cap)
-            self.store.call_if_empty(
-                lambda cursor: Deferred.fromCoroutine(
-                    self.recoverer.recover(downloader, cursor)
+            Deferred.fromCoroutine(
+                self.store.call_if_empty(
+                    lambda cursor: self.recoverer.recover(downloader, cursor),
                 ),
             )
         except NotEmpty:

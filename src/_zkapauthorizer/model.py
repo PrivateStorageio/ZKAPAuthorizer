@@ -278,11 +278,14 @@ class VoucherStore(object):
             conn,
         )
 
-    @with_cursor
-    def call_if_empty(self, cursor, f: Callable[[Cursor], None]) -> None:
+    @with_cursor_async
+    def call_if_empty(self, cursor, f: Callable[[Cursor], _T]) -> _T:
         """
         Transactionally determine that the database is empty and call the given
         function if it is or raise ``NotEmpty`` if it is not.
+
+        The function may return an ``Awaitable``.  If it does the transaction
+        opened for it will be kept open until the ``Awaitable`` completes.
         """
         # After redeemed-voucher garbage collection is implemented, this won't
         # be enough of a check.  We should check the unblinded-tokens table
