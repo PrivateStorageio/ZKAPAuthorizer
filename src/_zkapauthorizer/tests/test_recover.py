@@ -73,7 +73,8 @@ def snapshot(connection: Connection) -> Iterator[str]:
 # XXX
 # one snapshot-machine per example (see "boilerplate")
 # Q: when use @initialize or whatever?
-# 
+#
+
 
 class SnapshotMachine(RuleBasedStateMachine):
     """
@@ -318,9 +319,7 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
             set_state=lambda state: None,
         )
-        yield Deferred.fromCoroutine(
-            upload(BytesIO(b"snapshot data"))
-        )
+        yield Deferred.fromCoroutine(upload(BytesIO(b"snapshot data")))
 
         if False:
             # ask for the latest snapshot capability

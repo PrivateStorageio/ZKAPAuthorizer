@@ -270,7 +270,7 @@ def get_tahoe_lafs_direntry_uploader(
     client: Tahoe,
     directory_mutable_cap: str,
     set_state: SetState,
-    entry_name: str="snapshot.sql",
+    entry_name: str = "snapshot.sql",
 ):
     """
     Bind a Tahoe client to a mutable directory in a callable that will
@@ -280,8 +280,10 @@ def get_tahoe_lafs_direntry_uploader(
     :return: A callable that uploads a BytesIO as the latest replica
         snapshot
     """
+
     async def upload(data: BytesIO) -> Awaitable[None]:
         await tahoe_lafs_uploader(client, directory_mutable_cap, data, set_state)
+
     return upload
 
 
