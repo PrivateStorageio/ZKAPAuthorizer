@@ -19,10 +19,9 @@ Tests for ``_zkapauthorizer.model``.
 
 from datetime import datetime, timedelta
 from errno import EACCES
-from functools import wraps
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
-from typing import Awaitable, Callable, TypeVar
+from typing import TypeVar
 from unittest import skipIf
 
 from fixtures import TempDir
