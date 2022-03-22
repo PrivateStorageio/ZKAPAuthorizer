@@ -2,6 +2,7 @@
 A library for interacting with a Tahoe-LAFS node.
 """
 
+from io import BytesIO
 from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
@@ -125,6 +126,41 @@ _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 
 
 @async_retry(_common_tahoe_errors)
+async def upload_bytes(
+    client: HTTPClient,
+    data: BytesIO,
+    api_root: DecodedURL,
+) -> Awaitable[str]:
+    """
+    Upload the given data and return the resulting capability.
+
+    If not enough storage servers are reachable then the upload is
+    automatically retried.
+
+    :param client: An HTTP client to use to make requests to the Tahoe-LAFS
+        HTTP API to perform the upload.
+
+    :param data: Data to upload
+
+    :param api_root: The location of the root of the Tahoe-LAFS HTTP API to
+        use to perform the upload.  This should typically be the ``node.url``
+        value from a Tahoe-LAFS client node.
+
+    :return: If the upload is successful then the capability of the uploaded
+        data is returned.
+
+    :raise: If there is a problem uploading the data -- except for
+        unavailability of storage servers -- then some exception is raised.
+    """
+    uri = api_root.child("uri")
+    resp = await client.put(uri, data)
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code in (200, 201):
+        return content
+    raise TahoeAPIError("put", uri, resp.code, content)
+
+
+@async_retry(_common_tahoe_errors)
 async def upload(
     client: HTTPClient, inpath: FilePath, api_root: DecodedURL
 ) -> Awaitable[str]:
@@ -149,13 +185,9 @@ async def upload(
     :raise: If there is a problem uploading the data -- except for
         unavailability of storage servers -- then some exception is raised.
     """
-    uri = api_root.child("uri")
     with inpath.open() as f:
-        resp = await client.put(uri, f)
-    content = (await treq.content(resp)).decode("utf-8")
-    if resp.code in (200, 201):
-        return content
-    raise TahoeAPIError("put", uri, resp.code, content)
+        capability = await upload_bytes(client, f, api_root)
+    return capability
 
 
 async def download(
@@ -299,6 +331,9 @@ class Tahoe(object):
 
     def upload(self, inpath):
         return upload(self.client, inpath, self._api_root)
+
+    def upload_bytes(self, data):
+        return upload_bytes(self.client, data, self._api_root)
 
     def make_directory(self):
         return make_directory(self.client, self._api_root)

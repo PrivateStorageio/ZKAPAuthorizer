@@ -236,8 +236,7 @@ async def tahoe_lafs_uploader(
     Upload a replica to Tahoe
     """
     set_state(RecoveryState(stage=RecoveryStages.uploading))
-    # XXX need a client.upload_data or something / refactor
-    snapshot_immutable_cap = await client.upload(snapshot_data)
+    snapshot_immutable_cap = await client.upload_bytes(snapshot_data)
     await client.link(recovery_cap, "snapshot.sql", snapshot_immutable_cap)
 
 
