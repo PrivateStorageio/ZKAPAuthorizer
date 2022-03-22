@@ -159,31 +159,6 @@ class WithCursorAsyncTests(TestCase):
             Equals([(1,)]),
         )
 
-    def test_db0(self):
-        db = connect(":memory:")
-        cursor0 = db.cursor()
-        cursor0.execute("BEGIN IMMEDIATE TRANSACTION")
-        cursor0.execute("CREATE TABLE [foo] ([a] INT)")
-        cursor0.execute("INSERT INTO [foo] VALUES (1)")
-        # note: no close() yet
-        cursor1 = db.cursor()
-        # should cause error
-        print(cursor1.execute("select * from [foo]").fetchall())
-        cursor0.close()
-        cursor1.close()
-
-    def test_db1(self):
-        db = connect(":memory:")
-        with db as cursor0:
-            cursor0.execute("BEGIN IMMEDIATE TRANSACTION")
-            cursor0.execute("CREATE TABLE [foo] ([a] INT)")
-            cursor0.execute("INSERT INTO [foo] VALUES (1)")
-
-            # cursor0 still open
-            cursor1 = db.cursor()
-            # should cause error
-            print(cursor1.execute("select * from [foo]").fetchall())
-
     def test_async(self):
         """
         The given function can return an ``Awaitable`` and the transaction will
@@ -210,23 +185,16 @@ class WithCursorAsyncTests(TestCase):
             @with_cursor_async
             async def f(self, cursor_a):
                 # Have an observable effect
-                print("run db stuff")
                 cursor_a.execute("CREATE TABLE [foo] ([a] INT)")
                 cursor_a.execute("INSERT INTO [foo] VALUES (1)")
                 # The transaction is still open while we wait.
-                print("awaiting")
                 await self.task
-                print("done waiting")
                 return self.expected
 
         # Start the asynchronous task but don't wait on it so that we can
         # assert stuff in parallel.
         db = Database()
-        coro = db.f()
-
-        print("creating deferred")
-        coro_d = Deferred.fromCoroutine(coro)
-        print("deferred: {}".format(coro_d))
+        coro_d = Deferred.fromCoroutine(db.f())
 
         # Since the asynchronous task hasn't completed, its transaction hasn't
         # committed and there is no foo table to select from.  A query on the
@@ -241,23 +209,9 @@ class WithCursorAsyncTests(TestCase):
         # the transaction to be committed.
         Database.task.callback(None)
 
-        # Now we can wait for `call_if_empty` to finish.  Even though the
-        # asynchronous task should have finished when we fired the Deferred
-        # above, that doesn't mean the transaction management code has
-        # finished.  For that, we have to wait for `call_if_empty`'s coroutine
-        # to finish.
-        #
-        # Also, we expect to get back the value from the function we passed
-        # in.
-
-        self.assertThat(
-            coro_d,
-            succeeded(
-                Equals(
-                    Database.expected
-                )
-            )
-        )
+        # Now we can wait for the task to finish.  Also, we expect to get back
+        # the value from the function we passed in.
+        self.assertThat(coro_d, succeeded(Equals(Database.expected)))
 
         # So we can see the table and row that were created in it.
         cursor_b.execute("SELECT [a] FROM [foo]")
