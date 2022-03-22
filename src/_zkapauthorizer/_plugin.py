@@ -50,8 +50,8 @@ from .lease_maintenance import lease_maintenance_service, maintain_leases_from_r
 from .model import VoucherStore
 from .recover import (
     make_fail_downloader,
-    setup_tahoe_lafs_replication,
     make_fail_uploader,
+    setup_tahoe_lafs_replication,
 )
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender

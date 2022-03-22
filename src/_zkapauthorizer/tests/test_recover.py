@@ -2,8 +2,8 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
-from io import BytesIO
 from asyncio import run
+from io import BytesIO
 from sqlite3 import Connection, connect
 from typing import Iterator
 
@@ -38,8 +38,8 @@ from ..recover import (
     ReplicationAlreadySetup,
     StatefulRecoverer,
     attenuate_writecap,
-    get_tahoe_lafs_downloader,
     get_tahoe_lafs_direntry_uploader,
+    get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
