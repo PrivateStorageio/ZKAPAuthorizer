@@ -8,7 +8,6 @@ from sqlite3 import Connection, connect
 from typing import Iterator
 
 from allmydata.client import read_config
-from fixtures import TempDir
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -29,7 +28,6 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
@@ -46,7 +44,7 @@ from ..recover import (
     recover,
     setup_tahoe_lafs_replication,
 )
-from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
+from ..tahoe import MemoryGrid, Tahoe, make_directory
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
@@ -320,13 +318,6 @@ class TahoeLAFSDownloaderTests(TestCase):
             set_state=lambda state: None,
         )
         yield Deferred.fromCoroutine(upload(BytesIO(b"snapshot data")))
-
-        if False:
-            # ask for the latest snapshot capability
-            recovery_contents = yield Deferred.fromCoroutine(
-                self.client.list_directory(replica_dir_cap_str)
-            )
-            snapshot_cap_str = recovery_contents["snapshot.sql"]
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)

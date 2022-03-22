@@ -48,9 +48,8 @@ from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import lease_maintenance_service, maintain_leases_from_root
 from .model import VoucherStore
-from .recover import (
+from .recover import (  # make_fail_uploader,
     make_fail_downloader,
-    make_fail_uploader,
     setup_tahoe_lafs_replication,
 )
 from .resource import from_configuration as resource_from_configuration
