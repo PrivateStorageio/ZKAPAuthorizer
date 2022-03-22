@@ -258,11 +258,31 @@ async def tahoe_lafs_uploader(
     set_state: SetState,
 ) -> Awaitable[None]:
     """
-    Upload a replica to Tahoe
+    Upload a replica to Tahoe, linking the result into the given
+    recovery mutable capbility under the name 'snapshot.sql'
     """
     set_state(RecoveryState(stage=RecoveryStages.uploading))
     snapshot_immutable_cap = await client.upload_bytes(snapshot_data)
     await client.link(recovery_cap, "snapshot.sql", snapshot_immutable_cap)
+
+
+def get_tahoe_lafs_direntry_uploader(
+    client: Tahoe,
+    directory_mutable_cap: str,
+    set_state: SetState,
+    entry_name: str="snapshot.sql",
+):
+    """
+    Bind a Tahoe client to a mutable directory in a callable that will
+    upload a BytesIO and link it into the mutable directory under the
+    given name.
+
+    :return: A callable that uploads a BytesIO as the latest replica
+        snapshot
+    """
+    async def upload(data: BytesIO) -> Awaitable[None]:
+        await tahoe_lafs_uploader(client, directory_mutable_cap, data, set_state)
+    return upload
 
 
 def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:
