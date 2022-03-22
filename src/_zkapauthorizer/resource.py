@@ -43,8 +43,8 @@ from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
+from .lease_maintenance import LeaseMaintenanceConfig
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
@@ -150,7 +150,7 @@ def from_configuration(
     )
     calculate_price = _CalculatePrice(
         calculator,
-        get_configured_lease_duration(node_config),
+        LeaseMaintenanceConfig.from_node_config(node_config).get_lease_duration(),
     )
 
     root = create_private_tree(
