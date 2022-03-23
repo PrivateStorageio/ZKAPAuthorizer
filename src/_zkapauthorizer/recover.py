@@ -13,9 +13,9 @@ __all__ = [
     "noop_downloader",
 ]
 
+from io import BytesIO
 from collections.abc import Awaitable
 from enum import Enum, auto
-from io import BytesIO
 from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Iterator, Optional
 
