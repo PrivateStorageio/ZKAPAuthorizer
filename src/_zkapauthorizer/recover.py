@@ -181,7 +181,15 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
     """
-    return data.read().decode("ascii").splitlines()
+    s = data.read()
+    pos = 0
+    while pos < len(s):
+        delim = s.index(b":", pos)
+        length = int(s[pos:delim])
+        new_pos = delim + 1 + length
+        statement = s[delim + 1 : new_pos]
+        yield statement.decode("utf-8")
+        pos = new_pos + 1
 
 
 def recover(statements: Iterator[str], cursor) -> None:
