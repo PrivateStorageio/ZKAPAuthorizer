@@ -19,6 +19,7 @@ Tests for ``_zkapauthorizer.model``.
 
 from datetime import datetime, timedelta
 from errno import EACCES
+from functools import partial
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
@@ -73,6 +74,12 @@ from ..model import (
     memory_connect,
     with_cursor_async,
 )
+from ..recover import (
+    RecoveryStages,
+    RecoveryState,
+    StatefulRecoverer,
+    make_canned_downloader,
+)
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
@@ -89,6 +96,8 @@ from .strategies import (
 )
 
 _T = TypeVar("T")
+
+from .test_recover import snapshot, statements_to_snapshot
 
 
 async def fail(cursor):
@@ -1152,4 +1161,46 @@ class PassTests(TestCase):
         self.assertThat(
             Pass.from_bytes(pass_.pass_bytes),
             Equals(pass_),
+        )
+
+
+class ReplicationTests(TestCase):
+    """
+    Tests for replication and recovery.
+    """
+
+    def test_recover(self):
+        """
+        Given a snapshot returned by ``snapshot`` can be loaded into an empty
+        ``VoucherStore`` using ``VoucherStore.call_if_empty`` with
+        ``StatefulRecoverer.recover``.
+        """
+        store = self.useFixture(
+            ConfiglessMemoryVoucherStore(
+                # Time is not relevant to this test
+                datetime.now,
+            )
+        ).store
+        # XXX Use VoucherStore.snapshot once it is available
+        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(store._connection)))
+        downloader = make_canned_downloader(snapshot_bytes)
+        recoverer = StatefulRecoverer()
+
+        # StatefulRecoverer.recover should always succeed.  Verify that.
+        self.assertThat(
+            Deferred.fromCoroutine(
+                store.call_if_empty(partial(recoverer.recover, downloader))
+            ),
+            succeeded(Always()),
+        )
+
+        # It is not enough for StatefulRecoverer.recover to succeed, though.
+        # StatefulRecoverer must also end up in the succeeded state.
+        self.assertThat(
+            recoverer.state(),
+            Equals(
+                RecoveryState(
+                    stage=RecoveryStages.succeeded,
+                ),
+            ),
         )
