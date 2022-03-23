@@ -134,7 +134,9 @@ class SnapshotMachine(RuleBasedStateMachine):
         snapshot_bytes = b"".join(statements_to_snapshot(snapshot(self.connection)))
         statements = statements_from_snapshot(BytesIO(snapshot_bytes))
         new = connect(":memory:")
-        recover(statements, new)
+        cursor = new.cursor()
+        with new:
+            recover(statements, cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
