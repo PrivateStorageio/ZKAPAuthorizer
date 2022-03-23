@@ -128,7 +128,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(statements_from_download(downloaded_data), cursor)
+            recover(statements_from_snapshot(downloaded_data), cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -177,7 +177,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
 noop_downloader = make_canned_downloader(b"")
 
 
-def statements_from_download(data: BinaryIO) -> Iterator[str]:
+def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
     """
