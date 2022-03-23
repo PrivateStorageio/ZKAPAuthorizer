@@ -68,12 +68,6 @@ def snapshot(connection: Connection) -> Iterator[str]:
         yield statement + "\n"
 
 
-# XXX
-# one snapshot-machine per example (see "boilerplate")
-# Q: when use @initialize or whatever?
-#
-
-
 class SnapshotMachine(RuleBasedStateMachine):
     """
     Transition rules for a state machine corresponding to the state of a
