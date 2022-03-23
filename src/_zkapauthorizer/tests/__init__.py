@@ -50,6 +50,12 @@ def _configure_hypothesis():
     )
 
     settings.register_profile(
+        "fast",
+        max_examples=2,
+        **base,
+    )
+
+    settings.register_profile(
         "big",
         max_examples=10000,
         # The only rule-based state machine we have now is quite simple and
