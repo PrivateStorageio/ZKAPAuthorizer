@@ -309,7 +309,6 @@ class TahoeLAFSDownloaderTests(TestCase):
         upload = get_tahoe_lafs_direntry_uploader(
             tahoeclient,
             replica_dir_cap_str,
-            set_state=lambda state: None,
         )
         yield Deferred.fromCoroutine(upload(BytesIO(b"snapshot data")))
 
