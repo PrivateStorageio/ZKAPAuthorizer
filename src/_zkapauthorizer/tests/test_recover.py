@@ -46,11 +46,11 @@ from ..recover import (
     setup_tahoe_lafs_replication,
     statements_from_snapshot,
 )
+from ..sql import Table, create_table
 from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
-from .sql import Table, create_table
 from .strategies import (
     api_auth_tokens,
     deletes,
