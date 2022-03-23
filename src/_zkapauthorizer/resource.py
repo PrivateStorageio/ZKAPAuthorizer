@@ -25,6 +25,7 @@ from collections.abc import Awaitable
 from json import loads
 from typing import Callable
 
+from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
@@ -231,8 +232,6 @@ class RecoverResource(Resource):
         return dumps_utf8(self.recoverer.state().marshal())
 
     def render_POST(self, request):
-        from allmydata.uri import ReadonlyDirectoryURI, from_string
-
         if wrong_content_type(request, "application/json"):
             return NOT_DONE_YET
 
