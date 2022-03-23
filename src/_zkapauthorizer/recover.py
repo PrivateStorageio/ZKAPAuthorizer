@@ -3,7 +3,6 @@ A system for recovering local ZKAPAuthorizer state from a remote replica.
 """
 
 __all__ = [
-    "AlreadyRecovering",
     "RecoveryStages",
     "RecoveryState",
     "SetState",
@@ -30,12 +29,6 @@ from .tahoe import Tahoe, attenuate_writecap
 class SnapshotMissing(Exception):
     """
     No snapshot was not found in the replica directory.
-    """
-
-
-class AlreadyRecovering(Exception):
-    """
-    A recovery attempt is already in-progress so another one cannot be made.
     """
 
 
@@ -119,12 +112,9 @@ class StatefulRecoverer:
 
         :param cursor: A database cursor which can be used to populate the
             database with recovered state.
-
-        :raise AlreadyRecovering: If recovery has already been attempted
-            (successfully or otherwise).
         """
         if self._state.stage != RecoveryStages.inactive:
-            raise AlreadyRecovering()
+            return
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
         try:

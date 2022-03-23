@@ -32,7 +32,6 @@ from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
-    AlreadyRecovering,
     RecoveryStages,
     ReplicationAlreadySetup,
     StatefulRecoverer,
@@ -251,8 +250,8 @@ class StatefulRecovererTests(TestCase):
 
     def test_cannot_recover_twice(self):
         """
-        A second call to ``StatefulRecoverer.recover`` fails with
-        ``AlreadyRecovering``.
+        A second call to ``StatefulRecoverer.recover`` returns ``None`` without
+        altering the recovery state.
         """
         downloader = noop_downloader
         recoverer = StatefulRecoverer()
@@ -262,16 +261,13 @@ class StatefulRecovererTests(TestCase):
                 Deferred.fromCoroutine(recoverer.recover(downloader, cursor)),
                 succeeded(Always()),
             )
+            stage = recoverer.state().stage
             second = Deferred.fromCoroutine(recoverer.recover(downloader, cursor))
             self.assertThat(
                 second,
-                failed(
-                    AfterPreprocessing(
-                        lambda f: f.value,
-                        IsInstance(AlreadyRecovering),
-                    ),
-                ),
+                succeeded(Is(None)),
             )
+            self.assertThat(recoverer.state().stage, Equals(stage))
 
 
 class TahoeLAFSDownloaderTests(TestCase):
