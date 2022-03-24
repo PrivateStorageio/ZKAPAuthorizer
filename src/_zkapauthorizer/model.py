@@ -278,6 +278,8 @@ class VoucherStore(object):
             conn,
         )
 
+    def run_replication(self, observer):
+
     @with_cursor_async
     def call_if_empty(self, cursor, f: Callable[[Cursor], _T]) -> _T:
         """

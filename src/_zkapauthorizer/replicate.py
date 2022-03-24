@@ -1,8 +1,12 @@
 from collections.abc import Awaitable
 
+from attrs import define, field
+from twisted.application.service import Service
+from twisted.internet.defer import CancelledError, Deferred
 from twisted.python.lockfile import FilesystemLock
 
-from .config import REPLICA_RWCAP_BASENAME
+from .config import REPLICA_RWCAP_BASENAME, _Config
+from .model import VoucherStore
 from .tahoe import Tahoe, attenuate_writecap
 
 
@@ -54,3 +58,53 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
 
     # Return the read-cap
     return rocap
+
+
+def replication_service(reactor, node, store):
+    """
+    Return a service which implements the replication process documented in
+    the ``backup-recovery`` design document:
+    """
+    return _ReplicationService(reactor, node.config, store)
+
+
+SERVICE_NAME = "replication-service"
+
+
+@define
+class _ReplicationService(Service):
+    """
+    Perform all activity related to maintaining a remote replica of the local
+    ZKAPAuthorizer database.
+
+    :ivar _reactor: The reactor to use for this activity.
+
+    :ivar _config: The Tahoe-LAFS configuration for the node this service runs
+        in.
+
+    :ivar _store: The database for the plugin instance for which this service
+        performs replication.
+    """
+
+    name = SERVICE_NAME
+
+    _reactor = field()
+    _config: _Config = field()
+    _store: VoucherStore = field()
+
+    def startService(self):
+        # Observe changes Tell the store to initiate replication when appropriate.
+        self._replicating = self._store.observe_events(
+            lambda conn, replica_dircap: None,
+        )
+
+    def stopService(self):
+        replicating = self._replicating
+        self._replicating = None
+
+        def catch_cancelled(err):
+            err.trap(CancelledError)
+            return None
+
+        replicating.addErrback(catch_cancelled)
+        replicating.cancel()

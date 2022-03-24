@@ -1,0 +1,93 @@
+Relationships
+=============
+
+* ReplicationCapableConnection wraps a Connection
+  * It exposes a subset of the SQLite3 interface plus replication-related APIs
+
+* ReplicationCapableConnection creates, writes, and reads the event stream schema
+  * The schema is created when someone calls a method on the connection to enable replication
+  * Rows are written when replication is enabled and changes are made via execute() or executemany()
+  * Rows are read when someone calls a method to read out all unreplicated changes
+
+* ReplicationCapableConnection infers enabled state of replication by existence of the schema in the db
+
+* VoucherStore wraps a ReplicationCapableConnection
+* _ReplicationService wraps a VoucherStore
+
+Workflow
+========
+* HTTP endpoint calls setup_tahoe_lafs_replication
+  * setup_tahoe_lafs_replication creates and saves a tahoe-lafs directory
+  * setup_tahoe_lafs_replication calls VoucherStore.enable_replication()
+    * VoucherStore.enable_replication() calls ReplicationCapableConnection.enable_replication()
+
+* _ReplicationService starts and calls VoucherStore.replicate_with(replicator)
+  * If replication is already enabled or after it becomes enabled,
+    * The replicator is called with the wrapped ReplicationCapableConnection
+      * The replicator calls ReplicationCapableConnection.observe_event_stream(observer)
+      * The observer is immediately called with information about the current state wrt replication
+      * When new changes are committed to the database the observer is called again with updated details
+      * In both cases,
+        * It looks at the database's event stream sequence number
+        * It looks at the size of the unreplicated event stream in the database
+        * It uploads a snapshot if appropriate
+        * It uploads an event stream object if if appropriate
+
+
+code sketches
+=============
+
+```
+# this is probably in _ReplicationService.startService.  Or a function called
+# from there so we can get a handle on something to cancel in stopService.
+async with store.replicate() as rep:
+    # the block is only entered if/when replication is actually enabled - so,
+    # possibly never in a given process
+
+    async for state_info in rep:
+        # `rep` is like a cursor on the event stream. the loop iterates when
+	# there are unobserved events. state_info describes the database's
+	# event stream sequence number and the size of the unreplicated event
+	# stream.
+
+	# a task is something like "create and upload a snapshot" or "create
+	# an event stream blob for the last 1000 events and upload it" implied
+	# by running the operation is also updating in-database state
+	# reflecting what has been replicated and possibly dropping replicated
+	# event stream rows.
+	#
+	# there could be multiple tasks if there are enough unreplicated
+	# events that multiple uploads are required.
+        tasks = calulate_tasks(state_info)
+        try:
+            for t in tasks:
+                await t.run(conn)
+        except Exception as e:
+	    # exact details of error handling TBD ... probably at least log
+	    # it.  maybe this outside-the-loop handling makes sense since if
+	    # you couldn't upload an earlier event stream uploading a later
+	    # one is not very productive.
+            ...
+```
+
+alternatively (trades the async context manager adventure for more boring challenges)
+
+```
+# serialize calls to the observer because it sounds complicated to figure out
+# what new replication work should be done while earlier work is still in
+# progress.  also if multiple calls pile up, drop all but the last one when it
+# comes time to make a new call because it will have the best information
+# available about what action to take.
+@serialize(discard_outdated=True)
+async def observer(conn, state_info):
+    # state_info is as above
+    tasks = calculate_tasks(state_info)
+    try:
+        for t in tasks:
+            await t.run()
+    except Exception as e:
+        # TBD
+
+# _ReplicationService.startService can do this.
+self.d = store.replicate_with(lambda conn: conn.observe_event_stream(observer))
+```
