@@ -3,7 +3,6 @@ A system for recovering local ZKAPAuthorizer state from a remote replica.
 """
 
 __all__ = [
-    "AlreadyRecovering",
     "RecoveryStages",
     "RecoveryState",
     "SetState",
@@ -30,12 +29,6 @@ from .tahoe import Tahoe, attenuate_writecap
 class SnapshotMissing(Exception):
     """
     No snapshot was not found in the replica directory.
-    """
-
-
-class AlreadyRecovering(Exception):
-    """
-    A recovery attempt is already in-progress so another one cannot be made.
     """
 
 
@@ -119,12 +112,9 @@ class StatefulRecoverer:
 
         :param cursor: A database cursor which can be used to populate the
             database with recovered state.
-
-        :raise AlreadyRecovering: If recovery has already been attempted
-            (successfully or otherwise).
         """
         if self._state.stage != RecoveryStages.inactive:
-            raise AlreadyRecovering()
+            return
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
         try:
@@ -138,7 +128,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(statements_from_download(downloaded_data), cursor)
+            recover(statements_from_snapshot(downloaded_data), cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -187,11 +177,21 @@ def make_canned_downloader(data: bytes) -> Downloader:
 noop_downloader = make_canned_downloader(b"")
 
 
-def statements_from_download(data: BinaryIO) -> Iterator[str]:
+def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
     """
-    return data.read().decode("ascii").splitlines()
+    s = data.read()
+    pos = 0
+    while pos < len(s):
+        delim = s.index(b":", pos)
+        length = int(s[pos:delim])
+        new_pos = delim + 1 + length
+        statement = s[delim + 1 : new_pos]
+        yield statement.decode("utf-8")
+        pos = new_pos + 1
 
 
 def recover(statements: Iterator[str], cursor) -> None:

@@ -658,6 +658,10 @@ class RecoverTests(TestCase):
         If recovery fails for some unrecognized reason the endpoint returns a 500
         response.
         """
+
+        class DownloaderBroken(Exception):
+            pass
+
         config = get_config_with_api_token(
             self.useFixture(TempDir()),
             get_config,
@@ -665,7 +669,7 @@ class RecoverTests(TestCase):
         )
 
         def broken_get_downloader(cap):
-            raise Exception("Oops")
+            raise DownloaderBroken()
 
         root = root_from_config(config, datetime.now, broken_get_downloader)
         agent = RequestTraversalAgent(root)
@@ -681,6 +685,15 @@ class RecoverTests(TestCase):
         self.assertThat(
             requesting,
             succeeded(matches_response(code_matcher=Equals(500))),
+        )
+
+        # There is no public API for flushing logged errors if you're not
+        # using one of trial's TestCase classes...
+        from twisted.trial.runner import _logObserver
+
+        self.assertThat(
+            len(_logObserver.flushErrors(DownloaderBroken)),
+            Equals(1),
         )
 
     @given(

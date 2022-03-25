@@ -56,7 +56,7 @@ from testtools.matchers import (
     Raises,
 )
 from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, succeed
 from twisted.python.runtime import platform
 
 from ..model import (
@@ -91,7 +91,7 @@ from .strategies import (
 _T = TypeVar("T")
 
 
-def fail(cursor):
+async def fail(cursor):
     raise Exception("Should not be called")
 
 
@@ -237,14 +237,14 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         """
         self.setup_example()
 
-        def side_effect(cursor):
+        async def side_effect(cursor):
             cursor.execute("CREATE TABLE [it_ran] (a INT)")
             cursor.execute("INSERT INTO [it_ran] VALUES (1)")
             return True
 
         self.assertThat(
-            self.store_fixture.store.call_if_empty(side_effect),
-            Equals(True),
+            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(side_effect)),
+            succeeded(Equals(True)),
         )
         rows = list(
             self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
@@ -267,8 +267,8 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             get_tokens=lambda: tokens,
         )
         self.assertThat(
-            lambda: self.store_fixture.store.call_if_empty(fail),
-            raises(NotEmpty),
+            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(fail)),
+            failed(AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty))),
         )
 
     @given(
@@ -283,8 +283,8 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         d = self.store_fixture.redeem(voucher, num_passes)
         self.assertThat(d, succeeded(Always()))
         self.assertThat(
-            lambda: self.store_fixture.store.call_if_empty(fail),
-            raises(NotEmpty),
+            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(fail)),
+            failed(AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty))),
         )
 
     @given(
@@ -303,8 +303,8 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         self.store_fixture.store.invalidate_unblinded_tokens("anything", tokens)
 
         self.assertThat(
-            lambda: self.store_fixture.store.call_if_empty(fail),
-            raises(NotEmpty),
+            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(fail)),
+            failed(AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty))),
         )
 
 
@@ -716,13 +716,17 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         """
         if self.num_vouchers_redeemed == 0:
             self.case.assertThat(
-                self.configless.store.call_if_empty(lambda cursor: True),
-                Equals(True),
+                Deferred.fromCoroutine(
+                    self.configless.store.call_if_empty(lambda cursor: succeed(True))
+                ),
+                succeeded(Equals(True)),
             )
         else:
             self.case.assertThat(
-                lambda: self.configless.store.call_if_empty(fail),
-                raises(NotEmpty),
+                Deferred.fromCoroutine(self.configless.store.call_if_empty(fail)),
+                failed(
+                    AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty)),
+                ),
             )
 
     @invariant()

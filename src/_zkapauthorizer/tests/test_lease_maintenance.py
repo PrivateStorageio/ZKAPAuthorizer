@@ -52,7 +52,7 @@ from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
-from ..config import empty_config, lease_maintenance_from_tahoe_config
+from ..config import empty_config
 from ..foolscap import ShareStat
 from ..lease_maintenance import (
     LeaseMaintenanceConfig,
@@ -76,7 +76,7 @@ from .strategies import (
     storage_indexes,
 )
 
-default_lease_maint_config = lease_maintenance_from_tahoe_config(empty_config)
+default_lease_maint_config = LeaseMaintenanceConfig.from_node_config(empty_config)
 
 
 def dummy_maintain_leases():

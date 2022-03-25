@@ -586,8 +586,8 @@ Footnotes
 
 .. [7] The SQL statements from ``iterdump``,
        except for those relating to the event stream table,
-       are joined with newline separators and compressed using lzma.
-       The compressed blob is uploaded as an immutable object.
+       are UTF-8 encoded, `netstring <http://cr.yp.to/proto/netstrings.txt>`_ encoded, and concatenated.
+       The resulting byte string is uploaded as an immutable object.
        The metadata of the object in the containing directory includes the snapshot's sequence number.
 
 .. [8] The upload may proceed concurrently with further database changes.

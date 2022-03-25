@@ -22,9 +22,11 @@ In the future it should also allow users to read statistics about token usage.
 """
 
 from collections.abc import Awaitable
+from functools import partial
 from json import loads
 from typing import Callable
 
+from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
@@ -35,6 +37,7 @@ from twisted.web.http import (
     CREATED,
     INTERNAL_SERVER_ERROR,
 )
+from twisted.web.iweb import IRequest
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
@@ -43,8 +46,8 @@ from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .config import get_configured_lease_duration
 from .controller import PaymentController, get_redeemer
+from .lease_maintenance import LeaseMaintenanceConfig
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
@@ -150,7 +153,7 @@ def from_configuration(
     )
     calculate_price = _CalculatePrice(
         calculator,
-        get_configured_lease_duration(node_config),
+        LeaseMaintenanceConfig.from_node_config(node_config).get_lease_duration(),
     )
 
     root = create_private_tree(
@@ -231,8 +234,6 @@ class RecoverResource(Resource):
         return dumps_utf8(self.recoverer.state().marshal())
 
     def render_POST(self, request):
-        from allmydata.uri import ReadonlyDirectoryURI, from_string
-
         if wrong_content_type(request, "application/json"):
             return NOT_DONE_YET
 
@@ -256,23 +257,66 @@ class RecoverResource(Resource):
             request.setResponseCode(BAD_REQUEST)
             return b"recovery-capability must be a read-only dircap string"
 
+        # The response to this request does not wait for recovery to complete.
+        # Instead, a separate endpoint exposes the progress of the recovery
+        # attempt.  So we're not going to wait for `recovering` to complete.
+        # However, we do have to schedule it in the event loop or it will
+        # never even start.
+        recovering = self._recover(request, self.store, cap)
+        d = Deferred.fromCoroutine(recovering)
+
+        # The recovery code is meant to be /pretty/ unlikely to raise an
+        # exception - it directs all errors into the status information
+        # exposed by StatefulRecoverer instead of letting them get raised.
+        # Still, it's not _impossible_ that an exception could come out.  If
+        # it does, make sure it shows up in the log at least.
+        d.addErrback(partial(self._log.failure, "unhandled recovery failure"))
+
+        # _recover is responsible for generating the response.
+        return NOT_DONE_YET
+
+    async def _recover(
+        self,
+        request: IRequest,
+        store: VoucherStore,
+        cap: ReadonlyDirectoryURI,
+    ):
+        async def initiate(request, recoverer, downloader, cursor):
+            recovering = recoverer.recover(downloader, cursor)
+            recovering_d = Deferred.fromCoroutine(recovering)
+
+            # The only way to get to this point is if the store is empty and
+            # the recoverer appears to at least be willing to try to start.
+            # This is no guarantee that recovery will succeed but it is a
+            # guarantee that the *try* has begun.  Generate a response that
+            # reflects this.
+            request.setResponseCode(ACCEPTED)
+            request.finish()
+
+            # Really start the recovery attempt.
+            await recovering_d
+
         try:
+            # If these things succeed then we will have started recovery and
+            # generated a response to the request.
             downloader = self.get_downloader(cap)
-            self.store.call_if_empty(
-                lambda cursor: Deferred.fromCoroutine(
-                    self.recoverer.recover(downloader, cursor)
-                ),
+            await store.call_if_empty(
+                partial(initiate, request, self.recoverer, downloader)
             )
         except NotEmpty:
+            # If the database had anything in it, though, recovery will not be
+            # attempted - and it will even fail quickly enough to be a
+            # reasonable way to detect and report the conflict case.
             request.setResponseCode(CONFLICT)
-            return b"there is existing local state"
+            request.write(b"there is existing local state")
+            request.finish()
         except:
-            self._log.error("recovery failed")
+            # And if something else is broken, then who knows...  At least try
+            # to generate an error response.
+            self._log.failure("recovery setup failed")
             request.setResponseCode(INTERNAL_SERVER_ERROR)
-            return b""
-
-        request.setResponseCode(ACCEPTED)
-        return b""
+            request.write(b"recovery setup failed")
+            request.finish()
 
 
 def authorizationless_resource_tree(
