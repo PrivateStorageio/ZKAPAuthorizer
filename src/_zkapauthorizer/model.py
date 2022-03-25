@@ -279,7 +279,7 @@ class VoucherStore(object):
         )
 
     @with_cursor_async
-    def call_if_empty(self, cursor, f: Callable[[Cursor], _T]) -> _T:
+    async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
         """
         Transactionally determine that the database is empty and call the given
         function if it is or raise ``NotEmpty`` if it is not.
@@ -293,7 +293,7 @@ class VoucherStore(object):
         # `invalid-unblinded-tokens` table and maybe also look at lease
         # maintenance spending.
         if self.list.wrapped(self, cursor) == []:
-            return f(cursor)
+            return await f(cursor)
         else:
             raise NotEmpty()
 
