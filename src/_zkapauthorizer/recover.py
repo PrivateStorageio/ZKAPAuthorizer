@@ -197,28 +197,6 @@ def statements_from_download(data: BinaryIO) -> Iterator[str]:
     return data.read().decode("ascii").splitlines()
 
 
-def make_fail_uploader(reason: Exception) -> Uploader:
-    """
-    Make an uploader that always fails with the given exception.
-    """
-
-    async def fail_uploader(set_state: SetState) -> Awaitable[None]:
-        raise reason
-
-    return fail_uploader
-
-
-def make_success_uploader() -> Uploader:
-    """
-    Make an uploader that always succeeds immediately
-    """
-
-    async def success_uploader(set_state: SetState) -> Awaitable[None]:
-        return
-
-    return success_uploader
-
-
 def recover(statements: Iterator[str], cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
