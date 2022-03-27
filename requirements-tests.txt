@@ -1,6 +1,0 @@
-codecov
-attrs
-hypothesis
-testtools
-fixtures
-treq

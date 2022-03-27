@@ -181,6 +181,8 @@ noop_downloader = make_canned_downloader(b"")
 def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
     """
     s = data.read()
     pos = 0

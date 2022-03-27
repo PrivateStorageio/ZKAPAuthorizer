@@ -263,9 +263,16 @@ class RecoverResource(Resource):
         # However, we do have to schedule it in the event loop or it will
         # never even start.
         recovering = self._recover(request, self.store, cap)
-        Deferred.fromCoroutine(recovering)
+        d = Deferred.fromCoroutine(recovering)
 
-        # _initiate_recovery is responsible for generating the response.
+        # The recovery code is meant to be /pretty/ unlikely to raise an
+        # exception - it directs all errors into the status information
+        # exposed by StatefulRecoverer instead of letting them get raised.
+        # Still, it's not _impossible_ that an exception could come out.  If
+        # it does, make sure it shows up in the log at least.
+        d.addErrback(partial(self._log.failure, "unhandled recovery failure"))
+
+        # _recover is responsible for generating the response.
         return NOT_DONE_YET
 
     async def _recover(
