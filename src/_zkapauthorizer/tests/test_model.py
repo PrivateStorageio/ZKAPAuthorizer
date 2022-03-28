@@ -245,6 +245,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         then it is empty.
         """
         self.setup_example()
+        store = self.store_fixture.store
 
         async def side_effect(cursor):
             cursor.execute("CREATE TABLE [it_ran] (a INT)")
@@ -252,13 +253,19 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             return True
 
         self.assertThat(
-            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(side_effect)),
+            Deferred.fromCoroutine(store.call_if_empty(side_effect)),
             succeeded(Equals(True)),
         )
-        cursor = self.store_fixture.store._connection.cursor()
-        rows = cursor.execute("SELECT * FROM [it_ran]")
-        rows = cursor.fetchall()
-        self.assertThat(rows, HasLength(1))
+
+        async def check_side_effect(cursor):
+            rows = cursor.execute("SELECT * FROM [it_ran]")
+            rows = cursor.fetchall()
+            return rows
+
+        self.assertThat(
+            Deferred.fromCoroutine(store.call_if_empty(check_side_effect)),
+            succeeded(Equals([(1,)])),
+        )
 
     @given(
         voucher=vouchers(),
