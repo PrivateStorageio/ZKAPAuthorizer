@@ -63,10 +63,10 @@ class Insert:
     fields: tuple[...]
 
     def statement(self):
-        names = ", ".join((escape(name) for (name, _) in self.table.columns))
+        names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
         placeholders = ", ".join("?" * len(self.table.columns))
         return (
-            f"INSERT INTO {escape(self.table_name)} "
+            f"INSERT INTO {escape_identifier(self.table_name)} "
             f"({names}) "
             f"VALUES ({placeholders})"
         )
@@ -95,8 +95,10 @@ class Update:
 
     def statement(self):
         field_names = list(name for (name, _) in self.table.columns)
-        assignments = ", ".join(f"{escape(name)} = ?" for name in field_names)
-        return f"UPDATE {escape(self.table_name)} SET {assignments}"
+        assignments = ", ".join(
+            f"{escape_identifier(name)} = ?" for name in field_names
+        )
+        return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
 
     def arguments(self):
         return self.fields
@@ -115,13 +117,13 @@ class Delete:
     table_name: str
 
     def statement(self):
-        return f"DELETE FROM {escape(self.table_name)}"
+        return f"DELETE FROM {escape_identifier(self.table_name)}"
 
     def arguments(self):
         return ()
 
 
-def escape(string: str) -> str:
+def escape_identifier(string: str) -> str:
     """
     Escape an arbitrary string for use as a SQLite3 identifier.
     """
@@ -134,7 +136,7 @@ def column_ddl(name: str, column: Column) -> str:
 
     :return: *bar* in **create table foo ( bar )**
     """
-    return f"{escape(name)} {column.affinity.name}"
+    return f"{escape_identifier(name)} {column.affinity.name}"
 
 
 def create_table(name: str, table: Table) -> str:
@@ -142,4 +144,4 @@ def create_table(name: str, table: Table) -> str:
     Get a table creation DDL statement for a table of the given name and type.
     """
     columns = ", ".join(column_ddl(name, column) for (name, column) in table.columns)
-    return f"CREATE TABLE {escape(name)} ({columns})"
+    return f"CREATE TABLE {escape_identifier(name)} ({columns})"

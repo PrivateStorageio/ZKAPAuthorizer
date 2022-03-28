@@ -35,6 +35,7 @@ from testtools import TestCase
 from testtools.matchers import Always, Annotate, Equals, Is, Not
 from zope.interface import Interface, implementer
 
+from ..sql import Column, Insert, StorageAffinity, Table, create_table
 from ._sql_matchers import structured_dump
 from .matchers import (
     Provides,
@@ -43,7 +44,6 @@ from .matchers import (
     matches_json,
     returns,
 )
-from .sql import Column, Insert, StorageAffinity, Table, create_table
 from .strategies import inserts, sql_schemas
 
 

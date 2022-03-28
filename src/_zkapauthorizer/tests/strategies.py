@@ -64,7 +64,7 @@ from ..model import (
     Unpaid,
     Voucher,
 )
-from .sql import Column, Delete, Insert, StorageAffinity, Table, Update
+from ..sql import Column, Delete, Insert, StorageAffinity, Table, Update
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
