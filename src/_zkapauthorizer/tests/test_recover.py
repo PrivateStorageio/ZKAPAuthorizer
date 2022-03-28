@@ -35,19 +35,17 @@ from twisted.python.filepath import FilePath
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
-    ReplicationAlreadySetup,
     StatefulRecoverer,
-    attenuate_writecap,
     get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
     recover,
-    setup_tahoe_lafs_replication,
     statements_from_snapshot,
 )
+from ..replicate import ReplicationAlreadySetup, setup_tahoe_lafs_replication
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, link, make_directory, upload
+from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, link, make_directory, upload
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager

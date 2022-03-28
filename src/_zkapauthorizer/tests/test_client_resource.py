@@ -95,12 +95,8 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import (
-    ReplicationAlreadySetup,
-    fail_setup_replication,
-    make_fail_downloader,
-    noop_downloader,
-)
+from ..recover import make_fail_downloader, noop_downloader
+from ..replicate import ReplicationAlreadySetup, fail_setup_replication
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,

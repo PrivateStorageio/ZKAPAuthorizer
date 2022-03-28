@@ -51,7 +51,8 @@ from .lease_maintenance import LeaseMaintenanceConfig
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import Downloader, ReplicationAlreadySetup, StatefulRecoverer
+from .recover import Downloader, StatefulRecoverer
+from .replicate import ReplicationAlreadySetup
 from .storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
