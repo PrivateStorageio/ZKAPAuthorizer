@@ -140,10 +140,9 @@ def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection
         run_schema_upgrades(schema_upgrades, cursor)
 
         # Create some tables that only exist (along with their contents) for
-        # this connection.  These are outside of the schema because they are
-        # not persistent.  We can change them any time we like without
-        # worrying about upgrade logic because we re-create them on every
-        # connection.
+        # this connection.  These are outside of the schema because they are not
+        # persistent.  We can change them any time we like without worrying about
+        # upgrade logic because we re-create them on every connection.
         cursor.execute(
             """
             -- Track tokens in use by the process holding this connection.
@@ -160,9 +159,9 @@ def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection
         )
         cursor.execute(
             """
-            -- Track tokens that we want to remove from the database.  Mainly
-            -- just works around the awkward DB-API interface for dealing with
-            -- deleting many rows.
+            -- Track tokens that we want to remove from the database.  Mainly just
+            -- works around the awkward DB-API interface for dealing with deleting
+            -- many rows.
             CREATE TEMPORARY TABLE [to-discard] (
                 [unblinded-token] text
             )
@@ -170,8 +169,8 @@ def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection
         )
         cursor.execute(
             """
-            -- Track tokens that we want to remove from the [in-use] set.
-            -- Similar to [to-discard].
+            -- Track tokens that we want to remove from the [in-use] set.  Similar
+            -- to [to-discard].
             CREATE TEMPORARY TABLE [to-reset] (
                 [unblinded-token] text
             )
