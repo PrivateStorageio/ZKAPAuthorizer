@@ -238,8 +238,7 @@ def connection_to_statements(connection: Connection) -> Iterator[str]:
     self-contained snapshot of the database reachable via the given
     connection.
     """
-    for statement in connection.iterdump():
-        yield statement + "\n"
+    return connection.iterdump()
 
 
 # Convenience API for dump statements, netstring-encoding them, and
