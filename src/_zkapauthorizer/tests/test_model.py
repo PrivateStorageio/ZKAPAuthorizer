@@ -1166,7 +1166,8 @@ class PassTests(TestCase):
 
 class ReplicationTests(TestCase):
     """
-    Tests for replication and recovery.
+    Tests for replication and recovery - especially tests for successful
+    integration of different pieces that go into those processes.
     """
 
     def test_recover(self):
