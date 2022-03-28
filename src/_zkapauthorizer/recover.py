@@ -173,6 +173,8 @@ noop_downloader = make_canned_downloader(b"")
 def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
     """
     s = data.read()
     pos = 0
@@ -212,8 +214,9 @@ def recover(statements: Iterator[str], cursor: Cursor) -> None:
     # pragma above.
     #
     # Probably a right-er solution is to change the snapshotter to emit all of
-    # the DDL statements first and all of the DML statements second so that
-    # executing the statements in the order given is correct.
+    # the Data Definition Language (DDL) statements first and all of the Data
+    # Manipulation Language (DML) statements second so that executing the
+    # statements in the order given is correct.
     #
     # Possibly it is also true that if we had never turned on the foreign_keys
     # pragma in the first place, SQLite3 would allow this to pass.  It is too
