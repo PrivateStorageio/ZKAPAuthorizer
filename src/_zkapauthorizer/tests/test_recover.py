@@ -33,20 +33,18 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
-    ReplicationAlreadySetup,
     StatefulRecoverer,
-    attenuate_writecap,
     get_tahoe_lafs_direntry_uploader,
     get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
     recover,
-    setup_tahoe_lafs_replication,
     statements_from_snapshot,
 )
+from ..replicate import ReplicationAlreadySetup, setup_tahoe_lafs_replication
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, make_directory
+from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
