@@ -22,7 +22,7 @@ from functools import wraps
 from json import loads
 from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
-from typing import Callable
+from typing import Awaitable, Callable, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
@@ -39,6 +39,8 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
+
+_T = TypeVar("T")
 
 
 class NotEmpty(Exception):
@@ -175,6 +177,26 @@ def open_and_initialize(path, connect=None):
     return conn
 
 
+def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
+    """
+    Like ``with_cursor`` but support decorating async functions instead.
+
+    The transaction will be kept open until the async function completes.
+    """
+
+    @wraps(f)
+    async def with_cursor_async(self, *a, **kw):
+        with self._connection:
+            cursor = self._connection.cursor()
+            try:
+                cursor.execute("BEGIN IMMEDIATE TRANSACTION")
+                return await f(self, cursor, *a, **kw)
+            finally:
+                cursor.close()
+
+    return with_cursor_async
+
+
 def with_cursor(f):
     """
     Decorate a function so it is automatically passed a cursor with an active
@@ -256,11 +278,14 @@ class VoucherStore(object):
             conn,
         )
 
-    @with_cursor
-    def call_if_empty(self, cursor, f: Callable[[Cursor], None]) -> None:
+    @with_cursor_async
+    async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
         """
         Transactionally determine that the database is empty and call the given
         function if it is or raise ``NotEmpty`` if it is not.
+
+        The function may return an ``Awaitable``.  If it does the transaction
+        opened for it will be kept open until the ``Awaitable`` completes.
         """
         # After redeemed-voucher garbage collection is implemented, this won't
         # be enough of a check.  We should check the unblinded-tokens table
@@ -268,7 +293,7 @@ class VoucherStore(object):
         # `invalid-unblinded-tokens` table and maybe also look at lease
         # maintenance spending.
         if self.list.wrapped(self, cursor) == []:
-            return f(cursor)
+            return await f(cursor)
         else:
             raise NotEmpty()
 

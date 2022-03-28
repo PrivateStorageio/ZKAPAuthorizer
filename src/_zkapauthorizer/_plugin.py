@@ -43,10 +43,13 @@ from zope.interface import implementer
 
 from . import NAME
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
-from .config import lease_maintenance_from_tahoe_config
 from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
-from .lease_maintenance import lease_maintenance_service, maintain_leases_from_root
+from .lease_maintenance import (
+    LeaseMaintenanceConfig,
+    lease_maintenance_service,
+    maintain_leases_from_root,
+)
 from .model import VoucherStore
 from .recover import (  # make_fail_uploader,
     make_fail_downloader,
@@ -310,7 +313,7 @@ def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IS
     def get_now():
         return datetime.utcfromtimestamp(reactor.seconds())
 
-    maint_config = lease_maintenance_from_tahoe_config(node_config)
+    maint_config = LeaseMaintenanceConfig.from_node_config(node_config)
 
     # Create the operation which performs the lease maintenance job when
     # called.

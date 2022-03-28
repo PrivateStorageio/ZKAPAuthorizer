@@ -16,13 +16,14 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from hypothesis.strategies import data, lists, randoms, sampled_from
+from hypothesis.strategies import data, lists, randoms, sampled_from, text
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
     Always,
     Equals,
+    Is,
     IsInstance,
     MatchesStructure,
 )
@@ -31,7 +32,6 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
-    AlreadyRecovering,
     RecoveryStages,
     ReplicationAlreadySetup,
     StatefulRecoverer,
@@ -43,6 +43,7 @@ from ..recover import (
     noop_downloader,
     recover,
     setup_tahoe_lafs_replication,
+    statements_from_snapshot,
 )
 from ..tahoe import MemoryGrid, Tahoe, make_directory
 from .fixtures import Treq
@@ -61,11 +62,53 @@ from .strategies import (
 
 
 def snapshot(connection: Connection) -> Iterator[str]:
+    return connection.iterdump()
+
+
+def netstring(bs: bytes) -> bytes:
+    """
+    Encode a single string as a netstring.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
+    """
+    return b"".join(
+        [
+            str(len(bs)).encode("ascii"),
+            b":",
+            bs,
+            b",",
+        ]
+    )
+
+
+def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
     """
     Take a snapshot of the database reachable via the given connection.
     """
-    for statement in connection.iterdump():
-        yield statement + "\n"
+    for statement in statements:
+        # Use netstrings to frame each statement.  Statements can have
+        # embedded newlines (and CREATE TABLE statements especially tend to).
+        yield netstring(statement.encode("utf-8"))
+
+
+class SnapshotEncodingTests(TestCase):
+    """
+    Tests for a snapshot's round-trip through encoding and decoding.
+    """
+
+    @given(lists(text()))
+    def test_roundtrip(self, statements):
+        """
+        Statements of a snapshot can be encoded to bytes and decoded to the same
+        statements again using ``statements_to_snapshot`` and
+        ``statements_from_snapshot``.
+        """
+        loaded = list(
+            statements_from_snapshot(
+                BytesIO(b"".join(statements_to_snapshot(statements)))
+            )
+        )
+        self.assertThat(statements, Equals(loaded))
 
 
 class SnapshotMachine(RuleBasedStateMachine):
@@ -87,7 +130,8 @@ class SnapshotMachine(RuleBasedStateMachine):
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
         """
-        statements = list(snapshot(self.connection))
+        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(self.connection)))
+        statements = statements_from_snapshot(BytesIO(snapshot_bytes))
         new = connect(":memory:")
         recover(statements, new)
         self.case.assertThat(
@@ -190,9 +234,13 @@ class StatefulRecovererTests(TestCase):
         represented by the downloaded snapshot is present in the database
         itself.
         """
-        snapshot = (
-            b"CREATE TABLE [succeeded] ( [a] TEXT );\n"
-            b"INSERT INTO [succeeded] ([a]) VALUES ('yes');\n"
+        snapshot = b"".join(
+            statements_to_snapshot(
+                [
+                    "CREATE TABLE [succeeded] ( [a] TEXT );\n",
+                    "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
+                ]
+            )
         )
         downloader = make_canned_downloader(snapshot)
         recoverer = StatefulRecoverer()
@@ -251,8 +299,8 @@ class StatefulRecovererTests(TestCase):
 
     def test_cannot_recover_twice(self):
         """
-        A second call to ``StatefulRecoverer.recover`` fails with
-        ``AlreadyRecovering``.
+        A second call to ``StatefulRecoverer.recover`` returns ``None`` without
+        altering the recovery state.
         """
         downloader = noop_downloader
         recoverer = StatefulRecoverer()
@@ -262,16 +310,13 @@ class StatefulRecovererTests(TestCase):
                 Deferred.fromCoroutine(recoverer.recover(downloader, cursor)),
                 succeeded(Always()),
             )
+            stage = recoverer.state().stage
             second = Deferred.fromCoroutine(recoverer.recover(downloader, cursor))
             self.assertThat(
                 second,
-                failed(
-                    AfterPreprocessing(
-                        lambda f: f.value,
-                        IsInstance(AlreadyRecovering),
-                    ),
-                ),
+                succeeded(Is(None)),
             )
+            self.assertThat(recoverer.state().stage, Equals(stage))
 
 
 class TahoeLAFSDownloaderTests(TestCase):
