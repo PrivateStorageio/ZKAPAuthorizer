@@ -23,6 +23,7 @@ from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
+from .sql import escape_identifier
 from .tahoe import Tahoe, attenuate_writecap
 
 
@@ -197,11 +198,53 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
         pos = new_pos + 1
 
 
-def recover(statements: Iterator[str], cursor) -> None:
+def recover(statements: Iterator[str], cursor: Cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
     """
+    # Discard all existing data in the database.
+    cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
+    tables = cursor.fetchall()
+    for (table_name,) in tables:
+        cursor.execute(f"DROP TABLE {escape_identifier(table_name)}")
+
+    # The order of statements does not necessarily guarantee that foreign key
+    # constraints are satisfied after every statement.  Turn off enforcement
+    # so we can insert our rows.  If foreign keys were valid at the dump the
+    # snapshot was created then they'll be valid by the time we finish
+    # processing all of the statements.  With this pragma, SQLite3 will
+    # enforce them when the current transaction is committed and the effect
+    # vanishes after the current transaction (whether it commits or rolls
+    # back).
+    cursor.execute("PRAGMA defer_foreign_keys = ON")
+
+    # Load everything back in two passes.  The two passes thing sucks.
+    # However, if a row is inserted into a table and the table has a foreign
+    # key constraint and the table it references hasn't been created yet,
+    # SQLite3 raises an OperationalError - despite the defer_foreign_keys
+    # pragma above.
+    #
+    # Probably a right-er solution is to change the snapshotter to emit all of
+    # the Data Definition Language (DDL) statements first and all of the Data
+    # Manipulation Language (DML) statements second so that executing the
+    # statements in the order given is correct.
+    #
+    # Possibly it is also true that if we had never turned on the foreign_keys
+    # pragma in the first place, SQLite3 would allow this to pass.  It is too
+    # late to turn it off here, though, since it cannot be changed inside a
+    # transaction.
+
+    # So, pull the DDL apart from the DML.  Do this in one pass in case
+    # iterating statements is destructive.
+    dml = []
     for sql in statements:
+        if sql.startswith("CREATE TABLE"):
+            cursor.execute(sql)
+        elif sql not in ("BEGIN TRANSACTION;", "COMMIT;"):
+            dml.append(sql)
+
+    # Run all the DML
+    for sql in dml:
         cursor.execute(sql)
 
 

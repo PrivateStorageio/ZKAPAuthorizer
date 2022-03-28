@@ -8,8 +8,8 @@ from typing import Iterator, Union
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 
+from ..sql import Insert, escape_identifier
 from ._float_matchers import matches_float_within_distance
-from .sql import Insert, escape
 
 SQLType = Union[int, float, str, bytes, None]
 
@@ -71,16 +71,16 @@ def _structured_dump_table(
     formatting.
     """
     curs = db.cursor()
-    curs.execute(f"PRAGMA table_info({escape(table_name)})")
+    curs.execute(f"PRAGMA table_info({escape_identifier(table_name)})")
 
     columns = list(
         (name, type_) for (cid, name, type_, notnull, dftl_value, pk) in list(curs)
     )
-    column_names = ", ".join(escape(name) for (name, type_) in columns)
+    column_names = ", ".join(escape_identifier(name) for (name, type_) in columns)
     curs.execute(
         f"""
         SELECT {column_names}
-        FROM {escape(table_name)}
+        FROM {escape_identifier(table_name)}
         """
     )
 

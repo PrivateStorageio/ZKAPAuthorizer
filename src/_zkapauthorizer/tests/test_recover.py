@@ -45,11 +45,11 @@ from ..recover import (
     setup_tahoe_lafs_replication,
     statements_from_snapshot,
 )
+from ..sql import Table, create_table
 from ..tahoe import MemoryGrid, Tahoe, make_directory
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
-from .sql import Table, create_table
 from .strategies import (
     api_auth_tokens,
     deletes,
@@ -133,7 +133,9 @@ class SnapshotMachine(RuleBasedStateMachine):
         snapshot_bytes = b"".join(statements_to_snapshot(snapshot(self.connection)))
         statements = statements_from_snapshot(BytesIO(snapshot_bytes))
         new = connect(":memory:")
-        recover(statements, new)
+        cursor = new.cursor()
+        with new:
+            recover(statements, cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
