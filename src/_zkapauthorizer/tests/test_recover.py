@@ -355,7 +355,8 @@ class TahoeLAFSDownloaderTests(TestCase):
             tahoeclient,
             replica_dir_cap_str,
         )
-        yield Deferred.fromCoroutine(upload(BytesIO(b"snapshot data")))
+        expected = b"snapshot data"
+        yield Deferred.fromCoroutine(upload(BytesIO(expected)))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
