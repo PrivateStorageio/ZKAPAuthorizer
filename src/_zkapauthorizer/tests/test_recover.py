@@ -367,7 +367,7 @@ class TahoeLAFSDownloaderTests(TestCase):
         )
         self.assertThat(
             downloaded_snapshot_path.getContent(),
-            Equals(b"snapshot data"),
+            Equals(expected),
         )
 
 
