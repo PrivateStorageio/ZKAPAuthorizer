@@ -139,9 +139,10 @@ class _ReplicationCapableConnection:
 
     _conn: Connection
 
-    def snapshot(self):
+    def snapshot(self) -> bytes:
         """
-        :see: ``snapshot``
+        Create and return a byte string representing a consistent, self-contained
+        snapshot of the wrapped database.
         """
         return snapshot(self._conn)
 
