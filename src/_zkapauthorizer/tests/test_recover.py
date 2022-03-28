@@ -81,7 +81,12 @@ class SnapshotEncodingTests(TestCase):
                 BytesIO(b"".join(statements_to_snapshot(statements)))
             )
         )
-        self.assertThat(statements, Equals(loaded))
+        self.assertThat(
+            # They are allowed to differ by leading and trailing whitespace
+            # because such whitespace is meaningless in a SQL statement.
+            [s.strip() for s in statements],
+            Equals(loaded),
+        )
 
 
 class SnapshotMachine(RuleBasedStateMachine):
