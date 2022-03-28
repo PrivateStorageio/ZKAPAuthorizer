@@ -51,7 +51,7 @@ def _configure_hypothesis():
 
     settings.register_profile(
         "fast",
-        max_examples=3,
+        max_examples=2,
         **base,
     )
 
