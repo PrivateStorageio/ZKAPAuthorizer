@@ -245,7 +245,7 @@ jobs:
       - run:
           name: "Run Type Checks"
           command: |
-            nix-shell --run 'mypy src'
+            nix-shell --run 'mypy src' shell.nix
       - run:
           <<: *PUSH_TO_CACHIX
 
