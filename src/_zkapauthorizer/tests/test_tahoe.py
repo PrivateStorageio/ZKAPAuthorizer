@@ -162,6 +162,7 @@ class UploadDownloadTestsMixin:
 
         def get_content():
             return BytesIO(content)
+
         cap = yield Deferred.fromCoroutine(client.upload(get_content))
 
         d = Deferred.fromCoroutine(client.download(outpath, cap, ["somepath"]))
@@ -285,7 +286,9 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # Upload not-a-directory
-        filecap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(b"hello world")))
+        filecap = yield Deferred.fromCoroutine(
+            tahoe.upload(lambda: BytesIO(b"hello world"))
+        )
 
         d = Deferred.fromCoroutine(tahoe.list_directory(filecap))
         try:
