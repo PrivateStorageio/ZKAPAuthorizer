@@ -17,7 +17,6 @@ from testtools.matchers import (
     Is,
     IsInstance,
     Not,
-    raises,
 )
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
