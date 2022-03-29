@@ -20,7 +20,7 @@ refresh leases on all shares reachable from a root.
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Iterable, Type, TypeVar
+from typing import Any, Callable, Iterable, TypeVar
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode

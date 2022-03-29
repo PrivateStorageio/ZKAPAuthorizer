@@ -17,7 +17,7 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 """
 
 from datetime import timedelta
-from typing import Any, TypeVar, Union
+from typing import TypeVar, Union
 
 from allmydata.node import _Config
 from hyperlink import DecodedURL
