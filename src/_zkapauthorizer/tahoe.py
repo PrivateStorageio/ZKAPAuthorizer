@@ -8,7 +8,7 @@ from hashlib import sha256
 from io import BytesIO
 from json import loads
 from tempfile import mkdtemp
-from typing import Callable, Iterable, Optional, Union, BinaryIO
+from typing import BinaryIO, Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.node import _Config

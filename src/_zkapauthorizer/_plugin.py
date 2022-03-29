@@ -51,12 +51,8 @@ from .lease_maintenance import (
     maintain_leases_from_root,
 )
 from .model import VoucherStore
-from .recover import (
-    make_fail_downloader,
-)
-from .replicate import (
-    setup_tahoe_lafs_replication,
-)
+from .recover import make_fail_downloader
+from .replicate import setup_tahoe_lafs_replication
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController

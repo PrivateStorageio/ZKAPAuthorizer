@@ -2,8 +2,8 @@
 Tests for ``_zkapauthorizer.tahoe``.
 """
 
-from io import BytesIO
 from asyncio import run
+from io import BytesIO
 
 from allmydata.test.strategies import write_capabilities
 from fixtures import TempDir
@@ -228,9 +228,7 @@ class DirectoryTestsMixin:
             return b"x" * (n + 1)
 
         async def upload(n):
-            cap = await tahoe.upload(
-                BytesIO(file_content(n))
-            )
+            cap = await tahoe.upload(BytesIO(file_content(n)))
             await tahoe.link(dir_cap, str(n), cap)
 
         # Populate it a little
