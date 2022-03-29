@@ -166,7 +166,7 @@ jobs:
       NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
-      - run:
+      - run: &FIX_CA_CERTS
           # Work around a bug in the 2.5.1 Docker image that prevents it from
           # having any CA certificates to use to validate any certificates it
           # encounters (and thus makes it incapable of talking to our binary
@@ -179,7 +179,7 @@ jobs:
             mkdir -p /etc/ssl/certs/
             ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
 
-      - run:
+      - run: &SETUP_CACHIX
           name: "Set up Cachix"
           command: |
             nix-env -f $NIXPKGS -iA cachix bash
@@ -210,7 +210,7 @@ jobs:
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
               --argstr python python<< parameters.py-version >>
 
-      - run:
+      - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
           when: "always"
           command: |
@@ -234,11 +234,25 @@ jobs:
           command: |
             ./.circleci/report-coverage.sh
 
+  typecheck:
+    <<: *LINUX_TESTS
+
+    steps:
+      - <<: *FIX_CA_CERTS
+      - <<: *SETUP_CACHIX
+      - run:
+          name: "Run Type Checks"
+          command: |
+            mypy src
+      - <<: *PUSH_TO_CACHIX
+
+
 workflows:
   version: 2
   everything:
     jobs:
     - "documentation"
+    - "typecheck"
     - "linux-tests":
         name: "Linux tests python 3.9"
         py-version: "39"
