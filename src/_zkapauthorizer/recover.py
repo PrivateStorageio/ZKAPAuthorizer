@@ -252,11 +252,6 @@ async def tahoe_lafs_downloader(
     snapshot_path = client.get_private_path("snapshot.sql")
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
-    # snapshot-<seqnum>.sql or something?
-
-    # maybe just: snapshot.sql (and we overwrite the thing in the
-    # mutable .. because same failure mode either way?)
-
     await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
     return snapshot_path
 
