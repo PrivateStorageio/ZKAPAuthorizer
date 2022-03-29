@@ -9,8 +9,17 @@ from hypothesis import given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Contains, ContainsDict, Equals, Is, Not, raises, AfterPreprocessing, IsInstance
-from testtools.twistedsupport import AsynchronousDeferredRunTest, succeeded, failed
+from testtools.matchers import (
+    AfterPreprocessing,
+    Contains,
+    ContainsDict,
+    Equals,
+    Is,
+    IsInstance,
+    Not,
+    raises,
+)
+from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 
@@ -402,7 +411,7 @@ class AsyncRetryTests(TestCase):
                     lambda f: f.value,
                     IsInstance(Exc),
                 )
-            )
+            ),
         )
 
     def test_matched_failure(self):

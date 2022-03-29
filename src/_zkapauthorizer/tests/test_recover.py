@@ -419,15 +419,11 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         client = grid.client()
 
         results = []
-        d = Deferred.fromCoroutine(
-            setup_tahoe_lafs_replication(client)
-        )
+        d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
         d.addCallback(lambda x: results.append(x) or x)
         self.assertThat(
             d,
-            succeeded(
-                matches_capability(Equals("DIR2-RO"))
-            ),
+            succeeded(matches_capability(Equals("DIR2-RO"))),
         )
         ro_cap = results[0]
 
