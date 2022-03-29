@@ -2,6 +2,7 @@
 Tests for ``_zkapauthorizer.tahoe``.
 """
 
+from io import BytesIO
 from asyncio import run
 
 from allmydata.test.strategies import write_capabilities
@@ -129,16 +130,15 @@ class UploadDownloadTestsMixin:
 
         workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
         workdir.makedirs()
-        inpath = workdir.child("uploaded")
-        inpath.setContent(b"abc" * 1024)
+        content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        cap = yield Deferred.fromCoroutine(client.upload(inpath))
+        cap = yield Deferred.fromCoroutine(client.upload(BytesIO(content)))
         yield Deferred.fromCoroutine(client.download(outpath, cap, None))
 
         self.assertThat(
-            inpath.getContent(),
-            Equals(outpath.getContent()),
+            outpath.getContent(),
+            Equals(content),
         )
 
     @inlineCallbacks
@@ -150,11 +150,10 @@ class UploadDownloadTestsMixin:
 
         workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
         workdir.makedirs()
-        inpath = workdir.child("uploaded")
-        inpath.setContent(b"abc" * 1024)
+        content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        cap = yield Deferred.fromCoroutine(client.upload(inpath))
+        cap = yield Deferred.fromCoroutine(client.upload(BytesIO(content)))
 
         d = Deferred.fromCoroutine(client.download(outpath, cap, ["somepath"]))
         try:
@@ -229,9 +228,9 @@ class DirectoryTestsMixin:
             return b"x" * (n + 1)
 
         async def upload(n):
-            p = inpath.child(str(n))
-            p.setContent(file_content(n))
-            cap = await tahoe.upload(p)
+            cap = await tahoe.upload(
+                BytesIO(file_content(n))
+            )
             await tahoe.link(dir_cap, str(n), cap)
 
         # Populate it a little
@@ -279,10 +278,7 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # Upload not-a-directory
-        inpath = FilePath(self.useFixture(TempDir()).join("list_directory"))
-        inpath.setContent(b"hello world")
-
-        filecap = yield Deferred.fromCoroutine(tahoe.upload(inpath))
+        filecap = yield Deferred.fromCoroutine(tahoe.upload(BytesIO(b"hello world")))
 
         d = Deferred.fromCoroutine(tahoe.list_directory(filecap))
         try:
@@ -298,14 +294,12 @@ class DirectoryTestsMixin:
         ``link`` adds an entry to a directory.
         """
         tmp = FilePath(self.useFixture(TempDir()).path)
-        inpath = tmp.child("source")
-        inpath.setContent(b"some content")
-
+        content = b"some content"
         tahoe = self.get_client()
 
         dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
         entry_name = "foo"
-        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(inpath))
+        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(BytesIO(content)))
         yield Deferred.fromCoroutine(
             tahoe.link(
                 dir_cap,
@@ -325,7 +319,7 @@ class DirectoryTestsMixin:
 
         self.assertThat(
             outpath.getContent(),
-            Equals(inpath.getContent()),
+            Equals(content),
         )
 
     @inlineCallbacks

@@ -160,36 +160,6 @@ async def upload_bytes(
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
-@async_retry(_common_tahoe_errors)
-async def upload(
-    client: HTTPClient, inpath: FilePath, api_root: DecodedURL
-) -> Awaitable[str]:
-    """
-    Upload data from the given path and return the resulting capability.
-
-    If not enough storage servers are reachable then the upload is
-    automatically retried.
-
-    :param client: An HTTP client to use to make requests to the Tahoe-LAFS
-        HTTP API to perform the upload.
-
-    :param inpath: The path to the regular file to upload.
-
-    :param api_root: The location of the root of the Tahoe-LAFS HTTP API to
-        use to perform the upload.  This should typically be the ``node.url``
-        value from a Tahoe-LAFS client node.
-
-    :return: If the upload is successful then the capability of the uploaded
-        data is returned.
-
-    :raise: If there is a problem uploading the data -- except for
-        unavailability of storage servers -- then some exception is raised.
-    """
-    with inpath.open() as f:
-        capability = await upload_bytes(client, f, api_root)
-    return capability
-
-
 async def download(
     client: HTTPClient,
     outpath: FilePath,
@@ -329,10 +299,7 @@ class Tahoe(object):
     def download(self, outpath, cap, child_path):
         return download(self.client, outpath, self._api_root, cap, child_path)
 
-    def upload(self, inpath):
-        return upload(self.client, inpath, self._api_root)
-
-    def upload_bytes(self, data):
+    def upload(self, data):
         return upload_bytes(self.client, data, self._api_root)
 
     def make_directory(self):
@@ -473,8 +440,9 @@ class _MemoryTahoe:
             d = dumps_utf8(d)
         outpath.setContent(d)
 
-    async def upload(self, inpath):
-        return self._grid.upload(inpath.getContent())
+    async def upload(self, data):
+        content = data.read()
+        return self._grid.upload(content)
 
     async def make_directory(self):
         return self._grid.make_directory()
