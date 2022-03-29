@@ -109,7 +109,7 @@ def get_tahoe_lafs_direntry_uploader(
         snapshot
     """
 
-    async def upload(data: BinaryIO) -> Awaitable[None]:
+    async def upload(data: BinaryIO) -> None:
         await tahoe_lafs_uploader(client, directory_mutable_cap, data, entry_name)
 
     return upload
