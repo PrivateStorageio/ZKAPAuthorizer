@@ -136,13 +136,16 @@ class _ReplicationService(Service):
     _config: Config
     _tahoe: Tahoe = field()
     _replica_dircap: str = field()
-    _conn: "ReplicationCapableConnection" = field()
+    _conn: "_ReplicationCapableConnection" = field()
 
     _replicating: Deferred = field(init=False, default=None)
 
     def startService(self):
-        # Tell the store to initiate replication when appropriate.
-        self._replicating = self._conn.run_replication(
+        # Tell the store to initiate replication when appropriate.  The
+        # service should only be created and started if replication has been
+        # turned on - so, make sure replication is turned on at the database
+        # layer.
+        self._replicating = self._conn.enable_replication(
             lambda conn, replica_dircap: replicate(
                 self._reactor,
                 get_tahoe_client(self._reactor, self._config),
@@ -161,13 +164,18 @@ class _ReplicationService(Service):
 
         replicating.addErrback(catch_cancelled)
         replicating.cancel()
+
+        # What do we wait for here?
+        # We might be uploading urgent or non-urgent stuff.
+        # Maybe we should offer user option to nicely kill and then hard kill later.
+        # Figure out desirable UX to inform this choice.
         return replicating
 
 
 async def replicate(
     reactor,
     tahoe: Tahoe,
-    conn: ReplicationCapableConnection,
+    conn: _ReplicationCapableConnection,
     replica_dircap: CapStr,
 ) -> Awaitable[None]:
     # 1. If there is no up to date snapshot

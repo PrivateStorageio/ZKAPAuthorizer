@@ -88,7 +88,16 @@ class ZKAPAuthorizer(object):
     name: str
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
 
-    def _get_store(self, node_config):
+    # Place to put the replication service that's easier to reach than the
+    # Tahoe service hierarchy.
+    _multiservice: MultiService = field()
+
+    def __init__(self, reactor):
+        self._multiservice = MultiService()
+        # Make sure it actually works
+        glue_into_reactor(reactor, self._multiservice)
+
+    def _get_store(self, node_config, create_replication_service):
         """
         :return VoucherStore: The database for the given node.  At most one
             connection is made to the database per ``ZKAPAuthorizer`` instance.
@@ -98,6 +107,12 @@ class ZKAPAuthorizer(object):
             s = self._stores[key]
         except KeyError:
             s = VoucherStore.from_node_config(node_config, datetime.now)
+            # The VoucherStore should have figured out if replication was
+            # previously turned on.  Ask it and then turn on the managing
+            # replication service if appropriate.
+            if s.wants_to_be_replicating():
+                srv = create_replication_service(s)
+                srv.setServiceParent(self._multiservice)
             self._stores[key] = s
         return s
 
@@ -375,4 +390,4 @@ def load_signing_key(path):
 # Create the global plugin object, re-exported elsewhere so Twisted can
 # discover it.  We'll also use it here since it carries some state that we
 # sometimes need to dig up and can't easily get otherwise.
-storage_server_plugin = ZKAPAuthorizer(name=NAME)
+storage_server_plugin = ZKAPAuthorizer(name=NAME, reactor=reactor)

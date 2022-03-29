@@ -238,6 +238,10 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     for sql in dml:
         cursor.execute(sql)
 
+    # XXX after [event-stream]:
+    # - run_schema_upgrades
+    # - check the schema version after and make sure it is not newer than supported by this software
+
 
 async def tahoe_lafs_downloader(
     client: Tahoe,
