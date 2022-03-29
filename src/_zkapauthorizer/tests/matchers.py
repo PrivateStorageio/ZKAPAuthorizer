@@ -29,7 +29,8 @@ __all__ = [
 
 from datetime import datetime
 from json import loads
-from typing import GenericAlias, Union
+from types import GenericAlias
+from typing import Union
 
 import attr
 from testtools.matchers import (
