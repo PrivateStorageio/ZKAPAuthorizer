@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 from collections.abc import Awaitable
-from typing import BinaryIO, Callable, Iterator, Optional
+from typing import BinaryIO
 
 from twisted.python.lockfile import FilesystemLock
 

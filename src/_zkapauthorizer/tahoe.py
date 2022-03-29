@@ -5,7 +5,6 @@ A library for interacting with a Tahoe-LAFS node.
 from collections.abc import Awaitable
 from functools import wraps
 from hashlib import sha256
-from io import BytesIO
 from json import loads
 from tempfile import mkdtemp
 from typing import BinaryIO, Callable, Iterable, Optional, Union
