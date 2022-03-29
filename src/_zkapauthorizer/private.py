@@ -36,7 +36,7 @@ SCHEME = b"tahoe-lafs"
 
 
 class IToken(ICredentials):
-    def check(auth_token):
+    def equals(auth_token):
         pass
 
 

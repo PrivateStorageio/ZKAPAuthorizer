@@ -47,7 +47,9 @@ class BrokenCopyable(Copyable):
     """
 
 
-@implementer(RIEcho)
+@implementer(
+    RIEcho  # type: ignore # zope.interface.implementer accepts interface, not ...
+)
 class Echoer(Referenceable):
     def remote_echo(self, argument):
         return argument

@@ -176,7 +176,9 @@ class LeaseRenewalRequired(Exception):
     """
 
 
-@implementer(RIPrivacyPassAuthorizedStorageServer)
+@implementer(
+    RIPrivacyPassAuthorizedStorageServer  # type: ignore # zope.interface.implementer accepts interface, not ...
+)
 # It would be great to use `frozen=True` (value-based hashing) instead of
 # `cmp=False` (identity based hashing) but Referenceable wants to set some
 # attributes on self and it's hard to avoid that.
