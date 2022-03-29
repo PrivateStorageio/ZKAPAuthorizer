@@ -2,7 +2,6 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
-from asyncio import run
 from io import BytesIO
 from sqlite3 import Connection, connect
 from typing import Iterator
@@ -419,8 +418,14 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        ro_cap = run(setup_tahoe_lafs_replication(client))
-        self.assertThat(ro_cap, matches_capability(Equals("DIR2-RO")))
+        results = []
+        d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
+        d.addCallback(lambda x: results.append(x) or x)
+        self.assertThat(
+            d,
+            succeeded(matches_capability(Equals("DIR2-RO"))),
+        )
+        ro_cap = results[0]
 
         # Memory grid lets us download directory cap as a dict.  Kind of bogus
         # but use it for now.

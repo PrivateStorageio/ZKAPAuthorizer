@@ -2,8 +2,6 @@
 Tests for ``_zkapauthorizer.tahoe``.
 """
 
-from asyncio import run
-
 from allmydata.test.strategies import write_capabilities
 from fixtures import TempDir
 from hyperlink import DecodedURL
@@ -11,8 +9,16 @@ from hypothesis import given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import Contains, ContainsDict, Equals, Is, Not, raises
-from testtools.twistedsupport import AsynchronousDeferredRunTest
+from testtools.matchers import (
+    AfterPreprocessing,
+    Contains,
+    ContainsDict,
+    Equals,
+    Is,
+    IsInstance,
+    Not,
+)
+from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 
@@ -378,10 +384,9 @@ class AsyncRetryTests(TestCase):
         async def decorated():
             return result
 
-        coro = decorated()
         self.assertThat(
-            run(coro),
-            Is(result),
+            Deferred.fromCoroutine(decorated()),
+            succeeded(Is(result)),
         )
 
     def test_not_matched_failure(self):
@@ -398,10 +403,14 @@ class AsyncRetryTests(TestCase):
         async def decorated():
             raise Exc()
 
-        coro = decorated()
         self.assertThat(
-            lambda: run(coro),
-            raises(Exc),
+            Deferred.fromCoroutine(decorated()),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(Exc),
+                )
+            ),
         )
 
     def test_matched_failure(self):
@@ -422,8 +431,7 @@ class AsyncRetryTests(TestCase):
                 raise Exception()
             return result
 
-        coro = decorated()
         self.assertThat(
-            run(coro),
-            Is(result),
+            Deferred.fromCoroutine(decorated()),
+            succeeded(Is(result)),
         )
