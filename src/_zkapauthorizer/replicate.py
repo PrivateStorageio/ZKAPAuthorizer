@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 from collections.abc import Awaitable
+from typing import BinaryIO, Callable, Iterator, Optional
 
 from twisted.python.lockfile import FilesystemLock
 
@@ -78,3 +79,37 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
 
     # Return the read-cap
     return rocap
+
+
+async def tahoe_lafs_uploader(
+    client: Tahoe,
+    recovery_cap: str,
+    snapshot_data: BinaryIO,
+    entry_name: str,
+) -> Awaitable[None]:
+    """
+    Upload a replica to Tahoe, linking the result into the given
+    recovery mutable capbility under the name 'snapshot.sql'
+    """
+    snapshot_immutable_cap = await client.upload(snapshot_data)
+    await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
+
+
+def get_tahoe_lafs_direntry_uploader(
+    client: Tahoe,
+    directory_mutable_cap: str,
+    entry_name: str = "snapshot.sql",
+):
+    """
+    Bind a Tahoe client to a mutable directory in a callable that will
+    upload a BytesIO and link it into the mutable directory under the
+    given name.
+
+    :return: A callable that uploads a BytesIO as the latest replica
+        snapshot
+    """
+
+    async def upload(data: BinaryIO) -> Awaitable[None]:
+        await tahoe_lafs_uploader(client, directory_mutable_cap, data, entry_name)
+
+    return upload

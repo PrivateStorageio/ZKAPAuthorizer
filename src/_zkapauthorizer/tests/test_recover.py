@@ -34,7 +34,6 @@ from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
     StatefulRecoverer,
-    get_tahoe_lafs_direntry_uploader,
     get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
@@ -42,7 +41,11 @@ from ..recover import (
     recover,
     statements_from_snapshot,
 )
-from ..replicate import ReplicationAlreadySetup, setup_tahoe_lafs_replication
+from ..replicate import (
+    ReplicationAlreadySetup,
+    get_tahoe_lafs_direntry_uploader,
+    setup_tahoe_lafs_replication,
+)
 from ..sql import Table, create_table
 from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
 from .fixtures import Treq
