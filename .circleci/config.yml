@@ -236,8 +236,6 @@ jobs:
 
   typecheck:
     <<: *LINUX_TESTS
-    # There are none
-    parameters: {}
 
     steps:
       - run:
@@ -257,7 +255,9 @@ workflows:
   everything:
     jobs:
     - "documentation"
-    - "typecheck"
+    - "typecheck":
+        py-version: "39"
+        tahoe-lafs-source: "tahoe-lafs"
     - "linux-tests":
         name: "Linux tests python 3.9"
         py-version: "39"
