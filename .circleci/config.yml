@@ -238,13 +238,16 @@ jobs:
     <<: *LINUX_TESTS
 
     steps:
-      - <<: *FIX_CA_CERTS
-      - <<: *SETUP_CACHIX
+      - run:
+          <<: *FIX_CA_CERTS
+      - run:
+          <<: *SETUP_CACHIX
       - run:
           name: "Run Type Checks"
           command: |
             mypy src
-      - <<: *PUSH_TO_CACHIX
+      - run:
+          <<: *PUSH_TO_CACHIX
 
 
 workflows:
