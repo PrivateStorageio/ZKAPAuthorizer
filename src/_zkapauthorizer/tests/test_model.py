@@ -95,7 +95,7 @@ from .strategies import (
     zkaps,
 )
 
-_T = TypeVar("T")
+_T = TypeVar("_T")
 
 from .test_recover import snapshot, statements_to_snapshot
 

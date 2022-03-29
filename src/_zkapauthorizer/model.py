@@ -22,10 +22,11 @@ from functools import wraps
 from json import loads
 from sqlite3 import Cursor, OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, Optional, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
+from attr import define, field
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
@@ -40,7 +41,7 @@ from .storage_common import (
 )
 from .validators import greater_than, has_length, is_base64_encoded
 
-_T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 class NotEmpty(Exception):
@@ -231,7 +232,7 @@ def memory_connect(path, *a, **kw):
 _SQLITE3_INTEGER_MAX = 2 ** 63 - 1
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class VoucherStore(object):
     """
     This class implements persistence for vouchers.
@@ -245,12 +246,12 @@ class VoucherStore(object):
 
     _log = Logger()
 
-    pass_value = pass_value_attribute()
+    pass_value: int = pass_value_attribute()
 
-    database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
-    now = attr.ib()
+    database_path: FilePath = field(validator=attr.validators.instance_of(FilePath))
+    now = field()
 
-    _connection = attr.ib()
+    _connection = field()
 
     @classmethod
     def from_node_config(cls, node_config, now, connect=None):
@@ -780,7 +781,7 @@ class VoucherStore(object):
 
 
 @implementer(ILeaseMaintenanceObserver)
-@attr.s
+@define
 class LeaseMaintenance(object):
     """
     A state-updating helper for recording pass usage during a lease
@@ -856,25 +857,14 @@ class LeaseMaintenance(object):
         self._rowid = None
 
 
-@attr.s
+@define
 class LeaseMaintenanceActivity(object):
-    started = attr.ib()
-    passes_required = attr.ib()
-    finished = attr.ib()
+    started = field()
+    passes_required = field()
+    finished = field()
 
 
-# store = ...
-# x = store.start_lease_maintenance()
-# x.observe(size=123)
-# x.observe(size=456)
-# ...
-# x.finish()
-#
-# x = store.get_latest_lease_maintenance_activity()
-# xs.started, xs.passes_required, xs.finished
-
-
-@attr.s(frozen=True)
+@define(frozen=True)
 class UnblindedToken(object):
     """
     An ``UnblindedToken`` instance represents cryptographic proof of a voucher
@@ -888,7 +878,7 @@ class UnblindedToken(object):
         ``decode_base64`` method.
     """
 
-    unblinded_token = attr.ib(
+    unblinded_token = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -897,20 +887,20 @@ class UnblindedToken(object):
     )
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar bytes pass_bytes: The text value of the pass.  This can be sent to
-        a service provider one time to anonymously prove a prior voucher
+    :ivar pass_bytes: The text value of the pass.  This can be sent to a
+        service provider one time to anonymously prove a prior voucher
         redemption.  If it is sent more than once the service provider may
         choose to reject it and the anonymity property is compromised.  Pass
         text should be kept secret.  If pass text is divulged to third-parties
         the anonymity property may be compromised.
     """
 
-    preimage = attr.ib(
+    preimage: bytes = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -918,7 +908,7 @@ class Pass(object):
         ),
     )
 
-    signature = attr.ib(
+    signature: bytes = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -927,22 +917,21 @@ class Pass(object):
     )
 
     @property
-    def pass_bytes(self):
+    def pass_bytes(self) -> bytes:
         return b" ".join((self.preimage, self.signature))
 
     @classmethod
-    def from_bytes(cls, pass_):
+    def from_bytes(cls, pass_) -> "Pass":
         return cls(*pass_.split(b" "))
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class RandomToken(object):
     """
-    :ivar bytes token_value: The base64-encoded representation of the random
-        token.
+    :ivar token_value: The base64-encoded representation of the random token.
     """
 
-    token_value = attr.ib(
+    token_value: bytes = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -952,7 +941,7 @@ class RandomToken(object):
 
 
 def _counter_attribute():
-    return attr.ib(
+    return field(
         validator=attr.validators.and_(
             attr.validators.instance_of(int),
             greater_than(-1),
@@ -960,16 +949,16 @@ def _counter_attribute():
     )
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Pending(object):
     """
     The voucher has not yet been completely redeemed for ZKAPs.
 
-    :ivar int counter: The number of partial redemptions which have been
+    :ivar counter: The number of partial redemptions which have been
         successfully performed for the voucher.
     """
 
-    counter = _counter_attribute()
+    counter: int = _counter_attribute()
 
     def should_start_redemption(self):
         return True
@@ -981,7 +970,7 @@ class Pending(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Redeeming(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -989,8 +978,8 @@ class Redeeming(object):
     progress.
     """
 
-    started = attr.ib(validator=attr.validators.instance_of(datetime))
-    counter = _counter_attribute()
+    started: datetime = field(validator=attr.validators.instance_of(datetime))
+    counter: int = _counter_attribute()
 
     def should_start_redemption(self):
         return False
@@ -1003,19 +992,19 @@ class Redeeming(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Redeemed(object):
     """
     The voucher was successfully redeemed.  Associated tokens were retrieved
     and stored locally.
 
-    :ivar datetime finished: The time when the redemption finished.
+    :ivar finished: The time when the redemption finished.
 
-    :ivar int token_count: The number of tokens the voucher was redeemed for.
+    :ivar token_count: The number of tokens the voucher was redeemed for.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    token_count = attr.ib(validator=attr.validators.instance_of(int))
+    finished: datetime = field(validator=attr.validators.instance_of(datetime))
+    token_count: int = field(validator=attr.validators.instance_of(int))
 
     def should_start_redemption(self):
         return False
@@ -1028,9 +1017,9 @@ class Redeemed(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class DoubleSpend(object):
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    finished: datetime = field(validator=attr.validators.instance_of(datetime))
 
     def should_start_redemption(self):
         return False
@@ -1042,7 +1031,7 @@ class DoubleSpend(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Unpaid(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -1050,7 +1039,7 @@ class Unpaid(object):
     to lack of payment.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    finished: datetime = field(validator=attr.validators.instance_of(datetime))
 
     def should_start_redemption(self):
         return True
@@ -1062,7 +1051,7 @@ class Unpaid(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Error(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -1070,8 +1059,8 @@ class Error(object):
     to an error that is not handled by any other part of the system.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    details = attr.ib(validator=attr.validators.instance_of(str))
+    finished: datetime = field(validator=attr.validators.instance_of(datetime))
+    details: str = field(validator=attr.validators.instance_of(str))
 
     def should_start_redemption(self):
         return True
@@ -1084,10 +1073,10 @@ class Error(object):
         }
 
 
-@attr.s(frozen=True)
+@define(frozen=True)
 class Voucher(object):
     """
-    :ivar bytes number: The byte string which gives this voucher its
+    :ivar number: The byte string which gives this voucher its
         identity.
 
     :ivar datetime created: The time at which this voucher was added to this
@@ -1103,7 +1092,7 @@ class Voucher(object):
         ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
 
-    number = attr.ib(
+    number: bytes = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(urlsafe_b64decode),
@@ -1111,7 +1100,7 @@ class Voucher(object):
         ),
     )
 
-    expected_tokens = attr.ib(
+    expected_tokens: Optional[datetime] = field(
         validator=attr.validators.optional(
             attr.validators.and_(
                 attr.validators.instance_of(int),
@@ -1120,12 +1109,12 @@ class Voucher(object):
         ),
     )
 
-    created = attr.ib(
+    created: Optional[datetime] = field(
         default=None,
         validator=attr.validators.optional(attr.validators.instance_of(datetime)),
     )
 
-    state = attr.ib(
+    state = field(
         default=Pending(counter=0),
         validator=attr.validators.instance_of(
             (

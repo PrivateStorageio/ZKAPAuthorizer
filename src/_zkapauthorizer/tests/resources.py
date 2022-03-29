@@ -6,7 +6,7 @@ from subprocess import Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
 from time import sleep
-from typing import Iterator, Optional
+from typing import Iterable, Optional
 
 from allmydata.client import config_from_string
 from attrs import define
@@ -44,13 +44,13 @@ def read_text(path: FilePath) -> str:
     return path.getContent().decode("ascii").strip()
 
 
-def wait_for_path(path: FilePath, retry: Iterator[float] = RETRY_DELAY) -> None:
+def wait_for_path(path: FilePath, retry: Iterable[float] = RETRY_DELAY) -> None:
     """
     Wait for a file to exist at a certain path for a while.
 
     :raise Exception: If it does not exist by the end of the retry period.
     """
-    total = 0
+    total: float = 0
     for delay in retry:
         if path.exists():
             return
@@ -152,14 +152,16 @@ class TahoeStorage:
         Get an entry describing this storage node for a client's ``servers.yaml``
         file.
         """
-        return {
-            self.node_pubkey[len("pub-") :]: {
-                "ann": {
-                    "anonymous-storage-FURL": self.storage_furl,
-                    "nickname": "storage",
+        if self.node_pubkey is not None:
+            return {
+                self.node_pubkey[len("pub-") :]: {
+                    "ann": {
+                        "anonymous-storage-FURL": self.storage_furl,
+                        "nickname": "storage",
+                    },
                 },
-            },
-        }
+            }
+        raise ValueError("Cannot get servers.yaml before starting.")
 
 
 class TahoeStorageManager(TestResourceManager):

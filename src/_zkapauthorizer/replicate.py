@@ -22,8 +22,6 @@ __all__ = [
     "setup_tahoe_lafs_replication",
 ]
 
-from collections.abc import Awaitable
-
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
@@ -43,7 +41,7 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
+async def setup_tahoe_lafs_replication(client: Tahoe) -> str:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage
@@ -54,7 +52,7 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
 
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
-    config_lock = FilesystemLock(config_path.path + ".lock")
+    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")
     config_lock.lock()
     try:
 

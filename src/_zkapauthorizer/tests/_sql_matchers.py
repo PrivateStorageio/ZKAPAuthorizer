@@ -8,10 +8,8 @@ from typing import Iterator, Union
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 
-from ..sql import Insert, escape_identifier
+from ..sql import Insert, Table, escape_identifier
 from ._float_matchers import matches_float_within_distance
-
-SQLType = Union[int, float, str, bytes, None]
 
 
 def equals_database(reference: Connection):
@@ -39,7 +37,7 @@ def equals_database(reference: Connection):
     )
 
 
-def structured_dump(db: Connection) -> Iterator[tuple]:
+def structured_dump(db: Connection) -> Iterator[Union[str, Insert]]:
     """
     Dump the whole database, schema and rows, without trying to do any string
     formatting.
@@ -63,9 +61,7 @@ def _structured_dump_tables(db: Connection) -> Iterator[tuple[str, str]]:
     yield from iter(curs)
 
 
-def _structured_dump_table(
-    db: Connection, table_name: str
-) -> Iterator[tuple[str, str, tuple[SQLType, ...]]]:
+def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
     """
     Dump a single database table's rows without trying to do any string
     formatting.
@@ -86,10 +82,10 @@ def _structured_dump_table(
 
     for rows in iter(lambda: curs.fetchmany(1024), []):
         for row in rows:
-            # We have no representation of the table right now so we'll just
-            # leave it out.  This still gives us a convenient container for
-            # the other values.
-            yield Insert(table_name, None, row)
+            # We don't have a representation of the table so we'll supply a
+            # bogus value.  This still gives us a convenient container for the
+            # other values.
+            yield Insert(table_name, Table([]), row)
 
 
 def _get_matcher(reference, actual):

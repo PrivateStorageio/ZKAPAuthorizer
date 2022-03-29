@@ -27,7 +27,7 @@ from challenge_bypass_ristretto import RandomToken, SigningKey
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
-from ..model import NotEnoughTokens
+from ..model import NotEnoughTokens, Pass, UnblindedToken
 from ..spending import IPassFactory, PassGroup
 from .privacypass import make_passes
 from .strategies import bytes_for_share  # Not really a strategy...
@@ -224,14 +224,14 @@ class _PassFactory(object):
 
     _get_passes: Callable[[bytes, int], list[bytes]] = attr.ib()
 
-    returned: list[int] = attr.ib(default=attr.Factory(list), init=False)
-    in_use: set[int] = attr.ib(default=attr.Factory(set), init=False)
-    invalid: dict[int, str] = attr.ib(default=attr.Factory(dict), init=False)
-    spent: set[int] = attr.ib(default=attr.Factory(set), init=False)
-    issued: set[int] = attr.ib(default=attr.Factory(set), init=False)
+    returned: list[bytes] = attr.ib(default=attr.Factory(list), init=False)
+    in_use: set[bytes] = attr.ib(default=attr.Factory(set), init=False)
+    invalid: dict[bytes, str] = attr.ib(default=attr.Factory(dict), init=False)
+    spent: set[bytes] = attr.ib(default=attr.Factory(set), init=False)
+    issued: set[bytes] = attr.ib(default=attr.Factory(set), init=False)
 
     def get(self, message: bytes, num_passes: int) -> PassGroup:
-        passes = []
+        passes: list[bytes] = []
         if self.returned:
             passes.extend(self.returned[:num_passes])
             del self.returned[:num_passes]
@@ -239,7 +239,9 @@ class _PassFactory(object):
         passes.extend(self._get_passes(message, num_passes))
         self.issued.update(passes)
         self.in_use.update(passes)
-        return PassGroup(message, self, list(zip(passes, passes)))
+        return PassGroup(
+            message, self, [(UnblindedToken(t), Pass(t, t)) for t in passes]
+        )
 
     def _clear(self):
         """

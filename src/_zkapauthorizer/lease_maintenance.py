@@ -44,7 +44,7 @@ from .model import ILeaseMaintenanceObserver
 SERVICE_NAME = "lease maintenance service"
 
 
-_T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 @inlineCallbacks
@@ -458,7 +458,7 @@ class LeaseMaintenanceConfig(object):
     min_lease_remaining: timedelta = attr.ib()
 
     @classmethod
-    def from_node_config(cls: Type[_T], node_config: _Config) -> _T:
+    def from_node_config(cls, node_config: _Config) -> "LeaseMaintenanceConfig":
         """
         Return a ``LeaseMaintenanceConfig`` representing the values from the given
         configuration object.

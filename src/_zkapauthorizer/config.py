@@ -17,13 +17,15 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 """
 
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, TypeVar, Union
 
 from allmydata.node import _Config
 from hyperlink import DecodedURL
 from twisted.python.filepath import FilePath
 
 from . import NAME
+
+_T = TypeVar("_T")
 
 # The basename of the replica read-write capability file in the node's private
 # directory, if replication is configured.
@@ -55,7 +57,7 @@ def read_node_url(config: _Config) -> DecodedURL:
     )
 
 
-def read_duration(cfg: _Config, option: str, default: Any) -> Optional[timedelta]:
+def read_duration(cfg: _Config, option: str, default: _T) -> Union[timedelta, _T]:
     """
     Read an integer number of seconds from the ZKAPAuthorizer section of a
     Tahoe-LAFS config.

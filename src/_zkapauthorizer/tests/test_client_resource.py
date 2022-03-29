@@ -20,7 +20,7 @@ plugin.
 from base64 import b32encode
 from datetime import datetime
 from io import BytesIO
-from typing import Optional
+from typing import Container
 from urllib.parse import quote
 
 import attr
@@ -1516,14 +1516,12 @@ class VoucherTests(TestCase):
         )
 
 
-def mime_types(blacklist: Optional[set[str]] = None) -> SearchStrategy[str]:
+def mime_types(blacklist: Container[str] = ()) -> SearchStrategy[str]:
     """
     Build MIME types as b"major/minor" byte strings.
 
     :param blacklist: If not ``None``, MIME types to exclude from the result.
     """
-    if blacklist is None:
-        blacklist = set()
     return (
         tuples(
             text(),
