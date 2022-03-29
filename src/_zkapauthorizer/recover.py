@@ -264,7 +264,7 @@ async def tahoe_lafs_downloader(
 async def tahoe_lafs_uploader(
     client: Tahoe,
     recovery_cap: str,
-    snapshot_data: BytesIO,
+    snapshot_data: BinaryIO,
     entry_name: str,
 ) -> Awaitable[None]:
     """

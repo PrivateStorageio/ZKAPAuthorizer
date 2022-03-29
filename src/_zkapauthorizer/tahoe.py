@@ -8,7 +8,7 @@ from hashlib import sha256
 from io import BytesIO
 from json import loads
 from tempfile import mkdtemp
-from typing import Callable, Iterable, Optional, Union
+from typing import Callable, Iterable, Optional, Union, BinaryIO
 
 import treq
 from allmydata.node import _Config
@@ -128,7 +128,7 @@ _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 @async_retry(_common_tahoe_errors)
 async def upload_bytes(
     client: HTTPClient,
-    data: BytesIO,
+    data: BinaryIO,
     api_root: DecodedURL,
 ) -> Awaitable[str]:
     """
@@ -140,7 +140,7 @@ async def upload_bytes(
     :param client: An HTTP client to use to make requests to the Tahoe-LAFS
         HTTP API to perform the upload.
 
-    :param data: Data to upload
+    :param data: Source of bytes to upload
 
     :param api_root: The location of the root of the Tahoe-LAFS HTTP API to
         use to perform the upload.  This should typically be the ``node.url``
