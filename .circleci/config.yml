@@ -236,6 +236,8 @@ jobs:
 
   typecheck:
     <<: *LINUX_TESTS
+    # There are none
+    parameters: {}
 
     steps:
       - run:
