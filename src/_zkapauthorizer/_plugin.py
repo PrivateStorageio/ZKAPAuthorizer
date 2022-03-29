@@ -205,7 +205,6 @@ class ZKAPAuthorizer(object):
             node_config,
             store=self._get_store(node_config),
             get_downloader=get_downloader,
-            ##            get_uploader=make_fail_uploader(work_in_progress_error),
             setup_replication=setup_replication,
             redeemer=self._get_redeemer(node_config, None, reactor),
             clock=reactor,
