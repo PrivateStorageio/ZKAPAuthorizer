@@ -86,7 +86,7 @@ async def tahoe_lafs_uploader(
     recovery_cap: str,
     snapshot_data: BinaryIO,
     entry_name: str,
-) -> Awaitable[None]:
+) -> None:
     """
     Upload a replica to Tahoe, linking the result into the given
     recovery mutable capbility under the name 'snapshot.sql'
