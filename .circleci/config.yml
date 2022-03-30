@@ -242,10 +242,11 @@ jobs:
           <<: *FIX_CA_CERTS
       - run:
           <<: *SETUP_CACHIX
+      - "checkout"
       - run:
           name: "Run Type Checks"
           command: |
-            nix-shell --run 'mypy src' shell.nix
+            nix-shell --run 'mypy src'
       - run:
           <<: *PUSH_TO_CACHIX
 
