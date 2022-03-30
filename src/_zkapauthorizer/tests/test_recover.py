@@ -2,12 +2,10 @@
 Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
-from asyncio import run
 from io import BytesIO
 from sqlite3 import connect
 
 from allmydata.client import read_config
-from fixtures import TempDir
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -29,7 +27,6 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
@@ -44,12 +41,13 @@ from ..recover import (
 )
 from ..replicate import (
     ReplicationAlreadySetup,
+    get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
     snapshot,
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, link, make_directory, upload
+from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
 from .fixtures import Treq
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
@@ -315,35 +313,29 @@ class TahoeLAFSDownloaderTests(TestCase):
         self.addCleanup(lambda: tearDownResources(self, self.resources, None))
 
     @inlineCallbacks
-    def test_get_downloader(self):
+    def test_uploader_and_downloader(self):
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
         """
-        snapshot_path = FilePath(self.useFixture(TempDir()).join("snapshot-source"))
-        snapshot_path.setContent(b"snapshot data")
-
         config = read_config(self.client.node_dir.path, "tub.port")
         # AsynchronousDeferredRunTest sets reactor on us.
         httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
+        tahoeclient = Tahoe(httpclient, config)
 
         replica_dir_cap_str = yield Deferred.fromCoroutine(
             make_directory(httpclient, self.client.node_url),
         )
-        snapshot_cap_str = yield Deferred.fromCoroutine(
-            upload(httpclient, snapshot_path, self.client.node_url)
-        )
-        yield Deferred.fromCoroutine(
-            link(
-                httpclient,
-                self.client.node_url,
-                replica_dir_cap_str,
-                "snapshot.sql",
-                snapshot_cap_str,
-            )
-        )
 
-        tahoeclient = Tahoe(httpclient, config)
+        # use the uploader to push some replica data
+        upload = get_tahoe_lafs_direntry_uploader(
+            tahoeclient,
+            replica_dir_cap_str,
+        )
+        expected = b"snapshot data"
+        yield Deferred.fromCoroutine(upload(lambda: BytesIO(expected)))
+
+        # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
@@ -352,7 +344,7 @@ class TahoeLAFSDownloaderTests(TestCase):
         )
         self.assertThat(
             downloaded_snapshot_path.getContent(),
-            Equals(snapshot_path.getContent()),
+            Equals(expected),
         )
 
 
@@ -397,8 +389,14 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        ro_cap = run(setup_tahoe_lafs_replication(client))
-        self.assertThat(ro_cap, matches_capability(Equals("DIR2-RO")))
+        results = []
+        d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
+        d.addCallback(lambda x: results.append(x) or x)
+        self.assertThat(
+            d,
+            succeeded(matches_capability(Equals("DIR2-RO"))),
+        )
+        ro_cap = results[0]
 
         # Memory grid lets us download directory cap as a dict.  Kind of bogus
         # but use it for now.

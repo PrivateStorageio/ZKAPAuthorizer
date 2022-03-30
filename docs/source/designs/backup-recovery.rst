@@ -327,8 +327,8 @@ The replication process is as follows:
    #. The write capability is written to the Tahoe-LAFS client node's private directory. [18]_
    #. The read capability is returned to the external caller.
 
-#. If there is not a sufficiently up-to-date snapshot [1]_ on the grid then one is created [7]_ in the *replica directory*.
-   Any obsolete snapshots [2]_ in the *replica directory* are pruned.
+#. If there is not a sufficiently up-to-date snapshot [1]_ on the grid then one is created [7]_.
+   The new snapshot is linked to the name `snapshot.sql` in the *replica directory*, replacing any old (and now obsolete [2]_) snapshot.
 
 #. As the application runs the event stream is recorded [3]_ locally in the database.
 
@@ -549,7 +549,7 @@ Footnotes
        (and to what degree).
        If the snapshot does not exist then its size is treated as 0.
 
-.. [2] A snapshot is obsolete if there is a completely uploaded snapshot with a greater sequence number.
+.. [2] The new snapshot will have a greater sequence number than the old one and thus the old one is fully contained in the new snapshot.
 
 .. [3] Application-code is supplied with a cursor which performs this capturing.
        Replication code bypasses this capturing so that statements which record the event stream are not themselves recorded.
