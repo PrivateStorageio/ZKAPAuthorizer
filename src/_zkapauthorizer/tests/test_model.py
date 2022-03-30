@@ -93,6 +93,10 @@ from .strategies import (
     voucher_objects,
     vouchers,
     zkaps,
+    existing_states,
+    inserts,
+    tables,
+    sql_identifiers,
 )
 
 _T = TypeVar("T")
@@ -853,6 +857,46 @@ class LeaseMaintenanceTests(TestCase):
         self.assertThat(
             store.get_latest_lease_maintenance_activity(),
             Equals(expected),
+        )
+
+
+class EventStreamTests(TestCase):
+    """
+    Tests related to the event-stream storage of VoucherStore
+    """
+
+    @given(
+        tahoe_configs(),
+        posix_safe_datetimes(),
+        lists(sql_identifiers(), min_size=1),
+        tables(),
+        data(),
+    )
+    def test_event_stream_serialization(self, get_config, now, ids, table, data):
+        """
+        XXX
+        """
+        tempdir = self.useFixture(TempDir())
+        config = get_config(tempdir.join("node"), "tub.port")
+        store = VoucherStore.from_node_config(
+            config,
+            lambda: now,
+            memory_connect,
+        )
+
+        sql_statements = []
+        for sql_id in ids:
+            ins = data.draw(inserts(sql_id, table))
+            sql_statements.append(store.add_event(ins))
+
+        events = store.get_events()
+        print(events)
+        self.assertThat(
+            events,
+            AfterPreprocessing(
+                lambda changes: [change.statement for change in changes],
+                Equals(sql_statements),
+            )
         )
 
 
