@@ -189,12 +189,12 @@ class ZKAPAuthorizer(object):
         if reactor is None:
             from twisted.internet import reactor
 
+        work_in_progress_error = Exception(
+            "The recovery system implementation is a work in progress.",
+        )
+
         def get_downloader(cap):
-            return make_fail_downloader(
-                Exception(
-                    "The recovery system implementation is a work in progress.",
-                )
-            )
+            return make_fail_downloader(work_in_progress_error)
 
         setup_replication = partial(
             setup_tahoe_lafs_replication,
