@@ -26,9 +26,50 @@ from collections.abc import Awaitable
 from typing import BinaryIO, Callable
 
 from twisted.python.lockfile import FilesystemLock
+from attrs import frozen
 
 from .config import REPLICA_RWCAP_BASENAME
 from .tahoe import Tahoe, attenuate_writecap
+
+
+@frozen
+class Change:
+    """
+    Represent an item in a replication event stream
+    """
+
+    statement: str  # the SQL statement string
+    sequence: int = -1  # the sequence-number of this event
+
+    # note to self: the design-doc says "arguments embedded" but the
+    # sketch-code had an "arguments":
+    #arguments: tuple[SQLType, ...]
+    # ..and the TABLE in the design-doc has only TEXT
+
+    def to_bytes(self): # XXX maybe to_netstring ...?
+        ...
+
+
+# presumably:
+# - we serialize Changes as they happen to the database
+# - deserialize them from the database when we want to package them to the replica(??)
+# - how to store in replica?
+# - <replica>/events/XXX
+#   XXX is the highest event sequence-number in the chunk of events
+#   it is a file
+#   it contains netstrings representing the Changes
+
+
+@frozen
+class EventStream:
+    """
+    A series of database operations which are represented as `Change` instances.
+    """
+
+    changes: tuple[Change]
+
+    def to_bytes(self):
+        ...
 
 
 class ReplicationAlreadySetup(Exception):

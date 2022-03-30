@@ -778,6 +778,37 @@ class VoucherStore(object):
             parse_datetime(finished, delimiter=" "),
         )
 
+    # XXX do we want "str" or "bytes" here?
+    @with_cursor
+    def add_event(self, cursor, sql_statement: str):
+        """
+        Add a new event to the event-log.
+        """
+        cursor.execute(
+            """
+            INSERT INTO [event-stream] VALUES (?)
+            """,
+            sql_statement
+        )
+
+    @with_cursor
+    def get_events(self, cursor):
+        """
+        Return all events currently in our event-log.
+        """
+        cursor.execute(
+            """
+            SELECT [sequence-number], [statement]
+            FROM [event-stream]
+            """
+        )
+        return EventStream(
+            events=[
+                Change(stmt)
+                for seq, stmt in row.fetchall()
+            ]
+        )
+
 
 @implementer(ILeaseMaintenanceObserver)
 @attr.s
