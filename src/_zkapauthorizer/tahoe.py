@@ -7,7 +7,7 @@ from functools import wraps
 from hashlib import sha256
 from json import loads
 from tempfile import mkdtemp
-from typing import Callable, Iterable, Optional, Union
+from typing import BinaryIO, Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.node import _Config
@@ -125,11 +125,13 @@ _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 
 
 @async_retry(_common_tahoe_errors)
-async def upload(
-    client: HTTPClient, inpath: FilePath, api_root: DecodedURL
+async def upload_bytes(
+    client: HTTPClient,
+    get_data_provider: Callable[[], BinaryIO],
+    api_root: DecodedURL,
 ) -> Awaitable[str]:
     """
-    Upload data from the given path and return the resulting capability.
+    Upload the given data and return the resulting capability.
 
     If not enough storage servers are reachable then the upload is
     automatically retried.
@@ -137,7 +139,10 @@ async def upload(
     :param client: An HTTP client to use to make requests to the Tahoe-LAFS
         HTTP API to perform the upload.
 
-    :param inpath: The path to the regular file to upload.
+    :param get_data_provider: A callable that returns a BinaryIO ready
+        to provide the bytes to upload. This isn't a BinaryIO _directly_
+        because we might re-try the operation, in which case we need a new
+        stream.
 
     :param api_root: The location of the root of the Tahoe-LAFS HTTP API to
         use to perform the upload.  This should typically be the ``node.url``
@@ -150,8 +155,8 @@ async def upload(
         unavailability of storage servers -- then some exception is raised.
     """
     uri = api_root.child("uri")
-    with inpath.open() as f:
-        resp = await client.put(uri, f)
+    data = get_data_provider()
+    resp = await client.put(uri, data)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code in (200, 201):
         return content
@@ -297,8 +302,8 @@ class Tahoe(object):
     def download(self, outpath, cap, child_path):
         return download(self.client, outpath, self._api_root, cap, child_path)
 
-    def upload(self, inpath):
-        return upload(self.client, inpath, self._api_root)
+    def upload(self, get_data_provider):
+        return upload_bytes(self.client, get_data_provider, self._api_root)
 
     def make_directory(self):
         return make_directory(self.client, self._api_root)
@@ -338,7 +343,7 @@ class MemoryGrid:
         """
         return _MemoryTahoe(self)
 
-    def upload(self, data: bytes) -> CapStr:
+    def upload(self, data) -> CapStr:
         cap = str(self._counter)
         self._objects[cap] = data
         self._counter += 1
@@ -438,8 +443,17 @@ class _MemoryTahoe:
             d = dumps_utf8(d)
         outpath.setContent(d)
 
-    async def upload(self, inpath):
-        return self._grid.upload(inpath.getContent())
+    async def upload(self, get_data_provider: Callable[[], BinaryIO]):
+        """
+        Send some data to Tahoe-LAFS, returning an immutable capability.
+
+        :param get_data: a function that returns the data to
+            upload. This may be called more than once in case we need
+            to re-try the upload, which is also the reason this method
+            doesn't just take a `bytes` directly
+        """
+        content = get_data_provider().read()
+        return self._grid.upload(content)
 
     async def make_directory(self):
         return self._grid.make_directory()
