@@ -17,10 +17,10 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from itertools import count
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
+from itertools import count
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
@@ -36,13 +36,13 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
-    sampled_from,
     booleans,
     data,
     datetimes,
     integers,
     lists,
     randoms,
+    sampled_from,
     timedeltas,
     tuples,
 )
@@ -86,10 +86,9 @@ from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
+    deletes,
     dummy_ristretto_keys,
     inserts,
-    deletes,
-    updates,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
@@ -97,6 +96,7 @@ from .strategies import (
     tables,
     tahoe_configs,
     unblinded_tokens,
+    updates,
     voucher_counters,
     voucher_objects,
     vouchers,
@@ -877,7 +877,9 @@ class EventStreamTests(TestCase):
         data(),
         lists(sampled_from([inserts, deletes, updates]), min_size=1),
     )
-    def test_event_stream_serialization(self, get_config, now, ids, table, data, change_types):
+    def test_event_stream_serialization(
+        self, get_config, now, ids, table, data, change_types
+    ):
         """
         Various kinds of SQL statements can be serialized into and out of
         the event-stream.
@@ -885,8 +887,7 @@ class EventStreamTests(TestCase):
         # no BLOBs
         assume(
             not any(
-                column[1].affinity == StorageAffinity.BLOB
-                for column in table.columns
+                column[1].affinity == StorageAffinity.BLOB for column in table.columns
             )
         )
         tempdir = self.useFixture(TempDir())
@@ -902,7 +903,9 @@ class EventStreamTests(TestCase):
         for sql_id in ids:
             for change_type in change_types:
                 change = data.draw(change_type(sql_id, table))
-                sql_statements.append((next(sequence), change.bound_statement(store._connection.cursor())))
+                sql_statements.append(
+                    (next(sequence), change.bound_statement(store._connection.cursor()))
+                )
                 store.add_event(change.bound_statement(store._connection.cursor()))
 
         events = store.get_events()
@@ -910,7 +913,8 @@ class EventStreamTests(TestCase):
             events,
             AfterPreprocessing(
                 lambda eventstream: [
-                    (change.sequence, change.statement) for change in eventstream.changes
+                    (change.sequence, change.statement)
+                    for change in eventstream.changes
                 ],
                 Equals(sql_statements),
             ),
