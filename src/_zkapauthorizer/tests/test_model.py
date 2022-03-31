@@ -18,16 +18,12 @@ Tests for ``_zkapauthorizer.model``.
 """
 
 from datetime import datetime, timedelta
-from errno import EACCES
 from functools import partial
 from io import BytesIO
 from itertools import count
-from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
-from unittest import skipIf
 
-from fixtures import TempDir
 from hypothesis import assume, given, note
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -57,11 +53,9 @@ from testtools.matchers import (
     IsInstance,
     MatchesAll,
     MatchesStructure,
-    Raises,
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
-from twisted.python.runtime import platform
 
 from ..model import (
     DoubleSpend,
@@ -71,10 +65,8 @@ from ..model import (
     Pass,
     Pending,
     Redeemed,
-    StoreOpenError,
     Voucher,
     VoucherStore,
-    memory_connect,
     with_cursor_async,
 )
 from ..recover import (
@@ -492,74 +484,6 @@ class VoucherStoreTests(TestCase):
             ),
         )
 
-    @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
-    @given(tahoe_configs(), datetimes())
-    def test_uncreateable_store_directory(self, get_config, now):
-        """
-        If the underlying directory in the node configuration cannot be created
-        then ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
-        """
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join("node")
-
-        # Create the node directory without permission to create the
-        # underlying directory.
-        mkdir(nodedir, 0o500)
-
-        config = get_config(nodedir, "tub.port")
-
-        self.assertThat(
-            lambda: VoucherStore.from_node_config(
-                config,
-                lambda: now,
-                memory_connect,
-            ),
-            Raises(
-                AfterPreprocessing(
-                    lambda exc_info: exc_info[1],
-                    MatchesAll(
-                        IsInstance(StoreOpenError),
-                        MatchesStructure(
-                            reason=MatchesAll(
-                                IsInstance(OSError),
-                                MatchesStructure(
-                                    errno=Equals(EACCES),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-    @skipIf(
-        platform.isWindows(), "Hard to prevent database from being opened on Windows"
-    )
-    @given(tahoe_configs(), datetimes())
-    def test_unopenable_store(self, get_config, now):
-        """
-        If the underlying database file cannot be opened then
-        ``VoucherStore.from_node_config`` raises ``StoreOpenError``.
-        """
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join("node")
-
-        config = get_config(nodedir, "tub.port")
-
-        # Create the underlying database file.
-        store = VoucherStore.from_node_config(config, lambda: now)
-
-        # Prevent further access to it.
-        store.database_path.chmod(0o000)
-
-        self.assertThat(
-            lambda: VoucherStore.from_node_config(
-                config,
-                lambda: now,
-            ),
-            raises(StoreOpenError),
-        )
-
 
 class VoucherStoreSnapshotTests(TestCase):
     """
@@ -586,8 +510,8 @@ class VoucherStoreSnapshotTests(TestCase):
         with connection:
             recover(BytesIO(snapshot), cursor)
 
-        recovered = VoucherStore(
-            store.pass_value, store.database_path, store.now, connection
+        recovered = VoucherStore.from_connection(
+            store.pass_value, store.now, connection
         )
         self.assertThat(
             recovered.get(voucher),
@@ -1229,28 +1153,6 @@ class UnblindedTokenStoreTests(TestCase):
             lambda: store.get_unblinded_tokens(num_tokens + extra),
             raises(NotEnoughTokens),
         )
-
-
-def store_for_test(testcase, get_config, get_now):
-    """
-    Create a ``VoucherStore`` in a temporary directory associated with the
-    given test case.
-
-    :param TestCase testcase: The test case for which to build the store.
-    :param get_config: A function like the one built by ``tahoe_configs``.
-    :param get_now: A no-argument callable that returns a datetime giving a
-        time to consider as "now".
-
-    :return VoucherStore: A newly created temporary store.
-    """
-    tempdir = testcase.useFixture(TempDir())
-    config = get_config(tempdir.join("node"), "tub.port")
-    store = VoucherStore.from_node_config(
-        config,
-        get_now,
-        memory_connect,
-    )
-    return store
 
 
 class PassTests(TestCase):

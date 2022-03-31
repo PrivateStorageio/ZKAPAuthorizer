@@ -83,6 +83,7 @@ from .. import __file__ as package_init_file
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
+from .._plugin import open_store
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -91,7 +92,6 @@ from ..model import (
     Redeeming,
     Unpaid,
     Voucher,
-    VoucherStore,
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
@@ -227,9 +227,9 @@ def root_from_config(
     """
     return from_configuration(
         config,
-        VoucherStore.from_node_config(
-            config,
+        open_store(
             now,
+            config,
             memory_connect,
         ),
         get_downloader=get_downloader,
