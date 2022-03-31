@@ -82,6 +82,8 @@ from ..recover import (
     StatefulRecoverer,
     make_canned_downloader,
 )
+from ..replicate import (    EventStream,
+)
 from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
@@ -918,6 +920,15 @@ class EventStreamTests(TestCase):
                 ],
                 Equals(sql_statements),
             ),
+        )
+        # also ensure the serializer works
+        self.assertThat(
+            EventStream.from_bytes(events.to_bytes()),
+            Equals(events),
+        )
+        self.assertThat(
+            events.highest_sequence(),
+            Equals(len(sql_statements)),
         )
 
 

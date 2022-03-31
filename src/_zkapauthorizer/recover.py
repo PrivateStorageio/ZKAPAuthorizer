@@ -15,7 +15,7 @@ __all__ = [
 from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
-from sqlite3 import Cursor
+from sqlite3 import Cursor, Connection
 from typing import BinaryIO, Callable, Iterator, Optional
 
 from attrs import define

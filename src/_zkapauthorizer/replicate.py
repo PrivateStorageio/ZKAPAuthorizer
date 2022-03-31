@@ -22,9 +22,11 @@ __all__ = [
     "setup_tahoe_lafs_replication",
 ]
 
+from io import BytesIO
 from collections.abc import Awaitable
 from typing import BinaryIO, Callable
 
+import cbor2
 from attrs import frozen
 from twisted.python.lockfile import FilesystemLock
 
@@ -49,6 +51,45 @@ class EventStream:
     """
 
     changes: tuple[Change]
+
+    def highest_sequence(self):
+        """
+        :return int: the highest sequence number in this EventStream (or
+            None if there are no events)
+        """
+        if not self.changes:
+            return None
+        return max(change.sequence for change in self.changes)
+
+    # XXX or should we pass in a writable stream to use instead?
+    def to_bytes(self) -> BinaryIO:
+        """
+        :returns BinaryIO: a producer of bytes representing this EventStream.
+        """
+        return BytesIO(
+            cbor2.dumps({
+                "events": tuple(
+                    (event.sequence, event.statement.encode("utf8"))
+                    for event in self.changes
+                )
+            })
+        )
+
+    # XXX versioning? or do we handle that higher up?
+    @classmethod
+    def from_bytes(cls, stream: BinaryIO):
+        """
+        :returns EventStream: an instance of EventStream from the given
+            bytes (which should have been produced by a prior call to
+            ``to_bytes``)
+        """
+        data = cbor2.load(stream)
+        return cls(
+            changes=tuple(
+                Change(seq, statement.decode("utf8"))
+                for seq, statement in data["events"]
+            )
+        )
 
 
 class ReplicationAlreadySetup(Exception):
