@@ -22,8 +22,8 @@ __all__ = [
     "setup_tahoe_lafs_replication",
 ]
 
-from io import BytesIO
 from collections.abc import Awaitable
+from io import BytesIO
 from typing import BinaryIO, Callable
 
 import cbor2
@@ -67,12 +67,14 @@ class EventStream:
         :returns BinaryIO: a producer of bytes representing this EventStream.
         """
         return BytesIO(
-            cbor2.dumps({
-                "events": tuple(
-                    (event.sequence, event.statement.encode("utf8"))
-                    for event in self.changes
-                )
-            })
+            cbor2.dumps(
+                {
+                    "events": tuple(
+                        (event.sequence, event.statement.encode("utf8"))
+                        for event in self.changes
+                    )
+                }
+            )
         )
 
     # XXX versioning? or do we handle that higher up?

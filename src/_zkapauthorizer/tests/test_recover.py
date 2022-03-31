@@ -3,8 +3,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
 from io import BytesIO
-from sqlite3 import Connection, connect
-from typing import Iterator
+from sqlite3 import connect
 
 from allmydata.client import read_config
 from hypothesis import assume, given, note, settings
@@ -38,10 +37,9 @@ from ..recover import (
     make_fail_downloader,
     noop_downloader,
     recover,
+    snapshot,
     statements_from_snapshot,
     statements_to_snapshot,
-    netstring,
-    snapshot,
 )
 from ..replicate import (
     ReplicationAlreadySetup,

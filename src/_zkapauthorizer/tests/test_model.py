@@ -82,8 +82,7 @@ from ..recover import (
     StatefulRecoverer,
     make_canned_downloader,
 )
-from ..replicate import (    EventStream,
-)
+from ..replicate import EventStream
 from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
