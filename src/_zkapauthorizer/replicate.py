@@ -25,8 +25,8 @@ __all__ = [
 from collections.abc import Awaitable
 from typing import BinaryIO, Callable
 
-from twisted.python.lockfile import FilesystemLock
 from attrs import frozen
+from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
 from .tahoe import Tahoe, attenuate_writecap
@@ -43,10 +43,10 @@ class Change:
 
     # note to self: the design-doc says "arguments embedded" but the
     # sketch-code had an "arguments":
-    #arguments: tuple[SQLType, ...]
+    # arguments: tuple[SQLType, ...]
     # ..and the TABLE in the design-doc has only TEXT
 
-    def to_bytes(self): # XXX maybe to_netstring ...?
+    def to_bytes(self):  # XXX maybe to_netstring ...?
         ...
 
 

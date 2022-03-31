@@ -60,7 +60,6 @@ from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
 from twisted.python.runtime import platform
 
-from ..sql import StorageAffinity
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
@@ -81,23 +80,24 @@ from ..recover import (
     StatefulRecoverer,
     make_canned_downloader,
 )
+from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     dummy_ristretto_keys,
+    existing_states,
+    inserts,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
+    sql_identifiers,
+    tables,
     tahoe_configs,
     unblinded_tokens,
     voucher_counters,
     voucher_objects,
     vouchers,
     zkaps,
-    existing_states,
-    inserts,
-    tables,
-    sql_identifiers,
 )
 
 _T = TypeVar("T")
@@ -878,7 +878,11 @@ class EventStreamTests(TestCase):
         XXX
         """
         # no BLOBs
-        assume(not any(column[1].affinity == StorageAffinity.BLOB for column in table.columns))
+        assume(
+            not any(
+                column[1].affinity == StorageAffinity.BLOB for column in table.columns
+            )
+        )
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join("node"), "tub.port")
         store = VoucherStore.from_node_config(
@@ -897,9 +901,11 @@ class EventStreamTests(TestCase):
         self.assertThat(
             events,
             AfterPreprocessing(
-                lambda eventstream: [change.statement for change in eventstream.changes],
+                lambda eventstream: [
+                    change.statement for change in eventstream.changes
+                ],
                 Equals(sql_statements),
-            )
+            ),
         )
 
 

@@ -32,6 +32,7 @@ from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .replicate import Change, EventStream
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -39,7 +40,6 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
-from .replicate import EventStream, Change
 
 _T = TypeVar("T")
 
@@ -789,7 +789,7 @@ class VoucherStore(object):
             """
             INSERT INTO [event-stream]([statement]) VALUES (?)
             """,
-            (sql_statement, )
+            (sql_statement,),
         )
 
     @with_cursor
@@ -804,12 +804,7 @@ class VoucherStore(object):
             """
         ).fetchall()
 
-        return EventStream(
-            changes=[
-                Change(stmt)
-                for seq, stmt in rows
-            ]
-        )
+        return EventStream(changes=[Change(stmt) for seq, stmt in rows])
 
 
 @implementer(ILeaseMaintenanceObserver)
