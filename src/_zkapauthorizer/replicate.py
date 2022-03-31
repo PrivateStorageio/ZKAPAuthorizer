@@ -39,37 +39,16 @@ class Change:
     """
 
     statement: str  # the SQL statement string
-    sequence: int = -1  # the sequence-number of this event
-
-    # note to self: the design-doc says "arguments embedded" but the
-    # sketch-code had an "arguments":
-    # arguments: tuple[SQLType, ...]
-    # ..and the TABLE in the design-doc has only TEXT
-
-    def to_bytes(self):  # XXX maybe to_netstring ...?
-        ...
-
-
-# presumably:
-# - we serialize Changes as they happen to the database
-# - deserialize them from the database when we want to package them to the replica(??)
-# - how to store in replica?
-# - <replica>/events/XXX
-#   XXX is the highest event sequence-number in the chunk of events
-#   it is a file
-#   it contains netstrings representing the Changes
+    sequence: int  # the sequence-number of this event
 
 
 @frozen
 class EventStream:
     """
-    A series of database operations which are represented as `Change` instances.
+    A series of database operations represented as `Change` instances.
     """
 
     changes: tuple[Change]
-
-    def to_bytes(self):
-        ...
 
 
 class ReplicationAlreadySetup(Exception):

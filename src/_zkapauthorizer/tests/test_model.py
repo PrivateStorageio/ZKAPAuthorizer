@@ -35,6 +35,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
+    sampled_from,
     booleans,
     data,
     datetimes,
@@ -86,6 +87,8 @@ from .matchers import raises
 from .strategies import (
     dummy_ristretto_keys,
     inserts,
+    deletes,
+    updates,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
@@ -871,15 +874,17 @@ class EventStreamTests(TestCase):
         lists(sql_identifiers(), min_size=1),
         tables(),
         data(),
+        lists(sampled_from([inserts, deletes, updates]), min_size=1),
     )
-    def test_event_stream_serialization(self, get_config, now, ids, table, data):
+    def test_event_stream_serialization(self, get_config, now, ids, table, data, change_types):
         """
         XXX
         """
         # no BLOBs
         assume(
             not any(
-                column[1].affinity == StorageAffinity.BLOB for column in table.columns
+                column[1].affinity == StorageAffinity.BLOB
+                for column in table.columns
             )
         )
         tempdir = self.useFixture(TempDir())
@@ -890,11 +895,13 @@ class EventStreamTests(TestCase):
             memory_connect,
         )
 
+        # generate some SQL events
         sql_statements = []
         for sql_id in ids:
-            change = data.draw(inserts(sql_id, table))
-            sql_statements.append(change.bound_statement(store._connection.cursor()))
-            store.add_event(change.bound_statement(store._connection.cursor()))
+            for change_type in change_types:
+                change = data.draw(change_type(sql_id, table))
+                sql_statements.append(change.bound_statement(store._connection.cursor()))
+                store.add_event(change.bound_statement(store._connection.cursor()))
 
         events = store.get_events()
         self.assertThat(

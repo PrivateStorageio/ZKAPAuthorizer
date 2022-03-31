@@ -779,11 +779,10 @@ class VoucherStore(object):
             parse_datetime(finished, delimiter=" "),
         )
 
-    # XXX do we want "str" or "bytes" here?
     @with_cursor
     def add_event(self, cursor, sql_statement: str):
         """
-        Add a new event to the event-log.
+        Add a new change to the event-log.
         """
         cursor.execute(
             """
@@ -804,7 +803,7 @@ class VoucherStore(object):
             """
         ).fetchall()
 
-        return EventStream(changes=[Change(stmt) for seq, stmt in rows])
+        return EventStream(changes=[Change(stmt, seq) for seq, stmt in rows])
 
 
 @implementer(ILeaseMaintenanceObserver)

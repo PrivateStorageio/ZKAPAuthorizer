@@ -123,6 +123,14 @@ class Update:
         )
         return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
 
+    def bound_statement(self, cursor):
+        field_names = list(name for (name, _) in self.table.columns)
+        assignments = ", ".join(
+            f"{escape_identifier(name)} = {quote_sql_value(cursor, value)}"
+            for name, value in zip(field_names, self.fields)
+        )
+        return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
+
     def arguments(self):
         return self.fields
 
@@ -141,6 +149,9 @@ class Delete:
 
     def statement(self):
         return f"DELETE FROM {escape_identifier(self.table_name)}"
+
+    def bound_statement(self, cursor):
+        return self.statement()
 
     def arguments(self):
         return ()
