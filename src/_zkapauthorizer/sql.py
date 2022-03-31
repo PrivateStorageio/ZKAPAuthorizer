@@ -71,8 +71,31 @@ class Insert:
             f"VALUES ({placeholders})"
         )
 
+    def bound_statement(self, cursor):
+        names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
+        values = ", ".join((quote_sql_value(cursor, value) for value in self.arguments()))
+        return (
+            f"INSERT INTO {escape_identifier(self.table_name)} "
+            f"({names}) "
+            f"VALUES ({values})"
+        )
+
     def arguments(self):
         return self.fields
+
+
+def quote_sql_value(cursor, value):
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return str(value)
+    if isinstance(value, type(None)):
+        return "NULL"
+    if isinstance(value, str):
+        return cursor.execute("SELECT quote(?);", (value,)).fetchall()[0][0]
+    raise ValueError(
+        "Do not know how to quote value of type f{type(value)}"
+    )
 
 
 @define(frozen=True)

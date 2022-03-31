@@ -39,6 +39,7 @@ from .storage_common import (
     required_passes,
 )
 from .validators import greater_than, has_length, is_base64_encoded
+from .replicate import EventStream, Change
 
 _T = TypeVar("T")
 
@@ -786,9 +787,9 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            INSERT INTO [event-stream] VALUES (?)
+            INSERT INTO [event-stream]([statement]) VALUES (?)
             """,
-            sql_statement
+            (sql_statement, )
         )
 
     @with_cursor
@@ -796,16 +797,17 @@ class VoucherStore(object):
         """
         Return all events currently in our event-log.
         """
-        cursor.execute(
+        rows = cursor.execute(
             """
             SELECT [sequence-number], [statement]
             FROM [event-stream]
             """
-        )
+        ).fetchall()
+
         return EventStream(
-            events=[
+            changes=[
                 Change(stmt)
-                for seq, stmt in row.fetchall()
+                for seq, stmt in rows
             ]
         )
 
