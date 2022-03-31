@@ -85,7 +85,6 @@ from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     dummy_ristretto_keys,
-    existing_states,
     inserts,
     pass_counts,
     posix_safe_datetimes,
