@@ -39,6 +39,9 @@ from ..recover import (
     noop_downloader,
     recover,
     statements_from_snapshot,
+    statements_to_snapshot,
+    netstring,
+    snapshot,
 )
 from ..replicate import (
     ReplicationAlreadySetup,
@@ -59,36 +62,6 @@ from .strategies import (
     tahoe_configs,
     updates,
 )
-
-
-def snapshot(connection: Connection) -> Iterator[str]:
-    return connection.iterdump()
-
-
-def netstring(bs: bytes) -> bytes:
-    """
-    Encode a single string as a netstring.
-
-    :see: http://cr.yp.to/proto/netstrings.txt
-    """
-    return b"".join(
-        [
-            str(len(bs)).encode("ascii"),
-            b":",
-            bs,
-            b",",
-        ]
-    )
-
-
-def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
-    """
-    Take a snapshot of the database reachable via the given connection.
-    """
-    for statement in statements:
-        # Use netstrings to frame each statement.  Statements can have
-        # embedded newlines (and CREATE TABLE statements especially tend to).
-        yield netstring(statement.encode("utf-8"))
 
 
 class SnapshotEncodingTests(TestCase):
