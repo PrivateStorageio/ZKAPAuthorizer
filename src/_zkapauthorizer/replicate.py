@@ -38,8 +38,8 @@ class Change:
     Represent an item in a replication event stream
     """
 
-    statement: str  # the SQL statement string
     sequence: int  # the sequence-number of this event
+    statement: str  # the SQL statement string
 
 
 @frozen

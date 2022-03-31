@@ -17,6 +17,7 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
+from itertools import count
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
@@ -878,7 +879,8 @@ class EventStreamTests(TestCase):
     )
     def test_event_stream_serialization(self, get_config, now, ids, table, data, change_types):
         """
-        XXX
+        Various kinds of SQL statements can be serialized into and out of
+        the event-stream.
         """
         # no BLOBs
         assume(
@@ -888,19 +890,19 @@ class EventStreamTests(TestCase):
             )
         )
         tempdir = self.useFixture(TempDir())
-        config = get_config(tempdir.join("node"), "tub.port")
         store = VoucherStore.from_node_config(
-            config,
+            get_config(tempdir.join("node"), "tub.port"),
             lambda: now,
             memory_connect,
         )
 
         # generate some SQL events
         sql_statements = []
+        sequence = count(1)
         for sql_id in ids:
             for change_type in change_types:
                 change = data.draw(change_type(sql_id, table))
-                sql_statements.append(change.bound_statement(store._connection.cursor()))
+                sql_statements.append((next(sequence), change.bound_statement(store._connection.cursor())))
                 store.add_event(change.bound_statement(store._connection.cursor()))
 
         events = store.get_events()
@@ -908,7 +910,7 @@ class EventStreamTests(TestCase):
             events,
             AfterPreprocessing(
                 lambda eventstream: [
-                    change.statement for change in eventstream.changes
+                    (change.sequence, change.statement) for change in eventstream.changes
                 ],
                 Equals(sql_statements),
             ),

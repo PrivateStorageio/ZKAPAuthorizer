@@ -803,7 +803,7 @@ class VoucherStore(object):
             """
         ).fetchall()
 
-        return EventStream(changes=[Change(stmt, seq) for seq, stmt in rows])
+        return EventStream(changes=[Change(seq, stmt) for seq, stmt in rows])
 
 
 @implementer(ILeaseMaintenanceObserver)
