@@ -29,7 +29,7 @@ __all__ = [
 
 from datetime import datetime
 from json import loads
-from typing import GenericAlias
+from typing import Generic, TypeVar, Union
 
 import attr
 from testtools.matchers import (
@@ -40,7 +40,9 @@ from testtools.matchers import (
     Equals,
     GreaterThan,
     LessThan,
-    Matcher,
+)
+from testtools.matchers import Matcher as _Matcher
+from testtools.matchers import (
     MatchesAll,
     MatchesAny,
     MatchesDict,
@@ -50,12 +52,21 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from treq import content
+from twisted.web.http_headers import Headers
 
 from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
 from ._float_matchers import matches_float_within_distance
 from ._sql_matchers import equals_database
+
+_T = TypeVar("_T")
+
+
+class Matcher(_Matcher, Generic[_T]):
+    """
+    A generic version of ``_Matcher``.
+    """
 
 
 @attr.s
@@ -104,7 +115,7 @@ def returns(matcher):
     return _Returns(matcher)
 
 
-class _Returns(Matcher):
+class _Returns(_Matcher):
     def __init__(self, result_matcher):
         self.result_matcher = result_matcher
 
@@ -192,17 +203,19 @@ def odd():
 
 
 def matches_response(
-    code_matcher=Always(), headers_matcher=Always(), body_matcher=Always()
+    code_matcher: Matcher[int] = Always(),
+    headers_matcher: Matcher[Headers] = Always(),
+    body_matcher: Matcher[bytes] = Always(),
 ):
     """
     Match a Treq response object with certain code and body.
 
-    :param Matcher code_matcher: A matcher to apply to the response code.
+    :param code_matcher: A matcher to apply to the response code.
 
-    :param Matcher headers_matcher: A matcher to apply to the response headers
-        (a ``twisted.web.http_headers.Headers`` instance).
+    :param headers_matcher: A matcher to apply to the response headers (a
+        ``twisted.web.http_headers.Headers`` instance).
 
-    :param Matcher body_matcher: A matcher to apply to the response body.
+    :param body_matcher: A matcher to apply to the response body.
 
     :return: A matcher.
     """
@@ -220,7 +233,7 @@ def matches_response(
 
 def matches_spent_passes(
     public_key_hash: bytes, spent_passes: list[Pass]
-) -> GenericAlias(Matcher, (_SpendingData,)):
+) -> Matcher[_SpendingData]:
     """
     Returns a matcher for _SpendingData that checks whether the
     spent pass match the given public key and passes.
