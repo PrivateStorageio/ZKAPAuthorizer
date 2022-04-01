@@ -24,6 +24,7 @@ __all__ = [
 
 from collections.abc import Awaitable
 from io import BytesIO
+from sqlite3 import Connection
 from typing import BinaryIO, Callable
 
 import cbor2
@@ -180,3 +181,54 @@ def get_tahoe_lafs_direntry_uploader(
         )
 
     return upload
+
+
+def event_stream_observer(
+    replica_dircap: str,
+    client: Tahoe,
+    conn: Connection,
+    max_sequence_difference: int = 5,
+) -> Callable[[EventStream], None]:
+    """
+    Create a function that will be called with a new EventStream every
+    time it changes. This will choose whether to upload the
+    EventStream or not and whether to prune things from the local
+    database.
+
+    :param max_sequence_difference: the maximum number of statements
+        before we upload a new EventStream to the replica
+
+    :returns: a Callable that should be called with a new event-stream
+    """
+    # the last sequence-number we've uploaded
+    last_uploaded = [None]
+
+    async def upload(events: EventStream):
+        entry_name = f"event-stream-{events.highest_sequence()}"
+        await tahoe_lafs_uploader(
+            client,
+            replica_dircap,
+            events.to_bytes,
+            entry_name,
+        )
+
+    def prune_events(sequence_number):
+        with conn as cursor:
+            cursor.execute(
+                """
+                DELETE FROM [event-stream]
+                WHERE [sequence-number] <= (?)
+                """,
+                (sequence_number,),
+            )
+
+    async def observer(events: EventStream):
+        if (
+            last_uploaded[0] is None
+            or events.highest_sequence() - last_uploaded[0] > max_sequence_difference
+        ):
+            await upload(events)
+        last_uploaded[0] = events.highest_sequence()
+        prune_events(last_uploaded[0])
+
+    return observer
