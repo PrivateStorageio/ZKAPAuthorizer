@@ -195,6 +195,9 @@ class IndexedRedeemer(object):
 
     redeemers = attr.ib()
 
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise NotImplementedError("IndexedRedeemer cannot create passes")
+
     def random_tokens_for_voucher(self, voucher, counter, count):
         return dummy_random_tokens(voucher, counter, count)
 
@@ -277,6 +280,9 @@ class DoubleSpendRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise NotImplementedError("DoubleSpendRedeemer cannot create passes")
+
     def random_tokens_for_voucher(self, voucher, counter, count):
         return dummy_random_tokens(voucher, counter, count)
 
@@ -296,6 +302,9 @@ class UnpaidRedeemer(object):
     def make(cls, section_name, node_config, announcement, reactor):
         return cls()
 
+    def tokens_to_passes(self, message, unblinded_tokens):
+        raise NotImplementedError("UnpaidRedeemer cannot create passes")
+
     def random_tokens_for_voucher(self, voucher, counter, count):
         return dummy_random_tokens(voucher, counter, count)
 
@@ -313,6 +322,9 @@ class RecordingRedeemer(object):
 
     original = attr.ib()
     redemptions = attr.ib(default=attr.Factory(list))
+
+    def tokens_to_passes(self, message, unblinded_tokens):
+        return self.original.tokens_to_passes(message, unblinded_tokens)
 
     def random_tokens_for_voucher(self, voucher, counter, count):
         return dummy_random_tokens(voucher, counter, count)
