@@ -21,7 +21,7 @@ implemented in ``_storage_server.py``.
 """
 
 from functools import partial, wraps
-from typing import Any, Optional
+from typing import Any, Generator, Optional
 
 import attr
 from allmydata.interfaces import IStorageServer
@@ -436,7 +436,7 @@ class ZKAPAuthorizerStorageClient(object):
         secrets: Secrets,
         tw_vectors: TestWriteVectors,
         r_vector: ReadVector,
-    ) -> Deferred:
+    ) -> Generator[Deferred[Any], Any, None]:
         # Read operations are free.
         num_passes = 0
 
