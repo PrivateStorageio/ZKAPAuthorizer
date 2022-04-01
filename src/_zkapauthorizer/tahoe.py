@@ -51,7 +51,7 @@ def async_retry(matchers: list[Callable[[Exception], bool]]):
     return retry_decorator
 
 
-def _not_enough_servers(exc: Exception) -> bool:
+def _not_enough_servers(exc: Exception, /) -> bool:
     """
     Match the exception that is raised when the Tahoe-LAFS client node is not
     connected to enough servers to satisfy the encoding configuration.
@@ -62,7 +62,7 @@ def _not_enough_servers(exc: Exception) -> bool:
     )
 
 
-def _connection_refused(exc: Exception) -> bool:
+def _connection_refused(exc: Exception, /) -> bool:
     """
     Match the exception that is raised when the Tahoe-LAFS client node does
     not accept the API call connection attempt.
