@@ -274,7 +274,7 @@ def matches_capability(type_matcher):
     that has a type matched by ``type_matcher``.
     """
 
-    def get_cap_type(cap: str) -> str:
+    def get_cap_type(cap: str) -> Union[str, None]:
         if not isinstance(cap, str):
             raise Exception(f"expected str cap, got {cap!r}")
         pieces = cap.split(":")
