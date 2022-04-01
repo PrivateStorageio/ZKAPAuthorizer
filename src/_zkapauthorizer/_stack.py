@@ -18,12 +18,12 @@ try:
     from resource import RLIMIT_STACK, getrlimit, setrlimit
 except ImportError:
     # Not available on Windows, unfortunately.
-    RLIMIT_STACK = object()
+    RLIMIT_STACK = -1
 
-    def getrlimit(which):
+    def getrlimit(resource: int, /) -> tuple[int, int]:
         return (-1, -1)
 
-    def setrlimit(which, what):
+    def setrlimit(resource: int, limits: tuple[int, int], /) -> None:
         pass
 
 
