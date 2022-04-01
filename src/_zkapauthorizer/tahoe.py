@@ -169,7 +169,7 @@ async def download(
     api_root: DecodedURL,
     cap: str,
     child_path: Optional[Iterable[str]] = None,
-) -> Awaitable[None]:
+) -> None:
     """
     Download the object identified by the given capability to the given path.
 
@@ -250,7 +250,7 @@ async def link(
     dir_cap: str,
     entry_name: str,
     entry_cap: str,
-) -> Awaitable[None]:
+) -> None:
     """
     Link an object into a directory.
 

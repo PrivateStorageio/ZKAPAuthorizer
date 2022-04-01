@@ -100,7 +100,7 @@ class StatefulRecoverer:
         self,
         download: Downloader,
         cursor: Cursor,
-    ) -> Awaitable[None]:
+    ) -> None:
         """
         Begin the recovery process.
 
@@ -151,7 +151,7 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
+    async def fail_downloader(set_state: SetState) -> BinaryIO:
         raise reason
 
     return fail_downloader
@@ -163,7 +163,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
     """
     assert isinstance(data, bytes)
 
-    async def canned_downloader(set_state: SetState) -> Awaitable[BinaryIO]:
+    async def canned_downloader(set_state: SetState) -> BinaryIO:
         return BytesIO(data)
 
     return canned_downloader
@@ -244,7 +244,7 @@ async def tahoe_lafs_downloader(
     client: Tahoe,
     recovery_cap: str,
     set_state: SetState,
-) -> Awaitable[FilePath]:
+) -> FilePath:
     """
     Download replica data from the given replica directory capability into the
     node's private directory.

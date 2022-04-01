@@ -324,7 +324,7 @@ def authorizationless_resource_tree(
     store,
     controller,
     get_downloader: Callable[[str], Downloader],
-    setup_replication: Callable[[], str],
+    setup_replication: Callable[[], Awaitable[str]],
     calculate_price,
 ):
     """
