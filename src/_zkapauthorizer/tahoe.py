@@ -93,7 +93,7 @@ def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
         and not url.path[1].startswith("URI:SCRUBBED:")
     ):
         cap = url.path[1]
-        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + url.path[2:])
+        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + tuple(url.path[2:]))
         return new
 
     # That is the only form we use at the moment, in fact.
