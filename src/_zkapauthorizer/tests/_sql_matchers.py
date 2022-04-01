@@ -11,8 +11,6 @@ from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 from ..sql import Insert, Table, escape_identifier
 from ._float_matchers import matches_float_within_distance
 
-SQLType = Union[int, float, str, bytes, None]
-
 
 def equals_database(reference: Connection):
     """

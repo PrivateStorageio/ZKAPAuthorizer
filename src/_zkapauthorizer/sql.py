@@ -6,8 +6,11 @@ to support testing the replication/recovery system.
 """
 
 from enum import Enum, auto
+from typing import Union
 
 from attrs import define
+
+SQLType = Union[int, float, str, bytes, None]
 
 
 class StorageAffinity(Enum):
@@ -60,7 +63,7 @@ class Insert:
 
     table_name: str
     table: Table
-    fields: tuple[...]
+    fields: tuple[SQLType, ...]
 
     def statement(self):
         names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
@@ -91,7 +94,7 @@ class Update:
 
     table_name: str
     table: Table
-    fields: tuple[...]
+    fields: tuple[SQLType, ...]
 
     def statement(self):
         field_names = list(name for (name, _) in self.table.columns)
