@@ -54,7 +54,7 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> str:
 
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
-    config_lock = FilesystemLock(config_path.path + ".lock")
+    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")
     config_lock.lock()
     try:
 
