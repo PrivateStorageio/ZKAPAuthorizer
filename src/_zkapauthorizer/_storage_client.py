@@ -50,7 +50,7 @@ TestWriteVectors = dict[
     int,
     tuple[
         list[
-            tuple[int, int, bytes, bytes],
+            tuple[int, int, bytes],
         ],
         list[
             tuple[int, bytes],
@@ -442,7 +442,7 @@ class ZKAPAuthorizerStorageClient(object):
 
         # Convert tw_vectors from the new internal format to the wire format.
         # See https://github.com/tahoe-lafs/tahoe-lafs/pull/1127/files#r716939082
-        tw_vectors = {
+        old_tw_vectors = {
             sharenum: (
                 [
                     (offset, length, b"eq", specimen)
@@ -457,7 +457,7 @@ class ZKAPAuthorizerStorageClient(object):
             ) in tw_vectors.items()
         }
 
-        write_sharenums = get_write_sharenums(tw_vectors)
+        write_sharenums = get_write_sharenums(old_tw_vectors)
         if len(write_sharenums) > 0:
             # When performing writes, if we're increasing the storage
             # requirement, we need to spend more passes.  Unfortunately we
@@ -488,7 +488,7 @@ class ZKAPAuthorizerStorageClient(object):
             num_passes = get_required_new_passes_for_mutable_write(
                 self._pass_value,
                 current_sizes,
-                tw_vectors,
+                old_tw_vectors,
             )
 
         result = yield call_with_passes(
@@ -497,7 +497,7 @@ class ZKAPAuthorizerStorageClient(object):
                 _encode_passes(passes),
                 storage_index,
                 secrets,
-                tw_vectors,
+                old_tw_vectors,
                 r_vector,
             ),
             num_passes,
