@@ -423,11 +423,9 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         )
         ro_cap = results[0]
 
-        # Memory grid lets us download directory cap as a dict.  Kind of bogus
-        # but use it for now.
         self.assertThat(
-            grid.download(ro_cap),
-            Equals({}),
+            Deferred.fromCoroutine(client.list_directory(ro_cap)),
+            succeeded(Equals({})),
         )
 
         # Peek inside the node private state to make sure the capability was

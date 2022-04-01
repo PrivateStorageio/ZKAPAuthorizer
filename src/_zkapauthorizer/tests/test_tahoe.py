@@ -205,33 +205,13 @@ class DirectoryTestsMixin:
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
     @inlineCallbacks
-    def test_make_directory(self):
-        """
-        ``make_directory`` returns a coroutine that completes with the capability
-        of a new, empty directory.
-        """
-        tahoe = self.get_client()
-
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
-
-        # If we can download it, consider that success.
-        outpath = FilePath(self.useFixture(TempDir()).join("dir_contents"))
-        yield Deferred.fromCoroutine(tahoe.download(outpath, dir_cap, None))
-        self.assertThat(outpath.getContent(), Not(Equals(b"")))
-
-    @inlineCallbacks
     def test_list_directory(self):
         """
-        ``list_directory`` returns a coroutine that completes with a list of
-        direct child entries in the given directory.
+        ``make_directory`` creates a directory the children of which can be listed
+        using ``list_directory``.
         """
         tahoe = self.get_client()
-
         dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
-
-        inpath = FilePath(self.useFixture(TempDir()).join("list_directory"))
-        inpath.makedirs()
-
         entry_names = range(5)
 
         def file_content(n):
