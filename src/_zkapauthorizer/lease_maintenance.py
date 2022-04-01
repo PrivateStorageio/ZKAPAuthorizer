@@ -17,10 +17,12 @@ This module implements a service which periodically spends ZKAPs to
 refresh leases on all shares reachable from a root.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Iterable, Type, TypeVar
+from typing import Any, Callable, Iterable, TypeVar
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
@@ -42,9 +44,6 @@ from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
 
 SERVICE_NAME = "lease maintenance service"
-
-
-_T = TypeVar("T")
 
 
 @inlineCallbacks
@@ -458,7 +457,7 @@ class LeaseMaintenanceConfig(object):
     min_lease_remaining: timedelta = attr.ib()
 
     @classmethod
-    def from_node_config(cls: Type[_T], node_config: Config) -> _T:
+    def from_node_config(cls, node_config: Config) -> LeaseMaintenanceConfig:
         """
         Return a ``LeaseMaintenanceConfig`` representing the values from the given
         configuration object.
