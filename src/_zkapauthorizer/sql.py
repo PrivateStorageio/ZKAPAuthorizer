@@ -6,10 +6,10 @@ to support testing the replication/recovery system.
 """
 
 from enum import Enum, auto
-
-from attrs import define
 from sqlite3 import Cursor
 from typing import Union
+
+from attrs import define
 
 
 class StorageAffinity(Enum):

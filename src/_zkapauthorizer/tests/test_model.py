@@ -82,7 +82,7 @@ from ..recover import (
     StatefulRecoverer,
     make_canned_downloader,
 )
-from ..replicate import EventStream, Change
+from ..replicate import Change, EventStream
 from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
@@ -898,7 +898,12 @@ class EventStreamTests(TestCase):
         for sql_id in ids:
             for change_type in change_types:
                 change = data.draw(change_type(sql_id, table))
-                sql_statements.append(Change(next(sequence), change.bound_statement(store._connection.cursor())))
+                sql_statements.append(
+                    Change(
+                        next(sequence),
+                        change.bound_statement(store._connection.cursor()),
+                    )
+                )
                 store.add_event(change.bound_statement(store._connection.cursor()))
 
         events = store.get_events()
