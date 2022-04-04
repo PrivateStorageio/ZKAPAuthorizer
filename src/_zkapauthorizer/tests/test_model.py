@@ -82,7 +82,7 @@ from ..recover import (
     StatefulRecoverer,
     make_canned_downloader,
 )
-from ..replicate import EventStream
+from ..replicate import EventStream, Change
 from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
@@ -898,21 +898,13 @@ class EventStreamTests(TestCase):
         for sql_id in ids:
             for change_type in change_types:
                 change = data.draw(change_type(sql_id, table))
-                sql_statements.append(
-                    (next(sequence), change.bound_statement(store._connection.cursor()))
-                )
+                sql_statements.append(Change(next(sequence), change.bound_statement(store._connection.cursor())))
                 store.add_event(change.bound_statement(store._connection.cursor()))
 
         events = store.get_events()
         self.assertThat(
-            events,
-            AfterPreprocessing(
-                lambda eventstream: [
-                    (change.sequence, change.statement)
-                    for change in eventstream.changes
-                ],
-                Equals(sql_statements),
-            ),
+            events.changes,
+            Equals(tuple(sql_statements)),
         )
         # also ensure the serializer works
         self.assertThat(
