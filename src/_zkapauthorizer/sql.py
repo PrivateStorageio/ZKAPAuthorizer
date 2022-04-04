@@ -91,7 +91,7 @@ def quote_sql_value(cursor, value):
         return str(value)
     if isinstance(value, float):
         return str(value)
-    if isinstance(value, type(None)):
+    if isinstance(value is None):
         return "NULL"
     if isinstance(value, str):
         return cursor.execute("SELECT quote(?);", (value,)).fetchall()[0][0]
