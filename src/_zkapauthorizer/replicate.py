@@ -61,7 +61,6 @@ class EventStream:
             return None
         return max(change.sequence for change in self.changes)
 
-    # XXX or should we pass in a writable stream to use instead?
     def to_bytes(self) -> BinaryIO:
         """
         :returns BinaryIO: a producer of bytes representing this EventStream.
