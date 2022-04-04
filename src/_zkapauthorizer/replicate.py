@@ -76,7 +76,6 @@ class EventStream:
             )
         )
 
-    # XXX versioning? or do we handle that higher up?
     @classmethod
     def from_bytes(cls, stream: BinaryIO):
         """
