@@ -339,6 +339,10 @@ The replication process is as follows:
 
 #. If an event stream object in the *replica directory* contains only statements that are already part of the snapshot those statements are pruned. [9]_
 
+   #. the highest sequence number in the new snapshot is the "snapshot sequence"
+   #. extract the "highest sequence numbers" from all event-stream objects in the replica
+   #. unlink from the replica any event-stream object whose "higest sequence number" is less or equal to the "snapshot sequence"
+
 All uploads inherit the redundancy configuration from the Tahoe-LAFS client node.
 
 Recovery
@@ -582,7 +586,7 @@ Footnotes
 
 .. [6] The SQL statements are joined with newline separators.
        The resulting string is uploaded as a new immutable object next to the existing snapshot object.
-       The sequence number of the first statement it includes is added as metadata for that object in the containing directory.
+       The sequence number of the last statement it includes is added as metadata for that object in the containing directory.
 
 .. [7] The SQL statements from ``iterdump``,
        except for those relating to the event stream table,
