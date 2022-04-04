@@ -52,9 +52,9 @@ class EventStream:
 
     changes: tuple[Change]
 
-    def highest_sequence(self):
+    def highest_sequence(self) -> Optional[int]:
         """
-        :return int: the highest sequence number in this EventStream (or
+        :returns: the highest sequence number in this EventStream (or
             None if there are no events)
         """
         if not self.changes:
