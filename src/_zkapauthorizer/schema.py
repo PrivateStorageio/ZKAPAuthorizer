@@ -211,7 +211,7 @@ _UPGRADES = {
     6: [
         """
         -- track the "event-stream" which are a series of SQL statements
-        -- that modify the database (except statements which modify this table?)
+        -- that modify the database -- except statements which modify this table
         CREATE TABLE [event-stream] (
             -- A sequence number which allows us to identify specific positions in
             -- the sequence of modifications which were made to the database.
