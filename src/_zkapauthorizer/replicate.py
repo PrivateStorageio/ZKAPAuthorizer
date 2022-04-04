@@ -24,7 +24,7 @@ __all__ = [
 
 from collections.abc import Awaitable
 from io import BytesIO
-from typing import BinaryIO, Callable
+from typing import BinaryIO, Callable, Optional
 
 import cbor2
 from attrs import frozen

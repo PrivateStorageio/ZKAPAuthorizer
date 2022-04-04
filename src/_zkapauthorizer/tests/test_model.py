@@ -885,12 +885,6 @@ class EventStreamTests(TestCase):
         Various kinds of SQL statements can be serialized into and out of
         the event-stream.
         """
-        # no BLOBs
-        assume(
-            not any(
-                column[1].affinity == StorageAffinity.BLOB for column in table.columns
-            )
-        )
         tempdir = self.useFixture(TempDir())
         store = VoucherStore.from_node_config(
             get_config(tempdir.join("node"), "tub.port"),
