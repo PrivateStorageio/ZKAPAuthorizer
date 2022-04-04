@@ -571,7 +571,7 @@ Footnotes
        for a ``pass-value`` of 1MB(×month),
        a ``shares.needed`` of 3,
        and a ``shares.total`` of 5,
-       "large enough" is ``1MB × 0.95 × 3 / 5`` or 540,000 bytes.
+       "large enough" is ``1MB × 0.95 × 3 / 5`` or 570,000 bytes.
        A 570,000 byte object erasure-encodes under these parameters to 950,001 bytes.
        Therefore in this configuration 570,000 bytes is "large enough".
 
