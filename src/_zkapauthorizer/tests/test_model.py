@@ -83,7 +83,6 @@ from ..recover import (
     make_canned_downloader,
 )
 from ..replicate import Change, EventStream
-from ..sql import StorageAffinity
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
