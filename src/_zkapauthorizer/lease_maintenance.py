@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode

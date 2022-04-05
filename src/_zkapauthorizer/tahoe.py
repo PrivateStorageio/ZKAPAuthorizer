@@ -20,7 +20,6 @@ from twisted.internet.error import ConnectionRefusedError
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 
-from ._json import dumps_utf8
 from .config import read_node_url
 
 
