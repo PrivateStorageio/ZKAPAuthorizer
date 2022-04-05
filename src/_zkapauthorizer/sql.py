@@ -74,6 +74,10 @@ class Insert:
         )
 
     def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
         names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
         values = ", ".join(
             (quote_sql_value(cursor, value) for value in self.arguments())
@@ -132,6 +136,10 @@ class Update:
         return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
 
     def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
         field_names = list(name for (name, _) in self.table.columns)
         assignments = ", ".join(
             f"{escape_identifier(name)} = {quote_sql_value(cursor, value)}"
@@ -159,6 +167,10 @@ class Delete:
         return f"DELETE FROM {escape_identifier(self.table_name)}"
 
     def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
         return self.statement()
 
     def arguments(self):
