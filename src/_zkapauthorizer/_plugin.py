@@ -45,8 +45,7 @@ from zope.interface import implementer
 from . import NAME
 from ._types import Connect, GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
-from .config import CONFIG_DB_NAME
-from .config import _Config as Config
+from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import (
