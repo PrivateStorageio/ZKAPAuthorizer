@@ -9,12 +9,11 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 from sqlite3 import Cursor
-from typing import Union
-from sqlparse import parse
+from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 
-from attrs import frozen
+from attrs import define, frozen
+from sqlparse import parse
 
 SQLType = Union[int, float, str, bytes, None]
 

@@ -19,23 +19,12 @@ Tests for ``_zkapauthorizer.model``.
 
 
 from hypothesis import given
-from hypothesis.strategies import (
-    sampled_from,
-    tuples,
-)
+from hypothesis.strategies import sampled_from, tuples
 from testtools import TestCase
-from testtools.matchers import (
-    Equals,
-)
+from testtools.matchers import Equals
 
-from .strategies import (
-    deletes,
-    inserts,
-    sql_identifiers,
-    tables,
-    updates,
-)
 from ..sql import statement_mutates
+from .strategies import deletes, inserts, sql_identifiers, tables, updates
 
 
 class MutateTests(TestCase):
