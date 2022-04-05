@@ -220,6 +220,19 @@ def with_cursor(f):
 
 
 def path_to_memory_uri(path: FilePath) -> str:
+    """
+    Construct a SQLite3 database URI for an in-memory connection to a database
+    identified by the given path.
+
+    Since in-memory databases do not exist on disk the path does not actually
+    specify where on the filesystem the database exists.  Instead, it serves
+    as a key so that the same in-memory database can be opened multiple times
+    by supplying the same path (and similarly, different paths will result in
+    connections to different in-memory databases).
+
+    :return: A string suitable to be passed as the first argument to
+        ``sqlite3.connect`` along with the `uri=True` keyword argument.
+    """
     return (
         DecodedURL()
         .replace(
