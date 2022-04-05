@@ -37,9 +37,7 @@ from ..recover import (
     make_fail_downloader,
     noop_downloader,
     recover,
-    snapshot,
     statements_from_snapshot,
-    statements_to_snapshot,
 )
 from ..replicate import (
     ReplicationAlreadySetup,
