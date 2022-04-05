@@ -19,6 +19,7 @@ the storage plugin.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from functools import wraps
 from json import loads
@@ -237,7 +238,9 @@ def path_to_memory_uri(path: FilePath) -> str:
         DecodedURL()
         .replace(
             scheme="file",
-            path=path.segmentsFrom(FilePath("/")),
+            # segmentsFrom(FilePath("/")) is tempting but on Windows "/" is
+            # not necessarily the root for every path.
+            path=path.path.split(os.sep),
         )
         .add("mode", "memory")
         .to_text()
