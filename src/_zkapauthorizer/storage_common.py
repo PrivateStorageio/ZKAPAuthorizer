@@ -135,7 +135,7 @@ def get_configured_allowed_public_keys(node_config):
     )
 
 
-_dict_values = type(dict().values())
+_dict_values: type = type(dict().values())
 
 
 def required_passes(bytes_per_pass, share_sizes):
