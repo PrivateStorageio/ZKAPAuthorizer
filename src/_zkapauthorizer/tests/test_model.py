@@ -848,12 +848,9 @@ class EventStreamTests(TestCase):
         Various kinds of SQL statements can be serialized into and out of
         the event-stream.
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(tempdir.join("node"), "tub.port"),
-            lambda: now,
-            memory_connect,
-        )
+        store = self.useFixture(
+            TemporaryVoucherStore(get_config, lambda: now),
+        ).store
 
         # generate some SQL events
         sql_statements = []
