@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
 from io import BytesIO
+from itertools import count
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
@@ -42,6 +43,7 @@ from hypothesis.strategies import (
     integers,
     lists,
     randoms,
+    sampled_from,
     timedeltas,
     tuples,
 )
@@ -82,15 +84,21 @@ from ..recover import (
     make_canned_downloader,
     recover,
 )
+from ..replicate import Change, EventStream
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
+    deletes,
     dummy_ristretto_keys,
+    inserts,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
+    sql_identifiers,
+    tables,
     tahoe_configs,
     unblinded_tokens,
+    updates,
     voucher_counters,
     voucher_objects,
     vouchers,
@@ -893,6 +901,63 @@ class LeaseMaintenanceTests(TestCase):
         self.assertThat(
             store.get_latest_lease_maintenance_activity(),
             Equals(expected),
+        )
+
+
+class EventStreamTests(TestCase):
+    """
+    Tests related to the event-stream storage of VoucherStore
+    """
+
+    @given(
+        tahoe_configs(),
+        posix_safe_datetimes(),
+        lists(sql_identifiers(), min_size=1),
+        tables(),
+        data(),
+        lists(sampled_from([inserts, deletes, updates]), min_size=1),
+    )
+    def test_event_stream_serialization(
+        self, get_config, now, ids, table, data, change_types
+    ):
+        """
+        Various kinds of SQL statements can be serialized into and out of
+        the event-stream.
+        """
+        tempdir = self.useFixture(TempDir())
+        store = VoucherStore.from_node_config(
+            get_config(tempdir.join("node"), "tub.port"),
+            lambda: now,
+            memory_connect,
+        )
+
+        # generate some SQL events
+        sql_statements = []
+        sequence = count(1)
+        for sql_id in ids:
+            for change_type in change_types:
+                change = data.draw(change_type(sql_id, table))
+                sql_statements.append(
+                    Change(
+                        next(sequence),
+                        change.bound_statement(store._connection.cursor()),
+                    )
+                )
+                store.add_event(change.bound_statement(store._connection.cursor()))
+
+        events = store.get_events()
+        self.assertThat(
+            events.changes,
+            Equals(tuple(sql_statements)),
+        )
+        # also ensure the serializer works
+        self.assertThat(
+            EventStream.from_bytes(events.to_bytes()),
+            Equals(events),
+        )
+        self.assertThat(
+            events.highest_sequence(),
+            Equals(len(sql_statements)),
         )
 
 

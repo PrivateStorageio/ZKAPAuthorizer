@@ -34,7 +34,7 @@ from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .replicate import with_replication
+from .replicate import Change, EventStream, with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -795,6 +795,32 @@ class VoucherStore(object):
             count,
             parse_datetime(finished, delimiter=" "),
         )
+
+    @with_cursor
+    def add_event(self, cursor, sql_statement: str):
+        """
+        Add a new change to the event-log.
+        """
+        cursor.execute(
+            """
+            INSERT INTO [event-stream]([statement]) VALUES (?)
+            """,
+            (sql_statement,),
+        )
+
+    @with_cursor
+    def get_events(self, cursor):
+        """
+        Return all events currently in our event-log.
+        """
+        rows = cursor.execute(
+            """
+            SELECT [sequence-number], [statement]
+            FROM [event-stream]
+            """
+        ).fetchall()
+
+        return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
 
 
 @implementer(ILeaseMaintenanceObserver)

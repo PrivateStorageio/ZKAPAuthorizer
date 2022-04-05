@@ -36,7 +36,7 @@ from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python.log import err
 from zope.interface import implementer
 
-from .config import _Config, read_duration
+from .config import Config, read_duration
 from .controller import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
@@ -458,7 +458,7 @@ class LeaseMaintenanceConfig(object):
     min_lease_remaining: timedelta = attr.ib()
 
     @classmethod
-    def from_node_config(cls: Type[_T], node_config: _Config) -> _T:
+    def from_node_config(cls: Type[_T], node_config: Config) -> _T:
         """
         Return a ``LeaseMaintenanceConfig`` representing the values from the given
         configuration object.

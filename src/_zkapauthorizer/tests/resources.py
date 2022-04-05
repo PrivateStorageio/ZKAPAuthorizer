@@ -15,7 +15,7 @@ from testresources import TestResourceManager
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..config import _Config as Config
+from ..config import Config
 
 # An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
 # runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
