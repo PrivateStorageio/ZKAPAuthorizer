@@ -70,7 +70,7 @@ from twisted.web.resource import IResource
 from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
-from .._plugin import get_root_nodes, load_signing_key, open_store
+from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
@@ -85,13 +85,13 @@ from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
     client_lease_maintenance_configurations,
-    clocks,
     dummy_ristretto_keys,
     lease_cancel_secrets,
     lease_maintenance_configurations,
     lease_renew_secrets,
     minimal_tahoe_configs,
     pass_counts,
+    posix_timestamps,
     ristretto_signing_keys,
     server_configurations,
     sharenum_sets,
@@ -244,13 +244,17 @@ class ServerPluginTests(TestCase):
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
 
+    def setup_example(self):
+        self.reactor = Clock()
+        self.plugin = ZKAPAuthorizer(NAME, self.reactor)
+
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_announceable(self, configuration):
         """
-        ``storage_server_plugin.get_storage_server`` returns an instance which
-        provides ``IAnnounceableStorageServer``.
+        ``ZKAPAuthorizer.get_storage_server`` returns an instance which provides
+        ``IAnnounceableStorageServer``.
         """
-        storage_server_deferred = storage_server_plugin.get_storage_server(
+        storage_server_deferred = self.plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -263,10 +267,10 @@ class ServerPluginTests(TestCase):
     def test_returns_referenceable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server_plugin.get_storage_server`` provides
-        ``IReferenceable`` and ``IRemotelyCallable``.
+        ``ZKAPAuthorizer.get_storage_server`` provides ``IReferenceable`` and
+        ``IRemotelyCallable``.
         """
-        storage_server_deferred = storage_server_plugin.get_storage_server(
+        storage_server_deferred = self.plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -284,10 +288,10 @@ class ServerPluginTests(TestCase):
     def test_returns_serializable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server_plugin.get_storage_server`` can be serialized by a
-        banana Broker (for Foolscap).
+        ``ZKAPAuthorizer.get_storage_server`` can be serialized by a banana
+        Broker (for Foolscap).
         """
-        storage_server_deferred = storage_server_plugin.get_storage_server(
+        storage_server_deferred = self.plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -307,12 +311,12 @@ class ServerPluginTests(TestCase):
     def test_returns_hashable(self, configuration):
         """
         The storage server attached to the result of
-        ``storage_server_plugin.get_storage_server`` is hashable for use as a
+        ``ZKAPAuthorizer.get_storage_server`` is hashable for use as a
         Python dictionary key.
 
         This is another requirement of Foolscap.
         """
-        storage_server_deferred = storage_server_plugin.get_storage_server(
+        storage_server_deferred = self.plugin.get_storage_server(
             configuration,
             get_anonymous_storage_server,
         )
@@ -328,13 +332,15 @@ class ServerPluginTests(TestCase):
             ),
         )
 
-    @given(timedeltas(min_value=timedelta(seconds=1)), clocks())
-    def test_metrics_written(self, metrics_interval, clock):
+    @given(timedeltas(min_value=timedelta(seconds=1)), posix_timestamps())
+    def test_metrics_written(self, metrics_interval, when):
         """
         When the configuration tells us where to put a metrics .prom file
         and an interval how often to do so, test that metrics are actually
         written there after the configured interval.
         """
+        self.reactor.advance(when)
+
         metrics_path = self.useFixture(TempDir()).join("metrics")
         configuration = {
             "prometheus-metrics-path": metrics_path,
@@ -343,10 +349,9 @@ class ServerPluginTests(TestCase):
             "ristretto-signing-key-path": SIGNING_KEY_PATH.path,
         }
         announceable = extract_result(
-            storage_server_plugin.get_storage_server(
+            self.plugin.get_storage_server(
                 configuration,
                 get_anonymous_storage_server,
-                reactor=clock,
             )
         )
         registry = announceable.storage_server._registry
@@ -355,7 +360,7 @@ class ServerPluginTests(TestCase):
         for i in range(2):
             g.set(i)
 
-            clock.advance(metrics_interval.total_seconds())
+            self.reactor.advance(metrics_interval.total_seconds())
             self.assertThat(
                 metrics_path,
                 has_metric(Equals("foo"), Equals(i)),
@@ -418,12 +423,15 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
         """
+        reactor = Clock()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
 
         node_config = get_config(nodedir.path, "tub.port")
 
-        storage_client = storage_server_plugin.get_storage_client(
+        storage_client = plugin.get_storage_client(
             node_config,
             announcement,
             get_rref,
@@ -440,6 +448,9 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` raises an exception when called with an
         announcement and local configuration which specify different issuers.
         """
+        reactor = Clock()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
 
@@ -453,7 +464,7 @@ class ClientPluginTests(TestCase):
         self.addDetail("config", text_content(config_text.getvalue()))
         self.addDetail("announcement", text_content(str(announcement)))
         self.assertThat(
-            lambda: storage_server_plugin.get_storage_client(
+            lambda: plugin.get_storage_client(
                 node_config,
                 announcement,
                 get_rref,
@@ -486,11 +497,14 @@ class ClientPluginTests(TestCase):
         provider then the storage methods of the client raise exceptions that
         clearly indicate this.
         """
+        reactor = Clock()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
         node_config = get_config(nodedir.path, "tub.port")
 
-        storage_client = storage_server_plugin.get_storage_client(
+        storage_client = plugin.get_storage_client(
             node_config,
             announcement,
             partial(get_rref, RIStorageServer),
@@ -534,30 +548,32 @@ class ClientPluginTests(TestCase):
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
         """
+        reactor = Clock()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
         node_config = get_config(nodedir.path, "tub.port")
 
         # Populate the database with unspent tokens.
-        store = open_store(lambda: now, connect, node_config)
+        def redeem():
+            store = open_store(lambda: now, connect, node_config)
 
-        controller = PaymentController(
-            store,
-            DummyRedeemer(public_key),
-            default_token_count=num_passes,
-            num_redemption_groups=1,
-            allowed_public_keys={public_key},
-            clock=Clock(),
-        )
-        # Get a token inserted into the store.
-        redeeming = controller.redeem(voucher)
-        self.assertThat(
-            redeeming,
-            succeeded(Always()),
-        )
+            controller = PaymentController(
+                store,
+                DummyRedeemer(public_key),
+                default_token_count=num_passes,
+                num_redemption_groups=1,
+                allowed_public_keys={public_key},
+                clock=reactor,
+            )
+            # Get a token inserted into the store.
+            return controller.redeem(voucher)
+
+        self.assertThat(redeem(), succeeded(Always()))
 
         # Try to spend a pass via the storage client plugin.
-        storage_client = storage_server_plugin.get_storage_client(
+        storage_client = plugin.get_storage_client(
             node_config,
             announcement,
             get_rref,
@@ -603,6 +619,11 @@ class ClientResourceTests(TestCase):
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
 
+    def setUp(self):
+        super().setUp()
+        self.reactor = Clock()
+        self.plugin = ZKAPAuthorizer(NAME, self.reactor)
+
     @given(tahoe_configs())
     def test_interface(self, get_config):
         """
@@ -612,9 +633,8 @@ class ClientResourceTests(TestCase):
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
         self.assertThat(
-            storage_server_plugin.get_client_resource(
+            self.plugin.get_client_resource(
                 config,
-                reactor=Clock(),
             ),
             Provides([IResource]),
         )
