@@ -22,6 +22,7 @@ let
       ${builtins.readFile ./requirements/test.in}
       ${builtins.readFile ./requirements/elpy.in}
       ${builtins.readFile ./requirements/debug.in}
+      ${builtins.readFile ./requirements/typecheck.in}
       ${zkapauthorizer.requirements}
       '';
   };
