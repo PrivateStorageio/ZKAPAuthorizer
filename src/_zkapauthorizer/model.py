@@ -813,12 +813,13 @@ class VoucherStore(object):
         """
         Return all events currently in our event-log.
         """
-        rows = cursor.execute(
+        cursor.execute(
             """
             SELECT [sequence-number], [statement]
             FROM [event-stream]
             """
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
 
         return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
 
