@@ -128,7 +128,7 @@ class PassGroup(object):
     def unblinded_tokens(self) -> list[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices: list[int]) -> (PassGroup, PassGroup):
+    def split(self, select_indices: list[int]) -> tuple[PassGroup, PassGroup]:
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
