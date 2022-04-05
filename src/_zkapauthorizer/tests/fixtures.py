@@ -19,7 +19,7 @@ Common fixtures to let the test suite focus on application logic.
 import gc
 from base64 import b64encode
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Any, Callable, Generator, Optional
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -188,7 +188,7 @@ class Treq(Fixture):
         return HTTPClient(Agent(self.reactor, self.pool))
 
     @inlineCallbacks
-    def _cleanup(self) -> Deferred:
+    def _cleanup(self) -> Generator[Deferred[Any], Any, None]:
         """
         Clean up reactor event-sources allocated by ``HTTPConnectionPool``.
         """

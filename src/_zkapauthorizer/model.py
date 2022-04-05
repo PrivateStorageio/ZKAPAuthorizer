@@ -43,7 +43,7 @@ from .storage_common import (
 )
 from .validators import greater_than, has_length, is_base64_encoded
 
-_T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 class NotEmpty(Exception):

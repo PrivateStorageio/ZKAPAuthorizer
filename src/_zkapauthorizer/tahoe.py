@@ -7,7 +7,7 @@ from functools import wraps
 from hashlib import sha256
 from json import loads
 from tempfile import mkdtemp
-from typing import BinaryIO, Callable, Iterable, Optional, Union
+from typing import Any, BinaryIO, Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.node import _Config
@@ -20,7 +20,6 @@ from twisted.internet.error import ConnectionRefusedError
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 
-from ._json import dumps_utf8
 from .config import read_node_url
 
 
@@ -51,7 +50,7 @@ def async_retry(matchers: list[Callable[[Exception], bool]]):
     return retry_decorator
 
 
-def _not_enough_servers(exc: Exception) -> bool:
+def _not_enough_servers(exc: Exception, /) -> bool:
     """
     Match the exception that is raised when the Tahoe-LAFS client node is not
     connected to enough servers to satisfy the encoding configuration.
@@ -62,7 +61,7 @@ def _not_enough_servers(exc: Exception) -> bool:
     )
 
 
-def _connection_refused(exc: Exception) -> bool:
+def _connection_refused(exc: Exception, /) -> bool:
     """
     Match the exception that is raised when the Tahoe-LAFS client node does
     not accept the API call connection attempt.
@@ -93,7 +92,7 @@ def _scrub_caps_from_url(url: DecodedURL) -> DecodedURL:
         and not url.path[1].startswith("URI:SCRUBBED:")
     ):
         cap = url.path[1]
-        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + url.path[2:])
+        new = url.replace(path=(url.path[0], _scrub_cap(cap)) + tuple(url.path[2:]))
         return new
 
     # That is the only form we use at the moment, in fact.
@@ -169,7 +168,7 @@ async def download(
     api_root: DecodedURL,
     cap: str,
     child_path: Optional[Iterable[str]] = None,
-) -> Awaitable[None]:
+) -> None:
     """
     Download the object identified by the given capability to the given path.
 
@@ -250,7 +249,7 @@ async def link(
     dir_cap: str,
     entry_name: str,
     entry_cap: str,
-) -> Awaitable[None]:
+) -> None:
     """
     Link an object into a directory.
 
@@ -316,7 +315,22 @@ class Tahoe(object):
 
 
 CapStr = str
-FSEntry = Union[CapStr, dict[CapStr, "FSEntry"]]
+
+
+@define
+class _Directory:
+    """
+    Represent a Tahoe-LAFS directory object.
+
+    :ivar children: A mapping from an entry name to a capability which can be
+        used to look up the object for that entry.
+    """
+
+    children: dict[str, CapStr] = field()
+
+    @children.default
+    def _default_children(self):
+        return {}
 
 
 @define
@@ -334,7 +348,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[CapStr, FSEntry] = field(default=Factory(dict))
+    _objects: dict[CapStr, Union[bytes, _Directory]] = field(default=Factory(dict))
 
     def client(self):
         """
@@ -343,17 +357,17 @@ class MemoryGrid:
         """
         return _MemoryTahoe(self)
 
-    def upload(self, data) -> CapStr:
+    def upload(self, data: bytes) -> CapStr:
         cap = str(self._counter)
         self._objects[cap] = data
         self._counter += 1
         return cap
 
-    def download(self, cap: CapStr) -> bytes:
+    def download(self, cap: CapStr) -> Union[bytes, _Directory]:
         return self._objects[cap]
 
     def make_directory(self) -> CapStr:
-        def encode(s: bytes):
+        def encode(s: str) -> str:
             return b32encode(s.encode("ascii")).decode("ascii")
 
         writekey = encode("{:016x}".format(self._counter))
@@ -362,7 +376,7 @@ class MemoryGrid:
         self._counter += 1
         cap = f"URI:DIR2:{writekey}:{fingerprint}"
         rocap = attenuate_writecap(cap)
-        self._objects[cap] = self._objects[rocap] = {}
+        self._objects[cap] = self._objects[rocap] = _Directory()
 
         return cap
 
@@ -370,11 +384,17 @@ class MemoryGrid:
         d = capability_from_string(dir_cap)
         if d.is_readonly():
             raise NotWriteableError()
-        self._objects[dir_cap][entry_name] = entry_cap
+        dirobj = self._objects[dir_cap]
+        if isinstance(dirobj, _Directory):
+            dirobj.children[entry_name] = entry_cap
+        else:
+            raise ValueError(
+                f"Cannot link entry into non-directory capability ({dir_cap[:7]})"
+            )
 
-    def list_directory(self, dir_cap: CapStr) -> dict[CapStr, FSEntry]:
+    def list_directory(self, dir_cap: CapStr) -> dict[CapStr, list[Any]]:
         def kind(entry):
-            if isinstance(entry, dict):
+            if isinstance(entry, _Directory):
                 return "dirnode"
             return "filenode"
 
@@ -384,9 +404,9 @@ class MemoryGrid:
                 return ["dirnode", {"rw_uri": cap}]
             return ["filenode", {"size": len(obj)}]
 
-        dir_entries = self._objects[dir_cap]
-        if kind(dir_entries) == "dirnode":
-            return {name: describe(entry) for (name, entry) in dir_entries.items()}
+        dirobj = self._objects[dir_cap]
+        if isinstance(dirobj, _Directory):
+            return {name: describe(entry) for (name, entry) in dirobj.children.items()}
 
         raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
 
@@ -430,18 +450,16 @@ class _MemoryTahoe:
         if child_path is not None:
             for p in child_path:
                 if cap.startswith("URI:DIR2"):
-                    cap = d[p]
+                    cap = d.children[p]
                     d = self._grid.download(cap)
                 else:
                     raise TahoeAPIError(
                         "get", DecodedURL(), 400, _no_children_message.format(path=p)
                     )
-        if isinstance(d, dict):
-            # It is a directory.  Encode it somehow so it fits in the file.
-            # This is not the same encoding as Tahoe-LAFS itself uses for
-            # directories.
-            d = dumps_utf8(d)
-        outpath.setContent(d)
+        if isinstance(d, bytes):
+            outpath.setContent(d)
+        else:
+            raise ValueError(f"Cannot download non-data capability ({cap[:7]})")
 
     async def upload(self, get_data_provider: Callable[[], BinaryIO]):
         """

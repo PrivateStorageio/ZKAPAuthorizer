@@ -1245,7 +1245,7 @@ _sql_floats = floats(allow_infinity=False, allow_nan=False, width=64)
 # following them back.
 # https://sqlite.org/nulinstr.html
 _sql_text = text(
-    alphabet=characters(blacklist_categories={"Cs"}, blacklist_characters={"\0"})
+    alphabet=characters(blacklist_categories=["Cs"], blacklist_characters=["\0"])
 )
 
 # Here's how you can build values that match certain storage type affinities.

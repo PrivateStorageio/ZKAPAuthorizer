@@ -105,7 +105,7 @@ from .strategies import (
     zkaps,
 )
 
-_T = TypeVar("T")
+_T = TypeVar("_T")
 
 
 async def fail(cursor):
