@@ -44,6 +44,7 @@ from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
+from attrs import frozen
 from challenge_bypass_ristretto import (
     PublicKey,
     SigningKey,
@@ -90,19 +91,19 @@ class NewLengthRejected(Exception):
     """
 
 
-@attr.s
+@frozen
 class _ValidationResult(object):
     """
     The result of validating a list of passes.
 
-    :ivar list[bytes] valid: A list of valid token preimages.
+    :ivar valid: A list of valid token preimages.
 
-    :ivar list[int] signature_check_failed: A list of indexes (into the
-        validated list) of passes which did not have a correct signature.
+    :ivar signature_check_failed: A list of indexes (into the validated list)
+        of passes which did not have a correct signature.
     """
 
-    valid = attr.ib()
-    signature_check_failed = attr.ib()
+    valid: list[bytes]
+    signature_check_failed: list[int]
 
     @classmethod
     def _is_invalid_pass(cls, message, pass_, signing_key):
