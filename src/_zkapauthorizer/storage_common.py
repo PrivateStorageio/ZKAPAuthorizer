@@ -47,7 +47,7 @@ class MorePassesRequired(Exception):
     signature_check_failed: frozenset[int] = attr.ib(converter=frozenset)
 
 
-def _message_maker(label: str) -> Callable[[str], bytes]:
+def _message_maker(label: str) -> Callable[[bytes], bytes]:
     def make_message(storage_index):
         return "{label} {storage_index}".format(
             label=label,
