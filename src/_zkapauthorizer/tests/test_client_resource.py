@@ -229,8 +229,8 @@ def root_from_config(
         config,
         open_store(
             now,
-            config,
             memory_connect,
+            config,
         ),
         get_downloader=get_downloader,
         setup_replication=setup_replication,

@@ -20,6 +20,7 @@ from datetime import timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
+from sqlite3 import connect
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
@@ -126,7 +127,7 @@ class OpenStoreTests(TestCase):
         config = get_config(nodedir.path, "tub.port")
 
         self.assertThat(
-            partial(open_store, lambda: now, config),
+            partial(open_store, lambda: now, connect, config),
             Raises(
                 AfterPreprocessing(
                     lambda exc_info: exc_info[1],
@@ -150,13 +151,13 @@ class OpenStoreTests(TestCase):
         config = get_config(nodedir.path, "tub.port")
 
         # Create the underlying database file.
-        open_store(lambda: now, config)
+        open_store(lambda: now, connect, config)
 
         # Prevent further access to it.
         nodedir.child("private").chmod(0o000)
 
         self.assertThat(
-            lambda: open_store(lambda: now, config),
+            lambda: open_store(lambda: now, connect, config),
             raises(StoreOpenError),
         )
 
@@ -538,7 +539,7 @@ class ClientPluginTests(TestCase):
         node_config = get_config(nodedir.path, "tub.port")
 
         # Populate the database with unspent tokens.
-        store = open_store(lambda: now, node_config)
+        store = open_store(lambda: now, connect, node_config)
 
         controller = PaymentController(
             store,

@@ -86,7 +86,7 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        self.store = open_store(self.get_now, self.config, memory_connect)
+        self.store = open_store(self.get_now, memory_connect, self.config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):
@@ -117,7 +117,7 @@ class ConfiglessMemoryVoucherStore(Fixture):
         return DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        self.store = open_store(self.get_now, empty_config, memory_connect)
+        self.store = open_store(self.get_now, memory_connect, empty_config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):

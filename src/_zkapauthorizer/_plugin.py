@@ -73,12 +73,17 @@ class AnnounceableStorageServer(object):
     storage_server = field()
 
 
-def open_store(
-    now: GetTime, node_config: Config, connect: Connect = _connect
-) -> VoucherStore:
+def open_store(now: GetTime, connect: Connect, node_config: Config) -> VoucherStore:
     """
+    Open a ``VoucherStore`` for the given configuration.
+
+    :param now: A function that can be used to get the current time.
+
     :param node_config: The Tahoe-LAFS configuration object for the node
         for which we want to open a store.
+
+    :param connect: A function that can be used to connect to the underlying
+        database.
     """
     db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
     conn = _open_database(partial(connect, db_path.path))
@@ -113,7 +118,7 @@ class ZKAPAuthorizer(object):
         try:
             s = self._stores[key]
         except KeyError:
-            s = open_store(datetime.now, node_config)
+            s = open_store(datetime.now, _connect, node_config)
             self._stores[key] = s
         return s
 
