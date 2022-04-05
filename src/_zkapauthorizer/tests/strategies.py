@@ -64,7 +64,7 @@ from ..model import (
     Unpaid,
     Voucher,
 )
-from ..sql import Column, Delete, Insert, StorageAffinity, Table, Update
+from ..sql import Column, Delete, Insert, Select, StorageAffinity, Table, Update
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
@@ -1294,6 +1294,13 @@ def updates(name: str, table: Table) -> SearchStrategy[Update]:
             )
         ),
     )
+
+
+def selects(name: str) -> SearchStrategy[Select]:
+    """
+    Build objects describing SELECT statements on the given table.
+    """
+    return just(Select(table_name=name))
 
 
 def deletes(name, table):

@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright 2019 PrivateStorage.io, LLC
+# Copyright 2022 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from testtools import TestCase
 from testtools.matchers import Equals
 
 from ..sql import statement_mutates
-from .strategies import deletes, inserts, sql_identifiers, tables, updates
+from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
 
 
 class MutateTests(TestCase):
@@ -45,4 +45,15 @@ class MutateTests(TestCase):
         self.assertThat(
             statement_mutates(change.statement()),
             Equals(True),
+        )
+
+    @given(
+        tuples(sampled_from([selects]), sql_identifiers(),).flatmap(
+            lambda x: x[0](x[1]),
+        )
+    )
+    def test_non_mutate(self, change):
+        self.assertThat(
+            statement_mutates(change.statement()),
+            Equals(False),
         )

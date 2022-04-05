@@ -12,7 +12,7 @@ from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor
 from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 
-from attrs import define, frozen
+from attrs import frozen
 from sqlparse import parse
 
 SQLType = Union[int, float, str, bytes, None]
@@ -239,6 +239,30 @@ class Update:
 
     def arguments(self):
         return self.fields
+
+
+@frozen
+class Select:
+    """
+    Represent a query about a certain table
+
+    :ivar table_name: valid SQL identifier for a table
+    """
+
+    table_name: str
+
+    def statement(self):
+        return f"SELECT * FROM {escape_identifier(self.table_name)}"
+
+    def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
+        return self.statement()
+
+    def arguments(self):
+        return tuple()
 
 
 @frozen
