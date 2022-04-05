@@ -15,7 +15,7 @@ __all__ = [
 from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
-from sqlite3 import Connection, Cursor
+from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Iterator, Optional
 
 from attrs import define
@@ -124,7 +124,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(statements_from_snapshot(downloaded_data), cursor)
+            recover(downloaded_data, cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -190,40 +190,12 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
         pos = new_pos + 1
 
 
-def snapshot(connection: Connection) -> Iterator[str]:
-    return connection.iterdump()
-
-
-def netstring(bs: bytes) -> bytes:
-    """
-    Encode a single string as a netstring.
-
-    :see: http://cr.yp.to/proto/netstrings.txt
-    """
-    return b"".join(
-        [
-            str(len(bs)).encode("ascii"),
-            b":",
-            bs,
-            b",",
-        ]
-    )
-
-
-def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
-    """
-    Take a snapshot of the database reachable via the given connection.
-    """
-    for statement in statements:
-        # Use netstrings to frame each statement.  Statements can have
-        # embedded newlines (and CREATE TABLE statements especially tend to).
-        yield netstring(statement.encode("utf-8"))
-
-
-def recover(statements: Iterator[str], cursor: Cursor) -> None:
+def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
     """
+    statements = statements_from_snapshot(snapshot)
+
     # Discard all existing data in the database.
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
     tables = cursor.fetchall()

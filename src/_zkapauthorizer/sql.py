@@ -106,7 +106,8 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
     if value is None:
         return "NULL"
     if isinstance(value, (str, bytes)):
-        return cursor.execute("SELECT quote(?);", (value,)).fetchall()[0][0]
+        cursor.execute("SELECT quote(?);", (value,))
+        return cursor.fetchall()[0][0]
     raise ValueError("Do not know how to quote value of type f{type(value)}")
 
 

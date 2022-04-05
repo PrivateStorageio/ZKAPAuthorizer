@@ -18,6 +18,8 @@ Common fixtures to let the test suite focus on application logic.
 
 import gc
 from base64 import b64encode
+from datetime import datetime
+from typing import Callable, Optional
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -31,8 +33,9 @@ from twisted.internet.task import Clock, deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
-from ..controller import DummyRedeemer, PaymentController
-from ..model import VoucherStore, memory_connect, open_and_initialize
+from ..config import EmptyConfig
+from ..controller import DummyRedeemer, IRedeemer, PaymentController
+from ..model import VoucherStore, memory_connect
 
 
 @attr.s(auto_attribs=True)
@@ -97,7 +100,7 @@ class TemporaryVoucherStore(Fixture):
         self.store = None
 
 
-@attr.s
+@define
 class ConfiglessMemoryVoucherStore(Fixture):
     """
     Create a ``VoucherStore`` backed by an in-memory database and with no
@@ -107,20 +110,20 @@ class ConfiglessMemoryVoucherStore(Fixture):
     Tahoe-LAFS parts.
     """
 
-    get_now = attr.ib()
-    _public_key = attr.ib(default=b64encode(b"A" * 32).decode("utf-8"))
-    redeemer = attr.ib(default=None, init=False)
+    get_now: Callable[[], datetime]
+    _public_key: str = b64encode(b"A" * 32).decode("utf-8")
+    redeemer: IRedeemer = field(init=False)
+    store: Optional[VoucherStore] = None
 
-    def __attrs_post_init__(self):
-        self.redeemer = DummyRedeemer(self._public_key)
+    @redeemer.default
+    def _redeemer_default(self):
+        return DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        here = FilePath(".")
-        self.store = VoucherStore(
-            pass_value=2 ** 15,
-            database_path=here,
-            now=self.get_now,
-            connection=open_and_initialize(here, memory_connect),
+        self.store = VoucherStore.from_node_config(
+            EmptyConfig(FilePath(".")),
+            self.get_now,
+            memory_connect,
         )
         self.addCleanup(self._cleanUp)
 

@@ -1,4 +1,4 @@
-# Copyright 2019 PrivateStorage.io, LLC
+# Copyright 2022 PrivateStorage.io, LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,57 @@
 
 """
 A system for replicating local SQLite3 database state to remote storage.
+
+Theory of Operation
+===================
+
+A function to wrap a ``sqlite3.Connection`` in a new type is provided.  This
+new type provides facilities for accomplishing two goals:
+
+* It (can someday) presents an expanded connection interface which includes
+  the ability to switch the database into "replicated" mode.  This is an
+  application-facing interface meant to be used when the application is ready
+  to discharge its responsibilities in the replication process.
+
+* It (can someday) expose the usual cursor interface wrapped around the usual
+  cursor behavior combined with extra logic to record statements which change
+  the underlying database (DDL and DML statements).  This recorded data then
+  feeds into the above replication process once it is enabled.
+
+An application's responsibilities in the replication process are to arrange
+for remote storage of "snapshots" and "event streams".  See the
+replication/recovery design document for details of these concepts.
+
+Once replication has been enabled, the application (can someday be) informed
+whenever the event stream changes (respecting database transactionality) and
+data can be shipped to remote storage as desired.
+
+It is essential to good replication performance that once replication is
+enabled all database-modifying actions are captured in the event stream.  This
+is the reason for providing a ``sqlite3.Connection``-like object for use by
+application code rather than a separate side-car interface: it minimizes the
+opportunities for database changes which are overlooked by this replication
+system.
 """
 
 __all__ = [
     "ReplicationAlreadySetup",
     "fail_setup_replication",
     "setup_tahoe_lafs_replication",
+    "with_replication",
+    "statements_to_snapshot",
+    "connection_to_statements",
+    "snapshot",
 ]
 
 from collections.abc import Awaitable
 from io import BytesIO
-from typing import BinaryIO, Callable, Optional
+from sqlite3 import Connection, Cursor
+from typing import BinaryIO, Callable, Iterator, Optional
 
 import cbor2
-from attrs import frozen
+from attrs import define, frozen
+from compose import compose
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
@@ -140,6 +177,135 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> Awaitable[str]:
 
     # Return the read-cap
     return rocap
+
+
+def with_replication(connection: Connection):
+    """
+    Wrap a replicating support layer around the given connection.
+    """
+    return _ReplicationCapableConnection(connection)
+
+
+@define
+class _ReplicationCapableConnection:
+    """
+    Wrap a ``sqlite3.Connection`` to provide additional snapshot- and
+    streaming replication-related features.
+
+    All of this type's methods are intended to behave the same way as
+    ``sqlite3.Connection``\ 's methods except they may also add some
+    additional functionality to support replication.
+    """
+
+    _conn: Connection
+
+    def snapshot(self) -> bytes:
+        """
+        Create and return a byte string representing a consistent, self-contained
+        snapshot of the wrapped database.
+        """
+        return snapshot(self._conn)
+
+    def close(self):
+        return self._conn.close()
+
+    def __enter__(self):
+        return self._conn.__enter__()
+
+    def __exit__(self, *args):
+        return self._conn.__exit__(*args)
+
+    def cursor(self):
+        return _ReplicationCapableCursor(self._conn.cursor())
+
+
+@define
+class _ReplicationCapableCursor:
+    """
+    Wrap a ``sqlite3.Cursor`` to provide additional streaming
+    replication-related features.
+
+    All of this type's attributes and methods are intended to behave the same
+    way as ``sqlite3.Cursor``\ 's methods except they may also add some
+    additional functionality to support replication.
+    """
+
+    _cursor: Cursor
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def close(self):
+        return self._cursor.close()
+
+    def execute(self, statement, row=None):
+        if row is None:
+            args = (statement,)
+        else:
+            args = (statement, row)
+        self._cursor.execute(*args)
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def fetchmany(self, n):
+        return self._cursor.fetchmany(n)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def executemany(self, statement, rows):
+        self._cursor.executemany(statement, rows)
+
+
+def netstring(bs: bytes) -> bytes:
+    """
+    Encode a single string as a netstring.
+
+    :see: http://cr.yp.to/proto/netstrings.txt
+    """
+    return b"".join(
+        [
+            str(len(bs)).encode("ascii"),
+            b":",
+            bs,
+            b",",
+        ]
+    )
+
+
+def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
+    """
+    Take a snapshot of the database reachable via the given connection.
+
+    The snapshot is consistent and write transactions on the given connection
+    are blocked until it has been completed.
+    """
+    for statement in statements:
+        # Use netstrings to frame each statement.  Statements can have
+        # embedded newlines (and CREATE TABLE statements especially tend to).
+        yield netstring(statement.strip().encode("utf-8"))
+
+
+def connection_to_statements(connection: Connection) -> Iterator[str]:
+    """
+    Create an iterator of SQL statements as strings representing a consistent,
+    self-contained snapshot of the database reachable via the given
+    connection.
+    """
+    return connection.iterdump()
+
+
+# Convenience API to dump statements, netstring-encoding them, and
+# concatenating them all into a single byte string.
+snapshot: Callable[[Connection], bytes] = compose(
+    b"".join, statements_to_snapshot, connection_to_statements
+)
 
 
 async def tahoe_lafs_uploader(

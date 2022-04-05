@@ -37,14 +37,14 @@ from ..recover import (
     make_fail_downloader,
     noop_downloader,
     recover,
-    snapshot,
     statements_from_snapshot,
-    statements_to_snapshot,
 )
 from ..replicate import (
     ReplicationAlreadySetup,
     get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
+    snapshot,
+    statements_to_snapshot,
 )
 from ..sql import Table, create_table
 from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
@@ -79,7 +79,12 @@ class SnapshotEncodingTests(TestCase):
                 BytesIO(b"".join(statements_to_snapshot(statements)))
             )
         )
-        self.assertThat(statements, Equals(loaded))
+        self.assertThat(
+            # They are allowed to differ by leading and trailing whitespace
+            # because such whitespace is meaningless in a SQL statement.
+            [s.strip() for s in statements],
+            Equals(loaded),
+        )
 
 
 class SnapshotMachine(RuleBasedStateMachine):
@@ -101,12 +106,11 @@ class SnapshotMachine(RuleBasedStateMachine):
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
         """
-        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(self.connection)))
-        statements = statements_from_snapshot(BytesIO(snapshot_bytes))
+        snapshot_bytes = snapshot(self.connection)
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(statements, cursor)
+            recover(BytesIO(snapshot_bytes), cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),

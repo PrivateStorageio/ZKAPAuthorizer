@@ -20,6 +20,7 @@ Tests for ``_zkapauthorizer.model``.
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
+from io import BytesIO
 from itertools import count
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
@@ -81,6 +82,7 @@ from ..recover import (
     RecoveryState,
     StatefulRecoverer,
     make_canned_downloader,
+    recover,
 )
 from ..replicate import Change, EventStream
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
@@ -104,8 +106,6 @@ from .strategies import (
 )
 
 _T = TypeVar("T")
-
-from .test_recover import snapshot, statements_to_snapshot
 
 
 async def fail(cursor):
@@ -253,6 +253,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         then it is empty.
         """
         self.setup_example()
+        store = self.store_fixture.store
 
         async def side_effect(cursor):
             cursor.execute("CREATE TABLE [it_ran] (a INT)")
@@ -260,13 +261,19 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             return True
 
         self.assertThat(
-            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(side_effect)),
+            Deferred.fromCoroutine(store.call_if_empty(side_effect)),
             succeeded(Equals(True)),
         )
-        rows = list(
-            self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
+
+        async def check_side_effect(cursor):
+            rows = cursor.execute("SELECT * FROM [it_ran]")
+            rows = cursor.fetchall()
+            return rows
+
+        self.assertThat(
+            Deferred.fromCoroutine(store.call_if_empty(check_side_effect)),
+            succeeded(Equals([(1,)])),
         )
-        self.assertThat(rows, HasLength(1))
 
     @given(
         voucher=vouchers(),
@@ -554,6 +561,42 @@ class VoucherStoreTests(TestCase):
         )
 
 
+class VoucherStoreSnapshotTests(TestCase):
+    """
+    Tests for ``VoucherStore.snapshot``.
+    """
+
+    @given(
+        posix_safe_datetimes(),
+        vouchers(),
+        integers(min_value=1, max_value=2 ** 63 - 1),
+        lists(random_tokens(), unique=True),
+    )
+    def test_vouchers(self, now, voucher, expected, tokens):
+        """
+        Vouchers are present in the snapshot.
+        """
+        store = self.useFixture(
+            ConfiglessMemoryVoucherStore(get_now=lambda: now),
+        ).store
+        store.add(voucher, expected, 0, lambda: tokens)
+        snapshot = store.snapshot()
+        connection = connect(":memory:")
+        cursor = connection.cursor()
+        with connection:
+            recover(BytesIO(snapshot), cursor)
+
+        recovered = VoucherStore(
+            store.pass_value, store.database_path, store.now, connection
+        )
+        self.assertThat(
+            recovered.get(voucher),
+            Equals(
+                Voucher(voucher, expected, now),
+            ),
+        )
+
+
 class UnblindedTokenStateMachine(RuleBasedStateMachine):
     """
     Transition rules for a state machine corresponding to the state of
@@ -690,12 +733,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         maybe this is a good argument for using an explicitly attached
         temporary database instead of the built-in ``temp`` database.
         """
+        cursor = self.configless.store._connection.cursor()
         with self.configless.store._connection:
-            self.configless.store._connection.execute(
-                """
-                DELETE FROM [in-use]
-                """,
-            )
+            cursor.execute("DELETE FROM [in-use]")
         self.available += len(self.using)
         del self.using[:]
 
@@ -1247,8 +1287,7 @@ class ReplicationTests(TestCase):
                 datetime.now,
             )
         ).store
-        # XXX Use VoucherStore.snapshot once it is available
-        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(store._connection)))
+        snapshot_bytes = store.snapshot()
         downloader = make_canned_downloader(snapshot_bytes)
         recoverer = StatefulRecoverer()
 
