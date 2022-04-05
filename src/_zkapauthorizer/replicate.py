@@ -326,38 +326,28 @@ class _ReplicationCapableCursor:
         executed. The transaction is still active. Notify observers.
         """
         for ob in self._observers:
-            ob()
-
-
-@define
-class MutationObserver:
-
-    _store: VoucherStore
-    _queue_event_stream_upload: Callable[[], None]
-    _accumulated_size: int = 0
-
-    def observed_event(self, cursor, bound_statement):
-        """
-        A mutating SQL statement was observed by the cursor
-        """
-        self._store.add_event.wrapped(cursor, bound_statement)
-        if self.big_enough() or self.important(bound_statement):
-            self._queue_event_stream_upload()
-            self._accumulated_size = 0
-
-    def big_enough(self):
-        ...
+            ob(self, statement, rows, self.important)
 
 
 
 class Service:
 
+    _store: VoucherStore
+    _connection: _ReplicationCapableConnection
+    _accumulated_size: int = 0
     _trigger = DeferredSemaphore(1)
 
     def startService(self):
-        self._trigger.acquire()
+        # XXX this will be a bigger number than we had before .. but maybe fine
+        self._accumulated_size = len(self._store.get_events().to_bytes())
+        # XXX
+        #self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
+        if not self.big_enough():
+            self._trigger.acquire()
         d = do_upload()
         d.addErrback(print)
+
+        self._connection.observe_mutations(self.observe_mutations)
         return
 
     def queue_upload(self):
@@ -373,10 +363,29 @@ class Service:
         while True:
             await self._trigger.acquire()
             es = self._store.get_events()
-            immutable = await self._client.upload(es)
+            es_bytes  = es.encode()
+            immutable = await self._client.upload(es_bytes)
+            # if we e.g. decide to drop some statements from es here
+            # (to be more efficient with spending), add that size back
+            # to _accumulated_size (and _don't_ prune them from the
+            # database)
             await self._client.link("event-stream-{}".format(es.higest_sequence()), immutable)
             # prune the database
-            self._store.prune(es)
+            self._store.prune_events_to(es.higest_sequence())
+
+    def observed_event(self, cursor, statement, args, important):
+        """
+        A mutating SQL statement was observed by the cursor
+        """
+        bound_statement = ...
+        self._store.add_event.wrapped(cursor, bound_statement)
+        self._accumulated_size += len(bound_statement)
+        if self.big_enough() or important:
+            self.queue_upload()
+            self._accumulated_size = 0
+
+    def big_enough(self):
+        return self._accumulated_size >= 570000
 
 
 

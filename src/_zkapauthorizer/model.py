@@ -356,6 +356,7 @@ class VoucherStore(object):
 
         :param list[RandomToken]: The tokens to add alongside the voucher.
         """
+        cursor.important()
         now = self.now()
         if not isinstance(now, datetime):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
@@ -815,6 +816,21 @@ class VoucherStore(object):
         rows = cursor.fetchall()
 
         return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+
+    @with_cursor
+    def prune_events_to(self, cursor, sequence_number: int):
+        """
+        Remove all events <= sequence_number
+        """
+        cursor.execute(
+            """
+            DELETE [sequence-number], [statement]
+            FROM [event-stream]
+            WHERE [sequence-number] <= (?)
+            """,
+            (sequence_number, )
+        )
+        cursor.fetchall()
 
 
 @implementer(ILeaseMaintenanceObserver)
