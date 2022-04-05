@@ -43,6 +43,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
+from ._types import Connect, GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME
 from .config import _Config as Config
@@ -62,7 +63,6 @@ from .server.spending import get_spender
 from .spending import SpendingController
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 from .tahoe import get_tahoe_client
-from .types import Connect, GetTime
 
 _log = Logger()
 
