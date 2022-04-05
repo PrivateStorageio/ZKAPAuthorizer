@@ -297,4 +297,4 @@ def statement_mutates(statement):
     predicate to decide if `statement` will change the database
     """
     (statement,) = parse(statement)
-    return statement.tokens[0].normalized not in {"SELECT"}
+    return statement.get_type() not in {"SELECT"}
