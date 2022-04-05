@@ -20,18 +20,21 @@ the storage plugin.
 from datetime import datetime
 from functools import wraps
 from json import loads
-from sqlite3 import Cursor, OperationalError
+from sqlite3 import Connection, Cursor, OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, Optional, Type, TypeVar
 
 import attr
+from allmydata.node import _Config
 from aniso8601 import parse_datetime
+from compose import compose
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from .replicate import Change, EventStream, with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .storage_common import (
     get_configured_pass_value,
@@ -93,20 +96,21 @@ class NotEnoughTokens(Exception):
 # all.  The schema inside the database is versioned by yet another mechanism.
 CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
 
+_ConnectParamSpec = [str, int, bool, str, bool]
+_ConnectFunction = Callable[_ConnectParamSpec, Connection]
 
-def open_and_initialize(path, connect=None):
+
+def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection:
     """
     Open a SQLite3 database for use as a voucher store.
 
     Create the database and populate it with a schema, if it does not already
     exist.
 
-    :param FilePath path: The location of the SQLite3 database file.
+    :param path: The location of the SQLite3 database file.
 
     :return: A SQLite3 connection object for the database at the given path.
     """
-    if connect is None:
-        connect = _connect
     try:
         path.parent().makedirs(ignoreExistingDirectory=True)
     except OSError as e:
@@ -236,9 +240,6 @@ class VoucherStore(object):
     """
     This class implements persistence for vouchers.
 
-    :ivar allmydata.node._Config node_config: The Tahoe-LAFS node configuration object for
-        the node that owns the persisted vouchers.
-
     :ivar now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
     """
@@ -253,23 +254,33 @@ class VoucherStore(object):
     _connection = attr.ib()
 
     @classmethod
-    def from_node_config(cls, node_config, now, connect=None):
+    def from_node_config(
+        cls: Type[_T],
+        node_config: _Config,
+        now: Callable[[], datetime],
+        connect: Optional[_ConnectFunction] = None,
+    ) -> _T:
         """
         Create or open the ``VoucherStore`` for a given node.
 
-        :param allmydata.node._Config node_config: The Tahoe-LAFS
-            configuration object for the node for which we want to open a
-            store.
+        :param node_config: The Tahoe-LAFS configuration object for the node
+            for which we want to open a store.
 
         :param now: See ``VoucherStore.now``.
 
         :param connect: An alternate database connection function.  This is
             primarily for the purposes of the test suite.
         """
+        if connect is None:
+            connect = _connect
+
         db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
         conn = open_and_initialize(
             db_path,
-            connect=connect,
+            # Make sure we always have a replication-enabled connection even
+            # if we're not doing replication yet because we might want to turn
+            # it on later.
+            compose(with_replication, connect),
         )
         return cls(
             get_configured_pass_value(node_config),
@@ -277,6 +288,13 @@ class VoucherStore(object):
             now,
             conn,
         )
+
+    def snapshot(self) -> bytes:
+        """
+        Create and return a consistent, self-contained snapshot of the underlying
+        database state.
+        """
+        return self._connection.snapshot()
 
     @with_cursor_async
     async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
@@ -777,6 +795,33 @@ class VoucherStore(object):
             count,
             parse_datetime(finished, delimiter=" "),
         )
+
+    @with_cursor
+    def add_event(self, cursor, sql_statement: str):
+        """
+        Add a new change to the event-log.
+        """
+        cursor.execute(
+            """
+            INSERT INTO [event-stream]([statement]) VALUES (?)
+            """,
+            (sql_statement,),
+        )
+
+    @with_cursor
+    def get_events(self, cursor):
+        """
+        Return all events currently in our event-log.
+        """
+        cursor.execute(
+            """
+            SELECT [sequence-number], [statement]
+            FROM [event-stream]
+            """
+        )
+        rows = cursor.fetchall()
+
+        return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
 
 
 @implementer(ILeaseMaintenanceObserver)

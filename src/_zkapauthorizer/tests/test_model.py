@@ -20,6 +20,8 @@ Tests for ``_zkapauthorizer.model``.
 from datetime import datetime, timedelta
 from errno import EACCES
 from functools import partial
+from io import BytesIO
+from itertools import count
 from os import mkdir
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
@@ -41,6 +43,7 @@ from hypothesis.strategies import (
     integers,
     lists,
     randoms,
+    sampled_from,
     timedeltas,
     tuples,
 )
@@ -79,16 +82,23 @@ from ..recover import (
     RecoveryState,
     StatefulRecoverer,
     make_canned_downloader,
+    recover,
 )
+from ..replicate import Change, EventStream
 from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
+    deletes,
     dummy_ristretto_keys,
+    inserts,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
+    sql_identifiers,
+    tables,
     tahoe_configs,
     unblinded_tokens,
+    updates,
     voucher_counters,
     voucher_objects,
     vouchers,
@@ -96,8 +106,6 @@ from .strategies import (
 )
 
 _T = TypeVar("_T")
-
-from .test_recover import snapshot, statements_to_snapshot
 
 
 async def fail(cursor):
@@ -245,6 +253,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         then it is empty.
         """
         self.setup_example()
+        store = self.store_fixture.store
 
         async def side_effect(cursor):
             cursor.execute("CREATE TABLE [it_ran] (a INT)")
@@ -252,13 +261,19 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             return True
 
         self.assertThat(
-            Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(side_effect)),
+            Deferred.fromCoroutine(store.call_if_empty(side_effect)),
             succeeded(Equals(True)),
         )
-        rows = list(
-            self.store_fixture.store._connection.execute("SELECT * FROM [it_ran]")
+
+        async def check_side_effect(cursor):
+            rows = cursor.execute("SELECT * FROM [it_ran]")
+            rows = cursor.fetchall()
+            return rows
+
+        self.assertThat(
+            Deferred.fromCoroutine(store.call_if_empty(check_side_effect)),
+            succeeded(Equals([(1,)])),
         )
-        self.assertThat(rows, HasLength(1))
 
     @given(
         voucher=vouchers(),
@@ -546,6 +561,42 @@ class VoucherStoreTests(TestCase):
         )
 
 
+class VoucherStoreSnapshotTests(TestCase):
+    """
+    Tests for ``VoucherStore.snapshot``.
+    """
+
+    @given(
+        posix_safe_datetimes(),
+        vouchers(),
+        integers(min_value=1, max_value=2 ** 63 - 1),
+        lists(random_tokens(), unique=True),
+    )
+    def test_vouchers(self, now, voucher, expected, tokens):
+        """
+        Vouchers are present in the snapshot.
+        """
+        store = self.useFixture(
+            ConfiglessMemoryVoucherStore(get_now=lambda: now),
+        ).store
+        store.add(voucher, expected, 0, lambda: tokens)
+        snapshot = store.snapshot()
+        connection = connect(":memory:")
+        cursor = connection.cursor()
+        with connection:
+            recover(BytesIO(snapshot), cursor)
+
+        recovered = VoucherStore(
+            store.pass_value, store.database_path, store.now, connection
+        )
+        self.assertThat(
+            recovered.get(voucher),
+            Equals(
+                Voucher(voucher, expected, now),
+            ),
+        )
+
+
 class UnblindedTokenStateMachine(RuleBasedStateMachine):
     """
     Transition rules for a state machine corresponding to the state of
@@ -682,12 +733,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         maybe this is a good argument for using an explicitly attached
         temporary database instead of the built-in ``temp`` database.
         """
+        cursor = self.configless.store._connection.cursor()
         with self.configless.store._connection:
-            self.configless.store._connection.execute(
-                """
-                DELETE FROM [in-use]
-                """,
-            )
+            cursor.execute("DELETE FROM [in-use]")
         self.available += len(self.using)
         del self.using[:]
 
@@ -853,6 +901,63 @@ class LeaseMaintenanceTests(TestCase):
         self.assertThat(
             store.get_latest_lease_maintenance_activity(),
             Equals(expected),
+        )
+
+
+class EventStreamTests(TestCase):
+    """
+    Tests related to the event-stream storage of VoucherStore
+    """
+
+    @given(
+        tahoe_configs(),
+        posix_safe_datetimes(),
+        lists(sql_identifiers(), min_size=1),
+        tables(),
+        data(),
+        lists(sampled_from([inserts, deletes, updates]), min_size=1),
+    )
+    def test_event_stream_serialization(
+        self, get_config, now, ids, table, data, change_types
+    ):
+        """
+        Various kinds of SQL statements can be serialized into and out of
+        the event-stream.
+        """
+        tempdir = self.useFixture(TempDir())
+        store = VoucherStore.from_node_config(
+            get_config(tempdir.join("node"), "tub.port"),
+            lambda: now,
+            memory_connect,
+        )
+
+        # generate some SQL events
+        sql_statements = []
+        sequence = count(1)
+        for sql_id in ids:
+            for change_type in change_types:
+                change = data.draw(change_type(sql_id, table))
+                sql_statements.append(
+                    Change(
+                        next(sequence),
+                        change.bound_statement(store._connection.cursor()),
+                    )
+                )
+                store.add_event(change.bound_statement(store._connection.cursor()))
+
+        events = store.get_events()
+        self.assertThat(
+            events.changes,
+            Equals(tuple(sql_statements)),
+        )
+        # also ensure the serializer works
+        self.assertThat(
+            EventStream.from_bytes(events.to_bytes()),
+            Equals(events),
+        )
+        self.assertThat(
+            events.highest_sequence(),
+            Equals(len(sql_statements)),
         )
 
 
@@ -1182,8 +1287,7 @@ class ReplicationTests(TestCase):
                 datetime.now,
             )
         ).store
-        # XXX Use VoucherStore.snapshot once it is available
-        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(store._connection)))
+        snapshot_bytes = store.snapshot()
         downloader = make_canned_downloader(snapshot_bytes)
         recoverer = StatefulRecoverer()
 

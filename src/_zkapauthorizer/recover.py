@@ -124,7 +124,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(statements_from_snapshot(downloaded_data), cursor)
+            recover(downloaded_data, cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -190,10 +190,12 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
         pos = new_pos + 1
 
 
-def recover(statements: Iterator[str], cursor: Cursor) -> None:
+def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
     """
+    statements = statements_from_snapshot(snapshot)
+
     # Discard all existing data in the database.
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
     tables = cursor.fetchall()

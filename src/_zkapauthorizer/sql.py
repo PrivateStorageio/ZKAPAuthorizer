@@ -6,6 +6,7 @@ to support testing the replication/recovery system.
 """
 
 from enum import Enum, auto
+from sqlite3 import Cursor
 from typing import Union
 
 from attrs import define
@@ -74,8 +75,42 @@ class Insert:
             f"VALUES ({placeholders})"
         )
 
+    def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
+        names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
+        values = ", ".join(
+            (quote_sql_value(cursor, value) for value in self.arguments())
+        )
+        return (
+            f"INSERT INTO {escape_identifier(self.table_name)} "
+            f"({names}) "
+            f"VALUES ({values})"
+        )
+
     def arguments(self):
         return self.fields
+
+
+def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) -> str:
+    """
+    Use the SQL `quote()` function to return the quoted version of
+    `value`. Supports `int`, `float`, `None`, `str` and `bytes`.
+
+    :returns: the quoted value
+    """
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return str(value)
+    if value is None:
+        return "NULL"
+    if isinstance(value, (str, bytes)):
+        cursor.execute("SELECT quote(?);", (value,))
+        return cursor.fetchall()[0][0]
+    raise ValueError("Do not know how to quote value of type f{type(value)}")
 
 
 @define(frozen=True)
@@ -103,6 +138,18 @@ class Update:
         )
         return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
 
+    def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
+        field_names = list(name for (name, _) in self.table.columns)
+        assignments = ", ".join(
+            f"{escape_identifier(name)} = {quote_sql_value(cursor, value)}"
+            for name, value in zip(field_names, self.fields)
+        )
+        return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
+
     def arguments(self):
         return self.fields
 
@@ -121,6 +168,13 @@ class Delete:
 
     def statement(self):
         return f"DELETE FROM {escape_identifier(self.table_name)}"
+
+    def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
+        return self.statement()
 
     def arguments(self):
         return ()

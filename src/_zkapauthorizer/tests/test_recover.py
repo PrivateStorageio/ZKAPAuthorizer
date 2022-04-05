@@ -3,8 +3,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
 from io import BytesIO
-from sqlite3 import Connection, connect
-from typing import Iterator
+from sqlite3 import connect
 
 from allmydata.client import read_config
 from hypothesis import assume, given, note, settings
@@ -44,6 +43,8 @@ from ..replicate import (
     ReplicationAlreadySetup,
     get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
+    snapshot,
+    statements_to_snapshot,
 )
 from ..sql import Table, create_table
 from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
@@ -59,36 +60,6 @@ from .strategies import (
     tahoe_configs,
     updates,
 )
-
-
-def snapshot(connection: Connection) -> Iterator[str]:
-    return connection.iterdump()
-
-
-def netstring(bs: bytes) -> bytes:
-    """
-    Encode a single string as a netstring.
-
-    :see: http://cr.yp.to/proto/netstrings.txt
-    """
-    return b"".join(
-        [
-            str(len(bs)).encode("ascii"),
-            b":",
-            bs,
-            b",",
-        ]
-    )
-
-
-def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
-    """
-    Take a snapshot of the database reachable via the given connection.
-    """
-    for statement in statements:
-        # Use netstrings to frame each statement.  Statements can have
-        # embedded newlines (and CREATE TABLE statements especially tend to).
-        yield netstring(statement.encode("utf-8"))
 
 
 class SnapshotEncodingTests(TestCase):
@@ -108,7 +79,12 @@ class SnapshotEncodingTests(TestCase):
                 BytesIO(b"".join(statements_to_snapshot(statements)))
             )
         )
-        self.assertThat(statements, Equals(loaded))
+        self.assertThat(
+            # They are allowed to differ by leading and trailing whitespace
+            # because such whitespace is meaningless in a SQL statement.
+            [s.strip() for s in statements],
+            Equals(loaded),
+        )
 
 
 class SnapshotMachine(RuleBasedStateMachine):
@@ -130,12 +106,11 @@ class SnapshotMachine(RuleBasedStateMachine):
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
         """
-        snapshot_bytes = b"".join(statements_to_snapshot(snapshot(self.connection)))
-        statements = statements_from_snapshot(BytesIO(snapshot_bytes))
+        snapshot_bytes = snapshot(self.connection)
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(statements, cursor)
+            recover(BytesIO(snapshot_bytes), cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),

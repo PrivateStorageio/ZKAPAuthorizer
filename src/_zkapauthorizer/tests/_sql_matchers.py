@@ -58,7 +58,7 @@ def _structured_dump_tables(db: Connection) -> Iterator[tuple[str, str]]:
         ORDER BY [name]
         """
     )
-    yield from iter(curs)
+    yield from curs.fetchall()
 
 
 def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
@@ -70,7 +70,7 @@ def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
     curs.execute(f"PRAGMA table_info({escape_identifier(table_name)})")
 
     columns = list(
-        (name, type_) for (cid, name, type_, notnull, dftl_value, pk) in list(curs)
+        (name, type_) for (cid, name, type_, notnull, dftl_value, pk) in curs.fetchall()
     )
     column_names = ", ".join(escape_identifier(name) for (name, type_) in columns)
     curs.execute(
