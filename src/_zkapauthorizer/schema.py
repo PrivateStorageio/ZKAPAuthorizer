@@ -208,4 +208,18 @@ _UPGRADES = {
         ALTER TABLE [unblinded-tokens] ADD COLUMN [redemption-group] integer DEFAULT 1
         """,
     ],
+    6: [
+        """
+        -- track the "event-stream" which are a series of SQL statements
+        -- that modify the database -- except statements which modify this table
+        CREATE TABLE [event-stream] (
+            -- A sequence number which allows us to identify specific positions in
+            -- the sequence of modifications which were made to the database.
+            [sequence-number] INTEGER PRIMARY KEY,
+
+            -- A SQL statement which likely made a change to the database state.
+            [statement] TEXT
+        )
+        """,
+    ],
 }

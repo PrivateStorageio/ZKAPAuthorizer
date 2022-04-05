@@ -23,12 +23,73 @@ __all__ = [
 ]
 
 from collections.abc import Awaitable
-from typing import BinaryIO, Callable
+from io import BytesIO
+from typing import BinaryIO, Callable, Optional
 
+import cbor2
+from attrs import frozen
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
 from .tahoe import Tahoe, attenuate_writecap
+
+
+@frozen
+class Change:
+    """
+    Represent an item in a replication event stream
+    """
+
+    sequence: int  # the sequence-number of this event
+    statement: str  # the SQL statement string
+
+
+@frozen
+class EventStream:
+    """
+    A series of database operations represented as `Change` instances.
+    """
+
+    changes: tuple[Change]
+
+    def highest_sequence(self) -> Optional[int]:
+        """
+        :returns: the highest sequence number in this EventStream (or
+            None if there are no events)
+        """
+        if not self.changes:
+            return None
+        return max(change.sequence for change in self.changes)
+
+    def to_bytes(self) -> BinaryIO:
+        """
+        :returns BinaryIO: a producer of bytes representing this EventStream.
+        """
+        return BytesIO(
+            cbor2.dumps(
+                {
+                    "events": tuple(
+                        (event.sequence, event.statement.encode("utf8"))
+                        for event in self.changes
+                    )
+                }
+            )
+        )
+
+    @classmethod
+    def from_bytes(cls, stream: BinaryIO):
+        """
+        :returns EventStream: an instance of EventStream from the given
+            bytes (which should have been produced by a prior call to
+            ``to_bytes``)
+        """
+        data = cbor2.load(stream)
+        return cls(
+            changes=tuple(
+                Change(seq, statement.decode("utf8"))
+                for seq, statement in data["events"]
+            )
+        )
 
 
 class ReplicationAlreadySetup(Exception):
