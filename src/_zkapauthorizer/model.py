@@ -17,6 +17,8 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from functools import wraps
 from json import loads
@@ -259,7 +261,7 @@ class VoucherStore(object):
     @classmethod
     def from_connection(
         cls, pass_value: int, now: GetTime, conn: Connection
-    ) -> "VoucherStore":
+    ) -> VoucherStore:
         # Make sure we always have a replication-enabled connection even if
         # we're not doing replication yet because we might want to turn it on
         # later.  Also, if we're doing it, we need it to get involved in
