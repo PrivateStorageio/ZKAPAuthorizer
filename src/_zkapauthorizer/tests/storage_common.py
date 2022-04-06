@@ -251,14 +251,14 @@ class _PassFactory(object):
         self.spent.clear()
         self.issued.clear()
 
-    def _mark_spent(self, passes):
+    def mark_spent(self, passes):
         for p in passes:
             if p not in self.in_use:
                 raise ValueError("Pass {} cannot be spent, it is not in use.".format(p))
         self.spent.update(passes)
         self.in_use.difference_update(passes)
 
-    def _mark_invalid(self, reason, passes):
+    def mark_invalid(self, reason, passes):
         for p in passes:
             if p not in self.in_use:
                 raise ValueError(
@@ -267,7 +267,7 @@ class _PassFactory(object):
         self.invalid.update(dict.fromkeys(passes, reason))
         self.in_use.difference_update(passes)
 
-    def _reset(self, passes):
+    def reset(self, passes):
         for p in passes:
             if p not in self.in_use:
                 raise ValueError("Pass {} cannot be reset, it is not in use.".format(p))
