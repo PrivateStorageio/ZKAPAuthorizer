@@ -33,22 +33,21 @@ class MorePassesRequired(Exception):
     Storage operations fail with ``MorePassesRequired`` when they are not
     accompanied by a sufficient number of valid passes.
 
-    :ivar int valid_count: The number of valid passes presented in the
-        operation.
+    :ivar valid_count: The number of valid passes presented in the operation.
 
-    ivar int required_count: The number of valid passes which must be
-        presented for the operation to be authorized.
+    ivar required_count: The number of valid passes which must be presented
+        for the operation to be authorized.
 
-    :ivar set[int] signature_check_failed: Indices into the supplied list of
-        passes indicating passes which failed the signature check.
+    :ivar signature_check_failed: Indices into the supplied list of passes
+        indicating passes which failed the signature check.
     """
 
-    valid_count = attr.ib(validator=attr.validators.instance_of(int))
-    required_count = attr.ib(validator=attr.validators.instance_of(int))
-    signature_check_failed = attr.ib(converter=frozenset)
+    valid_count: int = attr.ib(validator=attr.validators.instance_of(int))
+    required_count: int = attr.ib(validator=attr.validators.instance_of(int))
+    signature_check_failed: frozenset[int] = attr.ib(converter=frozenset)
 
 
-def _message_maker(label: str) -> Callable[[str], bytes]:
+def _message_maker(label: str) -> Callable[[bytes], bytes]:
     def make_message(storage_index):
         return "{label} {storage_index}".format(
             label=label,
@@ -136,7 +135,7 @@ def get_configured_allowed_public_keys(node_config):
     )
 
 
-_dict_values = type(dict().values())
+_dict_values: type = type(dict().values())
 
 
 def required_passes(bytes_per_pass, share_sizes):
