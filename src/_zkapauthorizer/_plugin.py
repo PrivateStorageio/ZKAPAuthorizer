@@ -56,7 +56,11 @@ from .lease_maintenance import (
 from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
-from .replicate import setup_tahoe_lafs_replication
+from .replicate import (
+    is_replication_setup,
+    replication_service,
+    setup_tahoe_lafs_replication,
+)
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -138,6 +142,8 @@ class ZKAPAuthorizer(object):
             s = self._stores[key]
         except KeyError:
             s = open_store(datetime.now, _connect, node_config)
+            if is_replication_setup(node_config):
+                replication_service(s._connection).setServiceParent(self._service)
             self._stores[key] = s
         return s
 

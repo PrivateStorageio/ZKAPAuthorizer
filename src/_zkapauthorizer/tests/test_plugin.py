@@ -60,6 +60,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
+from twisted.internet.defer import Deferred
 from twisted.internet.testing import MemoryReactorClock
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
@@ -76,7 +77,9 @@ from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentCont
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, StoreOpenError
+from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
 from ..spending import GET_PASSES
+from ..tahoe import MemoryGrid
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -392,6 +395,53 @@ class ServiceTests(TestCase):
         self.assertThat(
             reactor.triggers,
             Equals({"before": {"shutdown": [(plugin._service.stopService, (), {})]}}),
+        )
+
+    @given(tahoe_configs().flatmap(just))
+    def test_replicating(self, get_config):
+        """
+        There is a replication service for a database which has been placed into
+        replication mode.
+        """
+        self._replication_service_test(get_config, True)
+
+    @given(tahoe_configs().flatmap(just))
+    def test_not_replicating(self, get_config):
+        """
+        There is not a replication service for a database which has not been
+        placed into replication mode.
+        """
+        self._replication_service_test(get_config, False)
+
+    def _replication_service_test(self, get_config, replicating: bool):
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        node_config = get_config(nodedir.path, "tub.port")
+        grid = MemoryGrid()
+        tahoe = grid.client(FilePath(node_config._basedir))
+
+        reactor = MemoryReactorClock()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
+        if replicating:
+            # Place it into replication mode.
+            self.assertThat(
+                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
+                succeeded(Always()),
+            )
+
+        # There is no public interface for just getting the database
+        # abstraction, so...
+        store = plugin._get_store(node_config)
+
+        def service_matches(svc):
+            return (
+                isinstance(svc, _ReplicationService)
+                and svc._connection is store._connection
+            )
+
+        self.assertThat(
+            [svc for svc in plugin._service if service_matches(svc)],
+            HasLength(1 if replicating else 0),
         )
 
 
