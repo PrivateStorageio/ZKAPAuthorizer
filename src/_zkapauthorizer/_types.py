@@ -19,6 +19,9 @@ Re-usable type definitions for ZKAPAuthorizer.
 from sqlite3 import Connection
 from typing import Any, Callable, Protocol
 
+# A Tahoe-LAFS capability string
+CapStr = str
+
 GetTime = Callable[[], float]
 
 

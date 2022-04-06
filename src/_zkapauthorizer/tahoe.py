@@ -19,8 +19,10 @@ from treq.client import HTTPClient
 from twisted.internet.error import ConnectionRefusedError
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
+from zope.interface import Interface, implementer
 
 from .config import read_node_url
+from ._types import CapStr
 
 
 def async_retry(matchers: list[Callable[[Exception], bool]]):
@@ -271,6 +273,52 @@ async def link(
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
+class ITahoeClient(Interface):
+    """
+    A simple Tahoe-LAFS client interface.
+    """
+
+    def get_private_path(name: str) -> FilePath:
+        """
+        Get the path to a file in the client node's private directory.
+        """
+
+    async def download(outpath: FilePath, cap: CapStr, child_path: list[str]) -> None:
+        """
+        Download the contents of an object to a given local path.
+        """
+
+    async def upload(get_data_provider: Callable[[], BinaryIO]) -> CapStr:
+        """
+        Upload some data, creating a new object, and returning a capability for
+        it.
+
+        :param get_data_provider: A callable which returns the data to be
+            uploaded.  This may be called more than once in case a retry is
+            required.
+        """
+
+    async def make_directory() -> CapStr:
+        """
+        Create a new, empty, mutable directory.
+        """
+
+    async def link(dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
+        """
+        Link an object into a directory.
+
+        :param dir_cap: The capability of the directory to link into.
+        :param entry_name: The name of the new link.
+        :param entry_cap: The capability of the object to link in.
+        """
+
+    async def list_directory(dir_cap: CapStr) -> dict[CapStr, list[Any]]:
+        """
+        List the entries linked into a directory.
+        """
+
+
+@implementer(ITahoeClient)
 @define
 class Tahoe(object):
     """
@@ -312,9 +360,6 @@ class Tahoe(object):
 
     def link(self, dir_cap, entry_name, entry_cap):
         return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
-
-
-CapStr = str
 
 
 @define
@@ -422,6 +467,7 @@ _no_children_message = (
 )
 
 
+@implementer(ITahoeClient)
 @define
 class _MemoryTahoe:
     """
@@ -491,7 +537,7 @@ def attenuate_writecap(rw_cap: CapStr) -> CapStr:
     return capability_from_string(rw_cap).get_readonly().to_string().decode("ascii")
 
 
-def get_tahoe_client(reactor, node_config: _Config) -> Tahoe:
+def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:
     """
     Return a Tahoe-LAFS client appropriate for the given node configuration.
 
