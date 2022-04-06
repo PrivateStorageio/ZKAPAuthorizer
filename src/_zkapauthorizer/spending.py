@@ -99,6 +99,21 @@ class IPassFactory(Interface):
             of the requested size.
         """
 
+    def mark_spent(unblinded_tokens: list[UnblindedToken]) -> None:
+        """
+        See ``IPassGroup.mark_spent``
+        """
+
+    def mark_invalid(reason: str, unblinded_tokens: list[UnblindedToken]) -> None:
+        """
+        See ``IPassGroup.mark_invalid``
+        """
+
+    def reset(unblinded_tokens: list[UnblindedToken]) -> None:
+        """
+        See ``IPassGroup.reset``
+        """
+
 
 @implementer(IPassGroup)
 @attr.s
@@ -128,7 +143,7 @@ class PassGroup(object):
     def unblinded_tokens(self) -> list[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices: list[int]) -> (PassGroup, PassGroup):
+    def split(self, select_indices: list[int]) -> tuple[PassGroup, PassGroup]:
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):
@@ -148,13 +163,13 @@ class PassGroup(object):
         )
 
     def mark_spent(self) -> None:
-        self._factory._mark_spent(self.unblinded_tokens)
+        self._factory.mark_spent(self.unblinded_tokens)
 
     def mark_invalid(self, reason) -> None:
-        self._factory._mark_invalid(reason, self.unblinded_tokens)
+        self._factory.mark_invalid(reason, self.unblinded_tokens)
 
     def reset(self) -> None:
-        self._factory._reset(self.unblinded_tokens)
+        self._factory.reset(self.unblinded_tokens)
 
 
 @implementer(IPassFactory)
@@ -191,20 +206,20 @@ class SpendingController(object):
         )
         return PassGroup(message, self, list(zip(unblinded_tokens, passes)))
 
-    def _mark_spent(self, unblinded_tokens):
+    def mark_spent(self, unblinded_tokens):
         SPENT_PASSES.log(
             count=len(unblinded_tokens),
         )
         self.discard_unblinded_tokens(unblinded_tokens)
 
-    def _mark_invalid(self, reason, unblinded_tokens):
+    def mark_invalid(self, reason, unblinded_tokens):
         INVALID_PASSES.log(
             reason=reason,
             count=len(unblinded_tokens),
         )
         self.invalidate_unblinded_tokens(reason, unblinded_tokens)
 
-    def _reset(self, unblinded_tokens):
+    def reset(self, unblinded_tokens):
         RESET_PASSES.log(
             count=len(unblinded_tokens),
         )

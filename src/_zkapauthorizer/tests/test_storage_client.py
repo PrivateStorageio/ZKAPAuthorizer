@@ -19,12 +19,12 @@ Tests for ``_zkapauthorizer._storage_client``.
 from functools import partial
 
 from allmydata.client import config_from_string
+from challenge_bypass_ristretto import random_signing_key
 from hypothesis import given
 from hypothesis.strategies import integers, sampled_from, sets
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
-    AllMatch,
     Always,
     Equals,
     HasLength,
@@ -41,14 +41,15 @@ from .._storage_client import call_with_passes
 from .._storage_server import _ValidationResult
 from ..api import MorePassesRequired
 from ..model import NotEnoughTokens
+from ..spending import PassGroup
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
     get_configured_shares_needed,
     get_configured_shares_total,
 )
-from .matchers import even, odd, raises
-from .storage_common import integer_passes, pass_factory
+from .matchers import raises
+from .storage_common import pass_factory, privacypass_passes
 from .strategies import dummy_ristretto_keys, pass_counts
 
 
@@ -168,6 +169,10 @@ class CallWithPassesTests(TestCase):
     Tests for ``call_with_passes``.
     """
 
+    def setUp(self):
+        super().setUp()
+        self.signing_key = random_signing_key()
+
     @given(pass_counts())
     def test_success_result(self, num_passes):
         """
@@ -180,7 +185,10 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: succeed(result),
                 num_passes,
-                partial(pass_factory(integer_passes(num_passes)).get, b"message"),
+                partial(
+                    pass_factory(privacypass_passes(self.signing_key, num_passes)).get,
+                    b"message",
+                ),
             ),
             succeeded(Is(result)),
         )
@@ -197,7 +205,10 @@ class CallWithPassesTests(TestCase):
             call_with_passes(
                 lambda group: fail(result),
                 num_passes,
-                partial(pass_factory(integer_passes(num_passes)).get, b"message"),
+                partial(
+                    pass_factory(privacypass_passes(self.signing_key, num_passes)).get,
+                    b"message",
+                ),
             ),
             failed(
                 AfterPreprocessing(
@@ -214,7 +225,7 @@ class CallWithPassesTests(TestCase):
         provider containing ``num_passes`` created by the function passed for
         ``get_passes``.
         """
-        passes = pass_factory(integer_passes(num_passes))
+        passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -223,8 +234,11 @@ class CallWithPassesTests(TestCase):
                 partial(passes.get, b"message"),
             ),
             succeeded(
-                Equals(
-                    sorted(passes.issued),
+                AfterPreprocessing(
+                    set,
+                    Equals(
+                        passes.issued_passes,
+                    ),
                 ),
             ),
         )
@@ -235,7 +249,7 @@ class CallWithPassesTests(TestCase):
         ``call_with_passes`` marks the passes it uses as spent if the operation
         succeeds.
         """
-        passes = pass_factory(integer_passes(num_passes))
+        passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -255,7 +269,7 @@ class CallWithPassesTests(TestCase):
         """
         ``call_with_passes`` returns the passes it uses if the operation fails.
         """
-        passes = pass_factory(integer_passes(num_passes))
+        passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
             call_with_passes(
@@ -280,26 +294,34 @@ class CallWithPassesTests(TestCase):
         of passes, still of length ```num_passes``, but without the passes
         which were rejected on the first try.
         """
-        # Half of the passes are going to be rejected so make twice as many as
-        # the operation uses available.
-        passes = pass_factory(integer_passes(num_passes * 2))
+        # We'll reject one pass from each of two calls so make sure we have
+        # two more than necessary.
+        reject_count = 2
+        rejected_passes = set()
+        passes = pass_factory(
+            privacypass_passes(self.signing_key, num_passes + reject_count)
+        )
 
-        def reject_even_pass_values(group):
-            passes = group.passes
-            good_passes = list(idx for (idx, p) in enumerate(passes) if p % 2)
-            bad_passes = list(
-                idx for (idx, p) in enumerate(passes) if idx not in good_passes
-            )
-            if len(good_passes) < num_passes:
+        def maybe_reject_passes(group: PassGroup) -> None:
+            if len(rejected_passes) < reject_count:
+                # Reject the first pass
+                rejected_passes.add(group.passes[0])
+
+                # Signal the failure
                 _ValidationResult(
-                    valid=good_passes,
-                    signature_check_failed=bad_passes,
+                    valid=[pass_.preimage for pass_ in group.passes[1:]],
+                    signature_check_failed=[0],
                 ).raise_for(num_passes)
-            return None
+            else:
+                # Otherwise accept them all.
+                return None
 
+        # To succeed with the given function, `call_with_passes` will have to
+        # have to try (reject_count + 1) times and replace one rejected token
+        # with a fresh one on each call after the first.
         self.assertThat(
             call_with_passes(
-                reject_even_pass_values,
+                maybe_reject_passes,
                 num_passes,
                 partial(passes.get, b"message"),
             ),
@@ -310,14 +332,13 @@ class CallWithPassesTests(TestCase):
             MatchesStructure(
                 returned=HasLength(0),
                 in_use=HasLength(0),
-                invalid=MatchesAll(
-                    HasLength(num_passes),
-                    AllMatch(even()),
+                invalid_passes=MatchesAll(
+                    HasLength(reject_count),
+                    AfterPreprocessing(
+                        lambda d: set(d.keys()), Equals(rejected_passes)
+                    ),
                 ),
-                spent=MatchesAll(
-                    HasLength(num_passes),
-                    AllMatch(odd()),
-                ),
+                spent=HasLength(num_passes),
                 issued=Equals(passes.spent | set(passes.invalid.keys())),
             ),
         )
@@ -329,7 +350,7 @@ class CallWithPassesTests(TestCase):
         no passes have been marked as invalid.  This happens if all passes
         given were valid but too fewer were given.
         """
-        passes = pass_factory(integer_passes(num_passes))
+        passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         def reject_passes(group):
             passes = group.passes
@@ -376,7 +397,7 @@ class CallWithPassesTests(TestCase):
         reported as invalid during its efforts as such and resets all other
         passes it acquired.
         """
-        passes = pass_factory(integer_passes(num_passes + extras))
+        passes = pass_factory(privacypass_passes(self.signing_key, num_passes + extras))
         rejected = []
         accepted = []
 
@@ -420,14 +441,14 @@ class CallWithPassesTests(TestCase):
             MatchesStructure(
                 # Whatever is left in the group when we run out of tokens must
                 # be returned.
-                returned=Equals(accepted),
+                returned_passes=Equals(set(accepted)),
                 in_use=HasLength(0),
-                invalid=AfterPreprocessing(
+                invalid_passes=AfterPreprocessing(
                     lambda invalid: set(invalid.keys()),
                     Equals(set(rejected)),
                 ),
                 spent=HasLength(0),
-                issued=Equals(set(accepted + rejected)),
+                issued_passes=Equals(set(accepted + rejected)),
             ),
         )
 
@@ -452,6 +473,10 @@ class PassFactoryTests(TestCase):
     ``test_spending.PassGroupTests``.
     """
 
+    def setUp(self):
+        super().setUp()
+        self.signing_key = random_signing_key()
+
     @given(pass_counts(), pass_counts())
     def test_returned_passes_reused(self, num_passes_a, num_passes_b):
         """
@@ -462,7 +487,7 @@ class PassFactoryTests(TestCase):
         min_passes = min(num_passes_a, num_passes_b)
         max_passes = max(num_passes_a, num_passes_b)
 
-        factory = pass_factory(integer_passes(max_passes))
+        factory = pass_factory(privacypass_passes(self.signing_key, max_passes))
         group_a = factory.get(message, num_passes_a)
         group_a.reset()
 
@@ -487,7 +512,7 @@ class PassFactoryTests(TestCase):
             perform with the pass group and to assert raises an exception.
         """
         message = b"message"
-        factory = pass_factory(integer_passes(num_passes))
+        factory = pass_factory(privacypass_passes(self.signing_key, num_passes))
         group = factory.get(message, num_passes)
         setup_op(group)
         self.assertThat(

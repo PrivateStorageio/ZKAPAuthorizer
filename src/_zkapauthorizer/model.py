@@ -29,6 +29,7 @@ from typing import Awaitable, Callable, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
+from attr import define, frozen
 from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -259,7 +260,7 @@ def memory_connect(path: str, *a, **kw) -> Connection:
 _SQLITE3_INTEGER_MAX = 2 ** 63 - 1
 
 
-@attr.s(frozen=True)
+@frozen
 class VoucherStore(object):
     """
     This class implements persistence for vouchers.
@@ -822,7 +823,7 @@ class VoucherStore(object):
 
 
 @implementer(ILeaseMaintenanceObserver)
-@attr.s
+@define
 class LeaseMaintenance(object):
     """
     A state-updating helper for recording pass usage during a lease
@@ -898,7 +899,7 @@ class LeaseMaintenance(object):
         self._rowid = None
 
 
-@attr.s
+@frozen
 class LeaseMaintenanceActivity(object):
     started = attr.ib()
     passes_required = attr.ib()
@@ -916,7 +917,7 @@ class LeaseMaintenanceActivity(object):
 # xs.started, xs.passes_required, xs.finished
 
 
-@attr.s(frozen=True)
+@frozen(order=True)
 class UnblindedToken(object):
     """
     An ``UnblindedToken`` instance represents cryptographic proof of a voucher
@@ -939,17 +940,11 @@ class UnblindedToken(object):
     )
 
 
-@attr.s(frozen=True)
+@frozen
 class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar bytes pass_bytes: The text value of the pass.  This can be sent to
-        a service provider one time to anonymously prove a prior voucher
-        redemption.  If it is sent more than once the service provider may
-        choose to reject it and the anonymity property is compromised.  Pass
-        text should be kept secret.  If pass text is divulged to third-parties
-        the anonymity property may be compromised.
     """
 
     preimage = attr.ib(
@@ -970,6 +965,15 @@ class Pass(object):
 
     @property
     def pass_bytes(self):
+        """
+        The byte string representation of the pass.
+
+        This can be sent to a service provider one time to anonymously prove a
+        prior voucher redemption.  If it is sent more than once the service
+        provider may choose to reject it and the anonymity property is
+        compromised.  This value should be kept secret.  If this value is
+        divulged to third-parties the anonymity property may be compromised.
+        """
         return b" ".join((self.preimage, self.signature))
 
     @classmethod
@@ -977,7 +981,7 @@ class Pass(object):
         return cls(*pass_.split(b" "))
 
 
-@attr.s(frozen=True)
+@frozen
 class RandomToken(object):
     """
     :ivar bytes token_value: The base64-encoded representation of the random
@@ -1002,7 +1006,7 @@ def _counter_attribute():
     )
 
 
-@attr.s(frozen=True)
+@frozen
 class Pending(object):
     """
     The voucher has not yet been completely redeemed for ZKAPs.
@@ -1011,7 +1015,7 @@ class Pending(object):
         successfully performed for the voucher.
     """
 
-    counter = _counter_attribute()
+    counter: int = _counter_attribute()
 
     def should_start_redemption(self):
         return True
@@ -1023,7 +1027,7 @@ class Pending(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class Redeeming(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -1045,7 +1049,7 @@ class Redeeming(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class Redeemed(object):
     """
     The voucher was successfully redeemed.  Associated tokens were retrieved
@@ -1070,7 +1074,7 @@ class Redeemed(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class DoubleSpend(object):
     finished = attr.ib(validator=attr.validators.instance_of(datetime))
 
@@ -1084,7 +1088,7 @@ class DoubleSpend(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class Unpaid(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -1104,7 +1108,7 @@ class Unpaid(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class Error(object):
     """
     This is a non-persistent state in which a voucher exists when the database
@@ -1126,7 +1130,7 @@ class Error(object):
         }
 
 
-@attr.s(frozen=True)
+@frozen
 class Voucher(object):
     """
     :ivar bytes number: The byte string which gives this voucher its

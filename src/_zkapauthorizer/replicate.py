@@ -86,7 +86,7 @@ class EventStream:
     A series of database operations represented as `Change` instances.
     """
 
-    changes: tuple[Change]
+    changes: tuple[Change, ...]
 
     def highest_sequence(self) -> Optional[int]:
         """
