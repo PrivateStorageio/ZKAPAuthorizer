@@ -477,20 +477,19 @@ async def tahoe_lafs_uploader(
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
     directory_mutable_cap: str,
-    entry_name: str = "snapshot.sql",
 ):
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     upload some data and link it into the mutable directory under the
     given name.
 
-    :return Callable[[Callable[[], BinaryIO]], None]: A callable that
+    :return Callable[str, [Callable[[], BinaryIO]], None]: A callable that
         will upload some data as the latest replica snapshot. The data
         isn't given directly, but instead from a zero-argument callable
         itself to facilitate retrying.
     """
 
-    async def upload(get_data_provider: Callable[[], BinaryIO]) -> None:
+    async def upload(entry_name: str, get_data_provider: Callable[[], BinaryIO]) -> None:
         await tahoe_lafs_uploader(
             client, directory_mutable_cap, get_data_provider, entry_name
         )
