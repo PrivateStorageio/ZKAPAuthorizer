@@ -287,13 +287,6 @@ class _ReplicationCapableConnection:
         cursor = self._conn.cursor(**kwargs)
         return _ReplicationCapableCursor(cursor)
 
-    def important(self):
-        """
-        Create a new context-manager that -- while active -- sets the
-        'important' flag to true and resets it afterwards.
-        """
-        return _Important(self)
-
 
 @define
 class _ReplicationCapableCursor:
@@ -308,6 +301,10 @@ class _ReplicationCapableCursor:
 
     _cursor: _SQLite3Cursor
     _observers: list = Factory(list)
+    # true while statements are "important" (which is pased along to
+    # the observers and interpreted as being "important data that the
+    # user will be interested in preserving")
+    _important: bool = False
 
     @property
     def lastrowid(self):
@@ -332,7 +329,7 @@ class _ReplicationCapableCursor:
             args = (statement, row)
         self._cursor.execute(*args)
         if statement_mutates(statement):
-            self._observe_mutations(statement, (row,))
+            self._observed_mutations(statement, (row,))
 
     def fetchall(self):
         return self._cursor.fetchall()
@@ -355,6 +352,13 @@ class _ReplicationCapableCursor:
         """
         for ob in self._observers:
             ob(self, self._important, statement, rows)
+
+    def important(self):
+        """
+        Create a new context-manager that -- while active -- sets the
+        'important' flag to true and resets it afterwards.
+        """
+        return _Important(self)
 
 
 def netstring(bs: bytes) -> bytes:
