@@ -60,8 +60,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
-from twisted.internet.task import Clock
-from twisted.internet.testing import MemoryReactor
+from twisted.internet.testing import MemoryReactorClock
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
@@ -246,7 +245,7 @@ class ServerPluginTests(TestCase):
     """
 
     def setup_example(self):
-        self.reactor = Clock()
+        self.reactor = MemoryReactorClock()
         self.plugin = ZKAPAuthorizer(NAME, self.reactor)
 
     @given(server_configurations(SIGNING_KEY_PATH))
@@ -378,14 +377,14 @@ class ServiceTests(TestCase):
         Children of ``ZKAPAuthorizer._service`` are started when the reactor
         starts and stopped when the reactor stops.
         """
-        reactor = MemoryReactor()
+        reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor)
 
-        # MemoryReactor does correctly implement callWhenRunning but it does
-        # not implement shutdown hooks meaningfully... So instead of asserting
-        # about the behavior we want, assert about how the plugin pokes the
-        # reactor. :/ This is lame.  Maybe Twisted will make MemoryReactor
-        # better.
+        # MemoryReactorClock does correctly implement callWhenRunning but it
+        # does not implement shutdown hooks meaningfully... So instead of
+        # asserting about the behavior we want, assert about how the plugin
+        # pokes the reactor. :/ This is lame.  Maybe Twisted will make
+        # MemoryReactorClock better.
         self.assertThat(
             reactor.whenRunningHooks,
             Equals([(plugin._service.startService, (), {})]),
@@ -452,7 +451,7 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
         """
-        reactor = Clock()
+        reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
@@ -477,7 +476,7 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` raises an exception when called with an
         announcement and local configuration which specify different issuers.
         """
-        reactor = Clock()
+        reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
@@ -526,7 +525,7 @@ class ClientPluginTests(TestCase):
         provider then the storage methods of the client raise exceptions that
         clearly indicate this.
         """
-        reactor = Clock()
+        reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
@@ -577,7 +576,7 @@ class ClientPluginTests(TestCase):
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
         """
-        reactor = Clock()
+        reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
@@ -650,7 +649,7 @@ class ClientResourceTests(TestCase):
 
     def setUp(self):
         super().setUp()
-        self.reactor = Clock()
+        self.reactor = MemoryReactorClock()
         self.plugin = ZKAPAuthorizer(NAME, self.reactor)
 
     @given(tahoe_configs())
