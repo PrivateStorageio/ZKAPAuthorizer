@@ -194,6 +194,20 @@ def is_replication_setup(config: Config) -> bool:
     # Find the configuration path for this node's replica.
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
+@define
+class _Important:
+    """
+    A context-manager to set and unset the ._important flag on a
+    _ReplicationCapableConnection
+    """
+    _replication_conn: _ReplicationCapableConnection
+
+    def __enter__(self):
+        self._replication_conn._important = True
+
+    def __exit__(self, *args):
+        self._replication_conn._important = False
+
 
 def with_replication(
     connection: _SQLite3Connection, enable_replication: bool
@@ -230,8 +244,13 @@ class _ReplicationCapableConnection:
         ``False`` otherwise.
     """
 
+    # the "real" / normal sqlite connection
     _conn: _SQLite3Connection
     _replicating: bool
+    # true while statements are "important" (which is pased along to
+    # the observers and interpreted as being "important data that the
+    # user will be interested in preserving")
+    _important: bool
 
     def enable_replication(self) -> None:
         """
@@ -266,6 +285,13 @@ class _ReplicationCapableConnection:
             kwargs["factory"] = factory
         cursor = self._conn.cursor(**kwargs)
         return _ReplicationCapableCursor(cursor)
+
+    def important(self):
+        """
+        Create a new context-manager that -- while active -- sets the
+        'important' flag to true and resets it afterwards.
+        """
+        return _Important(self)
 
 
 @define
