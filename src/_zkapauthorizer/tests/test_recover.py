@@ -5,7 +5,6 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from sqlite3 import connect
 
-from allmydata.client import read_config
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -15,7 +14,6 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from, text
-from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -47,8 +45,7 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
-from .fixtures import Treq
+from ..tahoe import MemoryGrid, attenuate_writecap
 from .matchers import equals_database, matches_capability
 from .resources import client_manager
 from .strategies import (

@@ -10,7 +10,6 @@ from __future__ import annotations
 import re
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from sqlite3 import Cursor
 from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 
 from attrs import frozen
