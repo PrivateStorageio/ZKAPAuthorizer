@@ -61,6 +61,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
+from twisted.internet.testing import MemoryReactor
 from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
@@ -365,6 +366,34 @@ class ServerPluginTests(TestCase):
                 metrics_path,
                 has_metric(Equals("foo"), Equals(i)),
             )
+
+
+class ServiceTests(TestCase):
+    """
+    Tests for the plugin's handling of a Twisted ``IServiceCollection``.
+    """
+
+    def test_started_and_stopped(self):
+        """
+        Children of ``ZKAPAuthorizer._service`` are started when the reactor
+        starts and stopped when the reactor stops.
+        """
+        reactor = MemoryReactor()
+        plugin = ZKAPAuthorizer(NAME, reactor)
+
+        # MemoryReactor does correctly implement callWhenRunning but it does
+        # not implement shutdown hooks meaningfully... So instead of asserting
+        # about the behavior we want, assert about how the plugin pokes the
+        # reactor. :/ This is lame.  Maybe Twisted will make MemoryReactor
+        # better.
+        self.assertThat(
+            reactor.whenRunningHooks,
+            Equals([(plugin._service.startService, (), {})]),
+        )
+        self.assertThat(
+            reactor.triggers,
+            Equals({"before": {"shutdown": [(plugin._service.stopService, (), {})]}}),
+        )
 
 
 def has_metric(name_matcher, value_matcher):

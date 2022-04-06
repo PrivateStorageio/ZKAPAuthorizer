@@ -35,7 +35,7 @@ from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
-from twisted.application.service import IService
+from twisted.application.service import IService, IServiceCollection, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
@@ -109,6 +109,24 @@ class ZKAPAuthorizer(object):
     name: str
     reactor: Any
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
+    _service: IServiceCollection = field()
+
+    @_service.default
+    def _service_default(self):
+        svc = MultiService()
+        # There doesn't seem to be an API in Twisted to hook a service up to
+        # the reactor.  There are pieces of it but they're spread out and
+        # mixed with other stuff.  So, just do it ourselves.  See
+        # twisted.application.app.startApplication for some of it, if you
+        # want.
+        #
+        # We intentionally don't hook up privilegedStartService because
+        # there's no expectation of a requirement for privileged operations
+        # and because we don't expect to ever run with any privileges and
+        # because we never expect to try to shed any privileges.
+        self.reactor.callWhenRunning(svc.startService)
+        self.reactor.addSystemEventTrigger("before", "shutdown", svc.stopService)
+        return svc
 
     def _get_store(self, node_config):
         """
@@ -387,6 +405,11 @@ def load_signing_key(path):
 # Create the global plugin object, re-exported elsewhere so Twisted can
 # discover it.  We'll also use it here since it carries some state that we
 # sometimes need to dig up and can't easily get otherwise.
-from twisted.internet import reactor
+def _create_plugin():
+    # Do not leak the global reactor into the module scope!
+    from twisted.internet import reactor
 
-storage_server_plugin = ZKAPAuthorizer(name=NAME, reactor=reactor)
+    return ZKAPAuthorizer(name=NAME, reactor=reactor)
+
+
+storage_server_plugin = _create_plugin()
