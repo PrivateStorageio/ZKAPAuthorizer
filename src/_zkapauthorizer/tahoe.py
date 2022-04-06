@@ -10,7 +10,6 @@ from tempfile import mkdtemp
 from typing import Any, BinaryIO, Callable, Iterable, Optional, Union
 
 import treq
-from allmydata.node import _Config
 from allmydata.uri import from_string as capability_from_string
 from allmydata.util.base32 import b2a as b32encode
 from attrs import Factory, define, field
@@ -21,8 +20,8 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
 from zope.interface import Interface, implementer
 
-from .config import read_node_url
 from ._types import CapStr
+from .config import Config, read_node_url
 
 
 def async_retry(matchers: list[Callable[[Exception], bool]]):
@@ -330,7 +329,7 @@ class Tahoe(object):
     """
 
     client: HTTPClient
-    _node_config: _Config
+    _node_config: Config
 
     @property
     def _api_root(self):
