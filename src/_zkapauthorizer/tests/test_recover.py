@@ -307,25 +307,15 @@ class TahoeLAFSDownloaderTests(TestCase):
     # Get a Tahoe-LAFS client node connected to a storage node.
     resources = [("client", client_manager)]
 
-    def setUp(self):
-        super().setUp()
-        setUpResources(self, self.resources, None)
-        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
-
     @inlineCallbacks
     def test_uploader_and_downloader(self):
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
         """
-        config = read_config(self.client.node_dir.path, "tub.port")
-        # AsynchronousDeferredRunTest sets reactor on us.
-        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
-        tahoeclient = Tahoe(httpclient, config)
-
-        replica_dir_cap_str = yield Deferred.fromCoroutine(
-            make_directory(httpclient, self.client.node_url),
-        )
+        grid = MemoryGrid()
+        tahoeclient = grid.client()
+        replica_dir_cap_str = grid.make_directory()
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
