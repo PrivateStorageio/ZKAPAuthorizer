@@ -18,13 +18,36 @@ Tests for ``_zkapauthorizer.model``.
 """
 
 
+import sqlite3
 from hypothesis import given
 from hypothesis.strategies import sampled_from, tuples
 from testtools import TestCase
 from testtools.matchers import Equals
 
-from ..sql import statement_mutates
+from ..sql import statement_mutates, bind_arguments
 from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
+
+
+class BindTests(TestCase):
+    """
+    Tests for ``bind_arguments``
+    """
+    @given(
+        tuples(
+            sampled_from([inserts, deletes, updates]),
+            sql_identifiers(),
+            tables(),
+        ).flatmap(
+            lambda x: x[0](x[1], x[2]),
+        )
+    )
+    def test_mutate(self, change):
+        conn = sqlite3.connect(":memory:")
+        cursor = conn.cursor()
+        self.assertThat(
+            bind_arguments(cursor, change.statement(), change.arguments()),
+            Equals(change.bound_statement(cursor)),
+        )
 
 
 class MutateTests(TestCase):

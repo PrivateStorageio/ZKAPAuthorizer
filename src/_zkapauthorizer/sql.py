@@ -7,6 +7,7 @@ to support testing the replication/recovery system.
 
 from __future__ import annotations
 
+import re
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor
@@ -198,6 +199,25 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
         assert isinstance(result, str)
         return result
     raise ValueError("Do not know how to quote value of type f{type(value)}")
+
+
+def bind_arguments(cursor, statement, args):
+    """
+    Interpolate the arguments into position in the statement. For
+    example, a statement 'INSERT INTO foo VALUES (?, ?)' and args (1,
+    'bar') should result in 'INSERT INTO foo VALUES (1, "bar")'
+
+    This is a simple substitution based on the ? character, which MUST
+    NOT appear elsewhere in the SQL.
+    """
+
+    to_sub = list(args)
+
+    def substitute_args(match):
+        return quote_sql_value(cursor, to_sub.pop(0))
+
+    # replace subsequent "?" characters with the next argument, quoted
+    return re.sub(r'([?])', substitute_args, statement)
 
 
 @frozen
