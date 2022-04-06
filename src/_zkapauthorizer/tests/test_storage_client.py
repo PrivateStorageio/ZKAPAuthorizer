@@ -16,7 +16,6 @@
 Tests for ``_zkapauthorizer._storage_client``.
 """
 
-from base64 import b64decode
 from functools import partial
 
 from allmydata.client import config_from_string
@@ -26,7 +25,6 @@ from hypothesis.strategies import integers, sampled_from, sets
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
-    AllMatch,
     Always,
     Equals,
     HasLength,
@@ -50,7 +48,7 @@ from ..storage_common import (
     get_configured_shares_needed,
     get_configured_shares_total,
 )
-from .matchers import even, odd, raises
+from .matchers import raises
 from .storage_common import pass_factory, privacypass_passes
 from .strategies import dummy_ristretto_keys, pass_counts
 
