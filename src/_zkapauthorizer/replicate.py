@@ -67,7 +67,7 @@ from compose import compose
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME
-from .tahoe import Tahoe, attenuate_writecap
+from .tahoe import ITahoeClient, attenuate_writecap
 
 
 @frozen
@@ -141,7 +141,7 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: Tahoe) -> str:
+async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage
@@ -308,7 +308,7 @@ snapshot: Callable[[Connection], bytes] = compose(
 
 
 async def tahoe_lafs_uploader(
-    client: Tahoe,
+    client: ITahoeClient,
     recovery_cap: str,
     get_snapshot_data: Callable[[], BinaryIO],
     entry_name: str,
@@ -322,7 +322,7 @@ async def tahoe_lafs_uploader(
 
 
 def get_tahoe_lafs_direntry_uploader(
-    client: Tahoe,
+    client: ITahoeClient,
     directory_mutable_cap: str,
     entry_name: str = "snapshot.sql",
 ):
