@@ -65,19 +65,17 @@ from sqlite3 import Cursor as _SQLite3Cursor
 from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, Optional
 
 import cbor2
-from attrs import define, field, frozen
-from attrs import define, frozen, Factory
+from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, succeed
+from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
 from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
-from twisted.internet.defer import DeferredSemaphore
 
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, statement_mutates
-from .tahoe import ITahoeClient, attenuate_writecap
+from .tahoe import ITahoeClient, Tahoe, attenuate_writecap
 
 
 @frozen
@@ -196,12 +194,14 @@ def is_replication_setup(config: Config) -> bool:
     # Find the configuration path for this node's replica.
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
+
 @define
 class _Important:
     """
     A context-manager to set and unset the ._important flag on a
     _ReplicationCapableConnection
     """
+
     _replication_conn: _ReplicationCapableConnection
 
     def __enter__(self):
@@ -333,7 +333,7 @@ class _ReplicationCapableCursor:
             args = (statement, row)
         self._cursor.execute(*args)
         if statement_mutates(statement):
-            self._observe_mutations(statement, (row, ))
+            self._observe_mutations(statement, (row,))
 
     def fetchall(self):
         return self._cursor.fetchall()
@@ -432,7 +432,9 @@ def get_tahoe_lafs_direntry_uploader(
         itself to facilitate retrying.
     """
 
-    async def upload(entry_name: str, get_data_provider: Callable[[], BinaryIO]) -> None:
+    async def upload(
+        entry_name: str, get_data_provider: Callable[[], BinaryIO]
+    ) -> None:
         await tahoe_lafs_uploader(
             client, directory_mutable_cap, get_data_provider, entry_name
         )
@@ -455,7 +457,7 @@ class ReplicationService:
         # XXX this will be a bigger number than we had before .. but maybe fine
         self._accumulated_size = len(self._store.get_events().to_bytes())
         # XXX
-        #self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
+        # self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
         if not self.big_enough():
             self._trigger.acquire()
         d = do_upload()
@@ -482,7 +484,6 @@ class ReplicationService:
             except Exception as e:
                 # probably log the error?
                 pass
-
 
     async def _do_one_upload(self):
         """

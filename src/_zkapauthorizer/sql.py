@@ -217,7 +217,7 @@ def bind_arguments(cursor, statement, args):
         return quote_sql_value(cursor, to_sub.pop(0))
 
     # replace subsequent "?" characters with the next argument, quoted
-    return re.sub(r'([?])', substitute_args, statement)
+    return re.sub(r"([?])", substitute_args, statement)
 
 
 @frozen
