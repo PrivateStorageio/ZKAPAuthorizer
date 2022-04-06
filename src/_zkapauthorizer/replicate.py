@@ -66,12 +66,14 @@ from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, 
 
 import cbor2
 from attrs import define, field, frozen
+from attrs import define, frozen, Factory
 from compose import compose
 from twisted.application.service import IService, Service
 from twisted.internet.defer import CancelledError, Deferred, succeed
 from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
+from twisted.internet.defer import DeferredSemaphore
 
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, statement_mutates
@@ -306,6 +308,7 @@ class _ReplicationCapableCursor:
     """
 
     _cursor: _SQLite3Cursor
+    _observers: list = Factory(list)
 
     @property
     def lastrowid(self):
@@ -344,75 +347,15 @@ class _ReplicationCapableCursor:
     def executemany(self, statement, rows):
         self._cursor.executemany(statement, rows)
         if statement_mutates(statement):
-            self._observe_mutations(statement, rows)
+            self._observed_mutations(statement, rows)
 
-    def _observe_mutations(self, statement, rows):
+    def _observed_mutations(self, statement, rows):
         """
         One or more statements that mutate the database have been
         executed. The transaction is still active. Notify observers.
         """
         for ob in self._observers:
-            ob(self, statement, rows, self.important)
-
-
-
-class Service:
-
-    _store: VoucherStore
-    _connection: _ReplicationCapableConnection
-    _accumulated_size: int = 0
-    _trigger = DeferredSemaphore(1)
-
-    def startService(self):
-        # XXX this will be a bigger number than we had before .. but maybe fine
-        self._accumulated_size = len(self._store.get_events().to_bytes())
-        # XXX
-        #self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
-        if not self.big_enough():
-            self._trigger.acquire()
-        d = do_upload()
-        d.addErrback(print)
-
-        self._connection.observe_mutations(self.observe_mutations)
-        return
-
-    def queue_upload(self):
-        if self._trigger.tokens:
-            self._trigger.release()
-        else:
-            # we're already uploading
-            pass
-
-    async def do_upload(self):
-        """
-        """
-        while True:
-            await self._trigger.acquire()
-            es = self._store.get_events()
-            es_bytes  = es.encode()
-            immutable = await self._client.upload(es_bytes)
-            # if we e.g. decide to drop some statements from es here
-            # (to be more efficient with spending), add that size back
-            # to _accumulated_size (and _don't_ prune them from the
-            # database)
-            await self._client.link("event-stream-{}".format(es.higest_sequence()), immutable)
-            # prune the database
-            self._store.prune_events_to(es.higest_sequence())
-
-    def observed_event(self, cursor, statement, args, important):
-        """
-        A mutating SQL statement was observed by the cursor
-        """
-        bound_statement = ...
-        self._store.add_event.wrapped(cursor, bound_statement)
-        self._accumulated_size += len(bound_statement)
-        if self.big_enough() or important:
-            self.queue_upload()
-            self._accumulated_size = 0
-
-    def big_enough(self):
-        return self._accumulated_size >= 570000
-
+            ob(self, self._important, statement, rows)
 
 
 def netstring(bs: bytes) -> bytes:
@@ -497,51 +440,80 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-@define
-class _ReplicationService(Service):
+class ReplicationService:
     """
-    Perform all activity related to maintaining a remote replica of the local
-    ZKAPAuthorizer database.
-
-    :ivar _connection: A connection to the database being replicated.
-
-    :ivar _replicating: The long-running replication operation.  This is never
-        expected to complete but it will be cancelled when the service stops.
+    This service uploads event-streams
     """
 
-    name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
-
+    _store: None  #: VoucherStore
+    _uploader: Callable[[str, BinaryIO], None]
     _connection: _ReplicationCapableConnection
-    _replicating: Optional[Deferred] = field(init=False, default=None)
+    _accumulated_size: int = 0
+    _trigger = DeferredSemaphore(1)
 
-    def startService(self) -> None:
-        super().startService()
-        # Tell the store to initiate replication when appropriate.  The
-        # service should only be created and started if replication has been
-        # turned on - so, make sure replication is turned on at the database
-        # layer.
-        self._connection.enable_replication()
-        self._replicating = succeed(None)
+    def startService(self):
+        # XXX this will be a bigger number than we had before .. but maybe fine
+        self._accumulated_size = len(self._store.get_events().to_bytes())
+        # XXX
+        #self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
+        if not self.big_enough():
+            self._trigger.acquire()
+        d = do_upload()
+        d.addErrback(print)
 
-    def stopService(self) -> Deferred:
+        self._connection.add_mutation_observer(self.observed_event)
+        return
+
+    def queue_upload(self):
+        if self._trigger.tokens:
+            self._trigger.release()
+        else:
+            # we're already uploading
+            pass
+
+    async def wait_for_uploads(self):
         """
-        Cancel the replication operation and then wait for it to complete.
+        An infinite async loop that proecsses uploads
         """
-        super().stopService()
+        while True:
+            await self._trigger.acquire()
+            try:
+                await self._do_one_upload()
+            except Exception as e:
+                # probably log the error?
+                pass
 
-        replicating = self._replicating
-        if replicating is None:
-            return succeed(None)
 
-        self._replicating = None
+    async def _do_one_upload(self):
+        """
+        Process a single upload.
+        """
+        events = self._store.get_events()
+        # upload latest event-stream
+        await self._uploader(
+            "event-stream-{}".format(es.higest_sequence()),
+            events.to_bytes,
+        )
+        # prune the database
+        self._store.prune_events_to(es.higest_sequence())
 
-        def catch_cancelled(err: Failure) -> None:
-            err.trap(CancelledError)
-            return None
+    def observed_event(self, cursor, important, statement, args):
+        """
+        A mutating SQL statement was observed by the cursor
+        """
+        bound_statement = bind_arguments(cursor, statement, args)
+        self._store.add_event.wrapped(cursor, bound_statement)
+        # note that we're ignoring a certain amount of size overhead
+        # here: the _actual_ size will be some CBOR information and
+        # the sequence number, although the statement text should
+        # still dominate.
+        self._accumulated_size += len(bound_statement)
+        if important or self.big_enough():
+            self.queue_upload()
+            self._accumulated_size = 0
 
-        replicating.addErrback(catch_cancelled)
-        replicating.cancel()
-        return replicating
+    def big_enough(self):
+        return self._accumulated_size >= 570000
 
 
 def replication_service(connection) -> IService:
@@ -549,4 +521,4 @@ def replication_service(connection) -> IService:
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document.
     """
-    return _ReplicationService(connection=connection)
+    return ReplicationService(connection=connection)
