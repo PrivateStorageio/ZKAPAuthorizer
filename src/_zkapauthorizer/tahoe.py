@@ -394,12 +394,14 @@ class MemoryGrid:
     _counter: int = 0
     _objects: dict[CapStr, Union[bytes, _Directory]] = field(default=Factory(dict))
 
-    def client(self):
+    def client(self, basedir: Optional[FilePath] = None) -> ITahoeClient:
         """
         Create a ``Tahoe``-alike that is backed by this object instead of by a
         real Tahoe-LAFS storage grid.
         """
-        return _MemoryTahoe(self)
+        if basedir is None:
+            return _MemoryTahoe(self)
+        return _MemoryTahoe(self, basedir)
 
     def upload(self, data: bytes) -> CapStr:
         cap = str(self._counter)
