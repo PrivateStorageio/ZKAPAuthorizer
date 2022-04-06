@@ -948,12 +948,6 @@ class Pass(object):
     """
     A ``Pass`` instance completely represents a single Zero-Knowledge Access Pass.
 
-    :ivar bytes pass_bytes: The text value of the pass.  This can be sent to
-        a service provider one time to anonymously prove a prior voucher
-        redemption.  If it is sent more than once the service provider may
-        choose to reject it and the anonymity property is compromised.  Pass
-        text should be kept secret.  If pass text is divulged to third-parties
-        the anonymity property may be compromised.
     """
 
     preimage = attr.ib(
@@ -974,6 +968,15 @@ class Pass(object):
 
     @property
     def pass_bytes(self):
+        """
+        The byte string representation of the pass.
+
+        This can be sent to a service provider one time to anonymously prove a
+        prior voucher redemption.  If it is sent more than once the service
+        provider may choose to reject it and the anonymity property is
+        compromised.  This value should be kept secret.  If this value is
+        divulged to third-parties the anonymity property may be compromised.
+        """
         return b" ".join((self.preimage, self.signature))
 
     @classmethod
