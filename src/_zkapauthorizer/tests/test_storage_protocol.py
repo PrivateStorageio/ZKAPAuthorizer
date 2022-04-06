@@ -323,7 +323,7 @@ class ShareTests(TestCase):
         )
         self.expectThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         for sharenum, bucket in allocated.items():
@@ -462,7 +462,7 @@ class ShareTests(TestCase):
         # The spent passes have been reported to the spending service.
         self.assertThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         expected_leases = {}
@@ -523,7 +523,7 @@ class ShareTests(TestCase):
         # The spent passes have been reported to the spending service.
         self.assertThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         leases = list(self.anonymous_storage_server.get_leases(storage_index))
@@ -777,7 +777,7 @@ class ShareTests(TestCase):
         # The spent passes have been reported to the spending service.
         self.assertThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         expected = [
@@ -917,7 +917,7 @@ class ShareTests(TestCase):
         # The spent passes have been reported to the spending service.
         self.assertThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         # And the lease we paid for on every share is present.
@@ -1043,7 +1043,7 @@ class ShareTests(TestCase):
         # The spent passes have been reported to the spending service.
         self.assertThat(
             self.spending_recorder,
-            matches_spent_passes(self.public_key_hash, self.pass_factory.spent),
+            matches_spent_passes(self.public_key_hash, self.pass_factory.spent_passes),
         )
 
         # Not only should the write above succeed but the lease should now be
