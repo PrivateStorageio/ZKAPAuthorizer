@@ -277,13 +277,17 @@ class VoucherStore(object):
 
     @classmethod
     def from_connection(
-        cls, pass_value: int, now: GetTime, conn: Connection
+        cls,
+        pass_value: int,
+        now: GetTime,
+        conn: Connection,
+        enable_replication: bool,
     ) -> VoucherStore:
         # Make sure we always have a replication-enabled connection even if
         # we're not doing replication yet because we might want to turn it on
         # later.  Also, if we're doing it, we need it to get involved in
         # database initialization which happens next.
-        replicating_conn = with_replication(conn)
+        replicating_conn = with_replication(conn, enable_replication)
         initialize_database(replicating_conn)
         return cls(pass_value=pass_value, now=now, connection=replicating_conn)
 

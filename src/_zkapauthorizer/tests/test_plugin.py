@@ -16,7 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
@@ -73,10 +73,11 @@ from twisted.plugins.zkapauthorizer import storage_server_plugin
 from .. import NAME
 from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
+from ..config import EmptyConfig
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError
+from ..model import NotEnoughTokens, StoreOpenError, memory_connect
 from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
 from ..spending import GET_PASSES
 from ..tahoe import MemoryGrid
@@ -163,6 +164,55 @@ class OpenStoreTests(TestCase):
             lambda: open_store(lambda: now, connect, config),
             raises(StoreOpenError),
         )
+
+    def _replication_enabled_connection_test(self, now: datetime, enabled: bool):
+        """
+        Test that the database connection ends up in replication mode (or not)
+        based on whether replication has been set up or not.
+
+        :param enabled: If True, set up replication and require the connection
+            to be in replication mode.  If False, don't set it up and require
+            it not to be in replication mode.
+        """
+        grid = MemoryGrid()
+
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        tahoe = grid.client(nodedir)
+        config = EmptyConfig(nodedir)
+
+        if enabled:
+            self.assertThat(
+                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
+                succeeded(Always()),
+            )
+
+        # Create the underlying database file.
+        store = open_store(lambda: now, memory_connect, config)
+
+        self.assertThat(
+            # Right now enabling replication does absolutely nothing except
+            # flip this flag, so there's no other behavior to observe in this
+            # test.  Maybe later when there's more replication implementation,
+            # we can assert something more meaningful.
+            store._connection._replicating,
+            Equals(enabled),
+        )
+
+    @given(datetimes())
+    def test_replication_enabled_connection(self, now):
+        """
+        If replication has been set up then ``open_store`` puts the SQLite3
+        connection into replication mode.
+        """
+        self._replication_enabled_connection_test(now, True)
+
+    @given(datetimes())
+    def test_replication_disabled_connection(self, now):
+        """
+        If replication has not been set up then ``open_store`` does not put the
+        SQLite3 connection into replication mode.
+        """
+        self._replication_enabled_connection_test(now, False)
 
 
 class GetRRefTests(TestCase):

@@ -191,11 +191,11 @@ def is_replication_setup(config: Config) -> bool:
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
 
-def with_replication(connection: Connection):
+def with_replication(connection: Connection, enable_replication: bool = False):
     """
     Wrap a replicating support layer around the given connection.
     """
-    return _ReplicationCapableConnection(connection)
+    return _ReplicationCapableConnection(connection, enable_replication)
 
 
 @define
@@ -207,9 +207,15 @@ class _ReplicationCapableConnection:
     All of this type's methods are intended to behave the same way as
     ``sqlite3.Connection``\ 's methods except they may also add some
     additional functionality to support replication.
+
+    :ivar _replicating: ``True`` if this connection is currently in
+        replication mode and is recording all executed DML statements,
+        ``False`` otherwise.
     """
 
     _conn: Connection
+    _replicating: bool
+
 
     def snapshot(self) -> bytes:
         """

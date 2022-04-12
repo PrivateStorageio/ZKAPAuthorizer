@@ -92,7 +92,9 @@ def open_store(now: GetTime, connect: Connect, node_config: Config) -> VoucherSt
     db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
     conn = _open_database(partial(connect, db_path.path))
     pass_value = get_configured_pass_value(node_config)
-    return VoucherStore.from_connection(pass_value, now, conn)
+    return VoucherStore.from_connection(
+        pass_value, now, conn, is_replication_setup(node_config)
+    )
 
 
 @implementer(IFoolscapStoragePlugin)
