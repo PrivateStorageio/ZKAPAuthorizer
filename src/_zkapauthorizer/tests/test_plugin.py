@@ -81,7 +81,7 @@ from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, StoreOpenError, memory_connect
 from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
 from ..spending import GET_PASSES
-from ..tahoe import MemoryGrid
+from ..tahoe import ITahoeClient, MemoryGrid
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -291,6 +291,13 @@ class PluginTests(TestCase):
         )
 
 
+def no_tahoe_client(reactor, node_config) -> ITahoeClient:
+    """
+    :raise: Always raise an exception.
+    """
+    raise Exception("No Tahoe client should be required in thi context.")
+
+
 @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
 class ServerPluginTests(TestCase):
     """
@@ -300,7 +307,7 @@ class ServerPluginTests(TestCase):
 
     def setup_example(self):
         self.reactor = MemoryReactorClock()
-        self.plugin = ZKAPAuthorizer(NAME, self.reactor)
+        self.plugin = ZKAPAuthorizer(NAME, self.reactor, no_tahoe_client)
 
     @given(server_configurations(SIGNING_KEY_PATH))
     def test_returns_announceable(self, configuration):
@@ -432,7 +439,7 @@ class ServiceTests(TestCase):
         starts and stopped when the reactor stops.
         """
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         # MemoryReactorClock does correctly implement callWhenRunning but it
         # does not implement shutdown hooks meaningfully... So instead of
@@ -471,7 +478,7 @@ class ServiceTests(TestCase):
         tahoe = grid.client(FilePath(node_config._basedir))
 
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         if replicating:
             # Place it into replication mode.
@@ -555,7 +562,7 @@ class ClientPluginTests(TestCase):
         ``IStorageServer``.
         """
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
@@ -580,7 +587,7 @@ class ClientPluginTests(TestCase):
         announcement and local configuration which specify different issuers.
         """
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
@@ -629,7 +636,7 @@ class ClientPluginTests(TestCase):
         clearly indicate this.
         """
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
@@ -680,7 +687,7 @@ class ClientPluginTests(TestCase):
         spends unblinded tokens from the plugin database.
         """
         reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor)
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()

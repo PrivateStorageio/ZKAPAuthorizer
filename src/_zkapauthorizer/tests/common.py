@@ -41,3 +41,16 @@ def _skipper(reason):
         return skipIt
 
     return wrapper
+
+
+def flushErrors(exc_type: type) -> list[Exception]:
+    """
+    Flush logged exceptions of the given type from the Trial log observer.
+
+    :return: A list of the flushed exceptions.
+    """
+    # There is no public API for flushing logged errors if you're not
+    # using one of trial's TestCase classes...
+    from twisted.trial.runner import _logObserver
+
+    return _logObserver.flushErrors(exc_type)

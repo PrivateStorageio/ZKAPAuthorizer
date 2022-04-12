@@ -114,9 +114,7 @@ class ZKAPAuthorizer(object):
 
     name: str
     reactor: Any
-    _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field(
-        default=get_tahoe_client
-    )
+    _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field()
 
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
     _service: IServiceCollection = field()
@@ -249,11 +247,13 @@ class ZKAPAuthorizer(object):
 
         store = self._get_store(node_config)
 
-        setup_replication = partial(
-            setup_tahoe_lafs_replication,
-            self._get_tahoe_client(self.reactor, node_config),
-            partial(self._add_replication_service, store),
-        )
+        async def setup_replication():
+            # Setup replication
+            tahoe = self._get_tahoe_client(self.reactor, node_config)
+            await setup_tahoe_lafs_replication(tahoe)
+            # And then turn replication on for the database connection already
+            # in use.
+            self._add_replication_service(store)
 
         return resource_from_configuration(
             node_config,
@@ -431,7 +431,11 @@ def _create_plugin():
     # Do not leak the global reactor into the module scope!
     from twisted.internet import reactor
 
-    return ZKAPAuthorizer(name=NAME, reactor=reactor)
+    return ZKAPAuthorizer(
+        name=NAME,
+        reactor=reactor,
+        get_tahoe_client=get_tahoe_client,
+    )
 
 
 storage_server_plugin = _create_plugin()
