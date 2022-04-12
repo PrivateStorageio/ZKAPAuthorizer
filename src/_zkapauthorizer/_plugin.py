@@ -20,6 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
+from sqlite3 import connect as _connect
 from typing import Callable
 from weakref import WeakValueDictionary
 
@@ -42,7 +43,9 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
+from ._types import Connect, GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
+from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import (
@@ -51,6 +54,7 @@ from .lease_maintenance import (
     maintain_leases_from_root,
 )
 from .model import VoucherStore
+from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import setup_tahoe_lafs_replication
 from .resource import from_configuration as resource_from_configuration
@@ -67,6 +71,24 @@ _log = Logger()
 class AnnounceableStorageServer(object):
     announcement = field()
     storage_server = field()
+
+
+def open_store(now: GetTime, connect: Connect, node_config: Config) -> VoucherStore:
+    """
+    Open a ``VoucherStore`` for the given configuration.
+
+    :param now: A function that can be used to get the current time.
+
+    :param node_config: The Tahoe-LAFS configuration object for the node
+        for which we want to open a store.
+
+    :param connect: A function that can be used to connect to the underlying
+        database.
+    """
+    db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+    conn = _open_database(partial(connect, db_path.path))
+    pass_value = get_configured_pass_value(node_config)
+    return VoucherStore.from_connection(pass_value, now, conn)
 
 
 @implementer(IFoolscapStoragePlugin)
@@ -96,7 +118,7 @@ class ZKAPAuthorizer(object):
         try:
             s = self._stores[key]
         except KeyError:
-            s = VoucherStore.from_node_config(node_config, datetime.now)
+            s = open_store(datetime.now, _connect, node_config)
             self._stores[key] = s
         return s
 

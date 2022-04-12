@@ -33,7 +33,8 @@ from twisted.internet.task import Clock, deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
-from ..config import EmptyConfig
+from .._plugin import open_store
+from ..config import empty_config
 from ..controller import DummyRedeemer, IRedeemer, PaymentController
 from ..model import VoucherStore, memory_connect
 
@@ -85,11 +86,7 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        self.store = VoucherStore.from_node_config(
-            self.config,
-            self.get_now,
-            memory_connect,
-        )
+        self.store = open_store(self.get_now, memory_connect, self.config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):
@@ -120,11 +117,7 @@ class ConfiglessMemoryVoucherStore(Fixture):
         return DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        self.store = VoucherStore.from_node_config(
-            EmptyConfig(FilePath(".")),
-            self.get_now,
-            memory_connect,
-        )
+        self.store = open_store(self.get_now, memory_connect, empty_config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):

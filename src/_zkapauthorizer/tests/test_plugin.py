@@ -19,7 +19,8 @@ Tests for the Tahoe-LAFS plugin.
 from datetime import timedelta
 from functools import partial
 from io import StringIO
-from os import makedirs
+from os import mkdir
+from sqlite3 import connect
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
@@ -55,6 +56,7 @@ from testtools.matchers import (
     MatchesAll,
     MatchesListwise,
     MatchesStructure,
+    Raises,
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
@@ -68,12 +70,12 @@ from twisted.web.resource import IResource
 from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
-from .._plugin import get_root_nodes, load_signing_key
+from .._plugin import get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, VoucherStore
+from ..model import NotEnoughTokens, StoreOpenError
 from ..spending import GET_PASSES
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
@@ -106,6 +108,58 @@ def get_rref(interface=None):
     if interface is None:
         interface = RIPrivacyPassAuthorizedStorageServer
     return LocalRemote(DummyReferenceable(interface))
+
+
+class OpenStoreTests(TestCase):
+    @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
+    @given(tahoe_configs(), datetimes())
+    def test_uncreateable_store_directory(self, get_config, now):
+        """
+        If the underlying directory in the node configuration cannot be created
+        then ``open_store`` raises ``StoreOpenError``.
+        """
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+
+        # Create the node directory without permission to create the
+        # underlying directory.
+        mkdir(nodedir.path, 0o500)
+
+        config = get_config(nodedir.path, "tub.port")
+
+        self.assertThat(
+            partial(open_store, lambda: now, connect, config),
+            Raises(
+                AfterPreprocessing(
+                    lambda exc_info: exc_info[1],
+                    IsInstance(StoreOpenError),
+                ),
+            ),
+        )
+
+    @skipIf(
+        platform.isWindows(), "Hard to prevent database from being opened on Windows"
+    )
+    @given(tahoe_configs(), datetimes())
+    def test_unopenable_store(self, get_config, now):
+        """
+        If the underlying database file cannot be opened then ``open_store``
+        raises ``StoreOpenError``.
+        """
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+
+        config = get_config(nodedir.path, "tub.port")
+
+        # Create the underlying database file.
+        open_store(lambda: now, connect, config)
+
+        # Prevent further access to it.
+        nodedir.child("private").chmod(0o000)
+
+        self.assertThat(
+            lambda: open_store(lambda: now, connect, config),
+            raises(StoreOpenError),
+        )
 
 
 class GetRRefTests(TestCase):
@@ -364,11 +418,10 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
         """
-        tempdir = self.useFixture(TempDir())
-        node_config = get_config(
-            tempdir.join("node"),
-            "tub.port",
-        )
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+
+        node_config = get_config(nodedir.path, "tub.port")
 
         storage_client = storage_server_plugin.get_storage_client(
             node_config,
@@ -387,9 +440,11 @@ class ClientPluginTests(TestCase):
         ``get_storage_client`` raises an exception when called with an
         announcement and local configuration which specify different issuers.
         """
-        tempdir = self.useFixture(TempDir())
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+
         node_config = config_from_string(
-            tempdir.join("node"),
+            nodedir.path,
             "tub.port",
             config_text.encode("utf-8"),
         )
@@ -431,11 +486,9 @@ class ClientPluginTests(TestCase):
         provider then the storage methods of the client raise exceptions that
         clearly indicate this.
         """
-        tempdir = self.useFixture(TempDir())
-        node_config = get_config(
-            tempdir.join("node"),
-            "tub.port",
-        )
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        node_config = get_config(nodedir.path, "tub.port")
 
         storage_client = storage_server_plugin.get_storage_client(
             node_config,
@@ -481,13 +534,12 @@ class ClientPluginTests(TestCase):
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
         """
-        tempdir = self.useFixture(TempDir())
-        node_config = get_config(
-            tempdir.join("node"),
-            "tub.port",
-        )
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        node_config = get_config(nodedir.path, "tub.port")
 
-        store = VoucherStore.from_node_config(node_config, lambda: now)
+        # Populate the database with unspent tokens.
+        store = open_store(lambda: now, connect, node_config)
 
         controller = PaymentController(
             store,
@@ -504,6 +556,7 @@ class ClientPluginTests(TestCase):
             succeeded(Always()),
         )
 
+        # Try to spend a pass via the storage client plugin.
         storage_client = storage_server_plugin.get_storage_client(
             node_config,
             announcement,
@@ -555,9 +608,9 @@ class ClientResourceTests(TestCase):
         """
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join("node")
-        config = get_config(nodedir, "tub.port")
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        config = get_config(nodedir.path, "tub.port")
         self.assertThat(
             storage_server_plugin.get_client_resource(
                 config,
@@ -630,11 +683,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         :param rootcap: ``True`` to write some bytes to the node's ``rootcap``
             file, ``False`` otherwise.
         """
-        tempdir = self.useFixture(TempDir())
-        nodedir = tempdir.join("node")
-        privatedir = tempdir.join("node", "private")
-        makedirs(privatedir)
-        config = get_config(nodedir, "tub.port")
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        config = get_config(nodedir.path, "tub.port")
 
         # In Tahoe-LAFS 1.17 write_private_config is broken.  It mixes bytes
         # and unicode in an os.path.join() call that always fails with a

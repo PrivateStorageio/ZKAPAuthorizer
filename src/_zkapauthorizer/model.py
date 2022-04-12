@@ -17,31 +17,30 @@ This module implements models (in the MVC sense) for the client side of
 the storage plugin.
 """
 
+from __future__ import annotations
+
+import os
 from datetime import datetime
 from functools import wraps
 from json import loads
 from sqlite3 import Connection, Cursor, OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, Optional, Type, TypeVar
+from typing import Awaitable, Callable, TypeVar
 
 import attr
-from allmydata.node import _Config
 from aniso8601 import parse_datetime
 from attr import define, frozen
-from compose import compose
+from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from ._types import Connect, GetTime
 from .replicate import Change, EventStream, with_replication
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
-from .storage_common import (
-    get_configured_pass_value,
-    pass_value_attribute,
-    required_passes,
-)
+from .storage_common import pass_value_attribute, required_passes
 from .validators import greater_than, has_length, is_base64_encoded
 
 _T = TypeVar("_T")
@@ -89,42 +88,40 @@ class NotEnoughTokens(Exception):
     """
 
 
-# The version number in _zkapauthorizer.api.NAME doesn't match the version
-# here because the database is persistent state and we need to be sure to load
-# the older version even if we signal an API compatibility break by bumping
-# the version number elsewhere.  Consider this version number part of a
-# different scheme where we're versioning our ability to open the database at
-# all.  The schema inside the database is versioned by yet another mechanism.
-CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
-
-_ConnectParamSpec = [str, int, bool, str, bool]
-_ConnectFunction = Callable[_ConnectParamSpec, Connection]
-
-
-def open_and_initialize(path: FilePath, connect: _ConnectFunction) -> Connection:
+def open_and_initialize(connect: Connect) -> Connection:
     """
     Open a SQLite3 database for use as a voucher store.
 
     Create the database and populate it with a schema, if it does not already
     exist.
 
-    :param path: The location of the SQLite3 database file.
+    :return: A SQLite3 connection object in which any necessary application
+        schema has been created.
+    """
+    conn = open_database(connect)
+    initialize_database(conn)
+    return conn
 
-    :return: A SQLite3 connection object for the database at the given path.
+
+def open_database(connect: Connect) -> Connection:
+    """
+    Create and return a database connection using the required connect
+    parameters.
     """
     try:
-        path.parent().makedirs(ignoreExistingDirectory=True)
-    except OSError as e:
-        raise StoreOpenError(e)
-
-    try:
-        conn = connect(
-            path.path,
-            isolation_level="IMMEDIATE",
-        )
+        return connect(isolation_level="IMMEDIATE")
     except OperationalError as e:
         raise StoreOpenError(e)
 
+
+def initialize_database(conn: Connection) -> None:
+    """
+    Make any persistent and temporary schema changes required to make the
+    given database compatible with this version of the software.
+
+    If the database has an older schema version, it will be upgraded.
+    Temporary tables required by application code will also be created.
+    """
     cursor = conn.cursor()
 
     with conn:
@@ -224,11 +221,38 @@ def with_cursor(f):
     return with_cursor
 
 
-def memory_connect(path, *a, **kw):
+def path_to_memory_uri(path: FilePath) -> str:
+    """
+    Construct a SQLite3 database URI for an in-memory connection to a database
+    identified by the given path.
+
+    Since in-memory databases do not exist on disk the path does not actually
+    specify where on the filesystem the database exists.  Instead, it serves
+    as a key so that the same in-memory database can be opened multiple times
+    by supplying the same path (and similarly, different paths will result in
+    connections to different in-memory databases).
+
+    :return: A string suitable to be passed as the first argument to
+        ``sqlite3.connect`` along with the `uri=True` keyword argument.
+    """
+    return (
+        DecodedURL()
+        .replace(
+            scheme="file",
+            # segmentsFrom(FilePath("/")) is tempting but on Windows "/" is
+            # not necessarily the root for every path.
+            path=path.path.split(os.sep),
+        )
+        .add("mode", "memory")
+        .to_text()
+    )
+
+
+def memory_connect(path: str, *a, **kw) -> Connection:
     """
     Always connect to an in-memory SQLite3 database.
     """
-    return _connect(":memory:", *a, **kw)
+    return _connect(path_to_memory_uri(FilePath(path)), *a, uri=True, **kw)
 
 
 # The largest integer SQLite3 can represent in an integer column.  Larger than
@@ -245,50 +269,23 @@ class VoucherStore(object):
         ``datetime`` instance.
     """
 
-    _log = Logger()
-
     pass_value = pass_value_attribute()
-
-    database_path = attr.ib(validator=attr.validators.instance_of(FilePath))
     now = attr.ib()
-
     _connection = attr.ib()
 
+    _log = Logger()
+
     @classmethod
-    def from_node_config(
-        cls: Type[_T],
-        node_config: _Config,
-        now: Callable[[], datetime],
-        connect: Optional[_ConnectFunction] = None,
-    ) -> _T:
-        """
-        Create or open the ``VoucherStore`` for a given node.
-
-        :param node_config: The Tahoe-LAFS configuration object for the node
-            for which we want to open a store.
-
-        :param now: See ``VoucherStore.now``.
-
-        :param connect: An alternate database connection function.  This is
-            primarily for the purposes of the test suite.
-        """
-        if connect is None:
-            connect = _connect
-
-        db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-        conn = open_and_initialize(
-            db_path,
-            # Make sure we always have a replication-enabled connection even
-            # if we're not doing replication yet because we might want to turn
-            # it on later.
-            compose(with_replication, connect),
-        )
-        return cls(
-            get_configured_pass_value(node_config),
-            db_path,
-            now,
-            conn,
-        )
+    def from_connection(
+        cls, pass_value: int, now: GetTime, conn: Connection
+    ) -> VoucherStore:
+        # Make sure we always have a replication-enabled connection even if
+        # we're not doing replication yet because we might want to turn it on
+        # later.  Also, if we're doing it, we need it to get involved in
+        # database initialization which happens next.
+        replicating_conn = with_replication(conn)
+        initialize_database(replicating_conn)
+        return cls(pass_value=pass_value, now=now, connection=replicating_conn)
 
     def snapshot(self) -> bytes:
         """

@@ -40,6 +40,14 @@ _T = TypeVar("_T")
 # directory, if replication is configured.
 REPLICA_RWCAP_BASENAME = NAME + ".replica-rwcap"
 
+# The version number in NAME doesn't match the version here because the
+# database is persistent state and we need to be sure to load the older
+# version even if we signal an API compatibility break by bumping the version
+# number elsewhere.  Consider this version number part of a different scheme
+# where we're versioning our ability to open the database at all.  The schema
+# inside the database is versioned by yet another mechanism.
+CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
+
 
 @define
 class EmptyConfig:
