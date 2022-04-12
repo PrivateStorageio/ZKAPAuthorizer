@@ -824,8 +824,7 @@ class VoucherStore(object):
         """
         cursor.execute(
             """
-            DELETE [sequence-number], [statement]
-            FROM [event-stream]
+            DELETE FROM [event-stream]
             WHERE [sequence-number] <= (?)
             """,
             (sequence_number,),

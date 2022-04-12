@@ -17,6 +17,7 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
+import random
 from datetime import datetime, timedelta
 from functools import partial
 from io import BytesIO
@@ -882,6 +883,46 @@ class EventStreamTests(TestCase):
         self.assertThat(
             events.highest_sequence(),
             Equals(len(sql_statements)),
+        )
+
+    @given(
+        tahoe_configs(),
+        lists(
+            tuples(
+                sampled_from([inserts, deletes, updates]),
+                sql_identifiers(),
+                tables(),
+            ).flatmap(
+                lambda x: x[0](x[1], x[2]),
+            ),
+            min_size=2,
+        )
+    )
+    def test_event_stream_prune(self, get_config, changes):
+        """
+        We can prune the event-stream
+        """
+        tempdir = self.useFixture(TempDir())
+        store = VoucherStore.from_node_config(
+            get_config(tempdir.join("node"), "tub.port"),
+            lambda: now,
+            memory_connect,
+        )
+
+        for change in changes:
+            store.add_event(change.bound_statement(store._connection.cursor()))
+
+        pre_events = store.get_events()
+
+        # prune it somewhere
+        where = random.randrange(1, len(changes))
+        store.prune_events_to(where)
+
+        post_events = store.get_events()
+
+        self.assertThat(
+            len(post_events.changes) + where,
+            Equals(len(pre_events.changes))
         )
 
 
