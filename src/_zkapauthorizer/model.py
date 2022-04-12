@@ -176,7 +176,6 @@ def initialize_database(conn: Connection) -> None:
         )
 
     cursor.close()
-    return conn
 
 
 def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
@@ -241,18 +240,19 @@ def path_to_memory_uri(path: FilePath) -> str:
             scheme="file",
             # segmentsFrom(FilePath("/")) is tempting but on Windows "/" is
             # not necessarily the root for every path.
-            path=path.path.split(os.sep),
+            path=path.asTextMode().path.split(os.sep),
         )
         .add("mode", "memory")
         .to_text()
     )
 
 
-def memory_connect(path: str, *a, **kw) -> Connection:
+def memory_connect(path: str, *a, uri=None, **kw) -> Connection:
     """
     Always connect to an in-memory SQLite3 database.
     """
-    return _connect(path_to_memory_uri(FilePath(path)), *a, uri=True, **kw)
+    kw["uri"] = True
+    return _connect(path_to_memory_uri(FilePath(path)), *a, **kw)
 
 
 # The largest integer SQLite3 can represent in an integer column.  Larger than
@@ -269,8 +269,8 @@ class VoucherStore(object):
         ``datetime`` instance.
     """
 
-    pass_value = pass_value_attribute()
-    now = attr.ib()
+    pass_value: int = pass_value_attribute()
+    now: GetTime = attr.ib()
     _connection = attr.ib()
 
     _log = Logger()
