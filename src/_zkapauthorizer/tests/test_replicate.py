@@ -9,8 +9,9 @@ from fixtures import TempDir
 from testtools import TestCase
 from testtools.matchers import Equals, raises
 
+from ..model import memory_connect
 from ..recover import recover
-from ..replicate import with_replication
+from ..replicate import replication_service, with_replication
 from .matchers import equals_database
 
 
@@ -186,3 +187,19 @@ class ReplicationConnectionTests(TestCase):
             conn_a,
             equals_database(conn_b),
         )
+
+
+class ReplicationServiceTests(TestCase):
+    """
+    Tests for ``_ReplicationService``.
+    """
+
+    def test_enable_replication_on_connection(self):
+        """
+        When the service starts it enables replication on its database connection.
+        """
+        conn = memory_connect("/foo/bar")
+        replicating_conn = with_replication(conn)
+        service = replication_service(replicating_conn)
+        service.startService()
+        self.assertThat(replicating_conn._replicating, Equals(True))

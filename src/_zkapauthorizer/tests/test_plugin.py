@@ -66,6 +66,7 @@ from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
+from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource
 
 from twisted.plugins.zkapauthorizer import storage_server_plugin
@@ -84,7 +85,7 @@ from ..tahoe import MemoryGrid
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
-from .matchers import Provides, raises
+from .matchers import Provides, matches_response, raises
 from .strategies import (
     announcements,
     client_dummyredeemer_configurations,
@@ -483,16 +484,18 @@ class ServiceTests(TestCase):
         # abstraction, so...
         store = plugin._get_store(node_config)
 
-        def service_matches(svc):
-            return (
-                isinstance(svc, _ReplicationService)
-                and svc._connection is store._connection
-            )
-
         self.assertThat(
-            [svc for svc in plugin._service if service_matches(svc)],
+            [svc for svc in plugin._service if service_matches(store, svc)],
             HasLength(1 if replicating else 0),
         )
+
+
+def service_matches(store, svc) -> bool:
+    """
+    :return: ``True`` if ``svc`` is a replication service for the given
+        store's database connection, ``False`` otherwise.
+    """
+    return isinstance(svc, _ReplicationService) and svc._connection is store._connection
 
 
 def has_metric(name_matcher, value_matcher):
@@ -747,10 +750,13 @@ class ClientResourceTests(TestCase):
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
 
-    def setUp(self):
-        super().setUp()
+    def setup_example(self):
         self.reactor = MemoryReactorClock()
-        self.plugin = ZKAPAuthorizer(NAME, self.reactor)
+        self.grid = MemoryGrid()
+        self.plugin = ZKAPAuthorizer(NAME, self.reactor, self.get_tahoe_client)
+
+    def get_tahoe_client(self, reactor, node_config):
+        return self.grid.client(FilePath(node_config._basedir))
 
     @given(tahoe_configs())
     def test_interface(self, get_config):
@@ -765,6 +771,42 @@ class ClientResourceTests(TestCase):
                 config,
             ),
             Provides([IResource]),
+        )
+
+    @given(tahoe_configs())
+    def test_replication_service_created(self, get_config):
+        """
+        If replication is enabled using the ``IResource`` returned by
+        ``get_client_resource`` then the plugin has a ``_ReplicationService``
+        added to it.
+        """
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        config = get_config(nodedir.path, "tub.port")
+        token = "hello world"
+        with open(config.get_private_path("api_auth_token"), "w") as f:
+            f.write(token)
+
+        root = self.plugin.get_client_resource(config)
+        from treq.testing import RequestTraversalAgent
+
+        agent = RequestTraversalAgent(root)
+        self.assertThat(
+            agent.request(
+                b"POST",
+                b"http://127.0.0.1/replicate",
+                headers=Headers({"authorization": [f"tahoe-lafs {token}"]}),
+            ),
+            succeeded(matches_response(code_matcher=Equals(201))),
+        )
+
+        self.assertThat(
+            [
+                svc
+                for svc in self.plugin._service
+                if service_matches(self.plugin._get_store(config), svc)
+            ],
+            HasLength(1),
         )
 
 

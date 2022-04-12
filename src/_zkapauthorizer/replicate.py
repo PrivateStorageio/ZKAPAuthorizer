@@ -145,11 +145,17 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
+async def setup_tahoe_lafs_replication(
+    client: ITahoeClient,
+    start_replicating: Callable[[], None],
+) -> str:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage
     servers using that Tahoe-LAFS node.
+
+    :param start_replicating: A callable which will make actual replication
+        work start.
     """
     # Find the configuration path for this node's replica.
     config_path = client.get_private_path(REPLICA_RWCAP_BASENAME)
@@ -174,6 +180,8 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
         # On success and failure, release the lock since we're done with the
         # file for now.
         config_lock.unlock()
+
+    start_replicating()
 
     # Attenuate it to a read-cap
     rocap = attenuate_writecap(rw_cap)
@@ -216,6 +224,11 @@ class _ReplicationCapableConnection:
     _conn: Connection
     _replicating: bool
 
+    def enable_replication(self) -> None:
+        """
+        Turn on replication support.
+        """
+        self._replicating = True
 
     def snapshot(self) -> bytes:
         """
@@ -387,6 +400,7 @@ class _ReplicationService(Service):
         # service should only be created and started if replication has been
         # turned on - so, make sure replication is turned on at the database
         # layer.
+        self._connection.enable_replication()
         self._replicating = succeed(None)
 
     def stopService(self) -> Deferred:

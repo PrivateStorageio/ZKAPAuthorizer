@@ -483,7 +483,7 @@ class _MemoryTahoe:
         return FilePath(mkdtemp(suffix=".memory-tahoe"))
 
     def __attrs_post_init__(self):
-        self._nodedir.child("private").makedirs()
+        self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)
 
     def get_private_path(self, name: str) -> FilePath:
         """

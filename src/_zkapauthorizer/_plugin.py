@@ -65,7 +65,7 @@ from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
-from .tahoe import get_tahoe_client
+from .tahoe import ITahoeClient, get_tahoe_client
 
 _log = Logger()
 
@@ -114,6 +114,10 @@ class ZKAPAuthorizer(object):
 
     name: str
     reactor: Any
+    _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field(
+        default=get_tahoe_client
+    )
+
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
     _service: IServiceCollection = field()
 
@@ -145,9 +149,16 @@ class ZKAPAuthorizer(object):
         except KeyError:
             s = open_store(datetime.now, _connect, node_config)
             if is_replication_setup(node_config):
-                replication_service(s._connection).setServiceParent(self._service)
+                self._add_replication_service(s)
             self._stores[key] = s
         return s
+
+    def _add_replication_service(self, store: VoucherStore) -> None:
+        """
+        Create a replication service for the given database and arrange for it to
+        start and stop when the reactor starts and stops.
+        """
+        replication_service(store._connection).setServiceParent(self._service)
 
     def _get_redeemer(self, node_config, announcement):
         """
@@ -236,14 +247,17 @@ class ZKAPAuthorizer(object):
         def get_downloader(cap):
             return make_fail_downloader(work_in_progress_error)
 
+        store = self._get_store(node_config)
+
         setup_replication = partial(
             setup_tahoe_lafs_replication,
-            get_tahoe_client(self.reactor, node_config),
+            self._get_tahoe_client(self.reactor, node_config),
+            partial(self._add_replication_service, store),
         )
 
         return resource_from_configuration(
             node_config,
-            store=self._get_store(node_config),
+            store=store,
             get_downloader=get_downloader,
             setup_replication=setup_replication,
             redeemer=self._get_redeemer(node_config, None),
