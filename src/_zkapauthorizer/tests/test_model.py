@@ -78,7 +78,7 @@ from ..recover import (
     recover,
 )
 from ..replicate import Change, EventStream
-from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore, TempDir
 from .matchers import raises
 from .strategies import (
     deletes,
@@ -903,12 +903,7 @@ class EventStreamTests(TestCase):
         """
         We can prune the event-stream
         """
-        tempdir = self.useFixture(TempDir())
-        store = VoucherStore.from_node_config(
-            get_config(tempdir.join("node"), "tub.port"),
-            lambda: now,
-            memory_connect,
-        )
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
 
         for change in changes:
             store.add_event(change.bound_statement(store._connection.cursor()))

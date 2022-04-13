@@ -72,6 +72,7 @@ from twisted.internet.defer import Deferred, DeferredSemaphore
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
+from .sql import statement_mutates
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, bind_arguments, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
