@@ -21,7 +21,7 @@ import random
 from datetime import datetime
 from functools import partial
 from sqlite3 import connect as _connect
-from typing import Callable
+from typing import Any, Callable
 from weakref import WeakValueDictionary
 
 from allmydata.client import _Client
@@ -35,7 +35,7 @@ from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
-from twisted.application.service import IService
+from twisted.application.service import IService, IServiceCollection, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
@@ -56,7 +56,11 @@ from .lease_maintenance import (
 from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
-from .replicate import setup_tahoe_lafs_replication
+from .replicate import (
+    is_replication_setup,
+    replication_service,
+    setup_tahoe_lafs_replication,
+)
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -107,7 +111,26 @@ class ZKAPAuthorizer(object):
     """
 
     name: str
+    reactor: Any
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
+    _service: IServiceCollection = field()
+
+    @_service.default
+    def _service_default(self):
+        svc = MultiService()
+        # There doesn't seem to be an API in Twisted to hook a service up to
+        # the reactor.  There are pieces of it but they're spread out and
+        # mixed with other stuff.  So, just do it ourselves.  See
+        # twisted.application.app.startApplication for some of it, if you
+        # want.
+        #
+        # We intentionally don't hook up privilegedStartService because
+        # there's no expectation of a requirement for privileged operations
+        # and because we don't expect to ever run with any privileges and
+        # because we never expect to try to shed any privileges.
+        self.reactor.callWhenRunning(svc.startService)
+        self.reactor.addSystemEventTrigger("before", "shutdown", svc.stopService)
+        return svc
 
     def _get_store(self, node_config):
         """
@@ -119,22 +142,20 @@ class ZKAPAuthorizer(object):
             s = self._stores[key]
         except KeyError:
             s = open_store(datetime.now, _connect, node_config)
+            if is_replication_setup(node_config):
+                replication_service(s._connection).setServiceParent(self._service)
             self._stores[key] = s
         return s
 
-    def _get_redeemer(self, node_config, announcement, reactor):
+    def _get_redeemer(self, node_config, announcement):
         """
         :return IRedeemer: The voucher redeemer indicated by the given
             configuration.  A new instance is returned on every call because
             the redeemer interface is stateless.
         """
-        return get_redeemer(self.name, node_config, announcement, reactor)
+        return get_redeemer(self.name, node_config, announcement, self.reactor)
 
-    def get_storage_server(
-        self, configuration, get_anonymous_storage_server, reactor=None
-    ):
-        if reactor is None:
-            from twisted.internet import reactor
+    def get_storage_server(self, configuration, get_anonymous_storage_server):
         registry = CollectorRegistry()
         kwargs = configuration.copy()
 
@@ -144,7 +165,7 @@ class ZKAPAuthorizer(object):
         if metrics_interval is not None and metrics_path is not None:
             FilePath(metrics_path).parent().makedirs(ignoreExistingDirectory=True)
             t = task.LoopingCall(make_safe_writer(metrics_path, registry))
-            t.clock = reactor
+            t.clock = self.reactor
             t.start(int(metrics_interval))
 
         root_url = kwargs.pop("ristretto-issuer-root-url")
@@ -162,7 +183,7 @@ class ZKAPAuthorizer(object):
         anonymous_storage_server = get_anonymous_storage_server()
         spender = get_spender(
             config=kwargs,
-            reactor=reactor,
+            reactor=self.reactor,
             registry=registry,
         )
         storage_server = ZKAPAuthorizerStorageServer(
@@ -187,9 +208,7 @@ class ZKAPAuthorizer(object):
         managed by this plugin in the node directory that goes along with
         ``node_config``.
         """
-        from twisted.internet import reactor
-
-        redeemer = self._get_redeemer(node_config, announcement, reactor)
+        redeemer = self._get_redeemer(node_config, announcement)
         store = self._get_store(node_config)
         controller = SpendingController.for_store(
             tokens_to_passes=redeemer.tokens_to_passes,
@@ -201,16 +220,13 @@ class ZKAPAuthorizer(object):
             controller.get,
         )
 
-    def get_client_resource(self, node_config, reactor=None):
+    def get_client_resource(self, node_config):
         """
         Get an ``IZKAPRoot`` for the given node configuration.
 
         :param allmydata.node._Config node_config: The configuration object
             for the relevant node.
         """
-        if reactor is None:
-            from twisted.internet import reactor
-
         work_in_progress_error = Exception(
             "The recovery system implementation is a work in progress.",
         )
@@ -220,7 +236,7 @@ class ZKAPAuthorizer(object):
 
         setup_replication = partial(
             setup_tahoe_lafs_replication,
-            get_tahoe_client(reactor, node_config),
+            get_tahoe_client(self.reactor, node_config),
         )
 
         return resource_from_configuration(
@@ -228,8 +244,8 @@ class ZKAPAuthorizer(object):
             store=self._get_store(node_config),
             get_downloader=get_downloader,
             setup_replication=setup_replication,
-            redeemer=self._get_redeemer(node_config, None, reactor),
-            clock=reactor,
+            redeemer=self._get_redeemer(node_config, None),
+            clock=self.reactor,
         )
 
 
@@ -395,4 +411,11 @@ def load_signing_key(path):
 # Create the global plugin object, re-exported elsewhere so Twisted can
 # discover it.  We'll also use it here since it carries some state that we
 # sometimes need to dig up and can't easily get otherwise.
-storage_server_plugin = ZKAPAuthorizer(name=NAME)
+def _create_plugin():
+    # Do not leak the global reactor into the module scope!
+    from twisted.internet import reactor
+
+    return ZKAPAuthorizer(name=NAME, reactor=reactor)
+
+
+storage_server_plugin = _create_plugin()

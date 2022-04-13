@@ -62,12 +62,16 @@ from sqlite3 import Connection, Cursor
 from typing import BinaryIO, Callable, Iterator, Optional
 
 import cbor2
-from attrs import define, frozen
+from attrs import define, field, frozen
 from compose import compose
+from twisted.application.service import IService, Service
+from twisted.internet.defer import CancelledError, Deferred, succeed
+from twisted.python.failure import Failure
+from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
-from .config import REPLICA_RWCAP_BASENAME
-from .tahoe import Tahoe, attenuate_writecap
+from .config import REPLICA_RWCAP_BASENAME, Config
+from .tahoe import ITahoeClient, attenuate_writecap
 
 
 @frozen
@@ -141,7 +145,7 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: Tahoe) -> str:
+async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage
@@ -176,6 +180,15 @@ async def setup_tahoe_lafs_replication(client: Tahoe) -> str:
 
     # Return the read-cap
     return rocap
+
+
+def is_replication_setup(config: Config) -> bool:
+    """
+    :return: ``True`` if and only if replication has previously been setup for
+        the Tahoe-LAFS node associated with the given configuration.
+    """
+    # Find the configuration path for this node's replica.
+    return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
 
 def with_replication(connection: Connection):
@@ -308,7 +321,7 @@ snapshot: Callable[[Connection], bytes] = compose(
 
 
 async def tahoe_lafs_uploader(
-    client: Tahoe,
+    client: ITahoeClient,
     recovery_cap: str,
     get_snapshot_data: Callable[[], BinaryIO],
     entry_name: str,
@@ -322,7 +335,7 @@ async def tahoe_lafs_uploader(
 
 
 def get_tahoe_lafs_direntry_uploader(
-    client: Tahoe,
+    client: ITahoeClient,
     directory_mutable_cap: str,
     entry_name: str = "snapshot.sql",
 ):
@@ -343,3 +356,57 @@ def get_tahoe_lafs_direntry_uploader(
         )
 
     return upload
+
+
+@define
+class _ReplicationService(Service):
+    """
+    Perform all activity related to maintaining a remote replica of the local
+    ZKAPAuthorizer database.
+
+    :ivar _connection: A connection to the database being replicated.
+
+    :ivar _replicating: The long-running replication operation.  This is never
+        expected to complete but it will be cancelled when the service stops.
+    """
+
+    name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
+
+    _connection: _ReplicationCapableConnection
+    _replicating: Optional[Deferred] = field(init=False, default=None)
+
+    def startService(self) -> None:
+        super().startService()
+        # Tell the store to initiate replication when appropriate.  The
+        # service should only be created and started if replication has been
+        # turned on - so, make sure replication is turned on at the database
+        # layer.
+        self._replicating = succeed(None)
+
+    def stopService(self) -> Deferred:
+        """
+        Cancel the replication operation and then wait for it to complete.
+        """
+        super().stopService()
+
+        replicating = self._replicating
+        if replicating is None:
+            return succeed(None)
+
+        self._replicating = None
+
+        def catch_cancelled(err: Failure) -> None:
+            err.trap(CancelledError)
+            return None
+
+        replicating.addErrback(catch_cancelled)
+        replicating.cancel()
+        return replicating
+
+
+def replication_service(connection) -> IService:
+    """
+    Return a service which implements the replication process documented in
+    the ``backup-recovery`` design document.
+    """
+    return _ReplicationService(connection=connection)
