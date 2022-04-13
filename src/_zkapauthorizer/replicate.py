@@ -65,10 +65,11 @@ from sqlite3 import Cursor as _SQLite3Cursor
 from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, Optional
 
 import cbor2
-from attrs import Factory, define, frozen
+from attrs import Factory, define, field, frozen
 from compose import compose
-from twisted.application.service import IService
-from twisted.internet.defer import Deferred, DeferredSemaphore
+from twisted.application.service import IService, Service
+from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
+from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
@@ -445,31 +446,58 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-class ReplicationService:
+@define
+class _ReplicationService(Service):
     """
-    This service uploads event-streams
+    Perform all activity related to maintaining a remote replica of the local
+    ZKAPAuthorizer database.
+
+    :ivar _connection: A connection to the database being replicated.
+
+    :ivar _replicating: The long-running replication operation.  This is never
+        expected to complete but it will be cancelled when the service stops.
     """
+
+    name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
+
+    _connection: _ReplicationCapableConnection = field()
+    _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _store: None  #: VoucherStore
     _uploader: Callable[[str, BinaryIO], None]
-    _connection: _ReplicationCapableConnection
     _accumulated_size: int = 0
     _trigger = DeferredSemaphore(1)
 
-    def startService(self):
-        # XXX this will be a bigger number than we had before .. but maybe fine
+    def startService(self) -> None:
+        super().startService()
+
+        # restore our state .. this number will be bigger than what we
+        # would have recorded through "normal" means which only counts
+        # the statement-sizes .. but maybe fine?
         self._accumulated_size = len(self._store.get_events().to_bytes())
-        # XXX
-        # self._accumulated_size = sum(len(change.statement) for change in self._store.get_events().changes)
+
+        # should we do an upload immediately? or hold the lock?
         if not self.big_enough():
             self._trigger.acquire()
-        d = Deferred.fromCoroutine(self.wait_for_uploads())
-        d.addErrback(print)
 
+        # Tell the store to initiate replication when appropriate.  The
+        # service should only be created and started if replication has been
+        # turned on - so, make sure replication is turned on at the database
+        # layer.
+        self._replicating = Deferred.fromCoroutine(self.wait_for_uploads())
+        self._replicating.addErrback(self._replication_fail)
         self._connection.add_mutation_observer(self.observed_event)
-        return
+
+    def _replication_fail(self, fail):
+        """
+        Replicating has failed for some reason
+        """
+        print(f"Replication failure: {fail}")
 
     def queue_upload(self):
+        """
+        Ask for an upload to occur
+        """
         if self._trigger.tokens:
             self._trigger.release()
         else:
@@ -478,7 +506,7 @@ class ReplicationService:
 
     async def wait_for_uploads(self):
         """
-        An infinite async loop that proecsses uploads
+        An infinite async loop that processes uploads
         """
         while True:
             await self._trigger.acquire()
@@ -500,6 +528,26 @@ class ReplicationService:
         )
         # prune the database
         self._store.prune_events_to(events.higest_sequence())
+
+    def stopService(self) -> Deferred:
+        """
+        Cancel the replication operation and then wait for it to complete.
+        """
+        super().stopService()
+
+        replicating = self._replicating
+        if replicating is None:
+            return succeed(None)
+
+        self._replicating = None
+
+        def catch_cancelled(err: Failure) -> None:
+            err.trap(CancelledError)
+            return None
+
+        replicating.addErrback(catch_cancelled)
+        replicating.cancel()
+        return replicating
 
     def observed_event(self, cursor, important, statement, args):
         """
@@ -525,4 +573,4 @@ def replication_service(connection) -> IService:
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document.
     """
-    return ReplicationService(connection=connection)
+    return _ReplicationService(connection=connection)
