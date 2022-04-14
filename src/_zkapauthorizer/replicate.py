@@ -136,6 +136,12 @@ class EventStream:
         )
 
 
+class AlreadySettingUp(Exception):
+    """
+    Another setup attempt is currently in progress.
+    """
+
+
 class ReplicationAlreadySetup(Exception):
     """
     An attempt was made to setup of replication but it is already set up.
@@ -161,7 +167,9 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
     config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")
-    config_lock.lock()
+
+    if not config_lock.lock():
+        raise AlreadySettingUp()
     try:
 
         # Check to see if there is already configuration.
