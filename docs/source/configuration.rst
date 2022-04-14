@@ -29,6 +29,8 @@ The value of the ``issuer-public-key`` item is included as-is as the public key 
 A ``redeemer`` value of ``ristretto`` causes the client to speak Ristretto-flavored PrivacyPass to an issuer server.
 In this case the ``ristretto-issuer-root-url`` item is also required.
 The client uses this URL to determine the server to which to send redemption requests.
+Additionally,
+the client will only interact with storage servers which announce the same issuer URL.
 
 For example::
 
@@ -36,8 +38,6 @@ For example::
   redeemer = ristretto
   ristretto-issuer-root-url = https://issuer.example.invalid/
 
-Note that ``ristretto-issuer-root-url`` must agree with whichever storage servers the client will be configured to interact with.
-If the values are not the same, the client will decline to use the storage servers.
 
 The client can also be configured with the value of a single pass::
 
