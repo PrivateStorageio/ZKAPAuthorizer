@@ -56,6 +56,7 @@ from testtools.matchers import (
     MatchesAll,
     MatchesListwise,
     MatchesStructure,
+    Not,
     Raises,
 )
 from testtools.twistedsupport import succeeded
@@ -806,6 +807,21 @@ class LeaseMaintenanceServiceTests(TestCase):
 
         return create_client_from_config(config)
 
+    @given(minimal_tahoe_configs())
+    def test_plugin_not_enabled(self, minimal_config):
+        """
+        If ZKAPAuthorizer storage client plugin isn't enabled then no lease
+        maintenance service is created.
+        """
+
+        def get_config(basedir, portnumfile):
+            return config_from_string(
+                basedir, portnumfile, minimal_config.encode("utf-8")
+            )
+
+        d = self._create(get_config, servers_yaml=None, rootcap=False)
+        self.assertThat(d, succeeded(Not(has_lease_maintenance_service())))
+
     @given(tahoe_configs())
     def test_get_root_nodes_rootcap_present(self, get_config):
         """
@@ -909,8 +925,8 @@ def has_lease_maintenance_service() -> Matcher:
     maintenance service.
     """
     return AfterPreprocessing(
-        lambda client: client.getServiceNamed(SERVICE_NAME),
-        Always(),
+        lambda client: [service.name for service in client],
+        Contains(SERVICE_NAME),
     )
 
 
