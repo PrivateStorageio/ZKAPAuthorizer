@@ -73,6 +73,7 @@ from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
+from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, bind_arguments, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
@@ -193,6 +194,15 @@ def is_replication_setup(config: Config) -> bool:
     """
     # Find the configuration path for this node's replica.
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
+
+
+def get_replica_rwcap(config: Config) -> CapStr:
+    """
+    :return: a mutable directory capability for our replica.
+    :raises: Exception if replication is not setup
+    """
+    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))
+    return rwcap_file.getContent()
 
 
 @define
@@ -461,12 +471,12 @@ class _ReplicationService(Service):
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
 
     _connection: _ReplicationCapableConnection = field()
+    _uploader: Callable[[str, BinaryIO], None] = field()
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
-    _store: None  #: VoucherStore
-    _uploader: Callable[[str, BinaryIO], None]
+    _store = field(default=None)  #: VoucherStore
     _accumulated_size: int = 0
-    _trigger = DeferredSemaphore(1)
+    _trigger: DeferredSemaphore = DeferredSemaphore(1)
 
     def startService(self) -> None:
         super().startService()
@@ -568,9 +578,9 @@ class _ReplicationService(Service):
         return self._accumulated_size >= 570000
 
 
-def replication_service(connection) -> IService:
+def replication_service(connection, store, uploader) -> IService:
     """
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document.
     """
-    return _ReplicationService(connection=connection)
+    return _ReplicationService(connection=connection, store=store, uploader=uploader)

@@ -208,3 +208,6 @@ class ReplicationServiceTests(TestCase):
         service = replication_service(replicating_conn)
         service.startService()
         self.assertThat(replicating_conn._replicating, Equals(True))
+
+    def test_replicate(self):
+        """ """

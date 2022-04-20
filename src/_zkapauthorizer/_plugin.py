@@ -55,8 +55,10 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore
 from .model import open_database as _open_database
-from .recover import make_fail_downloader
+from .recover import Uploader, make_fail_downloader
 from .replicate import (
+    get_replica_rwcap,
+    get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
     replication_service,
     setup_tahoe_lafs_replication,
@@ -150,16 +152,19 @@ class ZKAPAuthorizer(object):
         except KeyError:
             s = open_store(datetime.now, _connect, node_config)
             if is_replication_setup(node_config):
-                self._add_replication_service(s)
+                client = get_tahoe_client(self.reactor, node_config)
+                mutable = get_replica_rwcap(node_config)
+                uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
+                self._add_replication_service(s, uploader)
             self._stores[key] = s
         return s
 
-    def _add_replication_service(self, store: VoucherStore) -> None:
+    def _add_replication_service(self, s: VoucherStore, uploader: Uploader) -> None:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        replication_service(store._connection).setServiceParent(self._service)
+        replication_service(s._connection, s, uploader).setServiceParent(self._service)
 
     def _get_redeemer(self, node_config, announcement):
         """
