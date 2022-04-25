@@ -289,14 +289,15 @@ def _attach_zkapauthorizer_services(self, announceable_storage_servers):
     store = storage_server_plugin._get_store(self.config)
 
     # Hook up our services.
-    for name, create in _SERVICES:
-        _maybe_attach_service(
-            reactor,
-            self,
-            store,
-            name,
-            create,
-        )
+    for name, predicate, create in _SERVICES:
+        if predicate(self.config):
+            _maybe_attach_service(
+                reactor,
+                self,
+                store,
+                name,
+                create,
+            )
 
     return result
 
@@ -371,8 +372,20 @@ def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IS
     )
 
 
+def _is_client_plugin_enabled(node_config: Config) -> bool:
+    """
+    :return: ``True`` if and only if the ZKAPAuthorizer storage client plugin
+        is enabled in the given configuration.
+    """
+    # See allmydata/storage_client.py, StorageClientConfig.from_node_config.
+    storage_plugins = node_config.get_config("client", "storage.plugins", "")
+    plugin_names = {name.strip() for name in storage_plugins.split(",")}
+    return NAME in plugin_names
+
+
 _SERVICES = [
-    (MAINTENANCE_SERVICE_NAME, _create_maintenance_service),
+    # Run the lease maintenance service on client nodes.
+    (MAINTENANCE_SERVICE_NAME, _is_client_plugin_enabled, _create_maintenance_service),
 ]
 
 
