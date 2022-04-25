@@ -482,10 +482,13 @@ class RistrettoRedeemer(object):
         )
         if announcement is not None:
             # Don't let us talk to a storage server that has a different idea
-            # about who issues ZKAPs.  We should lift this limitation (that is, we
-            # should support as many different issuers as the user likes) in the
-            # future but doing so requires changing how the web interface works
-            # and possibly also the interface for voucher submission.
+            # about who issues ZKAPs.  If we did, they *probably* wouldn't
+            # accept our ZKAPs since they should have the wrong signature.
+            #
+            # We should lift this limitation (that is, we should support as
+            # many different issuers as the user likes) in the future but
+            # doing so requires changing how the web interface works and
+            # possibly also the interface for voucher submission.
             #
             # If we aren't given an announcement then we're not being used in
             # the context of a specific storage server so the check is
