@@ -193,7 +193,18 @@ def is_replication_setup(config: Config) -> bool:
 
 def with_replication(connection: Connection, enable_replication: bool = False):
     """
-    Wrap a replicating support layer around the given connection.
+    Wrap the given connection in a layer which is capable of entering a
+    "replication mode".  In replication mode, the wrapper stores all changes
+    made through the connection so that they are available to be replicated by
+    another component.  In normal mode, changes are not stored.
+
+    :param connection: The SQLite3 connection to wrap.
+
+    :param enable_replication: If ``True`` then the wrapper is placed in
+        "replication mode" initially.  Otherwise it is not but it can be
+        switched into that mode later.
+
+    :return: The wrapper object.
     """
     return _ReplicationCapableConnection(connection, enable_replication)
 
