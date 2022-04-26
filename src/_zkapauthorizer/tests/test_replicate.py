@@ -293,6 +293,7 @@ class ReplicationServiceTests(TrialTestCase):
 
         # XXX write proper asserts
         # (also assert pruning happened)
+        # - nuke prints()
 
         # TODO (other PR probably):
         # - separate test: snapshot uploads
