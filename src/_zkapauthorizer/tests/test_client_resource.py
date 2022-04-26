@@ -54,6 +54,7 @@ from testtools.matchers import (
     ContainsDict,
     Equals,
     GreaterThan,
+    HasLength,
     Is,
     IsInstance,
     MatchesAll,
@@ -103,6 +104,7 @@ from ..storage_common import (
     get_configured_pass_value,
     required_passes,
 )
+from .common import flushErrors
 from .json import loads
 from .matchers import between, matches_json, matches_response
 from .strategies import (
@@ -505,6 +507,10 @@ class ResourceTests(TestCase):
         )
 
 
+class SurpriseBug(Exception):
+    pass
+
+
 class ReplicateTests(TestCase):
     """
     Tests for the ``/replicate`` endpoint.
@@ -563,7 +569,7 @@ class ReplicateTests(TestCase):
         )
 
         async def setup_replication():
-            raise Exception("surprise bug")
+            raise SurpriseBug("surprise")
 
         root = root_from_config(
             config, datetime.now, setup_replication=setup_replication
@@ -582,6 +588,10 @@ class ReplicateTests(TestCase):
                     code_matcher=Equals(INTERNAL_SERVER_ERROR),
                 ),
             ),
+        )
+        self.assertThat(
+            flushErrors(SurpriseBug),
+            HasLength(1),
         )
 
     @given(
@@ -683,13 +693,9 @@ class RecoverTests(TestCase):
             succeeded(matches_response(code_matcher=Equals(500))),
         )
 
-        # There is no public API for flushing logged errors if you're not
-        # using one of trial's TestCase classes...
-        from twisted.trial.runner import _logObserver
-
         self.assertThat(
-            len(_logObserver.flushErrors(DownloaderBroken)),
-            Equals(1),
+            flushErrors(DownloaderBroken),
+            HasLength(1),
         )
 
     @given(

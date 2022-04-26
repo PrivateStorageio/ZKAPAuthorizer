@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 """
 A system for replicating local SQLite3 database state to remote storage.
 
@@ -191,11 +193,24 @@ def is_replication_setup(config: Config) -> bool:
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
 
-def with_replication(connection: Connection):
+def with_replication(
+    connection: Connection, enable_replication: bool
+) -> _ReplicationCapableConnection:
     """
-    Wrap a replicating support layer around the given connection.
+    Wrap the given connection in a layer which is capable of entering a
+    "replication mode".  In replication mode, the wrapper stores all changes
+    made through the connection so that they are available to be replicated by
+    another component.  In normal mode, changes are not stored.
+
+    :param connection: The SQLite3 connection to wrap.
+
+    :param enable_replication: If ``True`` then the wrapper is placed in
+        "replication mode" initially.  Otherwise it is not but it can be
+        switched into that mode later.
+
+    :return: The wrapper object.
     """
-    return _ReplicationCapableConnection(connection)
+    return _ReplicationCapableConnection(connection, enable_replication)
 
 
 @define
@@ -207,9 +222,20 @@ class _ReplicationCapableConnection:
     All of this type's methods are intended to behave the same way as
     ``sqlite3.Connection``\ 's methods except they may also add some
     additional functionality to support replication.
+
+    :ivar _replicating: ``True`` if this connection is currently in
+        replication mode and is recording all executed DDL and DML statements,
+        ``False`` otherwise.
     """
 
     _conn: Connection
+    _replicating: bool
+
+    def enable_replication(self) -> None:
+        """
+        Turn on replication support.
+        """
+        self._replicating = True
 
     def snapshot(self) -> bytes:
         """
@@ -381,6 +407,7 @@ class _ReplicationService(Service):
         # service should only be created and started if replication has been
         # turned on - so, make sure replication is turned on at the database
         # layer.
+        self._connection.enable_replication()
         self._replicating = succeed(None)
 
     def stopService(self) -> Deferred:

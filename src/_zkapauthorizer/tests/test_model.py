@@ -511,7 +511,10 @@ class VoucherStoreSnapshotTests(TestCase):
             recover(BytesIO(snapshot), cursor)
 
         recovered = VoucherStore.from_connection(
-            store.pass_value, store.now, connection
+            store.pass_value,
+            store.now,
+            connection,
+            enable_replication=False,
         )
         self.assertThat(
             recovered.get(voucher),

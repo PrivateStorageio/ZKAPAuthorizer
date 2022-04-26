@@ -204,7 +204,7 @@ class ReplicateResource(Resource):
         except ReplicationAlreadySetup:
             request.setResponseCode(CONFLICT)
         except:
-            self._log.error("replication setup failed")
+            self._log.failure("replication setup failed")
             request.setResponseCode(INTERNAL_SERVER_ERROR)
         else:
             application_json(request)

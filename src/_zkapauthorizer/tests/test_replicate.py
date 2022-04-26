@@ -2,6 +2,7 @@
 Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
+from functools import partial
 from io import BytesIO
 from sqlite3 import OperationalError, ProgrammingError, connect
 
@@ -9,9 +10,14 @@ from fixtures import TempDir
 from testtools import TestCase
 from testtools.matchers import Equals, raises
 
+from ..model import memory_connect
 from ..recover import recover
-from ..replicate import with_replication
+from ..replicate import replication_service, with_replication
 from .matchers import equals_database
+
+# Helper to construct the replication wrapper without immediately enabling
+# replication.
+with_postponed_replication = partial(with_replication, enable_replication=False)
 
 
 class ReplicationConnectionTests(TestCase):
@@ -24,7 +30,7 @@ class ReplicationConnectionTests(TestCase):
         """
         The connection object and its cursors can be closed.
         """
-        conn = with_replication(connect(":memory:"))
+        conn = with_postponed_replication(connect(":memory:"))
         cursor = conn.cursor()
         cursor.close()
         self.assertThat(
@@ -51,7 +57,7 @@ class ReplicationConnectionTests(TestCase):
         when the managed block completes normally.
         """
         dbpath = self.useFixture(TempDir()).join("db.sqlite")
-        conn = with_replication(connect(dbpath))
+        conn = with_postponed_replication(connect(dbpath))
         with conn:
             cursor = conn.cursor()
             cursor.execute("BEGIN")
@@ -76,7 +82,7 @@ class ReplicationConnectionTests(TestCase):
             pass
 
         dbpath = self.useFixture(TempDir()).join("db.sqlite")
-        conn = with_replication(connect(dbpath))
+        conn = with_postponed_replication(connect(dbpath))
         try:
             with conn:
                 cursor = conn.cursor()
@@ -103,7 +109,7 @@ class ReplicationConnectionTests(TestCase):
         The connection's cursor objects have an ``executemany`` method that
         operates in the usual way.
         """
-        conn = with_replication(connect(":memory:"))
+        conn = with_postponed_replication(connect(":memory:"))
         cursor = conn.cursor()
         cursor.execute("BEGIN")
         cursor.execute('CREATE TABLE "foo" ("a" INT)')
@@ -142,7 +148,7 @@ class ReplicationConnectionTests(TestCase):
         The connection's cursor objects have a ``fetchmany`` method that operates
         in the usual way.
         """
-        conn = with_replication(connect(":memory:"))
+        conn = with_postponed_replication(connect(":memory:"))
         cursor = conn.cursor()
         cursor.execute("BEGIN")
         cursor.execute('CREATE TABLE "foo" ("a" INT)')
@@ -168,7 +174,7 @@ class ReplicationConnectionTests(TestCase):
         method.
         """
         dbpath_a = self.useFixture(TempDir()).join("db.sqlite")
-        conn_a = with_replication(connect(dbpath_a))
+        conn_a = with_postponed_replication(connect(dbpath_a))
         with conn_a:
             cursor = conn_a.cursor()
             cursor.execute('CREATE TABLE "foo" ("a" INT)')
@@ -177,7 +183,7 @@ class ReplicationConnectionTests(TestCase):
         snapshot = conn_a.snapshot()
 
         dbpath_b = self.useFixture(TempDir()).join("db.sqlite")
-        conn_b = with_replication(connect(dbpath_b))
+        conn_b = with_postponed_replication(connect(dbpath_b))
 
         with conn_b:
             recover(BytesIO(snapshot), conn_b.cursor())
@@ -186,3 +192,19 @@ class ReplicationConnectionTests(TestCase):
             conn_a,
             equals_database(conn_b),
         )
+
+
+class ReplicationServiceTests(TestCase):
+    """
+    Tests for ``_ReplicationService``.
+    """
+
+    def test_enable_replication_on_connection(self):
+        """
+        When the service starts it enables replication on its database connection.
+        """
+        conn = memory_connect("/foo/bar")
+        replicating_conn = with_postponed_replication(conn)
+        service = replication_service(replicating_conn)
+        service.startService()
+        self.assertThat(replicating_conn._replicating, Equals(True))
