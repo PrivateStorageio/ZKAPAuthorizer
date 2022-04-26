@@ -220,7 +220,7 @@ def proxyForInterface(
 
     # Use the supplied descriptor factory to create a descriptor for each
     # method/attribute defined by the interface.
-    for name in iface:
+    for name in iface.names():
         contents[name] = descriptorFactory(iface, name, originalAttribute)
 
     # Create a type with all the attributes we just defined.
