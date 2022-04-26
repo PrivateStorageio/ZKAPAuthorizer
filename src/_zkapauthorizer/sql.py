@@ -11,7 +11,7 @@ from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
 from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 
-from attrs import define
+from attrs import frozen
 
 SQLType = Union[int, float, str, bytes, None]
 
@@ -110,7 +110,7 @@ class StorageAffinity(Enum):
     NUMERIC = auto()
 
 
-@define(frozen=True)
+@frozen
 class Column:
     """
     Represent a column in a SQLite3 table.
@@ -122,7 +122,7 @@ class Column:
     affinity: StorageAffinity
 
 
-@define(frozen=True)
+@frozen
 class Table:
     """
     Represent a table in a SQLite3 database.
@@ -133,7 +133,7 @@ class Table:
     columns: list[tuple[str, Column]]
 
 
-@define(frozen=True)
+@frozen
 class Insert:
     """
     Represent an insertion of one row into a table.
@@ -198,7 +198,7 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
     raise ValueError("Do not know how to quote value of type f{type(value)}")
 
 
-@define(frozen=True)
+@frozen
 class Update:
     """
     Represent an update to some rows in a table.
@@ -239,7 +239,7 @@ class Update:
         return self.fields
 
 
-@define(frozen=True)
+@frozen
 class Delete:
     """
     Represent the deletion of some rows from a table.

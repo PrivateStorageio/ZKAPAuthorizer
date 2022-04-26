@@ -12,7 +12,7 @@ from testtools.matchers import Equals, raises
 
 from ..model import memory_connect
 from ..recover import recover
-from ..replicate import replication_service, with_replication
+from ..replicate import replication_service, snapshot, with_replication
 from .matchers import equals_database
 
 # Helper to construct the replication wrapper without immediately enabling
@@ -177,16 +177,16 @@ class ReplicationConnectionTests(TestCase):
         conn_a = with_postponed_replication(connect(dbpath_a))
         with conn_a:
             cursor = conn_a.cursor()
-            cursor.execute('CREATE TABLE "foo" ("a" INT)')
+            cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
             cursor.execute('INSERT INTO "foo" VALUES (?)', (1,))
 
-        snapshot = conn_a.snapshot()
+        a_snapshot = snapshot(conn_a)
 
         dbpath_b = self.useFixture(TempDir()).join("db.sqlite")
         conn_b = with_postponed_replication(connect(dbpath_b))
 
         with conn_b:
-            recover(BytesIO(snapshot), conn_b.cursor())
+            recover(BytesIO(a_snapshot), conn_b.cursor())
 
         self.assertThat(
             conn_a,
