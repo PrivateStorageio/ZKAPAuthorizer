@@ -60,20 +60,8 @@ __all__ = [
 ]
 
 from io import BytesIO
-from sqlite3 import Connection
-from sqlite3 import Connection as _SQLite3Connection
-from sqlite3 import Cursor
-from sqlite3 import Cursor as _SQLite3Cursor
-from typing import (
-    Any,
-    Awaitable,
-    BinaryIO,
-    Callable,
-    ContextManager,
-    Iterable,
-    Iterator,
-    Optional,
-)
+from sqlite3 import Connection, Cursor
+from typing import Awaitable, BinaryIO, Callable, Iterator, Optional
 
 import cbor2
 from attrs import Factory, define, field, frozen
@@ -319,7 +307,11 @@ class _ReplicationCapableConnection:
                 yield ob(cursor, to_signal)
 
     def cursor(self):
-        return _ReplicationCapableCursor(self._conn.cursor(), self)
+        return (
+            _ReplicationCapableCursor(self._conn.cursor(), self)
+            if self._replicating
+            else self._conn.cursor()
+        )
 
 
 @define

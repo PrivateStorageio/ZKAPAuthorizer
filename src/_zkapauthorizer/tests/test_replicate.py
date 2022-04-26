@@ -21,7 +21,6 @@ from ..replicate import (
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
     replication_service,
-    snapshot,
     with_replication,
 )
 from ..tahoe import MemoryGrid, attenuate_writecap

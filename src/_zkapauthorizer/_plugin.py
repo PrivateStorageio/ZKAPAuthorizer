@@ -20,7 +20,6 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from sqlite3 import Connection
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import connect as _connect
 from typing import Any, Callable
@@ -59,6 +58,7 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import Uploader, make_fail_downloader
 from .replicate import (
+    Uploader,
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
