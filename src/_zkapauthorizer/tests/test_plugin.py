@@ -295,7 +295,7 @@ def no_tahoe_client(reactor, node_config) -> ITahoeClient:
     """
     :raise: Always raise an exception.
     """
-    raise Exception("No Tahoe client should be required in thi context.")
+    raise Exception("No Tahoe client should be required in this context.")
 
 
 @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
