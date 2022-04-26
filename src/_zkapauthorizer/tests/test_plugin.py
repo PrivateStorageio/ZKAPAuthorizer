@@ -78,7 +78,7 @@ from ..config import EmptyConfig
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError, memory_connect
+from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect
 from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
 from ..spending import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid
@@ -497,7 +497,7 @@ class ServiceTests(TestCase):
         )
 
 
-def service_matches(store, svc) -> bool:
+def service_matches(store: VoucherStore, svc: object) -> bool:
     """
     :return: ``True`` if ``svc`` is a replication service for the given
         store's database connection, ``False`` otherwise.
