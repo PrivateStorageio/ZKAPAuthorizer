@@ -257,11 +257,14 @@ class ReplicationServiceTests(TrialTestCase):
 
         uploads = []
         d = Deferred()
+        # XXX this tests "actually queue an upload"
+        wait_d = Deferred()
 
         ##def uploader(name: str, get_data: Callable[[], [BinaryIO]]) -> Awaitable[None]:
         async def uploader(name, get_data):
             print("UPLOADER", name, get_data)
             uploads.append((name, get_data))
+            await wait_d
             nonlocal d
             if d is not None:
                 d.callback(None)
@@ -276,12 +279,40 @@ class ReplicationServiceTests(TrialTestCase):
         # that cause "events" to be issued into the database
         srv.startService()
 
-        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(1)]
+        tokens = [
+            RandomToken(b64encode(urandom(96)))
+            for _ in range(10)
+        ]
         voucher = urlsafe_b64encode(urandom(32))
         srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
+        self.assertNoResult(d)
+
+        tokens = [
+            RandomToken(b64encode(urandom(96)))
+            for _ in range(10)
+        ]
+        voucher = urlsafe_b64encode(urandom(32))
+        srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+
+        tokens = [
+            RandomToken(b64encode(urandom(96)))
+            for _ in range(10)
+        ]
+        voucher = urlsafe_b64encode(urandom(32))
+        srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+
+        wait_d.callback(None)
         yield d
 
         # a voucher is "important" so we should have queued an upload
-        for up in uploads:
+        print("uploads")
+        for up, get_data in uploads:
             print(up)
+
+        # XXX write proper asserts
+        # (also assert pruning happened)
+
+        # TODO (other PR probably):
+        # - separate test: snapshot uploads
+        # - should unlink event-streams that the snapshot contains

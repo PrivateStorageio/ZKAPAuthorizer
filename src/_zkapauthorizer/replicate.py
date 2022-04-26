@@ -611,16 +611,13 @@ class _ReplicationService(Service):
             if important:
                 any_importants = True
         if any_importants or self.big_enough():
-            print("queueing")
-
-            def q():
-                self.queue_upload()
-                self._accumulated_size = 0
-
-            return q
+            return self._complete_upload
         else:
-            print("nah", self._accumulated_size)
             return lambda: None
+
+    def _complete_upload(self):
+        self.queue_upload()
+        self._accumulated_size = 0
 
     def big_enough(self):
         return self._accumulated_size >= 570000
