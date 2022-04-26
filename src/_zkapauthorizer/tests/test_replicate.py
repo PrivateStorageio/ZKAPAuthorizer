@@ -221,6 +221,7 @@ class ReplicationServiceTests(TrialTestCase):
         self.addCleanup(tvs._cleanUp)
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
+        rwcap_file.parent().makedirs()
         rwcap_file.setContent(b"URL:DIR2:stuff")
 
         uploads = []
@@ -290,8 +291,8 @@ class HypothesisReplicationServiceTests(TestCase):
         tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: now))
         other_connection = memory_connect(tvs.config.get_private_path(CONFIG_DB_NAME))
 
-        def uploader(name, get_bytes):
-            pass
+        async def uploader(name, get_bytes):
+            return None
 
         service = replication_service(
             tvs.store._connection, other_connection, tvs.store, uploader
