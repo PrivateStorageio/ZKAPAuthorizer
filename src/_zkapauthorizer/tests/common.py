@@ -195,7 +195,7 @@ class _DelayedMethod:
 
 def proxyForInterface(
     iface: InterfaceClass,
-    descriptorFactory: Callable[[str, str], object],
+    descriptorFactory: Callable[[InterfaceClass, str, str], object],
     originalAttribute: str = "original",
 ):
     """
