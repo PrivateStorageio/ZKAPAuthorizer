@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 """
 A system for replicating local SQLite3 database state to remote storage.
 
@@ -191,7 +193,9 @@ def is_replication_setup(config: Config) -> bool:
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
 
-def with_replication(connection: Connection, enable_replication: bool = False):
+def with_replication(
+    connection: Connection, enable_replication: bool
+) -> _ReplicationCapableConnection:
     """
     Wrap the given connection in a layer which is capable of entering a
     "replication mode".  In replication mode, the wrapper stores all changes
@@ -220,7 +224,7 @@ class _ReplicationCapableConnection:
     additional functionality to support replication.
 
     :ivar _replicating: ``True`` if this connection is currently in
-        replication mode and is recording all executed DML statements,
+        replication mode and is recording all executed DDL and DML statements,
         ``False`` otherwise.
     """
 
