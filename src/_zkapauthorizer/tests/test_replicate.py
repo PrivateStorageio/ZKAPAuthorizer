@@ -17,7 +17,7 @@ from twisted.python.filepath import FilePath
 from ..config import CONFIG_DB_NAME, REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, memory_connect
 from ..recover import recover
-from ..replicate import replication_service, with_replication
+from ..replicate import replication_service, snapshot, with_replication
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import equals_database
 from .strategies import datetimes, tahoe_configs

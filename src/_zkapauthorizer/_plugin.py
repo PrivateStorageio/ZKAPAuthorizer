@@ -58,7 +58,6 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import Uploader, make_fail_downloader
 from .replicate import (
-    Uploader,
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
@@ -271,7 +270,13 @@ class ZKAPAuthorizer(object):
             await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
-            self._add_replication_service(store)
+            client = get_tahoe_client(self.reactor, node_config)
+            mutable = get_replica_rwcap(node_config)
+            uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
+            private_conn = _open_database(
+                partial(_connect, node_config.get_private_path(CONFIG_DB_NAME))
+            )
+            self._add_replication_service(store, private_conn, uploader)
 
         return resource_from_configuration(
             node_config,
