@@ -260,8 +260,12 @@ class _ReplicationCapableConnection:
     ) -> None:
         return self._conn.__exit__(exc_type, exc_value, exc_tb)
 
-    def cursor(self, cursorClass: Optional[type] = None) -> Cursor:
-        return _ReplicationCapableCursor(self._conn.cursor(cursorClass=cursorClass))
+    def cursor(self, factory: Optional[type] = None) -> Cursor:
+        kwargs = {}
+        if factory is not None:
+            kwargs["factory"] = factory
+        cursor = self._conn.cursor(**kwargs)
+        return _ReplicationCapableCursor(cursor)
 
 
 @define
