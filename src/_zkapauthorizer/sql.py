@@ -8,6 +8,7 @@ to support testing the replication/recovery system.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
 from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
@@ -186,9 +187,7 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
 
     :returns: the quoted value
     """
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
+    if isinstance(value, (int, float, datetime)):
         return str(value)
     if value is None:
         return "NULL"
@@ -210,7 +209,7 @@ def bind_arguments(cursor, statement, args):
     NOT appear elsewhere in the SQL.
     """
 
-    to_sub = list(args)
+    to_sub = list(args) if args is not None else []
 
     def substitute_args(match):
         return quote_sql_value(cursor, to_sub.pop(0))
@@ -338,5 +337,7 @@ def statement_mutates(statement):
     """
     predicate to decide if `statement` will change the database
     """
+    if statement == "BEGIN IMMEDIATE TRANSACTION":
+        return False
     (statement,) = parse(statement)
     return statement.get_type() not in {"SELECT"}

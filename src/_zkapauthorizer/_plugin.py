@@ -20,6 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
+from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import connect as _connect
 from typing import Any, Callable
 from weakref import WeakValueDictionary
@@ -151,20 +152,28 @@ class ZKAPAuthorizer(object):
             s = self._stores[key]
         except KeyError:
             s = open_store(datetime.now, _connect, node_config)
+            private_conn = _open_database(
+                partial(_connect, node_config.get_private_path(CONFIG_DB_NAME))
+            )
+
             if is_replication_setup(node_config):
                 client = get_tahoe_client(self.reactor, node_config)
                 mutable = get_replica_rwcap(node_config)
                 uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-                self._add_replication_service(s, uploader)
+                self._add_replication_service(s, private_conn, uploader)
             self._stores[key] = s
         return s
 
-    def _add_replication_service(self, s: VoucherStore, uploader: Uploader) -> None:
+    def _add_replication_service(
+        self, s: VoucherStore, private_conn: _SQLite3Connection, uploader: Uploader
+    ) -> None:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        replication_service(s._connection, s, uploader).setServiceParent(self._service)
+        replication_service(s._connection, private_conn, s, uploader).setServiceParent(
+            self._service
+        )
 
     def _get_redeemer(self, node_config, announcement):
         """

@@ -259,16 +259,17 @@ class _ReplicationCapableConnection:
     # the "real" / normal sqlite connection
     _conn: _SQLite3Connection
     _replicating: bool
-    # true while statements are "important" (which is pased along to
-    # the observers and interpreted as being "important data that the
-    # user will be interested in preserving")
-    _important: bool
+    _observers: tuple = Factory(tuple)
+    _mutations: list = Factory(list)
 
     def enable_replication(self) -> None:
         """
         Turn on replication support.
         """
         self._replicating = True
+
+    def add_mutation_observer(self, fn):
+        self._observers = self._observers + (fn,)
 
     def iterdump(self) -> Iterable[str]:
         """
@@ -277,26 +278,37 @@ class _ReplicationCapableConnection:
         """
         return self._conn.iterdump()
 
+    # XXX there is a "commit" method too?
+
     def close(self):
         return self._conn.close()
 
-    def __enter__(self) -> ContextManager:
+    def __enter__(self):
+        print("connection.enter")
         return self._conn.__enter__()
 
-    def __exit__(
-        self,
-        exc_type: Optional[type],
-        exc_value: Optional[BaseException],
-        exc_tb: Optional[Any],
-    ) -> None:
-        return self._conn.__exit__(exc_type, exc_value, exc_tb)
+    def __exit__(self, *args):
+        r = self._conn.__exit__(*args)
+        print("ARR", r)
+        if r is not (None, None, None):
+            post_txn_fns = []
+            with self._conn:
+                curse = self._conn.cursor()
+                curse.execute("BEGIN IMMEDIATE TRANSACTION")
+                post_txn_fns.extend(self._maybe_signal_observers(curse))
+            for f in post_txn_fns:
+                f()
+        return r
 
-    def cursor(self, factory: Optional[type] = None) -> Cursor:
-        kwargs = {}
-        if factory is not None:
-            kwargs["factory"] = factory
-        cursor = self._conn.cursor(**kwargs)
-        return _ReplicationCapableCursor(cursor)
+    def _maybe_signal_observers(self, cursor):
+        if self._mutations:
+            to_signal = self._mutations
+            self._mutations = list()
+            for ob in self._observers:
+                yield ob(cursor, to_signal)
+
+    def cursor(self):
+        return _ReplicationCapableCursor(self._conn.cursor(), self)
 
 
 @define
@@ -312,6 +324,7 @@ class _ReplicationCapableCursor:
 
     _cursor: _SQLite3Cursor
     _observers: list = Factory(list)
+    _connection: _ReplicationCapableConnection
     # true while statements are "important" (which is pased along to
     # the observers and interpreted as being "important data that the
     # user will be interested in preserving")
@@ -326,6 +339,7 @@ class _ReplicationCapableCursor:
         return self._cursor.rowcount
 
     def close(self):
+        print("cursor.close")
         return self._cursor.close()
 
     def execute(self, statement, row=None):
@@ -334,13 +348,16 @@ class _ReplicationCapableCursor:
 
         :param row: the arguments
         """
+        print("XXX1", self._cursor, statement.strip(), row)
         if row is None:
             args = (statement,)
         else:
             args = (statement, row)
         self._cursor.execute(*args)
         if statement_mutates(statement):
-            self._observed_mutations(statement, (row,))
+            # note that this interface is for multiple statements, so
+            # we turn our single row into a one-tuple
+            self._connection._mutations.append((self._important, statement, (row,)))
 
     def fetchall(self):
         return self._cursor.fetchall()
@@ -354,15 +371,7 @@ class _ReplicationCapableCursor:
     def executemany(self, statement, rows):
         self._cursor.executemany(statement, rows)
         if statement_mutates(statement):
-            self._observed_mutations(statement, rows)
-
-    def _observed_mutations(self, statement, rows):
-        """
-        One or more statements that mutate the database have been
-        executed. The transaction is still active. Notify observers.
-        """
-        for ob in self._observers:
-            ob(self, self._important, statement, rows)
+            self._connection._mutations.append((self._important, statement, rows))
 
     def important(self):
         """
@@ -440,10 +449,10 @@ def get_tahoe_lafs_direntry_uploader(
     upload some data and link it into the mutable directory under the
     given name.
 
-    :return Callable[str, [Callable[[], BinaryIO]], None]: A callable that
-        will upload some data as the latest replica snapshot. The data
-        isn't given directly, but instead from a zero-argument callable
-        itself to facilitate retrying.
+    :return Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
+        A callable that will upload some data as the latest replica
+        snapshot. The data isn't given directly, but instead from a
+        zero-argument callable itself to facilitate retrying.
     """
 
     async def upload(
@@ -471,6 +480,7 @@ class _ReplicationService(Service):
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
 
     _connection: _ReplicationCapableConnection = field()
+    _private_connection: Connection = field()
     _uploader: Callable[[str, BinaryIO], None] = field()
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
@@ -484,7 +494,7 @@ class _ReplicationService(Service):
         # restore our state .. this number will be bigger than what we
         # would have recorded through "normal" means which only counts
         # the statement-sizes .. but maybe fine?
-        self._accumulated_size = len(self._store.get_events().to_bytes())
+        self._accumulated_size = len(self._store.get_events().to_bytes().getvalue())
 
         # should we do an upload immediately? or hold the lock?
         if not self.big_enough():
@@ -508,9 +518,11 @@ class _ReplicationService(Service):
         """
         Ask for an upload to occur
         """
-        if self._trigger.tokens:
+        if self._trigger.tokens == 0:
+            print("RELEASE")
             self._trigger.release()
         else:
+            print("already uploading")
             # we're already uploading
             pass
 
@@ -519,25 +531,37 @@ class _ReplicationService(Service):
         An infinite async loop that processes uploads
         """
         while True:
+            print("waiting")
             await self._trigger.acquire()
+            print("got trigger")
             try:
                 await self._do_one_upload()
+                # from twisted.internet import reactor
+                # await reactor.callLater(0, self._do_one_upload)
             except Exception:
                 # probably log the error?
-                pass
+                raise
 
     async def _do_one_upload(self):
         """
         Process a single upload.
         """
-        events = self._store.get_events()
+        with self._private_connection:
+            curse = self._private_connection.cursor()
+            events = self._store.get_events.wrapped(self._store, curse)
+
         # upload latest event-stream
         await self._uploader(
-            "event-stream-{}".format(events.higest_sequence()),
+            "event-stream-{}".format(events.highest_sequence()),
             events.to_bytes,
         )
+
         # prune the database
-        self._store.prune_events_to(events.higest_sequence())
+        with self._private_connection:
+            curse = self._private_connection.cursor()
+            self._store.prune_events_to.wrapped(
+                self._store, curse, events.highest_sequence()
+            )
 
     def stopService(self) -> Deferred:
         """
@@ -559,28 +583,59 @@ class _ReplicationService(Service):
         replicating.cancel()
         return replicating
 
-    def observed_event(self, cursor, important, statement, args):
+    def observed_event(self, unobserved_cursor, all_changes):
         """
-        A mutating SQL statement was observed by the cursor
+        A mutating SQL statement was observed by the cursor. This is like
+        the executemany interface: there is always a list of args. For
+        a single statement, we call this with the len(args) == 1
+
+        :param bool important: whether this change is 'important' or not
+
+        :param str statement: the SQL statement
+
+        :param list[tuple] list_of_args: a list of tuples, each tuple
+            being the args to apply to the SQL statement.
         """
-        bound_statement = bind_arguments(cursor, statement, args)
-        self._store.add_event.wrapped(cursor, bound_statement)
-        # note that we're ignoring a certain amount of size overhead
-        # here: the _actual_ size will be some CBOR information and
-        # the sequence number, although the statement text should
-        # still dominate.
-        self._accumulated_size += len(bound_statement)
-        if important or self.big_enough():
-            self.queue_upload()
-            self._accumulated_size = 0
+        any_importants = False
+        for (important, statement, list_of_args) in all_changes:
+            for args in list_of_args:
+                bound_statement = bind_arguments(unobserved_cursor, statement, args)
+                self._store.add_event.wrapped(
+                    self._store, unobserved_cursor, bound_statement
+                )
+                # note that we're ignoring a certain amount of size overhead
+                # here: the _actual_ size will be some CBOR information and
+                # the sequence number, although the statement text should
+                # still dominate.
+                self._accumulated_size += len(bound_statement)
+            if important:
+                any_importants = True
+        if any_importants or self.big_enough():
+            print("queueing")
+
+            def q():
+                self.queue_upload()
+                self._accumulated_size = 0
+
+            return q
+        else:
+            print("nah", self._accumulated_size)
+            return lambda: None
 
     def big_enough(self):
         return self._accumulated_size >= 570000
 
 
-def replication_service(connection, store, uploader) -> IService:
+def replication_service(
+    replicated_connection, private_connection, store, uploader
+) -> IService:
     """
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document.
     """
-    return _ReplicationService(connection=connection, store=store, uploader=uploader)
+    return _ReplicationService(
+        connection=replicated_connection,
+        private_connection=private_connection,
+        store=store,
+        uploader=uploader,
+    )
