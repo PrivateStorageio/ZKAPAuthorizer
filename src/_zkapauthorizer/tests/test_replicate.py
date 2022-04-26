@@ -9,7 +9,7 @@ from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
 
-from hypothesis import assume, given
+from hypothesis import given
 from testtools import TestCase
 from testtools.matchers import Equals, raises
 from twisted.python.filepath import FilePath
@@ -17,25 +17,10 @@ from twisted.python.filepath import FilePath
 from ..config import CONFIG_DB_NAME, REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, memory_connect
 from ..recover import recover
-from ..replicate import (
-    get_replica_rwcap,
-    get_tahoe_lafs_direntry_uploader,
-    replication_service,
-    with_replication,
-)
-from ..tahoe import MemoryGrid, attenuate_writecap
+from ..replicate import replication_service, with_replication
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import equals_database
-from .strategies import (
-    clocks,
-    datetimes,
-    dummy_ristretto_keys,
-    redemption_group_counts,
-    tahoe_configs,
-    voucher_counters,
-    voucher_objects,
-    vouchers,
-)
+from .strategies import datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -228,21 +213,15 @@ class ReplicationServiceTests(TrialTestCase):
 
     @inlineCallbacks
     def test_replicate(self):
-        grid = MemoryGrid()
-
         def get_config(rootpath, portnumfile):
             return config_from_string(rootpath, portnumfile, "")
 
         tvs = TemporaryVoucherStore(get_config, lambda: datetime.now())
         tvs.setUp()
         self.addCleanup(tvs._cleanUp)
-        client = grid.client(FilePath(tvs.tempdir.path).child("node"))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.setContent(b"URL:DIR2:stuff")
-
-        mutable = get_replica_rwcap(tvs.config)
-        # uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
 
         uploads = []
         d = Deferred()
@@ -299,7 +278,7 @@ class ReplicationServiceTests(TrialTestCase):
         # - should unlink event-streams that the snapshot contains
 
 
-class ReplicationServiceTests(TestCase):
+class HypothesisReplicationServiceTests(TestCase):
     """
     Tests for ``_ReplicationService``.
     """
