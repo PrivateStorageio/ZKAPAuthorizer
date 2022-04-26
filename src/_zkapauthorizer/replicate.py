@@ -283,7 +283,6 @@ class _ReplicationCapableConnection:
         return self._conn.close()
 
     def __enter__(self):
-        print("connection.enter")
         return self._conn.__enter__()
 
     def __exit__(self, *args):
@@ -342,7 +341,6 @@ class _ReplicationCapableCursor:
         return self._cursor.rowcount
 
     def close(self):
-        print("cursor.close")
         return self._cursor.close()
 
     def execute(self, statement, row=None):
@@ -351,7 +349,6 @@ class _ReplicationCapableCursor:
 
         :param row: the arguments
         """
-        print("XXX1", self._cursor, statement.strip(), row)
         if row is None:
             args = (statement,)
         else:
@@ -522,10 +519,8 @@ class _ReplicationService(Service):
         Ask for an upload to occur
         """
         if self._trigger.tokens == 0:
-            print("RELEASE")
             self._trigger.release()
         else:
-            print("already uploading")
             # we're already uploading
             pass
 
@@ -534,9 +529,7 @@ class _ReplicationService(Service):
         An infinite async loop that processes uploads
         """
         while True:
-            print("waiting")
             await self._trigger.acquire()
-            print("got trigger")
             try:
                 await self._do_one_upload()
                 # from twisted.internet import reactor

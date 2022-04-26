@@ -230,7 +230,6 @@ class ReplicationServiceTests(TrialTestCase):
 
         ##def uploader(name: str, get_data: Callable[[], [BinaryIO]]) -> Awaitable[None]:
         async def uploader(name, get_data):
-            print("UPLOADER", name, get_data)
             uploads.append((name, get_data))
             await wait_d
             nonlocal d
