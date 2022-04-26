@@ -20,6 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
+from sqlite3 import Connection
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import connect as _connect
 from typing import Any, Callable

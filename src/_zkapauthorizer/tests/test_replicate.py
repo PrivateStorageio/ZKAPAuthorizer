@@ -227,16 +227,6 @@ class ReplicationServiceTests(TrialTestCase):
     Tests for ``_ReplicationService``.
     """
 
-    def test_enable_replication_on_connection(self):
-        """
-        When the service starts it enables replication on its database connection.
-        """
-        conn = memory_connect("/foo/bar")
-        replicating_conn = with_postponed_replication(conn)
-        service = replication_service(replicating_conn)
-        service.startService()
-        self.assertThat(replicating_conn._replicating, Equals(True))
-
     @inlineCallbacks
     def test_replicate(self):
         grid = MemoryGrid()
@@ -279,26 +269,17 @@ class ReplicationServiceTests(TrialTestCase):
         # that cause "events" to be issued into the database
         srv.startService()
 
-        tokens = [
-            RandomToken(b64encode(urandom(96)))
-            for _ in range(10)
-        ]
+        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
         voucher = urlsafe_b64encode(urandom(32))
         srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
         self.assertNoResult(d)
 
-        tokens = [
-            RandomToken(b64encode(urandom(96)))
-            for _ in range(10)
-        ]
+        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
         voucher = urlsafe_b64encode(urandom(32))
         srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
-        tokens = [
-            RandomToken(b64encode(urandom(96)))
-            for _ in range(10)
-        ]
+        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
         voucher = urlsafe_b64encode(urandom(32))
         srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
@@ -316,3 +297,26 @@ class ReplicationServiceTests(TrialTestCase):
         # TODO (other PR probably):
         # - separate test: snapshot uploads
         # - should unlink event-streams that the snapshot contains
+
+
+class ReplicationServiceTests(TestCase):
+    """
+    Tests for ``_ReplicationService``.
+    """
+
+    @given(tahoe_configs(), datetimes())
+    def test_enable_replication_on_connection(self, get_config, now):
+        """
+        When the service starts it enables replication on its database connection.
+        """
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: now))
+        other_connection = memory_connect(tvs.config.get_private_path(CONFIG_DB_NAME))
+
+        def uploader(name, get_bytes):
+            pass
+
+        service = replication_service(
+            tvs.store._connection, other_connection, tvs.store, uploader
+        )
+        service.startService()
+        self.assertThat(tvs.store._connection._replicating, Equals(True))

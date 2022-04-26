@@ -60,9 +60,20 @@ __all__ = [
 ]
 
 from io import BytesIO
+from sqlite3 import Connection
 from sqlite3 import Connection as _SQLite3Connection
+from sqlite3 import Cursor
 from sqlite3 import Cursor as _SQLite3Cursor
-from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, Optional
+from typing import (
+    Any,
+    Awaitable,
+    BinaryIO,
+    Callable,
+    ContextManager,
+    Iterable,
+    Iterator,
+    Optional,
+)
 
 import cbor2
 from attrs import Factory, define, field, frozen
