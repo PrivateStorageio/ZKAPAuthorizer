@@ -17,9 +17,7 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import Any, Callable, ContextManager, Optional, Protocol, Union
-
-from .sql import SQLType
+from typing import Callable
 
 # A Tahoe-LAFS capability string
 CapStr = str
