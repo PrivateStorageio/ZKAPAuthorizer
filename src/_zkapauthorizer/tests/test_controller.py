@@ -47,6 +47,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
+from twisted.python.filepath import FilePath
 from twisted.internet.defer import fail, succeed
 from twisted.internet.task import Clock
 from twisted.python.url import URL
@@ -56,6 +57,7 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
+from ..config import empty_config, EmptyConfig
 from .._json import dumps_utf8
 from ..controller import (
     AlreadySpent,
@@ -659,7 +661,7 @@ class PaymentControllerTests(TestCase):
         num_redemption_groups = len(all_public_keys)
 
         datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
-        store = self.useFixture(ConfiglessMemoryVoucherStore(datetime_now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda basedir, portfile: EmptyConfig(FilePath(basedir)), datetime_now)).store
 
         redeemers = list(DummyRedeemer(public_key) for public_key in all_public_keys)
 

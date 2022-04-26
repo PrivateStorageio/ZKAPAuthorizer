@@ -82,6 +82,12 @@ class TemporaryVoucherStore(Fixture):
 
     get_config = attr.ib()
     get_now = attr.ib()
+    redeemer = attr.ib(init=False)
+    _public_key = b64encode(b"A" * 32).decode("utf-8")
+
+    @redeemer.default
+    def _redeemer_default(self):
+        return DummyRedeemer(self._public_key)
 
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
