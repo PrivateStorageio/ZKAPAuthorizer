@@ -39,7 +39,7 @@ jobs:
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
-        python -m pip install -v ./[test] slipcover==0.1.1 coveralls
+        python -m pip install -v ./[test] slipcover==0.1.2 coveralls
 
     - name: "Dump Python Environment"
       run: |
@@ -49,8 +49,7 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
-        # --dont-wrap-pytest because https://github.com/plasma-umass/slipcover/issues/4
-        python -m slipcover --dont-wrap-pytest --json --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_pricecalculator
+        python -m slipcover --json --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_pricecalculator
 
     - name: "Convert Coverage"
       run: |
