@@ -49,6 +49,7 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
+        python -c "import _zkapauthorizer; print(_zkapauthorizer.__file__)"
         python -m slipcover --source src --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_pricecalculator
 
     - name: "Convert Coverage"
