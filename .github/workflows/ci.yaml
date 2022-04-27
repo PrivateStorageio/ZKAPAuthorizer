@@ -56,8 +56,8 @@ jobs:
       run: |
         echo "Files:"
         dir
-        echo "Service Job ID %GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%"
-        Get-Content slipcover.json | python slipcover2coveralls.py "%GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%" > coveralls.json
+        echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
+        Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" > coveralls.json
         echo "Reporting"
         coveralls --match=coveralls.json
 
