@@ -33,21 +33,15 @@ in
       # This is kind of round-about but it seems to be the best way to
       # convince mach-nix to use a specific package for a specific dependency.
       tahoe-lafs = "nixpkgs";
-
-      # Make sure we use an sdist of zfec so that our patch to zfec's setup.py
-      # to remove its argparse dependency can be applied.  If we get a wheel,
-      # it is too late to fix that (though I suppose we could fix the metadata
-      # in t he wheel if we really wanted to).
-      zfec = "sdist";
     };
 
     # Define some fixes to the packaging / build process of some of the
     # dependencies.  These need to be added to each derivation that might
     # depend on the relevant packages.
     dependency-fixes = {
-      _.zfec.patches = [
-        (builtins.fetchurl https://github.com/tahoe-lafs/zfec/commit/c3e736a72cccf44b8e1fb7d6c276400204c6bc1e.patch)
-      ];
+      _ = {
+        # If there were any they would go here.
+      };
     };
 
   in
