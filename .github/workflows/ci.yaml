@@ -57,10 +57,12 @@ jobs:
         dir
         echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
         Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
+
+    - name: "Upload Coverage"
+      run: |
+        echo "Files:"
+        dir
+        echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
         echo "Reporting"
         coveralls --help
-        coveralls debug
-
-    - uses: codecov/codecov-action@v1
-      with:
-        file: "./coverage.xml"
+        coveralls --merge=coveralls.json
