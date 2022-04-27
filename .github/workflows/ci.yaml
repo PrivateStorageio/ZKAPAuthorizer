@@ -55,8 +55,8 @@ jobs:
       run: |
         echo "Files:"
         dir
-        echo "Combining"
-        coverage combine
+        echo "Service Job ID %GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%"
+        python slipcover2coveralls.py "%GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%" < slipcover.json > coveralls.json
         echo "Reporting"
         coverage report
         echo "Converting to XML"
