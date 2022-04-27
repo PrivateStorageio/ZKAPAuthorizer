@@ -39,7 +39,7 @@ jobs:
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
-        python -m pip install -v ./[test]
+        python -m pip install -v ./[test] slipcover coveralls
 
     - name: "Dump Python Environment"
       run: |
