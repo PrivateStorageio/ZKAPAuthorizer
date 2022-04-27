@@ -506,6 +506,15 @@ class _ReplicationService(Service):
         # turned on - so, make sure replication is turned on at the database
         # layer.
         self._replicating = Deferred.fromCoroutine(self.wait_for_uploads())
+
+        def catch_cancelled(err: Failure) -> None:
+            """
+            Ignore cancels; this will be the normal way we quit -- see stopService
+            """
+            err.trap(CancelledError)
+            return None
+        self._replicating.addErrback(catch_cancelled)
+        # if something besides a "cancel" happens, do something with it
         self._replicating.addErrback(self._replication_fail)
         self._connection.add_mutation_observer(self.observed_event)
 
@@ -571,12 +580,6 @@ class _ReplicationService(Service):
             return succeed(None)
 
         self._replicating = None
-
-        def catch_cancelled(err: Failure) -> None:
-            err.trap(CancelledError)
-            return None
-
-        replicating.addErrback(catch_cancelled)
         replicating.cancel()
         return replicating
 

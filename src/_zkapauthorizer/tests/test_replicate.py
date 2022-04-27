@@ -298,4 +298,7 @@ class HypothesisReplicationServiceTests(TestCase):
             tvs.store._connection, other_connection, tvs.store, uploader
         )
         service.startService()
-        self.assertThat(tvs.store._connection._replicating, Equals(True))
+        try:
+            self.assertThat(tvs.store._connection._replicating, Equals(True))
+        finally:
+            service.stopService()
