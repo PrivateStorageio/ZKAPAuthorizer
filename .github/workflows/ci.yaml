@@ -56,8 +56,10 @@ jobs:
         echo "Files:"
         dir
         echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
+        echo "slipcover output:"
         Get-Content slipcover.json
         Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
+        echo "converted output:"
         Get-Content coveralls.json
 
     - name: "Upload Coverage"
