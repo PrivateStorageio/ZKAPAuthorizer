@@ -49,6 +49,7 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
+        # --dont-wrap-pytest because https://github.com/plasma-umass/slipcover/issues/4
         python -m slipcover run --dont-wrap-pytest --json --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_pricecalculator
 
     - name: "Convert Coverage"
