@@ -59,7 +59,7 @@ jobs:
         echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
         Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
         echo "Reporting"
-        coveralls --match=coveralls.json
+        coveralls debug --match=coveralls.json
 
     - uses: codecov/codecov-action@v1
       with:
