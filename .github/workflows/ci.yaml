@@ -58,9 +58,7 @@ jobs:
         echo "Service Job ID %GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%"
         python slipcover2coveralls.py "%GITHUB_WORKFLOW%_%GITHUB_RUN_NUMBER%" < slipcover.json > coveralls.json
         echo "Reporting"
-        coverage report
-        echo "Converting to XML"
-        coverage xml
+        coveralls --match=coveralls.json
 
     - uses: codecov/codecov-action@v1
       with:
