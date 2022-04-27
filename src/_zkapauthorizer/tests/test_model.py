@@ -57,6 +57,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
+from twisted.python.filepath import FilePath
 
 from ..model import (
     DoubleSpend,
@@ -78,7 +79,7 @@ from ..recover import (
     recover,
 )
 from ..replicate import Change, EventStream
-from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     deletes,
@@ -97,6 +98,7 @@ from .strategies import (
     vouchers,
     zkaps,
 )
+from ..config import EmptyConfig
 
 _T = TypeVar("_T")
 
@@ -237,7 +239,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
 
     def setup_example(self):
         self.store_fixture = self.useFixture(
-            ConfiglessMemoryVoucherStore(get_now=datetime.now),
+            TemporaryVoucherStore(get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)), get_now=datetime.now),
         )
 
     def test_empty(self):
@@ -502,7 +504,7 @@ class VoucherStoreSnapshotTests(TestCase):
         Vouchers are present in the snapshot.
         """
         store = self.useFixture(
-            ConfiglessMemoryVoucherStore(get_now=lambda: now),
+            TemporaryVoucherStore(get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)), get_now=lambda: now),
         ).store
         store.add(voucher, expected, 0, lambda: tokens)
         snapshot = store.snapshot()
@@ -538,9 +540,10 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     def __init__(self, case):
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
-        self.configless = ConfiglessMemoryVoucherStore(
+        self.configless = TemporaryVoucherStore(
+            get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
             # Time probably not actually relevant to this state machine.
-            datetime.now,
+            get_now=datetime.now,
         )
         self.configless.setUp()
 
@@ -1220,9 +1223,10 @@ class ReplicationTests(TestCase):
         ``StatefulRecoverer.recover``.
         """
         store = self.useFixture(
-            ConfiglessMemoryVoucherStore(
+            TemporaryVoucherStore(
+                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
                 # Time is not relevant to this test
-                datetime.now,
+                get_now=datetime.now,
             )
         ).store
         snapshot_bytes = store.snapshot()

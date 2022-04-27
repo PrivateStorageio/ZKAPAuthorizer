@@ -102,37 +102,6 @@ class TemporaryVoucherStore(Fixture):
         """
         self.store = None
 
-
-@define
-class ConfiglessMemoryVoucherStore(Fixture):
-    """
-    Create a ``VoucherStore`` backed by an in-memory database and with no
-    associated Tahoe-LAFS configuration or node.
-
-    This is like ``TemporaryVoucherStore`` but faster because it skips the
-    Tahoe-LAFS parts.
-    """
-
-    get_now: Callable[[], datetime]
-    _public_key: str = b64encode(b"A" * 32).decode("utf-8")
-    redeemer: IRedeemer = field(init=False)
-    store: Optional[VoucherStore] = None
-
-    @redeemer.default
-    def _redeemer_default(self):
-        return DummyRedeemer(self._public_key)
-
-    def _setUp(self):
-        self.store = open_store(self.get_now, memory_connect, empty_config)
-        self.addCleanup(self._cleanUp)
-
-    def _cleanUp(self):
-        """
-        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
-        connection can close.
-        """
-        self.store = None
-
     def redeem(self, voucher, num_passes):
         """
         Redeem a voucher for some passes.

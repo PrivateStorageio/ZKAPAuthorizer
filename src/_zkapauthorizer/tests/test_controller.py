@@ -85,7 +85,7 @@ from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
 from ..model import UnblindedToken
 from ..model import Unpaid as model_Unpaid
-from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from .fixtures import TemporaryVoucherStore
 from .matchers import Provides, between, raises
 from .strategies import (
     clocks,
