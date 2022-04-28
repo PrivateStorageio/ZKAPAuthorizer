@@ -2,6 +2,9 @@
 Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
+from allmydata.client import config_from_string
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.trial.unittest import TestCase as TrialTestCase
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime
 from functools import partial
@@ -199,11 +202,6 @@ class ReplicationConnectionTests(TestCase):
             conn_a,
             equals_database(conn_b),
         )
-
-
-from allmydata.client import config_from_string
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.trial.unittest import TestCase as TrialTestCase
 
 
 class ReplicationServiceTests(TrialTestCase):
