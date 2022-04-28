@@ -245,27 +245,30 @@ class ReplicationServiceTests(TrialTestCase):
         # that cause "events" to be issued into the database
         srv.startService()
 
-        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-        voucher = urlsafe_b64encode(urandom(32))
-        srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+        try:
+            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
+            voucher = urlsafe_b64encode(urandom(32))
+            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
-        self.assertNoResult(d)
+            self.assertNoResult(d)
 
-        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-        voucher = urlsafe_b64encode(urandom(32))
-        srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
+            voucher = urlsafe_b64encode(urandom(32))
+            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
-        tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-        voucher = urlsafe_b64encode(urandom(32))
-        srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
+            voucher = urlsafe_b64encode(urandom(32))
+            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
 
-        wait_d.callback(None)
-        yield d
+            wait_d.callback(None)
+            yield d
 
-        # a voucher is "important" so we should have queued an upload
-        print("uploads")
-        for up, get_data in uploads:
-            print(up)
+            # a voucher is "important" so we should have queued an upload
+            print("uploads")
+            for up, get_data in uploads:
+                print(up)
+        finally:
+            srv.stopService()
 
         # XXX write proper asserts
         # (also assert pruning happened)
