@@ -59,6 +59,7 @@ from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
 from twisted.python.filepath import FilePath
 
+from ..config import EmptyConfig
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
@@ -98,7 +99,6 @@ from .strategies import (
     vouchers,
     zkaps,
 )
-from ..config import EmptyConfig
 
 _T = TypeVar("_T")
 

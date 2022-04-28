@@ -2,9 +2,6 @@
 Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
-from allmydata.client import config_from_string
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.trial.unittest import TestCase as TrialTestCase
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime
 from functools import partial
@@ -12,10 +9,13 @@ from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
 
+from allmydata.client import config_from_string
 from hypothesis import given
 from testtools import TestCase
 from testtools.matchers import Equals, raises
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python.filepath import FilePath
+from twisted.trial.unittest import TestCase as TrialTestCase
 
 from ..config import CONFIG_DB_NAME, REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, memory_connect

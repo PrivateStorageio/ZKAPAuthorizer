@@ -47,9 +47,9 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
-from twisted.python.filepath import FilePath
 from twisted.internet.defer import fail, succeed
 from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
 from twisted.python.url import URL
 from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
 from twisted.web.http_headers import Headers
@@ -57,8 +57,8 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
-from ..config import empty_config, EmptyConfig
 from .._json import dumps_utf8
+from ..config import EmptyConfig, empty_config
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
