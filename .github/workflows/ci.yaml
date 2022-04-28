@@ -35,11 +35,11 @@ jobs:
 
     - name: "Install CI Dependencies"
       run: |
-        python -m pip install -v wheel
+        python -m pip install -v wheel slipcover==0.1.2 coveralls
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
-        python -m pip install -v ./[test] slipcover==0.1.2 coveralls
+        python -m pip install -v ./[test]
 
     - name: "Dump Python Environment"
       run: |
@@ -49,24 +49,15 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
+        # We have to tell slipcover where to find the source we want it to
+        # instrument.  Find where our package was installed.
         $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
-        python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_pricecalculator
+        python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
 
     - name: "Convert Coverage"
       run: |
-        echo "Files:"
-        dir
-        echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
-        echo "slipcover output:"
-        Get-Content slipcover.json
         Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
-        echo "converted output:"
-        Get-Content coveralls.json
 
     - name: "Upload Coverage"
       run: |
-        echo "Files:"
-        dir
-        echo "Service Job ID $Env:GITHUB_RUN_NUMBER"
-        echo "Reporting"
         coveralls --merge=coveralls.json
