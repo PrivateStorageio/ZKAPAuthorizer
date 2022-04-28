@@ -58,7 +58,7 @@ from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
 from .._json import dumps_utf8
-from ..config import EmptyConfig, empty_config
+from ..config import EmptyConfig
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
