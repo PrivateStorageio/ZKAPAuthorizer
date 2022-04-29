@@ -34,9 +34,9 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from .._plugin import open_store
-from ..config import empty_config
+from ..config import CONFIG_DB_NAME, empty_config
 from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import VoucherStore, memory_connect
+from ..model import VoucherStore, memory_connect, path_to_memory_uri
 
 
 @attr.s(auto_attribs=True)
@@ -92,6 +92,10 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
+        print(
+            "XXX",
+            path_to_memory_uri(FilePath(self.config.get_private_path(CONFIG_DB_NAME))),
+        )
         self.store = open_store(self.get_now, memory_connect, self.config)
         self.addCleanup(self._cleanUp)
 
