@@ -576,18 +576,16 @@ class _ReplicationService(Service):
         replicating.cancel()
         return replicating
 
-    def observed_event(self, unobserved_cursor, all_changes):
+    def observed_event(self, unobserved_cursor: Cursor, all_changes: Iterator[tuple[bool, str, tuple]]):
         """
         A mutating SQL statement was observed by the cursor. This is like
         the executemany interface: there is always a list of args. For
         a single statement, we call this with the len(args) == 1
 
-        :param bool important: whether this change is 'important' or not
-
-        :param str statement: the SQL statement
-
-        :param list[tuple] list_of_args: a list of tuples, each tuple
-            being the args to apply to the SQL statement.
+        :param all_changes: 3-tuples of (important, statement, args)
+            where important is whether this should trigger an upload;
+            statement is the SQL statement; and args are the arguments for
+            the SQL.
         """
         any_importants = False
         for (important, statement, list_of_args) in all_changes:
@@ -609,10 +607,19 @@ class _ReplicationService(Service):
             return lambda: None
 
     def _complete_upload(self):
+        """
+        This is called after the transaction closes (because we return it
+        from our observer function). See
+        _ReplicationCapableConnection.__exit__
+        """
         self.queue_upload()
         self._accumulated_size = 0
 
-    def big_enough(self):
+    def big_enough(self) -> bool:
+        """
+        :returns: True if we have accumulated enough statements to upload
+            an event-stream record.
+        """
         return self._accumulated_size >= 570000
 
 
