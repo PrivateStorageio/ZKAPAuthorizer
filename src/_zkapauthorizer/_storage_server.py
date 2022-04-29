@@ -268,7 +268,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # are not at risk of blowing up the metrics overhead unboundedly.  11
         # finite buckets + 1 infinite bucket covers 1 to 1024 ZKAPs (plus
         # infinity) and only needs 12 buckets.
-        return list(2**n for n in range(11)) + [float("inf")]
+        return list(2 ** n for n in range(11)) + [float("inf")]
 
     @_metric_spending_successes.default
     def _make_histogram(self):

@@ -64,7 +64,7 @@ class ShareStat(Copyable, RemoteCopy):
 #
 # A limit of 2 ** 20 passes translates to 177 MiB (times some constant factor
 # for Foolscap/Python overhead).  That should be tolerable.
-_MAXIMUM_PASSES_PER_CALL = 2**20
+_MAXIMUM_PASSES_PER_CALL = 2 ** 20
 
 # This is the length of a serialized Ristretto-flavored PrivacyPass pass The
 # pass is a combination of token preimages and unblinded token signatures,

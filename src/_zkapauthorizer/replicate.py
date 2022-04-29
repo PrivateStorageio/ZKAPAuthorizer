@@ -576,7 +576,9 @@ class _ReplicationService(Service):
         replicating.cancel()
         return replicating
 
-    def observed_event(self, unobserved_cursor: Cursor, all_changes: Iterator[tuple[bool, str, tuple]]):
+    def observed_event(
+        self, unobserved_cursor: Cursor, all_changes: Iterator[tuple[bool, str, tuple]]
+    ):
         """
         A mutating SQL statement was observed by the cursor. This is like
         the executemany interface: there is always a list of args. For

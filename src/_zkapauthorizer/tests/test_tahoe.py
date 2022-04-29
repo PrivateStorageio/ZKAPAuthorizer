@@ -97,7 +97,7 @@ class TahoeAPIErrorTests(TestCase):
     @given(
         scheme=sampled_from(["http", "https"]),
         host=sampled_from(["127.0.0.1", "localhost", "example.invalid"]),
-        port=integers(min_value=1, max_value=2**16 - 1),
+        port=integers(min_value=1, max_value=2 ** 16 - 1),
         query=lists(tuples(text(), text())),
         path_extra=lists(text()),
         cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")),

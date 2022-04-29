@@ -694,7 +694,7 @@ class ShareTests(TestCase):
     @given(
         storage_index=storage_indexes(),
         sharenum=sharenums(),
-        size=sizes(min_value=2**18, max_value=2**40),
+        size=sizes(min_value=2 ** 18, max_value=2 ** 40),
         when=posix_timestamps(),
         leases=lists(lease_renew_secrets(), unique=True, min_size=1),
     )
