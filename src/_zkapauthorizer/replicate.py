@@ -327,7 +327,7 @@ class _ReplicationCapableCursor:
     # true while statements are "important" (which is pased along to
     # the observers and interpreted as being "important data that the
     # user will be interested in preserving")
-    _important: bool = False
+    _important: bool = field(default=False)
 
     @property
     def lastrowid(self):
@@ -585,9 +585,9 @@ class _ReplicationService(Service):
         a single statement, we call this with the len(args) == 1
 
         :param all_changes: 3-tuples of (important, statement, args)
-            where important is whether this should trigger an upload;
-            statement is the SQL statement; and args are the arguments for
-            the SQL.
+            where important is whether this should trigger an
+            immediate upload; statement is the SQL statement; and args
+            are the arguments for the SQL.
         """
         any_importants = False
         for (important, statement, list_of_args) in all_changes:
