@@ -211,6 +211,11 @@ class ReplicationServiceTests(TrialTestCase):
 
     @inlineCallbacks
     def test_replicate(self):
+        """
+        Making changes to the voucher store while replication is turned on
+        causes event-stream objects to be uploaded.
+        """
+
         def get_config(rootpath, portnumfile):
             return config_from_string(rootpath, portnumfile, "")
 
@@ -224,10 +229,10 @@ class ReplicationServiceTests(TrialTestCase):
 
         uploads = []
         d = Deferred()
-        # XXX this tests "actually queue an upload"
+        # we use this to contol when the first upload happens, so that
+        # we actually use the queue
         wait_d = Deferred()
 
-        ##def uploader(name: str, get_data: Callable[[], [BinaryIO]]) -> Awaitable[None]:
         async def uploader(name, get_data):
             uploads.append((name, get_data))
             await wait_d
@@ -278,14 +283,6 @@ class ReplicationServiceTests(TrialTestCase):
 
         finally:
             srv.stopService()
-
-        # XXX write proper asserts
-        # (also assert pruning happened)
-        # - nuke prints()
-
-        # TODO (other PR probably):
-        # - separate test: snapshot uploads
-        # - should unlink event-streams that the snapshot contains
 
 
 class HypothesisReplicationServiceTests(TestCase):
