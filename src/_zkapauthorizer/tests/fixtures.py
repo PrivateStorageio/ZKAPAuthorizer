@@ -92,10 +92,6 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        print(
-            "XXX",
-            path_to_memory_uri(FilePath(self.config.get_private_path(CONFIG_DB_NAME))),
-        )
         self.store = open_store(self.get_now, memory_connect, self.config)
         self.addCleanup(self._cleanUp)
 

@@ -217,6 +217,7 @@ class ReplicationServiceTests(TrialTestCase):
         """
 
         def get_config(rootpath, portnumfile):
+            print("XXX", rootpath)
             return config_from_string(rootpath, portnumfile, "")
 
         tvs = TemporaryVoucherStore(get_config, lambda: datetime.now())
