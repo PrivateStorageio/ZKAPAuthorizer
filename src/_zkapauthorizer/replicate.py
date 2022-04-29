@@ -306,12 +306,8 @@ class _ReplicationCapableConnection:
                 yield ob(cursor, to_signal)
 
     def cursor(self):
+        # this cursor honors the ._replicating flag in this instance
         return _ReplicationCapableCursor(self._conn.cursor(), self)
-        return (
-            _ReplicationCapableCursor(self._conn.cursor(), self)
-            if self._replicating
-            else self._conn.cursor()
-        )
 
 
 @define
@@ -355,7 +351,7 @@ class _ReplicationCapableCursor:
         else:
             args = (statement, row)
         self._cursor.execute(*args)
-        if statement_mutates(statement):
+        if self._connection._replicating and statement_mutates(statement):
             # note that this interface is for multiple statements, so
             # we turn our single row into a one-tuple
             self._connection._mutations.append((self._important, statement, (row,)))
@@ -371,7 +367,7 @@ class _ReplicationCapableCursor:
 
     def executemany(self, statement, rows):
         self._cursor.executemany(statement, rows)
-        if statement_mutates(statement):
+        if self._connection._replicating and statement_mutates(statement):
             self._connection._mutations.append((self._important, statement, rows))
 
     def important(self):
