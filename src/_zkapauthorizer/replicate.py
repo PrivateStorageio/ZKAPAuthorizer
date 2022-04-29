@@ -482,8 +482,8 @@ class _ReplicationService(Service):
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _store = field(default=None)  #: VoucherStore
-    _accumulated_size: int = 0
-    _trigger: DeferredSemaphore = DeferredSemaphore(1)
+    _accumulated_size: int = field(default=0)
+    _trigger: DeferredSemaphore = field(factory=lambda: DeferredSemaphore(1))
 
     def startService(self) -> None:
         super().startService()
