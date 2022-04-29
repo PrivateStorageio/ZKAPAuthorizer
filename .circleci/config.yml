@@ -111,7 +111,12 @@ jobs:
           command: |
             # Now we can install ZKAPAuthorizer and its dependencies and test
             # dependencies into the environment.
-            venv/bin/pip install --no-index --find-links file://${PWD}/wheelhouse .[test]
+            for req in "." "-r requirements/test.in"; do
+                venv/bin/pip install \
+                    --no-index \
+                    --find-links file://${PWD}/wheelhouse \
+                    ${req}
+            done
 
       - run:
           name: "Test"
