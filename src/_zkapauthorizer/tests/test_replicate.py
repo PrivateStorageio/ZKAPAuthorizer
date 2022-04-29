@@ -269,16 +269,12 @@ class ReplicationServiceTests(TrialTestCase):
             # "coalesced" into a single one. That means we expect two
             # uploads
             self.assertEqual(
-                [name for name, _ in uploads],
-                ["event-stream-11", "event-stream-33"]
+                [name for name, _ in uploads], ["event-stream-11", "event-stream-33"]
             )
 
             # since we've uploaded everything, there should be no
             # events in the store
-            self.assertEqual(
-                tuple(),
-                tvs.store.get_events().changes
-            )
+            self.assertEqual(tuple(), tvs.store.get_events().changes)
 
         finally:
             srv.stopService()
