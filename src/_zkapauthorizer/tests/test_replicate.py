@@ -263,10 +263,23 @@ class ReplicationServiceTests(TrialTestCase):
             wait_d.callback(None)
             yield d
 
-            # a voucher is "important" so we should have queued an upload
-            print("uploads")
-            for up, get_data in uploads:
-                print(up)
+            # a voucher is "important" so we should have queued some
+            # uploads .. but the last two were queued while the first
+            # was still uploading, so those last two should be
+            # "coalesced" into a single one. That means we expect two
+            # uploads
+            self.assertEqual(
+                [name for name, _ in uploads],
+                ["event-stream-11", "event-stream-33"]
+            )
+
+            # since we've uploaded everything, there should be no
+            # events in the store
+            self.assertEqual(
+                tuple(),
+                tvs.store.get_events().changes
+            )
+
         finally:
             srv.stopService()
 
