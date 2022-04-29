@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-Tests for ``_zkapauthorizer.model``.
+Tests for ``_zkapauthorizer.sql``.
 """
 
 
