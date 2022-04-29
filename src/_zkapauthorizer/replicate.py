@@ -536,13 +536,10 @@ class _ReplicationService(Service):
         """
         while True:
             await self._trigger.acquire()
-            try:
-                await self._do_one_upload()
-                # from twisted.internet import reactor
-                # await reactor.callLater(0, self._do_one_upload)
-            except Exception:
-                # probably log the error?
-                raise
+            # note that errors in here mean our "forever loop" will
+            # stop .. so we might want to simply log all/most errors
+            # instead?
+            await self._do_one_upload()
 
     async def _do_one_upload(self):
         """
