@@ -478,7 +478,7 @@ class _ReplicationService(Service):
 
     _connection: _ReplicationCapableConnection = field()
     _private_connection: Connection = field()
-    _uploader: Callable[[str, BinaryIO], None] = field()
+    _uploader: Uploader = field()
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _store = field(default=None)  #: VoucherStore
