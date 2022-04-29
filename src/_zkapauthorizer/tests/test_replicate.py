@@ -306,7 +306,7 @@ class HypothesisReplicationServiceTests(TestCase):
         other_connection = memory_connect(tvs.config.get_private_path(CONFIG_DB_NAME))
 
         async def uploader(name, get_bytes):
-            return None
+            pass
 
         service = replication_service(
             tvs.store._connection, other_connection, tvs.store, uploader
