@@ -218,6 +218,7 @@ class ReplicationServiceTests(TrialTestCase):
 
         def get_config(rootpath, portnumfile):
             print("XXX", rootpath)
+            print("YYY", FilePath(rootpath).asTextMode().path)
             return config_from_string(
                 FilePath(rootpath).asTextMode().path, portnumfile, ""
             )
