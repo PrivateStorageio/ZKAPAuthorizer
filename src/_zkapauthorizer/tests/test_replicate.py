@@ -218,10 +218,12 @@ class ReplicationServiceTests(TrialTestCase):
 
         def get_config(rootpath, portnumfile):
             print("XXX", rootpath)
-            print("YYY", FilePath(rootpath).asTextMode().path)
-            return config_from_string(
-                FilePath(rootpath).asTextMode().path, portnumfile, ""
-            )
+            basedir = FilePath(rootpath).asTextMode()
+            print("YYY", basedir)
+            config = config_from_string(basedir.path, portnumfile, "")
+            config._basedir = basedir
+            config.portnum_fname = portnumfile
+            return config
 
         tvs = TemporaryVoucherStore(get_config, lambda: datetime.now())
         tvs.setUp()
