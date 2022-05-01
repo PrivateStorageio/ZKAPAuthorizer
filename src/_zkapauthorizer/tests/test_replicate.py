@@ -221,7 +221,7 @@ class ReplicationServiceTests(TrialTestCase):
             basedir = FilePath(rootpath).asTextMode()
             print("YYY", basedir)
             config = config_from_string(basedir.path, portnumfile, "")
-            config._basedir = basedir
+            config._basedir = basedir.path
             config.portnum_fname = portnumfile
             return config
 
