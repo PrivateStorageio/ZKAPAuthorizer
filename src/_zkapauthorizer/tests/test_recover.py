@@ -52,9 +52,8 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import ITahoeClient, MemoryGrid, Tahoe, attenuate_writecap, make_directory
+from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
 from .common import delayedProxy
-from .fixtures import Treq
 from .matchers import equals_database, matches_capability, raises
 from .resources import client_manager
 from .strategies import (

@@ -18,8 +18,7 @@ Common fixtures to let the test suite focus on application logic.
 
 import gc
 from base64 import b64encode
-from datetime import datetime
-from typing import Any, Callable, Generator, Optional
+from typing import Any, Generator
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -34,9 +33,8 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from .._plugin import open_store
-from ..config import CONFIG_DB_NAME, empty_config
-from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import VoucherStore, memory_connect, path_to_memory_uri
+from ..controller import DummyRedeemer, PaymentController
+from ..model import memory_connect
 
 
 @attr.s(auto_attribs=True)
