@@ -100,7 +100,10 @@ jobs:
             # because some other tool depends on it.  For example, pip has a
             # bunch of dependencies it is nice to have around, and using the
             # wheels depends on the wheel package.
-            venv/bin/python -m pip wheel --wheel-dir wheelhouse pip wheel . -r requirements/test.in
+            venv/bin/python -m pip wheel \
+              --wheel-dir wheelhouse \
+              -r requirements/test.in \
+              pip wheel .
 
       - save_cache:
           paths:
