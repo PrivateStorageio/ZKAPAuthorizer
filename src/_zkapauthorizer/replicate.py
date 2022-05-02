@@ -60,8 +60,9 @@ __all__ = [
 ]
 
 from io import BytesIO
-from sqlite3 import Connection, Cursor
-from typing import Awaitable, BinaryIO, Callable, Iterator, Optional
+from sqlite3 import Connection as _SQLite3Connection
+from sqlite3 import Cursor as _SQLite3Cursor
+from typing import Any, Awaitable, BinaryIO, Callable, Generator, Iterator, Optional
 
 import cbor2
 from attrs import Factory, define, field, frozen
@@ -76,6 +77,9 @@ from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, bind_arguments, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
+
+# function which can set remote ZKAPAuthorizer state.
+Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
 
 
 @frozen
@@ -136,6 +140,12 @@ class EventStream:
         )
 
 
+class AlreadySettingUp(Exception):
+    """
+    Another setup attempt is currently in progress.
+    """
+
+
 class ReplicationAlreadySetup(Exception):
     """
     An attempt was made to setup of replication but it is already set up.
@@ -161,7 +171,9 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
     config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")
-    config_lock.lock()
+
+    if not config_lock.lock():
+        raise AlreadySettingUp()
     try:
 
         # Check to see if there is already configuration.
@@ -270,7 +282,7 @@ class _ReplicationCapableConnection:
     def add_mutation_observer(self, fn):
         self._observers = self._observers + (fn,)
 
-    def iterdump(self) -> Iterable[str]:
+    def iterdump(self) -> Iterator[str]:
         """
         :return: SQL statements which can be used to reconstruct the database
             state.
@@ -279,35 +291,47 @@ class _ReplicationCapableConnection:
 
     # XXX there is a "commit" method too?
 
-    def close(self):
+    def close(self) -> None:
         return self._conn.close()
 
-    def __enter__(self):
-        return self._conn.__enter__()
+    def __enter__(self) -> _ReplicationCapableConnection:
+        self._conn.__enter__()
+        return self
 
-    def __exit__(self, *args):
-        r = self._conn.__exit__(*args)
-        print("ARR", r)
-        if r is not (None, None, None):
-            post_txn_fns = []
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc_value: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> bool:
+        propagate = self._conn.__exit__(exc_type, exc_value, exc_tb)
+        if exc_type is None:
+            # There was no exception, signal observers that a change has been
+            # committed.
+            post_txn_fns: list[Callable[[], None]] = []
             with self._conn:
                 curse = self._conn.cursor()
                 curse.execute("BEGIN IMMEDIATE TRANSACTION")
                 post_txn_fns.extend(self._maybe_signal_observers(curse))
             for f in post_txn_fns:
                 f()
-        return r
+        # Respect the underlying propagation decision.
+        return propagate
 
-    def _maybe_signal_observers(self, cursor):
+    def _maybe_signal_observers(self, cursor) -> Generator[Callable[[], None], None, None]:
         if self._mutations:
             to_signal = self._mutations
             self._mutations = list()
             for ob in self._observers:
                 yield ob(cursor, to_signal)
 
-    def cursor(self):
+    def cursor(self, factory: Optional[type] = None) -> Cursor:
+        kwargs = {}
+        if factory is not None:
+            kwargs["factory"] = factory
+        cursor = self._conn.cursor(**kwargs)
         # this cursor honors the ._replicating flag in this instance
-        return _ReplicationCapableCursor(self._conn.cursor(), self)
+        return _ReplicationCapableCursor(cursor, self)
 
 
 @define
@@ -476,7 +500,7 @@ class _ReplicationService(Service):
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
 
     _connection: _ReplicationCapableConnection = field()
-    _private_connection: Connection = field()
+    _private_connection: _SQLite3Connection = field()
     _uploader: Uploader = field()
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
@@ -578,7 +602,7 @@ class _ReplicationService(Service):
         return replicating
 
     def observed_event(
-        self, unobserved_cursor: Cursor, all_changes: Iterator[tuple[bool, str, tuple]]
+        self, unobserved_cursor: _SQLite3Cursor, all_changes: Iterator[tuple[bool, str, tuple]]
     ):
         """
         A mutating SQL statement was observed by the cursor. This is like
