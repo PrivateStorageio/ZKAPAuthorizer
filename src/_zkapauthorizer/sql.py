@@ -313,7 +313,7 @@ def escape_identifier(string: str) -> str:
     """
     Escape an arbitrary string for use as a SQLite3 identifier.
     """
-    return f"[{string}]"
+    return f"'{string}'"
 
 
 def column_ddl(name: str, column: Column) -> str:
