@@ -661,7 +661,11 @@ class PaymentControllerTests(TestCase):
         num_redemption_groups = len(all_public_keys)
 
         datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
-        store = self.useFixture(TemporaryVoucherStore(lambda basedir, portfile: EmptyConfig(FilePath(basedir)), datetime_now)).store
+        store = self.useFixture(
+            TemporaryVoucherStore(
+                lambda basedir, portfile: EmptyConfig(FilePath(basedir)), datetime_now
+            )
+        ).store
 
         redeemers = list(DummyRedeemer(public_key) for public_key in all_public_keys)
 

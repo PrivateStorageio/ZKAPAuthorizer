@@ -318,7 +318,9 @@ class _ReplicationCapableConnection:
         # Respect the underlying propagation decision.
         return propagate
 
-    def _maybe_signal_observers(self, cursor) -> Generator[Callable[[], None], None, None]:
+    def _maybe_signal_observers(
+        self, cursor
+    ) -> Generator[Callable[[], None], None, None]:
         if self._mutations:
             to_signal = self._mutations
             self._mutations = list()
@@ -534,6 +536,7 @@ class _ReplicationService(Service):
             """
             err.trap(CancelledError)
             return None
+
         self._replicating.addErrback(catch_cancelled)
         # if something besides a "cancel" happens, do something with it
         self._replicating.addErrback(self._replication_fail)
@@ -602,7 +605,9 @@ class _ReplicationService(Service):
         return replicating
 
     def observed_event(
-        self, unobserved_cursor: _SQLite3Cursor, all_changes: Iterator[tuple[bool, str, tuple]]
+        self,
+        unobserved_cursor: _SQLite3Cursor,
+        all_changes: Iterator[tuple[bool, str, tuple]],
     ):
         """
         A mutating SQL statement was observed by the cursor. This is like

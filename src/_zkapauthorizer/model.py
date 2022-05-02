@@ -249,7 +249,7 @@ def memory_connect(path: str, *a, uri=None, **kw) -> _SQLite3Connection:
 
 # The largest integer SQLite3 can represent in an integer column.  Larger than
 # this an the representation loses precision as a floating point.
-_SQLITE3_INTEGER_MAX = 2 ** 63 - 1
+_SQLITE3_INTEGER_MAX = 2**63 - 1
 
 
 @frozen

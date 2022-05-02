@@ -83,6 +83,7 @@ SetState = Callable[[RecoveryState], None]
 # An object which can retrieve remote ZKAPAuthorizer state.
 Downloader = Callable[[SetState], Awaitable[BinaryIO]]
 
+
 @define
 class StatefulRecoverer:
     """
