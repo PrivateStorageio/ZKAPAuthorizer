@@ -62,8 +62,9 @@ jobs:
 
       - restore_cache:
           keys:
-          # when setup.cfg changes, use increasingly general patterns to
-          # restore cache
+          # when packaging metadata changes, use increasingly general patterns
+          # to restore cache
+          - pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}-{{ checksum "requirements/test.in" }}
           - pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}
           - pip-packages-v1-{{ .Branch }}-
           - pip-packages-v1-
@@ -82,14 +83,14 @@ jobs:
             # install virtualenv and use it to create an environment for
             # ZKAPAuthorizer so it can have all its own versions of its
             # dependencies.
-            python<< parameters.py-version >> -m pip install virtualenv
-
-            # Make sure virtualenv creates a Python 2 environment!
-            virtualenv --python=python<< parameters.py-version >> venv
+            python<< parameters.py-version >> -m venv venv
 
             # Get the newest pip we can because who knows what came along with
-            # that virtualenv.
-            venv/bin/pip install --find-links file://${PWD}/wheelhouse --upgrade pip
+            # that virtualenv.  Also get the wheel package or we won't be able
+            # to build any wheels in the next step.
+            venv/bin/python -m pip install \
+              --find-links file://${PWD}/wheelhouse \
+              --upgrade pip wheel
 
       - run:
           name: "Populate Wheelhouse"
@@ -99,19 +100,26 @@ jobs:
             # because some other tool depends on it.  For example, pip has a
             # bunch of dependencies it is nice to have around, and using the
             # wheels depends on the wheel package.
-            venv/bin/pip wheel --wheel-dir wheelhouse pip wheel .[test]
+            venv/bin/python -m pip wheel \
+              --wheel-dir wheelhouse \
+              -r requirements/test.in \
+              pip wheel .
 
       - save_cache:
           paths:
           - "wheelhouse"
-          key: pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}
+          key: pip-packages-v1-{{ .Branch }}-{{ checksum "setup.cfg" }}-{{ checksum "requirements/test.in" }}
 
       - run:
           name: "Install"
           command: |
             # Now we can install ZKAPAuthorizer and its dependencies and test
             # dependencies into the environment.
-            venv/bin/pip install --no-index --find-links file://${PWD}/wheelhouse .[test]
+            venv/bin/pip install \
+              --no-index \
+              --find-links file://${PWD}/wheelhouse \
+              -r requirements/test.in \
+              .
 
       - run:
           name: "Test"
