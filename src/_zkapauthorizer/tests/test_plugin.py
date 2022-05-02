@@ -80,7 +80,11 @@ from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentCont
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect
-from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
+from ..replicate import (
+    _ReplicationCapableConnection,
+    _ReplicationService,
+    setup_tahoe_lafs_replication,
+)
 from ..spending import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid
 from .common import skipIf
@@ -191,14 +195,20 @@ class OpenStoreTests(TestCase):
         # Create the underlying database file.
         store = open_store(lambda: now, memory_connect, config)
 
-        self.assertThat(
-            # Right now enabling replication does absolutely nothing except
-            # flip this flag, so there's no other behavior to observe in this
-            # test.  Maybe later when there's more replication implementation,
-            # we can assert something more meaningful.
-            store._connection._replicating,
-            Equals(enabled),
-        )
+        if isinstance(store._connection, _ReplicationCapableConnection):
+            self.assertThat(
+                # Right now enabling replication does absolutely nothing except
+                # flip this flag, so there's no other behavior to observe in this
+                # test.  Maybe later when there's more replication implementation,
+                # we can assert something more meaningful.
+                store._connection._replicating,
+                Equals(enabled),
+            )
+        else:
+            self.fail(
+                f"store._connection should be _ReplicationCapableConnection "
+                f"but was {store._connection}"
+            )
 
     @given(datetimes())
     def test_replication_enabled_connection(self, now):

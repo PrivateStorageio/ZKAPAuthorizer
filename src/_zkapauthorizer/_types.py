@@ -16,29 +16,10 @@
 Re-usable type definitions for ZKAPAuthorizer.
 """
 
-from sqlite3 import Connection
-from typing import Any, Callable, Protocol
+from datetime import datetime
+from typing import Callable
 
 # A Tahoe-LAFS capability string
 CapStr = str
 
-GetTime = Callable[[], float]
-
-
-class Connect(Protocol):
-    """
-    Connect to a certain (ie, not parameterized) SQLite3 database.
-    """
-
-    def __call__(
-        self,
-        timeout: int = None,
-        detect_types: bool = None,
-        isolation_level: str = None,
-        check_same_thread: bool = False,
-        factory: Any = None,
-        cached_statements: Any = None,
-    ) -> Connection:
-        """
-        Get a new database connection.
-        """
+GetTime = Callable[[], datetime]

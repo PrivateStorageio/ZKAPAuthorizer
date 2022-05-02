@@ -1209,7 +1209,7 @@ def tables() -> SearchStrategy[Table]:
         columns=lists(
             tuples(
                 sql_identifiers(),
-                builds(Column),
+                builds(Column, affinity=sampled_from(StorageAffinity)),
             ),
             min_size=1,
             unique_by=lambda x: x[0],

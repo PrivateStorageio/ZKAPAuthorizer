@@ -60,8 +60,9 @@ __all__ = [
 ]
 
 from io import BytesIO
-from sqlite3 import Connection, Cursor
-from typing import BinaryIO, Callable, Iterator, Optional
+from sqlite3 import Connection as _SQLite3Connection
+from sqlite3 import Cursor as _SQLite3Cursor
+from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, Optional
 
 import cbor2
 from attrs import define, field, frozen
@@ -73,6 +74,7 @@ from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME, Config
+from .sql import Connection, Cursor
 from .tahoe import ITahoeClient, attenuate_writecap
 
 
@@ -194,7 +196,7 @@ def is_replication_setup(config: Config) -> bool:
 
 
 def with_replication(
-    connection: Connection, enable_replication: bool
+    connection: _SQLite3Connection, enable_replication: bool
 ) -> _ReplicationCapableConnection:
     """
     Wrap the given connection in a layer which is capable of entering a
@@ -228,7 +230,7 @@ class _ReplicationCapableConnection:
         ``False`` otherwise.
     """
 
-    _conn: Connection
+    _conn: _SQLite3Connection
     _replicating: bool
 
     def enable_replication(self) -> None:
@@ -237,24 +239,33 @@ class _ReplicationCapableConnection:
         """
         self._replicating = True
 
-    def snapshot(self) -> bytes:
+    def iterdump(self) -> Iterable[str]:
         """
-        Create and return a byte string representing a consistent, self-contained
-        snapshot of the wrapped database.
+        :return: SQL statements which can be used to reconstruct the database
+            state.
         """
-        return snapshot(self._conn)
+        return self._conn.iterdump()
 
     def close(self):
         return self._conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> ContextManager:
         return self._conn.__enter__()
 
-    def __exit__(self, *args):
-        return self._conn.__exit__(*args)
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc_value: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> None:
+        return self._conn.__exit__(exc_type, exc_value, exc_tb)
 
-    def cursor(self):
-        return _ReplicationCapableCursor(self._conn.cursor())
+    def cursor(self, factory: Optional[type] = None) -> Cursor:
+        kwargs = {}
+        if factory is not None:
+            kwargs["factory"] = factory
+        cursor = self._conn.cursor(**kwargs)
+        return _ReplicationCapableCursor(cursor)
 
 
 @define
@@ -268,7 +279,7 @@ class _ReplicationCapableCursor:
     additional functionality to support replication.
     """
 
-    _cursor: Cursor
+    _cursor: _SQLite3Cursor
 
     @property
     def lastrowid(self):
@@ -336,7 +347,7 @@ def connection_to_statements(connection: Connection) -> Iterator[str]:
     self-contained snapshot of the database reachable via the given
     connection.
     """
-    return connection.iterdump()
+    return iter(connection.iterdump())
 
 
 # Convenience API to dump statements, netstring-encoding them, and

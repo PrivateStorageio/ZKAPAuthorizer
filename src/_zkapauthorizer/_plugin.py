@@ -43,7 +43,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
-from ._types import Connect, GetTime
+from ._types import GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
@@ -64,6 +64,7 @@ from .replicate import (
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
+from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 from .tahoe import ITahoeClient, get_tahoe_client
 
@@ -77,7 +78,9 @@ class AnnounceableStorageServer(object):
     storage_server = field()
 
 
-def open_store(now: GetTime, connect: Connect, node_config: Config) -> VoucherStore:
+def open_store(
+    now: GetTime, connect: UnboundConnect, node_config: Config
+) -> VoucherStore:
     """
     Open a ``VoucherStore`` for the given configuration.
 
