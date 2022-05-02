@@ -323,7 +323,6 @@ class _ReplicationCapableCursor:
 
     _cursor: _SQLite3Cursor
     _connection: _ReplicationCapableConnection
-    _observers: list = Factory(list)
     # true while statements are "important" (which is pased along to
     # the observers and interpreted as being "important data that the
     # user will be interested in preserving")
