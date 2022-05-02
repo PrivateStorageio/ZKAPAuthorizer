@@ -487,6 +487,8 @@ class _ReplicationService(Service):
     def startService(self) -> None:
         super().startService()
 
+        self._connection.enable_replication()
+
         # restore our state .. this number will be bigger than what we
         # would have recorded through "normal" means which only counts
         # the statement-sizes .. but maybe fine?
