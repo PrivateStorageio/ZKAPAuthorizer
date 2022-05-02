@@ -101,7 +101,7 @@ def whitebox_write_sparse_share(sharepath, version, size, leases, now):
     """
     # Maybe-saturated size (what at least one Tahoe-LAFS comment claims is
     # appropriate for large files)
-    internal_size = min(size, 2 ** 32 - 1)
+    internal_size = min(size, 2**32 - 1)
     apparent_size = size
 
     header_format = ">LLL"

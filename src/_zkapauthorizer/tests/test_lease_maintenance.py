@@ -159,7 +159,7 @@ def share_stats():
     return builds(
         ShareStat,
         size=integers(min_value=0),
-        lease_expiration=integers(min_value=0, max_value=2 ** 31),
+        lease_expiration=integers(min_value=0, max_value=2**31),
     )
 
 
