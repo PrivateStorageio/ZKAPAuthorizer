@@ -86,8 +86,11 @@ jobs:
             python<< parameters.py-version >> -m venv venv
 
             # Get the newest pip we can because who knows what came along with
-            # that virtualenv.
-            venv/bin/python -m pip install --find-links file://${PWD}/wheelhouse --upgrade pip
+            # that virtualenv.  Also get the wheel package or we won't be able
+            # to build any wheels in the next step.
+            venv/bin/python -m pip install \
+              --find-links file://${PWD}/wheelhouse \
+              --upgrade pip wheel
 
       - run:
           name: "Populate Wheelhouse"
