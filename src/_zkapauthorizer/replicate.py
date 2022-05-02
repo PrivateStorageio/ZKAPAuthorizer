@@ -62,7 +62,17 @@ __all__ = [
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
-from typing import Any, Awaitable, BinaryIO, Callable, Generator, Iterator, Optional
+from typing import (
+    Any,
+    Awaitable,
+    BinaryIO,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Optional,
+    Sequence,
+)
 
 import cbor2
 from attrs import Factory, define, field, frozen
@@ -75,7 +85,7 @@ from twisted.python.lockfile import FilesystemLock
 
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
-from .sql import Connection, Cursor, bind_arguments, statement_mutates
+from .sql import Connection, Cursor, SQLType, bind_arguments, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
@@ -223,13 +233,14 @@ class _Important:
     _ReplicationCapableConnection
     """
 
-    _replication_conn: _ReplicationCapableConnection
+    _replication_cursor: _ReplicationCapableCursor
 
-    def __enter__(self):
-        self._replication_conn._important = True
+    def __enter__(self) -> None:
+        self._replication_cursor._important = True
 
-    def __exit__(self, *args):
-        self._replication_conn._important = False
+    def __exit__(self, *args) -> None:
+        self._replication_cursor._important = False
+        return None
 
 
 def with_replication(
@@ -250,6 +261,10 @@ def with_replication(
     :return: The wrapper object.
     """
     return _ReplicationCapableConnection(connection, enable_replication)
+
+
+Mutation = tuple[bool, str, Sequence[tuple[SQLType, ...]]]
+MutationObserver = Callable[[_SQLite3Cursor, Sequence[Mutation]], Callable[[], None]]
 
 
 @define
@@ -279,7 +294,7 @@ class _ReplicationCapableConnection:
         """
         self._replicating = True
 
-    def add_mutation_observer(self, fn):
+    def add_mutation_observer(self, fn: MutationObserver) -> None:
         self._observers = self._observers + (fn,)
 
     def iterdump(self) -> Iterator[str]:
@@ -365,21 +380,18 @@ class _ReplicationCapableCursor:
     def close(self):
         return self._cursor.close()
 
-    def execute(self, statement, row=None):
+    def execute(self, statement: str, row: Iterable[Any] = ()) -> Cursor:
         """
         sqlite's Cursor API
 
         :param row: the arguments
         """
-        if row is None:
-            args = (statement,)
-        else:
-            args = (statement, row)
-        self._cursor.execute(*args)
+        self._cursor.execute(statement, row)
         if self._connection._replicating and statement_mutates(statement):
             # note that this interface is for multiple statements, so
             # we turn our single row into a one-tuple
             self._connection._mutations.append((self._important, statement, (row,)))
+        return self
 
     def fetchall(self):
         return self._cursor.fetchall()
@@ -390,12 +402,13 @@ class _ReplicationCapableCursor:
     def fetchone(self):
         return self._cursor.fetchone()
 
-    def executemany(self, statement, rows):
+    def executemany(self, statement: str, rows: Iterable[Any]) -> Cursor:
         self._cursor.executemany(statement, rows)
         if self._connection._replicating and statement_mutates(statement):
             self._connection._mutations.append((self._important, statement, rows))
+        return self
 
-    def important(self):
+    def important(self) -> _Important:
         """
         Create a new context-manager that -- while active -- sets the
         'important' flag to true and resets it afterwards.
@@ -503,12 +516,12 @@ class _ReplicationService(Service):
 
     _connection: _ReplicationCapableConnection = field()
     _private_connection: _SQLite3Connection = field()
-    _uploader: Uploader = field()
+    _store: VoucherStore
+    _uploader: Uploader
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
-    _store = field(default=None)  #: VoucherStore
-    _accumulated_size: int = field(default=0)
-    _trigger: DeferredSemaphore = field(factory=lambda: DeferredSemaphore(1))
+    _accumulated_size: int = 0
+    _trigger: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
 
     def startService(self) -> None:
         super().startService()
@@ -542,13 +555,13 @@ class _ReplicationService(Service):
         self._replicating.addErrback(self._replication_fail)
         self._connection.add_mutation_observer(self.observed_event)
 
-    def _replication_fail(self, fail):
+    def _replication_fail(self, fail: Failure) -> None:
         """
         Replicating has failed for some reason
         """
         print(f"Replication failure: {fail}")
 
-    def queue_upload(self):
+    def queue_upload(self) -> None:
         """
         Ask for an upload to occur
         """
@@ -558,7 +571,7 @@ class _ReplicationService(Service):
             # we're already uploading
             pass
 
-    async def wait_for_uploads(self):
+    async def wait_for_uploads(self) -> None:
         """
         An infinite async loop that processes uploads
         """
@@ -569,7 +582,7 @@ class _ReplicationService(Service):
             # instead?
             await self._do_one_upload()
 
-    async def _do_one_upload(self):
+    async def _do_one_upload(self) -> None:
         """
         Process a single upload.
         """
@@ -590,7 +603,7 @@ class _ReplicationService(Service):
                 self._store, curse, events.highest_sequence()
             )
 
-    def stopService(self) -> Deferred:
+    def stopService(self) -> Deferred[None]:
         """
         Cancel the replication operation and then wait for it to complete.
         """
@@ -607,8 +620,8 @@ class _ReplicationService(Service):
     def observed_event(
         self,
         unobserved_cursor: _SQLite3Cursor,
-        all_changes: Iterator[tuple[bool, str, tuple]],
-    ):
+        all_changes: Sequence[Mutation],
+    ) -> Callable[[], None]:
         """
         A mutating SQL statement was observed by the cursor. This is like
         the executemany interface: there is always a list of args. For
@@ -638,7 +651,7 @@ class _ReplicationService(Service):
         else:
             return lambda: None
 
-    def _complete_upload(self):
+    def _complete_upload(self) -> None:
         """
         This is called after the transaction closes (because we return it
         from our observer function). See
@@ -656,7 +669,10 @@ class _ReplicationService(Service):
 
 
 def replication_service(
-    replicated_connection, private_connection, store, uploader
+    replicated_connection: _ReplicationCapableConnection,
+    private_connection: _SQLite3Connection,
+    store: VoucherStore,
+    uploader: Uploader,
 ) -> IService:
     """
     Return a service which implements the replication process documented in

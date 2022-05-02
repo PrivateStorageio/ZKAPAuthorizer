@@ -791,7 +791,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def add_event(self, cursor, sql_statement: str):
+    def add_event(self, cursor, sql_statement: str) -> None:
         """
         Add a new change to the event-log.
         """
@@ -803,7 +803,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def get_events(self, cursor):
+    def get_events(self, cursor) -> EventStream:
         """
         Return all events currently in our event-log.
         """
@@ -818,7 +818,7 @@ class VoucherStore(object):
         return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
 
     @with_cursor
-    def prune_events_to(self, cursor, sequence_number: int):
+    def prune_events_to(self, cursor, sequence_number: int) -> None:
         """
         Remove all events <= sequence_number
         """
