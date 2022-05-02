@@ -265,7 +265,7 @@ class _ReplicationCapableConnection:
         exc_type: Optional[type],
         exc_value: Optional[BaseException],
         exc_tb: Optional[Any],
-    ) -> None:
+    ) -> bool:
         return self._conn.__exit__(exc_type, exc_value, exc_tb)
 
     def cursor(self, factory: Optional[type] = None) -> Cursor:

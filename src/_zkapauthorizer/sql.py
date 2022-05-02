@@ -50,7 +50,7 @@ class AbstractConnection(Protocol):
         exc_type: Optional[type],
         exc_value: Optional[BaseException],
         exc_tb: Optional[Any],
-    ) -> None:
+    ) -> bool:
         ...
 
 
