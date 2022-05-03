@@ -43,7 +43,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
-from ._types import GetTime, CapStr
+from ._types import CapStr, GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
