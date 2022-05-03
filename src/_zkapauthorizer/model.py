@@ -790,47 +790,6 @@ class VoucherStore(object):
             parse_datetime(finished, delimiter=" "),
         )
 
-    @with_cursor
-    def add_event(self, cursor, sql_statement: str) -> None:
-        """
-        Add a new change to the event-log.
-        """
-        cursor.execute(
-            """
-            INSERT INTO [event-stream]([statement]) VALUES (?)
-            """,
-            (sql_statement,),
-        )
-
-    @with_cursor
-    def get_events(self, cursor) -> EventStream:
-        """
-        Return all events currently in our event-log.
-        """
-        cursor.execute(
-            """
-            SELECT [sequence-number], [statement]
-            FROM [event-stream]
-            """
-        )
-        rows = cursor.fetchall()
-
-        return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
-
-    @with_cursor
-    def prune_events_to(self, cursor, sequence_number: int) -> None:
-        """
-        Remove all events <= sequence_number
-        """
-        cursor.execute(
-            """
-            DELETE FROM [event-stream]
-            WHERE [sequence-number] <= (?)
-            """,
-            (sequence_number,),
-        )
-        cursor.fetchall()
-
 
 @implementer(ILeaseMaintenanceObserver)
 @define

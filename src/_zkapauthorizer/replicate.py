@@ -500,6 +500,44 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
+def add_event(cursor: SQLite3Cursor, sql_statement: str) -> None:
+    """
+    Add a new change to the event-log.
+    """
+    cursor.execute(
+        """
+        INSERT INTO [event-stream]([statement]) VALUES (?)
+        """,
+        (sql_statement,),
+    )
+
+def get_events(cursor: _SQLite3Cursor) -> EventStream:
+    """
+    Return all events currently in our event-log.
+    """
+    cursor.execute(
+        """
+        SELECT [sequence-number], [statement]
+        FROM [event-stream]
+        """
+    )
+    rows = cursor.fetchall()
+    return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+
+def prune_events_to(cursor: _SQLite3Cursor, sequence_number: int) -> None:
+    """
+    Remove all events <= sequence_number
+    """
+    cursor.execute(
+        """
+        DELETE FROM [event-stream]
+        WHERE [sequence-number] <= (?)
+        """,
+        (sequence_number,),
+    )
+    cursor.fetchall()
+
+
 @define
 class _ReplicationService(Service):
     """
@@ -531,7 +569,9 @@ class _ReplicationService(Service):
         # restore our state .. this number will be bigger than what we
         # would have recorded through "normal" means which only counts
         # the statement-sizes .. but maybe fine?
-        self._accumulated_size = len(self._store.get_events().to_bytes().getvalue())
+        with self._connection._conn:
+            events = get_events(self._connection._conn.cursor())
+        self._accumulated_size = len(events.to_bytes().getvalue())
 
         # should we do an upload immediately? or hold the lock?
         if not self.big_enough():
@@ -586,9 +626,8 @@ class _ReplicationService(Service):
         """
         Process a single upload.
         """
-        with self._private_connection:
-            curse = self._private_connection.cursor()
-            events = self._store.get_events.wrapped(self._store, curse)
+        with self._connection._conn:
+            events = get_events(self._connection._conn.cursor())
 
         # upload latest event-stream
         await self._uploader(
@@ -598,10 +637,8 @@ class _ReplicationService(Service):
 
         # prune the database
         with self._private_connection:
-            curse = self._private_connection.cursor()
-            self._store.prune_events_to.wrapped(
-                self._store, curse, events.highest_sequence()
-            )
+            curse = self._connection._conn.cursor()
+            prune_events_to(curse, events.highest_sequence())
 
     def stopService(self) -> Deferred[None]:
         """
@@ -636,9 +673,7 @@ class _ReplicationService(Service):
         for (important, statement, list_of_args) in all_changes:
             for args in list_of_args:
                 bound_statement = bind_arguments(unobserved_cursor, statement, args)
-                self._store.add_event.wrapped(
-                    self._store, unobserved_cursor, bound_statement
-                )
+                add_event(unobserved_cursor, bound_statement)
                 # note that we're ignoring a certain amount of size overhead
                 # here: the _actual_ size will be some CBOR information and
                 # the sequence number, although the statement text should
