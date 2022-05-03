@@ -41,7 +41,7 @@ from ._json import dumps_utf8
 from ._types import GetTime
 from .replicate import _ReplicationCapableConnection, snapshot
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
-from .sql import BoundConnect, Connection, Cursor
+from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
 from .validators import greater_than, has_length, is_base64_encoded
 
