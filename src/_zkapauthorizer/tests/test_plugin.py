@@ -47,6 +47,7 @@ from testtools.matchers import (
     AllMatch,
     Always,
     AnyMatch,
+    MatchesPredicate,
     Contains,
     ContainsDict,
     Equals,
@@ -822,12 +823,13 @@ class ClientResourceTests(TestCase):
         )
 
         self.assertThat(
-            [
-                svc
-                for svc in self.plugin._service
-                if service_matches(self.plugin._get_store(config), svc)
-            ],
-            HasLength(1),
+            self.plugin._service,
+            AnyMatch(
+                MatchesPredicate(
+                    lambda svc: service_matches(self.plugin._get_store(config), svc),
+                    "it bad: %s"
+                ),
+            ),
         )
 
 

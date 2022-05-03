@@ -72,7 +72,7 @@ from .server.spending import get_spender
 from .spending import SpendingController
 from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
-from .tahoe import ITahoeClient, get_tahoe_client
+from .tahoe import ITahoeClient, get_tahoe_client, attenuate_writecap
 
 _log = Logger()
 
@@ -265,6 +265,7 @@ class ZKAPAuthorizer(object):
 
         store = self._get_store(node_config)
 
+        # XXX could maybe unify with _get_store code
         async def setup_replication():
             # Setup replication
             tahoe = self._get_tahoe_client(self.reactor, node_config)
@@ -274,11 +275,8 @@ class ZKAPAuthorizer(object):
             client = get_tahoe_client(self.reactor, node_config)
             mutable = get_replica_rwcap(node_config)
             uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-            private_conn = _open_database(
-                partial(_connect, node_config.get_private_path(CONFIG_DB_NAME))
-            )
-            replicated_conn = with_replication(private_conn, is_replication_setup(node_config))
-            self._add_replication_service(replicated_conn, uploader)
+            self._add_replication_service(store._connection, uploader)
+            return attenuate_writecap(mutable)
 
         return resource_from_configuration(
             node_config,
