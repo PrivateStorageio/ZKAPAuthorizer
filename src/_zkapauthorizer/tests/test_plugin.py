@@ -80,7 +80,7 @@ from ..config import EmptyConfig, CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect
+from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect, open_database
 from ..replicate import (
     _ReplicationCapableConnection,
     _ReplicationService,
@@ -136,9 +136,10 @@ class OpenStoreTests(TestCase):
         mkdir(nodedir.path, 0o500)
 
         config = get_config(nodedir.path, "tub.port")
+        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
 
         self.assertThat(
-            partial(open_store, lambda: now, connect, config),
+            lambda: open_database(partial(connect, db_path.path)),
             Raises(
                 AfterPreprocessing(
                     lambda exc_info: exc_info[1],
