@@ -59,6 +59,7 @@ __all__ = [
     "snapshot",
 ]
 
+import os
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
@@ -571,7 +572,9 @@ class _ReplicationService(Service):
         # the statement-sizes .. but maybe fine?
         with self._connection._conn:
             events = get_events(self._connection._conn.cursor())
-        self._accumulated_size = len(events.to_bytes().getvalue())
+        data = events.to_bytes()
+        data.seek(0, os.SEEK_END)
+        self._accumulated_size = data.tell()
 
         # should we do an upload immediately? or hold the lock?
         if not self.big_enough():
