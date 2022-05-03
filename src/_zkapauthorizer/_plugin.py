@@ -57,7 +57,6 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import (
-    Uploader,
     _ReplicationCapableConnection,
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
