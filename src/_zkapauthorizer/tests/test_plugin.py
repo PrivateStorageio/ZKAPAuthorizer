@@ -75,7 +75,7 @@ from twisted.plugins.zkapauthorizer import storage_server_plugin
 from .. import NAME
 from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
-from ..config import EmptyConfig
+from ..config import EmptyConfig, CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
@@ -161,13 +161,14 @@ class OpenStoreTests(TestCase):
         config = get_config(nodedir.path, "tub.port")
 
         # Create the underlying database file.
-        open_store(lambda: now, connect, config)
+        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
+        open_store(lambda: now, connect(db_path.path), config)
 
         # Prevent further access to it.
         nodedir.child("private").chmod(0o000)
 
         self.assertThat(
-            lambda: open_store(lambda: now, connect, config),
+            lambda: open_store(lambda: now, connect(db_path.path), config),
             raises(StoreOpenError),
         )
 
@@ -193,7 +194,8 @@ class OpenStoreTests(TestCase):
             )
 
         # Create the underlying database file.
-        store = open_store(lambda: now, memory_connect, config)
+        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
+        store = open_store(lambda: now, memory_connect(db_path.path), config)
 
         if isinstance(store._connection, _ReplicationCapableConnection):
             self.assertThat(
@@ -706,7 +708,8 @@ class ClientPluginTests(TestCase):
 
         # Populate the database with unspent tokens.
         def redeem():
-            store = open_store(lambda: now, connect, node_config)
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+            store = open_store(lambda: now, connect(db_path.path), node_config)
 
             controller = PaymentController(
                 store,

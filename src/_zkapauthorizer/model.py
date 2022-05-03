@@ -101,7 +101,7 @@ def open_database(connect: BoundConnect) -> _SQLite3Connection:
         raise StoreOpenError(e)
 
 
-def initialize_database(conn: Connection) -> None:
+def initialize_database(conn: ReplicationCapableConnection) -> None:
     """
     Make any persistent and temporary schema changes required to make the
     given database compatible with this version of the software.

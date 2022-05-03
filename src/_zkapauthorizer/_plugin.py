@@ -58,12 +58,14 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import (
+    _ReplicationCapableConnection,
     Uploader,
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
     replication_service,
     setup_tahoe_lafs_replication,
+    with_replication,
 )
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
@@ -83,7 +85,7 @@ class AnnounceableStorageServer(object):
 
 
 def open_store(
-    now: GetTime, connect: UnboundConnect, node_config: Config
+    now: GetTime, conn: _ReplicationCapableConnection, node_config: Config
 ) -> VoucherStore:
     """
     Open a ``VoucherStore`` for the given configuration.
@@ -96,8 +98,6 @@ def open_store(
     :param connect: A function that can be used to connect to the underlying
         database.
     """
-    db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-    conn = _open_database(partial(connect, db_path.path))
     pass_value = get_configured_pass_value(node_config)
     return VoucherStore.from_connection(
         pass_value, now, conn, is_replication_setup(node_config)
@@ -150,29 +150,29 @@ class ZKAPAuthorizer(object):
         """
         key = node_config.get_config_path()
         try:
-            s = self._stores[key]
+            store = self._stores[key]
         except KeyError:
-            s = open_store(datetime.now, _connect, node_config)
-            private_conn = _open_database(
-                partial(_connect, node_config.get_private_path(CONFIG_DB_NAME))
-            )
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+            unreplicated_conn = _open_database(partial(_connect, db_path.path))
+            replicated_conn = with_replication(unreplicated_conn, is_replication_setup(node_config))
+            store = open_store(datetime.now, replicated_conn, node_config)
 
             if is_replication_setup(node_config):
                 client = get_tahoe_client(self.reactor, node_config)
                 mutable = get_replica_rwcap(node_config)
                 uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-                self._add_replication_service(s, private_conn, uploader)
-            self._stores[key] = s
-        return s
+                self._add_replication_service(replicated_conn, uploader)
+            self._stores[key] = store
+        return store
 
     def _add_replication_service(
-        self, s: VoucherStore, private_conn: _SQLite3Connection, uploader: Uploader
+        self, replicated_conn: _ReplicationCapableConnection, uploader: Uploader
     ) -> None:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        replication_service(s._connection, private_conn, s, uploader).setServiceParent(
+        replication_service(replicated_conn, uploader).setServiceParent(
             self._service
         )
 
@@ -277,7 +277,8 @@ class ZKAPAuthorizer(object):
             private_conn = _open_database(
                 partial(_connect, node_config.get_private_path(CONFIG_DB_NAME))
             )
-            self._add_replication_service(store, private_conn, uploader)
+            replicated_conn = with_replication(private_conn, is_replication_setup(node_config))
+            self._add_replication_service(replicated_conn, uploader)
 
         return resource_from_configuration(
             node_config,

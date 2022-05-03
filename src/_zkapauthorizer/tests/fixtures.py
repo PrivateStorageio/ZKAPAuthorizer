@@ -34,6 +34,7 @@ from twisted.web.client import Agent, HTTPConnectionPool
 
 from .._plugin import open_store
 from ..controller import DummyRedeemer, PaymentController
+from ..config import CONFIG_DB_NAME
 from ..model import memory_connect
 
 
@@ -90,7 +91,8 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        self.store = open_store(self.get_now, memory_connect, self.config)
+        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME))
+        self.store = open_store(self.get_now, memory_connect(db_path.path), self.config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):
