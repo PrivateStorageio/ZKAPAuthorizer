@@ -58,8 +58,8 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import (
-    _ReplicationCapableConnection,
     Uploader,
+    _ReplicationCapableConnection,
     get_replica_rwcap,
     get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
@@ -72,7 +72,7 @@ from .server.spending import get_spender
 from .spending import SpendingController
 from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
-from .tahoe import ITahoeClient, get_tahoe_client, attenuate_writecap
+from .tahoe import ITahoeClient, attenuate_writecap, get_tahoe_client
 
 _log = Logger()
 
@@ -99,9 +99,7 @@ def open_store(
         database.
     """
     pass_value = get_configured_pass_value(node_config)
-    return VoucherStore.from_connection(
-        pass_value, now, conn
-    )
+    return VoucherStore.from_connection(pass_value, now, conn)
 
 
 @implementer(IFoolscapStoragePlugin)
@@ -154,7 +152,9 @@ class ZKAPAuthorizer(object):
         except KeyError:
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
             unreplicated_conn = _open_database(partial(_connect, db_path.path))
-            replicated_conn = with_replication(unreplicated_conn, is_replication_setup(node_config))
+            replicated_conn = with_replication(
+                unreplicated_conn, is_replication_setup(node_config)
+            )
             store = open_store(datetime.now, replicated_conn, node_config)
 
             if is_replication_setup(node_config):
@@ -172,9 +172,7 @@ class ZKAPAuthorizer(object):
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        replication_service(replicated_conn, uploader).setServiceParent(
-            self._service
-        )
+        replication_service(replicated_conn, uploader).setServiceParent(self._service)
 
     def _get_redeemer(self, node_config, announcement):
         """

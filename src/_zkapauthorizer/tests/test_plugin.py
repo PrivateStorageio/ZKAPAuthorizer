@@ -47,7 +47,6 @@ from testtools.matchers import (
     AllMatch,
     Always,
     AnyMatch,
-    MatchesPredicate,
     Contains,
     ContainsDict,
     Equals,
@@ -56,6 +55,7 @@ from testtools.matchers import (
     Matcher,
     MatchesAll,
     MatchesListwise,
+    MatchesPredicate,
     MatchesStructure,
     Not,
     Raises,
@@ -76,11 +76,17 @@ from twisted.plugins.zkapauthorizer import storage_server_plugin
 from .. import NAME
 from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
-from ..config import EmptyConfig, CONFIG_DB_NAME
+from ..config import CONFIG_DB_NAME, EmptyConfig
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect, open_database
+from ..model import (
+    NotEnoughTokens,
+    StoreOpenError,
+    VoucherStore,
+    memory_connect,
+    open_database,
+)
 from ..replicate import (
     _ReplicationCapableConnection,
     _ReplicationService,
@@ -450,10 +456,12 @@ class ServiceTests(TestCase):
                 plugin._service,
                 AnyMatch(
                     MatchesPredicate(
-                        lambda svc: service_matches(plugin._get_store(node_config), svc),
-                        "not a replicating service with matching connection: %s"
+                        lambda svc: service_matches(
+                            plugin._get_store(node_config), svc
+                        ),
+                        "not a replicating service with matching connection: %s",
                     ),
-                )
+                ),
             )
         else:
             self.assertThat(
@@ -467,7 +475,11 @@ def service_matches(store: VoucherStore, svc: object) -> bool:
     :return: ``True`` if ``svc`` is a replication service for the given
         store's database connection, ``False`` otherwise.
     """
-    return isinstance(svc, _ReplicationService) and svc._connection is store._connection and svc._connection._replicating
+    return (
+        isinstance(svc, _ReplicationService)
+        and svc._connection is store._connection
+        and svc._connection._replicating
+    )
 
 
 def has_metric(name_matcher, value_matcher):
@@ -661,7 +673,9 @@ class ClientPluginTests(TestCase):
         # Populate the database with unspent tokens.
         def redeem():
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-            store = open_store(lambda: now, with_replication(connect(db_path.path), False), node_config)
+            store = open_store(
+                lambda: now, with_replication(connect(db_path.path), False), node_config
+            )
 
             controller = PaymentController(
                 store,
@@ -783,7 +797,7 @@ class ClientResourceTests(TestCase):
             AnyMatch(
                 MatchesPredicate(
                     lambda svc: service_matches(self.plugin._get_store(config), svc),
-                    "not a replicating service with matching connection: %s"
+                    "not a replicating service with matching connection: %s",
                 ),
             ),
         )

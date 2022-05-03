@@ -85,6 +85,7 @@ from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
 from .._json import dumps_utf8
 from .._plugin import open_store
+from ..config import CONFIG_DB_NAME
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -95,10 +96,13 @@ from ..model import (
     Voucher,
     memory_connect,
 )
-from ..config import CONFIG_DB_NAME
 from ..pricecalculator import PriceCalculator
 from ..recover import make_fail_downloader, noop_downloader
-from ..replicate import ReplicationAlreadySetup, fail_setup_replication, with_replication
+from ..replicate import (
+    ReplicationAlreadySetup,
+    fail_setup_replication,
+    with_replication,
+)
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,

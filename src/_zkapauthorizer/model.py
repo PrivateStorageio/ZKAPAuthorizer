@@ -39,7 +39,13 @@ from zope.interface import Interface, implementer
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._types import GetTime
-from .replicate import Change, EventStream, snapshot, with_replication, _ReplicationCapableConnection
+from .replicate import (
+    Change,
+    EventStream,
+    _ReplicationCapableConnection,
+    snapshot,
+    with_replication,
+)
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .sql import BoundConnect, Connection, Cursor
 from .storage_common import required_passes

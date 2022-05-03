@@ -511,6 +511,7 @@ def add_event(cursor: SQLite3Cursor, sql_statement: str) -> None:
         (sql_statement,),
     )
 
+
 def get_events(cursor: _SQLite3Cursor) -> EventStream:
     """
     Return all events currently in our event-log.
@@ -523,6 +524,7 @@ def get_events(cursor: _SQLite3Cursor) -> EventStream:
     )
     rows = cursor.fetchall()
     return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+
 
 def prune_events_to(cursor: _SQLite3Cursor, sequence_number: int) -> None:
     """

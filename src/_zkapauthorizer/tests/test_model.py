@@ -79,7 +79,14 @@ from ..recover import (
     make_canned_downloader,
     recover,
 )
-from ..replicate import Change, EventStream, get_events, add_event, prune_events_to, with_replication
+from ..replicate import (
+    Change,
+    EventStream,
+    add_event,
+    get_events,
+    prune_events_to,
+    with_replication,
+)
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (

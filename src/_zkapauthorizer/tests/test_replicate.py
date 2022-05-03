@@ -20,7 +20,7 @@ from twisted.trial.unittest import TestCase as TrialTestCase
 from ..config import CONFIG_DB_NAME, REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, memory_connect
 from ..recover import recover
-from ..replicate import replication_service, snapshot, with_replication, get_events
+from ..replicate import get_events, replication_service, snapshot, with_replication
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import equals_database
 from .strategies import datetimes, tahoe_configs
@@ -280,7 +280,9 @@ class ReplicationServiceTests(TrialTestCase):
 
             # since we've uploaded everything, there should be no
             # events in the store
-            self.assertEqual(tuple(), get_events(tvs.store._connection._conn.cursor()).changes)
+            self.assertEqual(
+                tuple(), get_events(tvs.store._connection._conn.cursor()).changes
+            )
 
         finally:
             srv.stopService()
