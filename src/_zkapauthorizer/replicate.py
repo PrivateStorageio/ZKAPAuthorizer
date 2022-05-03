@@ -500,7 +500,7 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_event(cursor: SQLite3Cursor, sql_statement: str) -> None:
+def add_event(cursor: _SQLite3Cursor, sql_statement: str) -> None:
     """
     Add a new change to the event-log.
     """
@@ -629,16 +629,21 @@ class _ReplicationService(Service):
         with self._connection._conn:
             events = get_events(self._connection._conn.cursor())
 
+        high_seq = events.highest_sequence()
+        # if this is None there are no events at all
+        if high_seq is None:
+            return
+
         # upload latest event-stream
         await self._uploader(
-            "event-stream-{}".format(events.highest_sequence()),
+            "event-stream-{}".format(high_seq),
             events.to_bytes,
         )
 
         # prune the database
         with self._connection._conn:
             curse = self._connection._conn.cursor()
-            prune_events_to(curse, events.highest_sequence())
+            prune_events_to(curse, high_seq)
 
     def stopService(self) -> Deferred[None]:
         """
