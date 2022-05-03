@@ -36,7 +36,7 @@ from .._plugin import open_store
 from ..controller import DummyRedeemer, PaymentController
 from ..config import CONFIG_DB_NAME
 from ..model import memory_connect
-
+from ..replicate import with_replication
 
 @attr.s(auto_attribs=True)
 class AnonymousStorageServer(Fixture):
@@ -92,7 +92,7 @@ class TemporaryVoucherStore(Fixture):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
         db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME))
-        self.store = open_store(self.get_now, memory_connect(db_path.path), self.config)
+        self.store = open_store(self.get_now, with_replication(memory_connect(db_path.path), False), self.config)
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):

@@ -98,7 +98,7 @@ from ..model import (
 from ..config import CONFIG_DB_NAME
 from ..pricecalculator import PriceCalculator
 from ..recover import make_fail_downloader, noop_downloader
-from ..replicate import ReplicationAlreadySetup, fail_setup_replication
+from ..replicate import ReplicationAlreadySetup, fail_setup_replication, with_replication
 from ..resource import NUM_TOKENS, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -233,7 +233,7 @@ def root_from_config(
         config,
         open_store(
             now,
-            memory_connect(db_path.path),
+            with_replication(memory_connect(db_path.path), False),
             config,
         ),
         get_downloader=get_downloader,

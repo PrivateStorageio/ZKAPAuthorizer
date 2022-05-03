@@ -79,7 +79,7 @@ from ..recover import (
     make_canned_downloader,
     recover,
 )
-from ..replicate import Change, EventStream, get_events, add_event, prune_events_to
+from ..replicate import Change, EventStream, get_events, add_event, prune_events_to, with_replication
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
@@ -522,8 +522,7 @@ class VoucherStoreSnapshotTests(TestCase):
         recovered = VoucherStore.from_connection(
             store.pass_value,
             store.now,
-            connection,
-            enable_replication=False,
+            with_replication(connection, False),
         )
         self.assertThat(
             recovered.get(voucher),
