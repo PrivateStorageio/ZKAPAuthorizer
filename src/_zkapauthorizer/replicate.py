@@ -500,7 +500,7 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_event(cursor: SQLite3Cursor, sql_statement: str) -> None:
+def add_event(cursor: _SQLite3Cursor, sql_statement: str) -> None:
     """
     Add a new change to the event-log.
     """

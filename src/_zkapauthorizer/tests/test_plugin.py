@@ -440,17 +440,16 @@ class ServiceTests(TestCase):
                 succeeded(Always()),
             )
 
-        # There is no public interface for just getting the database
-        # abstraction, so...
-        store = plugin._get_store(node_config)
-
         if replicating:
             self.assertThat(
                 plugin._service,
                 AnyMatch(
                     MatchesPredicate(
                         lambda svc: service_matches(
-                            plugin._get_store(node_config), svc
+                            # There is no public interface for just getting the database
+                            # abstraction, so...
+                            plugin._get_store(node_config),
+                            svc,
                         ),
                         "not a replicating service with matching connection: %s",
                     ),
