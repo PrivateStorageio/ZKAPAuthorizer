@@ -262,7 +262,6 @@ class ZKAPAuthorizer(object):
 
         store = self._get_store(node_config)
 
-        # XXX could maybe unify with _get_store code
         async def setup_replication():
             # Setup replication
             tahoe = self._get_tahoe_client(self.reactor, node_config)
