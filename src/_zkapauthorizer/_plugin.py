@@ -89,11 +89,12 @@ def open_store(
 
     :param now: A function that can be used to get the current time.
 
+    :param conn: The database connection to give to the store.
+
     :param node_config: The Tahoe-LAFS configuration object for the node
         for which we want to open a store.
 
-    :param connect: A function that can be used to connect to the underlying
-        database.
+    :return: A new ``VoucherStore`` instance.
     """
     pass_value = get_configured_pass_value(node_config)
     return VoucherStore.from_connection(pass_value, now, conn)
@@ -138,10 +139,10 @@ class ZKAPAuthorizer(object):
         self.reactor.addSystemEventTrigger("before", "shutdown", svc.stopService)
         return svc
 
-    def _get_store(self, node_config):
+    def _get_store(self, node_config: Config) -> VoucherStore:
         """
-        :return VoucherStore: The database for the given node.  At most one
-            connection is made to the database per ``ZKAPAuthorizer`` instance.
+        :return: The ``VoucherStore`` for the given node.  At most one connection
+            is made to the database per ``ZKAPAuthorizer`` instance.
         """
         key = node_config.get_config_path()
         try:
