@@ -296,6 +296,12 @@ class _ReplicationCapableConnection:
         self._replicating = True
 
     def add_mutation_observer(self, fn: MutationObserver) -> None:
+        """
+        Add another observer of changes made through this connection.
+
+        :param fn: An object to call after any transaction with changes is
+            committed on this connection.
+        """
         self._observers = self._observers + (fn,)
 
     def iterdump(self) -> Iterator[str]:
