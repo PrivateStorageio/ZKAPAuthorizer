@@ -43,7 +43,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
-from ._types import GetTime
+from ._types import GetTime, CapStr
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
@@ -156,21 +156,22 @@ class ZKAPAuthorizer(object):
             store = open_store(datetime.now, replicated_conn, node_config)
 
             if is_replication_setup(node_config):
-                client = get_tahoe_client(self.reactor, node_config)
-                mutable = get_replica_rwcap(node_config)
-                uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-                self._add_replication_service(replicated_conn, uploader)
+                self._add_replication_service(replicated_conn, node_config)
             self._stores[key] = store
         return store
 
     def _add_replication_service(
-        self, replicated_conn: _ReplicationCapableConnection, uploader: Uploader
-    ) -> None:
+        self, replicated_conn: _ReplicationCapableConnection, node_config: Config
+    ) -> CapStr:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
+        client = get_tahoe_client(self.reactor, node_config)
+        mutable = get_replica_rwcap(node_config)
+        uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
         replication_service(replicated_conn, uploader).setServiceParent(self._service)
+        return mutable
 
     def _get_redeemer(self, node_config, announcement):
         """
@@ -268,10 +269,7 @@ class ZKAPAuthorizer(object):
             await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
-            client = get_tahoe_client(self.reactor, node_config)
-            mutable = get_replica_rwcap(node_config)
-            uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-            self._add_replication_service(store._connection, uploader)
+            mutable = self._add_replication_service(store._connection, node_config)
             return attenuate_writecap(mutable)
 
         return resource_from_configuration(
