@@ -88,7 +88,7 @@ from ..replicate import (
     prune_events_to,
     with_replication,
 )
-from .fixtures import TemporaryVoucherStore
+from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     deletes,
@@ -1271,3 +1271,52 @@ class ReplicationTests(TestCase):
                 ),
             ),
         )
+
+
+class MemoryConnectTests(TestCase):
+    """
+    Tests for ``memory_connect``.
+    """
+
+    def test_shared(self) -> None:
+        """
+        ``memory_connect`` returns connections to the same database when passed
+        the same path.
+        """
+        path = self.useFixture(TempDir()).join("db.sqlite3")
+        first = memory_connect(path)
+        second = memory_connect(path)
+
+        with first:
+            cursor = first.cursor()
+            cursor.execute("CREATE TABLE foo ( a INT )")
+            cursor.execute("INSERT INTO foo VALUES (?)", (1,))
+
+        with second:
+            cursor = second.cursor()
+            cursor.execute("SELECT a FROM foo")
+            rows = cursor.fetchall()
+
+        self.assertThat(rows, Equals([(1,)]))
+
+    def test_distinct(self) -> None:
+        """
+        ``memory_connect`` returns connections to different databases when passed
+        different paths.
+        """
+        first_path = self.useFixture(TempDir()).join("db.sqlite3")
+        first = memory_connect(first_path)
+        second_path = self.useFixture(TempDir()).join("db.sqlite3")
+        second = memory_connect(second_path)
+
+        with first:
+            cursor = first.cursor()
+            cursor.execute("CREATE TABLE foo ( a INT )")
+            cursor.execute("INSERT INTO foo VALUES (?)", (1,))
+
+        with second:
+            cursor = second.cursor()
+            self.assertThat(
+                partial(cursor.execute, "SELECT a FROM foo"),
+                raises(OperationalError),
+            )
