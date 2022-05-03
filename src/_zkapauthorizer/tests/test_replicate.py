@@ -245,10 +245,7 @@ class ReplicationServiceTests(TrialTestCase):
                 d.callback(None)
                 d = None
 
-        other_connection = memory_connect(tvs.config.get_private_path(CONFIG_DB_NAME))
-        srv = replication_service(
-            tvs.store._connection, other_connection, tvs.store, uploader
-        )
+        srv = replication_service(tvs.store._connection, uploader)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -257,17 +254,17 @@ class ReplicationServiceTests(TrialTestCase):
         try:
             tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
             voucher = urlsafe_b64encode(urandom(32))
-            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
 
             self.assertNoResult(d)
 
             tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
             voucher = urlsafe_b64encode(urandom(32))
-            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
 
             tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
             voucher = urlsafe_b64encode(urandom(32))
-            srv._store.add(voucher, len(tokens), 1, lambda: tokens)
+            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
 
             wait_d.callback(None)
             yield d
@@ -300,14 +297,11 @@ class HypothesisReplicationServiceTests(TestCase):
         When the service starts it enables replication on its database connection.
         """
         tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: now))
-        other_connection = memory_connect(tvs.config.get_private_path(CONFIG_DB_NAME))
 
         async def uploader(name, get_bytes):
             pass
 
-        service = replication_service(
-            tvs.store._connection, other_connection, tvs.store, uploader
-        )
+        service = replication_service(tvs.store._connection, uploader)
         service.startService()
         try:
             self.assertThat(tvs.store._connection._replicating, Equals(True))

@@ -553,8 +553,6 @@ class _ReplicationService(Service):
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
 
     _connection: _ReplicationCapableConnection = field()
-    _private_connection: _SQLite3Connection = field()
-    _store: VoucherStore
     _uploader: Uploader
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
@@ -636,7 +634,7 @@ class _ReplicationService(Service):
         )
 
         # prune the database
-        with self._private_connection:
+        with self._connection._conn:
             curse = self._connection._conn.cursor()
             prune_events_to(curse, events.highest_sequence())
 
@@ -705,8 +703,6 @@ class _ReplicationService(Service):
 
 def replication_service(
     replicated_connection: _ReplicationCapableConnection,
-    private_connection: _SQLite3Connection,
-    store: VoucherStore,
     uploader: Uploader,
 ) -> IService:
     """
@@ -715,7 +711,5 @@ def replication_service(
     """
     return _ReplicationService(
         connection=replicated_connection,
-        private_connection=private_connection,
-        store=store,
         uploader=uploader,
     )

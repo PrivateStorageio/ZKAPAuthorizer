@@ -79,7 +79,7 @@ from ..recover import (
     make_canned_downloader,
     recover,
 )
-from ..replicate import Change, EventStream
+from ..replicate import Change, EventStream, get_events, add_event, prune_events_to
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
@@ -877,9 +877,12 @@ class EventStreamTests(TestCase):
                         change.bound_statement(store._connection.cursor()),
                     )
                 )
-                store.add_event(change.bound_statement(store._connection.cursor()))
+                with store._connection:
+                    curse = store._connection.cursor()
+                    add_event(curse, change.bound_statement(curse))
 
-        events = store.get_events()
+        with store._connection:
+            events = get_events(store._connection.cursor())
         self.assertThat(
             events.changes,
             Equals(tuple(sql_statements)),
@@ -914,16 +917,21 @@ class EventStreamTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
 
-        for change in changes:
-            store.add_event(change.bound_statement(store._connection.cursor()))
+        with store._connection:
+            curse = store._connection.cursor()
+            for change in changes:
+                add_event(curse, change.bound_statement(curse))
 
-        pre_events = store.get_events()
+        with store._connection:
+            pre_events = get_events(store._connection.cursor())
 
         # prune it somewhere
         where = random.randrange(1, len(changes))
-        store.prune_events_to(where)
+        with store._connection:
+            prune_events_to(store._connection.cursor(), where)
 
-        post_events = store.get_events()
+        with store._connection:
+            post_events = get_events(store._connection.cursor())
 
         self.assertThat(
             len(post_events.changes) + where, Equals(len(pre_events.changes))
