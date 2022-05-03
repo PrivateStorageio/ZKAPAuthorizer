@@ -85,6 +85,7 @@ from ..replicate import (
     _ReplicationCapableConnection,
     _ReplicationService,
     setup_tahoe_lafs_replication,
+    with_replication,
 )
 from ..spending import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid
@@ -151,84 +152,22 @@ class OpenStoreTests(TestCase):
     @skipIf(
         platform.isWindows(), "Hard to prevent database from being opened on Windows"
     )
-    @given(tahoe_configs(), datetimes())
-    def test_unopenable_store(self, get_config, now):
+    def test_unopenable_database(self):
         """
-        If the underlying database file cannot be opened then ``open_store``
+        If the underlying database file cannot be opened then ``open_database``
         raises ``StoreOpenError``.
         """
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
 
-        config = get_config(nodedir.path, "tub.port")
-
-        # Create the underlying database file.
-        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
-        open_store(lambda: now, connect(db_path.path), config)
-
         # Prevent further access to it.
         nodedir.child("private").chmod(0o000)
+        db_path = nodedir.child("private").child(CONFIG_DB_NAME)
 
         self.assertThat(
-            lambda: open_store(lambda: now, connect(db_path.path), config),
+            lambda: open_database(partial(connect, db_path.path)),
             raises(StoreOpenError),
         )
-
-    def _replication_enabled_connection_test(self, now: datetime, enabled: bool):
-        """
-        Test that the database connection ends up in replication mode (or not)
-        based on whether replication has been set up or not.
-
-        :param enabled: If True, set up replication and require the connection
-            to be in replication mode.  If False, don't set it up and require
-            it not to be in replication mode.
-        """
-        grid = MemoryGrid()
-
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
-        tahoe = grid.client(nodedir)
-        config = EmptyConfig(nodedir)
-
-        if enabled:
-            self.assertThat(
-                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
-                succeeded(Always()),
-            )
-
-        # Create the underlying database file.
-        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
-        store = open_store(lambda: now, memory_connect(db_path.path), config)
-
-        if isinstance(store._connection, _ReplicationCapableConnection):
-            self.assertThat(
-                # Right now enabling replication does absolutely nothing except
-                # flip this flag, so there's no other behavior to observe in this
-                # test.  Maybe later when there's more replication implementation,
-                # we can assert something more meaningful.
-                store._connection._replicating,
-                Equals(enabled),
-            )
-        else:
-            self.fail(
-                f"store._connection should be _ReplicationCapableConnection "
-                f"but was {store._connection}"
-            )
-
-    @given(datetimes())
-    def test_replication_enabled_connection(self, now):
-        """
-        If replication has been set up then ``open_store`` puts the SQLite3
-        connection into replication mode.
-        """
-        self._replication_enabled_connection_test(now, True)
-
-    @given(datetimes())
-    def test_replication_disabled_connection(self, now):
-        """
-        If replication has not been set up then ``open_store`` does not put the
-        SQLite3 connection into replication mode.
-        """
-        self._replication_enabled_connection_test(now, False)
 
 
 class GetRRefTests(TestCase):
@@ -506,10 +445,21 @@ class ServiceTests(TestCase):
         # abstraction, so...
         store = plugin._get_store(node_config)
 
-        self.assertThat(
-            [svc for svc in plugin._service if service_matches(store, svc)],
-            HasLength(1 if replicating else 0),
-        )
+        if replicating:
+            self.assertThat(
+                plugin._service,
+                AnyMatch(
+                    MatchesPredicate(
+                        lambda svc: service_matches(plugin._get_store(node_config), svc),
+                        "not a replicating service with matching connection: %s"
+                    ),
+                )
+            )
+        else:
+            self.assertThat(
+                list(plugin._service),
+                Equals([]),
+            )
 
 
 def service_matches(store: VoucherStore, svc: object) -> bool:
@@ -517,7 +467,7 @@ def service_matches(store: VoucherStore, svc: object) -> bool:
     :return: ``True`` if ``svc`` is a replication service for the given
         store's database connection, ``False`` otherwise.
     """
-    return isinstance(svc, _ReplicationService) and svc._connection is store._connection
+    return isinstance(svc, _ReplicationService) and svc._connection is store._connection and svc._connection._replicating
 
 
 def has_metric(name_matcher, value_matcher):
@@ -711,7 +661,7 @@ class ClientPluginTests(TestCase):
         # Populate the database with unspent tokens.
         def redeem():
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-            store = open_store(lambda: now, connect(db_path.path), node_config)
+            store = open_store(lambda: now, with_replication(connect(db_path.path), False), node_config)
 
             controller = PaymentController(
                 store,
@@ -823,12 +773,17 @@ class ClientResourceTests(TestCase):
             succeeded(matches_response(code_matcher=Equals(201))),
         )
 
+        # This causes MemoryReactorClock to run all the hooks, which
+        # we need to actually get startService() called and
+        # _replicating getting set
+        self.reactor.run()
+
         self.assertThat(
             self.plugin._service,
             AnyMatch(
                 MatchesPredicate(
                     lambda svc: service_matches(self.plugin._get_store(config), svc),
-                    "it bad: %s"
+                    "not a replicating service with matching connection: %s"
                 ),
             ),
         )

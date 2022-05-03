@@ -100,7 +100,7 @@ def open_store(
     """
     pass_value = get_configured_pass_value(node_config)
     return VoucherStore.from_connection(
-        pass_value, now, conn, is_replication_setup(node_config)
+        pass_value, now, conn
     )
 
 

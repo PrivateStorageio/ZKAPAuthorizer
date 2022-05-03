@@ -39,7 +39,7 @@ from zope.interface import Interface, implementer
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._types import GetTime
-from .replicate import Change, EventStream, snapshot, with_replication
+from .replicate import Change, EventStream, snapshot, with_replication, _ReplicationCapableConnection
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .sql import BoundConnect, Connection, Cursor
 from .storage_common import required_passes
@@ -101,7 +101,7 @@ def open_database(connect: BoundConnect) -> _SQLite3Connection:
         raise StoreOpenError(e)
 
 
-def initialize_database(conn: ReplicationCapableConnection) -> None:
+def initialize_database(conn: _ReplicationCapableConnection) -> None:
     """
     Make any persistent and temporary schema changes required to make the
     given database compatible with this version of the software.
@@ -263,7 +263,7 @@ class VoucherStore(object):
 
     pass_value: int
     now: GetTime
-    _connection: Connection
+    _connection: _ReplicationCapableConnection
 
     _log = Logger()
 
@@ -272,14 +272,8 @@ class VoucherStore(object):
         cls,
         pass_value: int,
         now: GetTime,
-        conn: _SQLite3Connection,
-        enable_replication: bool,
+        replicating_conn: _ReplicationCapableConnection,
     ) -> VoucherStore:
-        # Make sure we always have a replication-enabled connection even if
-        # we're not doing replication yet because we might want to turn it on
-        # later.  Also, if we're doing it, we need it to get involved in
-        # database initialization which happens next.
-        replicating_conn = with_replication(conn, enable_replication)
         initialize_database(replicating_conn)
         return cls(pass_value=pass_value, now=now, connection=replicating_conn)
 
@@ -817,7 +811,7 @@ class LeaseMaintenance(object):
 
     _pass_value: int
     _now: GetTime
-    _connection: Connection
+    _connection: Connection  # _ReplicationCapableConnection probably
     _rowid: Optional[int] = None
 
     @with_cursor

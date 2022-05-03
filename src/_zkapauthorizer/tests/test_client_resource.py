@@ -95,6 +95,7 @@ from ..model import (
     Voucher,
     memory_connect,
 )
+from ..config import CONFIG_DB_NAME
 from ..pricecalculator import PriceCalculator
 from ..recover import make_fail_downloader, noop_downloader
 from ..replicate import ReplicationAlreadySetup, fail_setup_replication
@@ -227,11 +228,12 @@ def root_from_config(
 
     :return IResource: The root client resource.
     """
+    db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
     return from_configuration(
         config,
         open_store(
             now,
-            memory_connect,
+            memory_connect(db_path.path),
             config,
         ),
         get_downloader=get_downloader,
