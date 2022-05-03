@@ -80,12 +80,7 @@ from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import (
-    NotEnoughTokens,
-    StoreOpenError,
-    VoucherStore,
-    open_database,
-)
+from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, open_database
 from ..replicate import (
     _ReplicationService,
     setup_tahoe_lafs_replication,
