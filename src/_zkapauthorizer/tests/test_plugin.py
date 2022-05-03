@@ -409,22 +409,11 @@ class ServiceTests(TestCase):
         )
 
     @given(tahoe_configs().flatmap(just))
-    def test_replicating(self, get_config):
+    def test_replicating(self, get_config) -> None:
         """
         There is a replication service for a database which has been placed into
         replication mode.
         """
-        self._replication_service_test(get_config, True)
-
-    @given(tahoe_configs().flatmap(just))
-    def test_not_replicating(self, get_config):
-        """
-        There is not a replication service for a database which has not been
-        placed into replication mode.
-        """
-        self._replication_service_test(get_config, False)
-
-    def _replication_service_test(self, get_config, replicating: bool):
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         node_config = get_config(nodedir.path, "tub.port")
         grid = MemoryGrid()
@@ -433,33 +422,42 @@ class ServiceTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        if replicating:
-            # Place it into replication mode.
-            self.assertThat(
-                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
-                succeeded(Always()),
-            )
+        # Place it into replication mode.
+        self.assertThat(
+            Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
+            succeeded(Always()),
+        )
 
-        if replicating:
-            self.assertThat(
-                plugin._service,
-                AnyMatch(
-                    MatchesPredicate(
-                        lambda svc: service_matches(
-                            # There is no public interface for just getting the database
-                            # abstraction, so...
-                            plugin._get_store(node_config),
-                            svc,
-                        ),
-                        "not a replicating service with matching connection: %s",
-                    ),
+        # This causes MemoryReactorClock to run all the hooks, which
+        # we need to actually get startService() called and
+        # _replicating getting set
+        reactor.run()
+
+        # There is no public interface for just getting the database
+        # abstraction, so...
+        store = plugin._get_store(node_config)
+        self.assertThat(
+            plugin._service,
+            AnyMatch(
+                MatchesPredicate(
+                    lambda svc: service_matches(store, svc),
+                    "not a replicating service with matching connection: %s",
                 ),
-            )
-        else:
-            self.assertThat(
-                list(plugin._service),
-                Equals([]),
-            )
+            ),
+        )
+
+    def test_not_replicating(self) -> None:
+        """
+        There is not a replication service for a database which has not been
+        placed into replication mode.
+        """
+        reactor = MemoryReactorClock()
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
+
+        self.assertThat(
+            list(plugin._service),
+            Equals([]),
+        )
 
 
 def service_matches(store: VoucherStore, svc: object) -> bool:
