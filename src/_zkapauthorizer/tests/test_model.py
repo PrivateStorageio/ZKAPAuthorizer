@@ -70,6 +70,7 @@ from ..model import (
     Redeemed,
     Voucher,
     VoucherStore,
+    memory_connect,
     with_cursor_async,
 )
 from ..recover import (
@@ -191,9 +192,8 @@ class WithCursorAsyncTests(TestCase):
         # The shared cache mode is required for two connections to the same
         # memory-mode database.
         # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
-        dbpath = "file:async?mode=memory&cache=shared"
-        conn_a = connect(dbpath, uri=True)
-        conn_b = connect(dbpath, uri=True)
+        conn_a = memory_connect("async")
+        conn_b = memory_connect("async")
 
         class Database:
             _connection: Connection = conn_a
