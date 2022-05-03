@@ -305,8 +305,6 @@ class _ReplicationCapableConnection:
         """
         return self._conn.iterdump()
 
-    # XXX there is a "commit" method too?
-
     def close(self) -> None:
         return self._conn.close()
 
