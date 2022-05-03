@@ -17,8 +17,8 @@ from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.python.filepath import FilePath
 from twisted.trial.unittest import TestCase as TrialTestCase
 
-from ..config import CONFIG_DB_NAME, REPLICA_RWCAP_BASENAME
-from ..model import RandomToken, memory_connect
+from ..config import REPLICA_RWCAP_BASENAME
+from ..model import RandomToken
 from ..recover import recover
 from ..replicate import get_events, replication_service, snapshot, with_replication
 from .fixtures import TempDir, TemporaryVoucherStore

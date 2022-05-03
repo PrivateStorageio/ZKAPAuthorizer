@@ -20,7 +20,6 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import connect as _connect
 from typing import Any, Callable
 from weakref import WeakValueDictionary
@@ -70,7 +69,6 @@ from .replicate import (
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
-from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 from .tahoe import ITahoeClient, attenuate_writecap, get_tahoe_client
 

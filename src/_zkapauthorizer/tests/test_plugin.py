@@ -16,7 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
@@ -76,7 +76,7 @@ from twisted.plugins.zkapauthorizer import storage_server_plugin
 from .. import NAME
 from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
-from ..config import CONFIG_DB_NAME, EmptyConfig
+from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
@@ -84,11 +84,9 @@ from ..model import (
     NotEnoughTokens,
     StoreOpenError,
     VoucherStore,
-    memory_connect,
     open_database,
 )
 from ..replicate import (
-    _ReplicationCapableConnection,
     _ReplicationService,
     setup_tahoe_lafs_replication,
     with_replication,
