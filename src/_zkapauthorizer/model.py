@@ -811,7 +811,7 @@ class LeaseMaintenance(object):
 
     _pass_value: int
     _now: GetTime
-    _connection: Connection  # _ReplicationCapableConnection probably
+    _connection: _ReplicationCapableConnection
     _rowid: Optional[int] = None
 
     @with_cursor
