@@ -17,7 +17,6 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-import random
 from datetime import datetime, timedelta
 from functools import partial
 from io import BytesIO
@@ -910,8 +909,9 @@ class EventStreamTests(TestCase):
             ),
             min_size=2,
         ),
+        randoms(),
     )
-    def test_event_stream_prune(self, get_config, now, changes):
+    def test_event_stream_prune(self, get_config, now, changes, random):
         """
         We can prune the event-stream
         """
