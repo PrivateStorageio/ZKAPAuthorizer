@@ -1261,7 +1261,7 @@ _sql_text = text(
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: _sql_text,
+    StorageAffinity.TEXT: one_of(_sql_text, datetimes()),
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),

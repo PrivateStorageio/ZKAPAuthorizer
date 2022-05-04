@@ -28,22 +28,26 @@ from testtools.matchers import Equals
 from ..sql import bind_arguments, statement_mutates
 from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
 
+mutations = tuples(
+    sampled_from([inserts, deletes, updates]),
+    sql_identifiers(),
+    tables(),
+).flatmap(
+    lambda x: x[0](x[1], x[2]),
+)
+
 
 class BindTests(TestCase):
     """
     Tests for ``bind_arguments``
     """
 
-    @given(
-        tuples(
-            sampled_from([inserts, deletes, updates]),
-            sql_identifiers(),
-            tables(),
-        ).flatmap(
-            lambda x: x[0](x[1], x[2]),
-        )
-    )
-    def test_mutate(self, change):
+    @given(mutations)
+    def test_mutate(self, change) -> None:
+        """
+        ``bind_arguments`` creates a SQL statement as a single string which
+        represents the statement and the given arguments.
+        """
         conn = sqlite3.connect(":memory:")
         cursor = conn.cursor()
         self.assertThat(
@@ -57,28 +61,32 @@ class MutateTests(TestCase):
     Tests for ``statement_mutates``
     """
 
-    @given(
-        tuples(
-            sampled_from([inserts, deletes, updates]),
-            sql_identifiers(),
-            tables(),
-        ).flatmap(
-            lambda x: x[0](x[1], x[2]),
-        )
-    )
-    def test_mutate(self, change):
+    @given(mutations)
+    def test_mutate(self, change) -> None:
+        """
+        ``statement_mutates`` returns True for SQL INSERT, DELETE, and UPDATE
+        statements.
+        """
         self.assertThat(
             statement_mutates(change.statement()),
             Equals(True),
         )
 
     @given(
-        tuples(sampled_from([selects]), sql_identifiers(),).flatmap(
+        tuples(sampled_from([selects]), sql_identifiers()).flatmap(
             lambda x: x[0](x[1]),
         )
     )
     def test_non_mutate(self, change):
+        """
+        ``statement_mutates`` returns False for SQL SELECT and BEGIN IMMEDIATE
+        TRANSACTION statements.
+        """
         self.assertThat(
             statement_mutates(change.statement()),
+            Equals(False),
+        )
+        self.assertThat(
+            statement_mutates("BEGIN IMMEDIATE TRANSACTION"),
             Equals(False),
         )

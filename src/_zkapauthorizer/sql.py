@@ -16,7 +16,7 @@ from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 from attrs import frozen
 from sqlparse import parse
 
-SQLType = Union[int, float, str, bytes, None]
+SQLType = Union[int, float, str, bytes, datetime, None]
 
 
 class AbstractCursor(Protocol):
@@ -180,10 +180,9 @@ class Insert:
         return self.fields
 
 
-def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) -> str:
+def quote_sql_value(cursor: Cursor, value: SQLType) -> str:
     """
-    Use the SQL `quote()` function to return the quoted version of
-    `value`. Supports `int`, `float`, `None`, `str` and `bytes`.
+    Use the SQL `quote()` function to return the quoted version of `value`.
 
     :returns: the quoted value
     """
@@ -196,7 +195,7 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
         result = cursor.fetchall()[0][0]
         assert isinstance(result, str)
         return result
-    raise ValueError("Do not know how to quote value of type f{type(value)}")
+    raise ValueError(f"Do not know how to quote value of type {type(value)}")
 
 
 def bind_arguments(cursor, statement, args):
