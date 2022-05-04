@@ -55,7 +55,6 @@ from ..sql import Table, create_table
 from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
 from .common import delayedProxy
 from .matchers import equals_database, matches_capability, raises
-from .resources import client_manager
 from .strategies import (
     deletes,
     inserts,
@@ -304,12 +303,6 @@ class TahoeLAFSDownloaderTests(TestCase):
     """
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
-
-    # Support test methods that return a Deferred.
-    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
-
-    # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", client_manager)]
 
     @inlineCallbacks
     def test_uploader_and_downloader(self):
