@@ -224,6 +224,8 @@ def path_to_memory_uri(path: FilePath) -> str:
     :return: A string suitable to be passed as the first argument to
         ``sqlite3.connect`` along with the `uri=True` keyword argument.
     """
+    # See https://www.sqlite.org/uri.html for docs on URI-style database
+    # paths.
     return (
         DecodedURL()
         .replace(
@@ -233,6 +235,9 @@ def path_to_memory_uri(path: FilePath) -> str:
             path=path.asTextMode().path.split(os.sep),
         )
         .add("mode", "memory")
+        # The shared cache mode is required for two connections to the same
+        # memory-mode database.
+        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
         .add("cache", "shared")
         .to_text()
     )

@@ -186,14 +186,9 @@ class WithCursorAsyncTests(TestCase):
         # If we want to observe transactional side-effects then we need
         # transactionally independent views on the database.  For SQLite3 (at
         # least), this means two different connections to the same database.
-        # see https://www.sqlite.org/uri.html for docs on URI-style database
-        # paths.
-        #
-        # The shared cache mode is required for two connections to the same
-        # memory-mode database.
-        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
-        conn_a = memory_connect("async")
-        conn_b = memory_connect("async")
+        path = self.useFixture(TempDir()).join("async")
+        conn_a = memory_connect(path)
+        conn_b = memory_connect(path)
 
         class Database:
             _connection: Connection = conn_a
