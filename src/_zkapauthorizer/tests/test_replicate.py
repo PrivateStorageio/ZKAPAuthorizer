@@ -147,6 +147,36 @@ class ReplicationConnectionTests(TestCase):
         else:
             self.fail("exception should propagate")
 
+    def test_importance_ends(self):
+        """
+        After the `important()` context-manager is exited, the cursor is no longer
+        marked as important.
+        """
+        mutations = []
+        conn = with_replication(connect(":memory:"), True)
+        conn.add_mutation_observer(
+            lambda cursor, observed: lambda: mutations.append(observed)
+        )
+        important_statement = "CREATE TABLE 'important' ( 'a' INT )"
+        less_important_statement = "CREATE TABLE 'less_important' ( 'a' INT )"
+        with conn:
+            cursor = conn.cursor()
+            with cursor.important():
+                cursor.execute(important_statement)
+            cursor.execute(less_important_statement)
+
+        self.assertThat(
+            mutations,
+            Equals(
+                [
+                    [
+                        (True, important_statement, ((),)),
+                        (False, less_important_statement, ((),)),
+                    ]
+                ]
+            ),
+        )
+
     def test_executemany(self):
         """
         The connection's cursor objects have an ``executemany`` method that
