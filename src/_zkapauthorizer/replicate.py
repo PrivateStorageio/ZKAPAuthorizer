@@ -380,7 +380,7 @@ class _ReplicationCapableCursor:
     # true while statements are "important" (which is pased along to
     # the observers and interpreted as being "important data that the
     # user will be interested in preserving")
-    _important: bool = field(default=False)
+    _important: bool = field(init=False, default=False)
 
     @property
     def lastrowid(self):
