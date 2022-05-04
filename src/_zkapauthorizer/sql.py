@@ -343,5 +343,5 @@ def statement_mutates(statement: str) -> bool:
     """
     if statement == "BEGIN IMMEDIATE TRANSACTION":
         return False
-    (statement,) = parse(statement)
-    return statement.get_type() not in {"SELECT"}
+    (parsed,) = parse(statement)
+    return parsed.get_type() not in {"SELECT"}

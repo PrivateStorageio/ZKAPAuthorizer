@@ -59,7 +59,7 @@ class BindTests(TestCase):
             Equals(change.bound_statement(self.cursor)),
         )
 
-    def test_no_arguments(self):
+    def test_no_arguments(self) -> None:
         """
         ``bind_arguments`` returns the input statement if there are no
         placeholders and no arguments.
@@ -70,7 +70,7 @@ class BindTests(TestCase):
             Equals(statement),
         )
 
-    def test_too_few_placeholders(self):
+    def test_too_few_placeholders(self) -> None:
         """
         ``bind_arguments`` raises ``ValueError`` if called with a statement with
         fewer placeholders than arguments.
@@ -80,7 +80,7 @@ class BindTests(TestCase):
             raises(ValueError),
         )
 
-    def test_too_many_placeholders(self):
+    def test_too_many_placeholders(self) -> None:
         """
         ``bind_arguments`` raises ``ValueError`` if called with a statement with
         more placeholders than arguments.
@@ -112,7 +112,7 @@ class MutateTests(TestCase):
             lambda x: x[0](x[1]),
         )
     )
-    def test_non_mutate(self, change):
+    def test_non_mutate(self, change) -> None:
         """
         ``statement_mutates`` returns False for SQL SELECT and BEGIN IMMEDIATE
         TRANSACTION statements.
