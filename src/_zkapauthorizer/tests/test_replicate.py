@@ -114,6 +114,26 @@ class ReplicationConnectionTests(TestCase):
             raises(OperationalError),
         )
 
+    def test_important_exception(self):
+        """
+        An exception inside an `important()` context-manager is allowed to
+        propagate
+        """
+        dbpath = self.useFixture(TempDir()).join("db.sqlite")
+        conn = with_postponed_replication(connect(dbpath))
+        imp = conn.cursor().important()
+
+        class ApplicationError(Exception):
+            pass
+
+        try:
+            with imp:
+                raise ApplicationError()
+        except ApplicationError:
+            pass
+        else:
+            self.fail("exception should propagate")
+
     def test_executemany(self):
         """
         The connection's cursor objects have an ``executemany`` method that
