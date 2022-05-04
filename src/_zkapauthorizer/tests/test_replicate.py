@@ -8,7 +8,7 @@ from functools import partial
 from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
-from typing import Optional
+from typing import BinaryIO, Callable, Optional
 
 from attrs import frozen
 from hypothesis import given
@@ -265,13 +265,13 @@ class _MatchUpload(Matcher):
     name_matcher: Matcher[str]
     stream_matcher: Matcher[EventStream]
 
-    def match(self, matchee: object) -> Optional[Mismatch]:
+    def match(self, matchee: tuple[str, Callable[[], BinaryIO]]) -> Optional[Mismatch]:
         """
         Do the matching.
         """
         name, get_data = matchee
 
-        maybe_mismatches: Optional[Mismatch] = []
+        maybe_mismatches: list[Optional[Mismatch]] = []
         maybe_mismatches.append(self.name_matcher.match(name))
         try:
             stream = EventStream.from_bytes(get_data())
@@ -283,6 +283,7 @@ class _MatchUpload(Matcher):
         mismatches = [m for m in maybe_mismatches if m is not None]
         if len(mismatches) > 0:
             return MismatchesAll(mismatches)
+        return None
 
 
 class ReplicationServiceTests(TestCase):
@@ -307,7 +308,7 @@ class ReplicationServiceTests(TestCase):
 
         # we use this to contol when the first upload happens, so that we
         # actually use the queue
-        wait_d = Deferred()
+        wait_d: Deferred[None] = Deferred()
 
         uploads = []
         upload_completed = False
