@@ -72,7 +72,6 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
-    Sequence,
 )
 
 import cbor2
@@ -264,8 +263,8 @@ def with_replication(
     return _ReplicationCapableConnection(connection, enable_replication)
 
 
-Mutation = tuple[bool, str, Sequence[tuple[SQLType, ...]]]
-MutationObserver = Callable[[_SQLite3Cursor, Sequence[Mutation]], Callable[[], None]]
+Mutation = tuple[bool, str, Iterable[tuple[SQLType, ...]]]
+MutationObserver = Callable[[_SQLite3Cursor, Iterable[Mutation]], Callable[[], None]]
 
 
 @define
@@ -286,8 +285,8 @@ class _ReplicationCapableConnection:
     # the "real" / normal sqlite connection
     _conn: _SQLite3Connection
     _replicating: bool
-    _observers: tuple = Factory(tuple)
-    _mutations: list = Factory(list)
+    _observers: tuple[MutationObserver, ...] = Factory(tuple)
+    _mutations: list[Mutation] = Factory(list)
 
     def enable_replication(self) -> None:
         """
@@ -394,12 +393,13 @@ class _ReplicationCapableCursor:
     def close(self):
         return self._cursor.close()
 
-    def execute(self, statement: str, row: Iterable[Any] = ()) -> Cursor:
+    def execute(self, statement: str, row: Iterable[SQLType] = ()) -> Cursor:
         """
         sqlite's Cursor API
 
         :param row: the arguments
         """
+        assert isinstance(row, tuple)
         self._cursor.execute(statement, row)
         if self._connection._replicating and statement_mutates(statement):
             # note that this interface is for multiple statements, so
@@ -678,7 +678,7 @@ class _ReplicationService(Service):
     def observed_event(
         self,
         unobserved_cursor: _SQLite3Cursor,
-        all_changes: Sequence[Mutation],
+        all_changes: Iterable[Mutation],
     ) -> Callable[[], None]:
         """
         A mutating SQL statement was observed by the cursor. This is like
