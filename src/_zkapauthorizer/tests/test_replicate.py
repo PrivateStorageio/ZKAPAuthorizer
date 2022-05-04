@@ -8,21 +8,35 @@ from functools import partial
 from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
+from typing import Optional
 
-from allmydata.client import config_from_string
+from attrs import frozen
 from hypothesis import given
 from testtools import TestCase
-from testtools.matchers import Equals, raises
-from twisted.internet.defer import Deferred, inlineCallbacks
+from testtools.matchers import (
+    Equals,
+    HasLength,
+    MatchesListwise,
+    MatchesStructure,
+    Mismatch,
+    raises,
+)
+from testtools.matchers._higherorder import MismatchesAll
+from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
-from twisted.trial.unittest import TestCase as TrialTestCase
 
-from ..config import REPLICA_RWCAP_BASENAME
+from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
 from ..model import RandomToken
 from ..recover import recover
-from ..replicate import get_events, replication_service, snapshot, with_replication
+from ..replicate import (
+    EventStream,
+    get_events,
+    replication_service,
+    snapshot,
+    with_replication,
+)
 from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import equals_database
+from .matchers import Matcher, equals_database, returns
 from .strategies import datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
@@ -224,88 +238,145 @@ class ReplicationConnectionTests(TestCase):
         )
 
 
-class ReplicationServiceTests(TrialTestCase):
+def match_upload(
+    name_matcher: Matcher[str],
+    stream_matcher: Matcher[EventStream],
+) -> Matcher[tuple[str, EventStream]]:
+    """
+    Match faked Tahoe-LAFS EventStream uploads with matching name and
+    EventStream.
+    """
+    return _MatchUpload(name_matcher, stream_matcher)
+
+
+@frozen
+class _MatchUpload(Matcher):
+    """
+    Match a two-tuple where the first element is the name of an upload and the
+    second element is a function that returns a ``BinaryIO`` that has contents
+    that can be parsed as an ``EventStream``.
+
+    :ivar name_matcher: A matcher for the upload name.
+
+    :ivar stream_matcher: A matcher for the ``EventStream`` that can be
+        deserialized from the bytes of the upload.
+    """
+
+    name_matcher: Matcher[str]
+    stream_matcher: Matcher[EventStream]
+
+    def match(self, matchee: object) -> Optional[Mismatch]:
+        """
+        Do the matching.
+        """
+        name, get_data = matchee
+
+        maybe_mismatches: Optional[Mismatch] = []
+        maybe_mismatches.append(self.name_matcher.match(name))
+        try:
+            stream = EventStream.from_bytes(get_data())
+        except Exception as e:
+            maybe_mismatches.append(Mismatch(f"Parsing the stream failed: {e}"))
+        else:
+            maybe_mismatches.append(self.stream_matcher.match(stream))
+
+        mismatches = [m for m in maybe_mismatches if m is not None]
+        if len(mismatches) > 0:
+            return MismatchesAll(mismatches)
+
+
+class ReplicationServiceTests(TestCase):
     """
     Tests for ``_ReplicationService``.
     """
 
-    @inlineCallbacks
-    def test_replicate(self):
+    def test_replicate(self) -> None:
         """
         Making changes to the voucher store while replication is turned on
         causes event-stream objects to be uploaded.
         """
 
         def get_config(rootpath, portnumfile):
-            basedir = FilePath(rootpath).asTextMode()
-            config = config_from_string(basedir.path, portnumfile, "")
-            config._basedir = basedir.path
-            config.portnum_fname = portnumfile
-            return config
+            return EmptyConfig(FilePath(rootpath))
 
-        tvs = TemporaryVoucherStore(get_config, lambda: datetime.now())
-        tvs.setUp()
-        self.addCleanup(tvs._cleanUp)
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
         rwcap_file.setContent(b"URL:DIR2:stuff")
 
-        uploads = []
-        d = Deferred()
-        # we use this to contol when the first upload happens, so that
-        # we actually use the queue
+        # we use this to contol when the first upload happens, so that we
+        # actually use the queue
         wait_d = Deferred()
+
+        uploads = []
+        upload_completed = False
 
         async def uploader(name, get_data):
             uploads.append((name, get_data))
             await wait_d
-            nonlocal d
-            if d is not None:
-                d.callback(None)
-                d = None
+            nonlocal upload_completed
+            upload_completed = True
 
         srv = replication_service(tvs.store._connection, uploader)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
         srv.startService()
+        self.addCleanup(srv.stopService)
 
-        try:
+        def add_tokens():
             tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
             voucher = urlsafe_b64encode(urandom(32))
             tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
 
-            self.assertNoResult(d)
+        # Add some tokens, which are considered important.
+        add_tokens()
 
-            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-            voucher = urlsafe_b64encode(urandom(32))
-            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
+        # Still, the upload cannot complete until we fire wait_d.  Verify
+        # that's working as intended.
+        self.assertFalse(upload_completed)
 
-            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-            voucher = urlsafe_b64encode(urandom(32))
-            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
+        # Add two more groups of tokens.  These are also important.  They
+        # should be included in an upload but they cannot be included in the
+        # upload that already started.
+        add_tokens()
+        add_tokens()
 
-            wait_d.callback(None)
-            yield d
+        # Finish the first upload.
+        wait_d.callback(None)
+        self.assertTrue(upload_completed)
 
-            # a voucher is "important" so we should have queued some
-            # uploads .. but the last two were queued while the first
-            # was still uploading, so those last two should be
-            # "coalesced" into a single one. That means we expect two
-            # uploads
-            self.assertEqual(
-                [name for name, _ in uploads], ["event-stream-11", "event-stream-33"]
-            )
+        # Now both the first upload and a second upload should have completed.
+        # There is no third upload because the data for the 2nd and 3rd
+        # add_tokens calls should have been combined into a single upload.
+        self.assertThat(
+            uploads,
+            MatchesListwise(
+                [
+                    match_upload(
+                        Equals("event-stream-11"),
+                        MatchesStructure(
+                            changes=HasLength(11),
+                            highest_sequence=returns(Equals(11)),
+                        ),
+                    ),
+                    match_upload(
+                        Equals("event-stream-33"),
+                        MatchesStructure(
+                            changes=HasLength(22),
+                            highest_sequence=returns(Equals(33)),
+                        ),
+                    ),
+                ],
+            ),
+        )
 
-            # since we've uploaded everything, there should be no
-            # events in the store
-            self.assertEqual(
-                tuple(), get_events(tvs.store._connection._conn.cursor()).changes
-            )
-
-        finally:
-            srv.stopService()
+        # since we've uploaded everything, there should be no
+        # events in the store
+        self.assertEqual(
+            tuple(), get_events(tvs.store._connection._conn.cursor()).changes
+        )
 
 
 class HypothesisReplicationServiceTests(TestCase):

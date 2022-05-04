@@ -23,12 +23,7 @@ from testtools.matchers import (
     IsInstance,
     MatchesStructure,
 )
-from testtools.twistedsupport import (
-    AsynchronousDeferredRunTest,
-    failed,
-    has_no_result,
-    succeeded,
-)
+from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
 from zope.interface import Interface
 
