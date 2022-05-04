@@ -133,8 +133,7 @@ class ReplicationConnectionTests(TestCase):
         An exception inside an `important()` context-manager is allowed to
         propagate
         """
-        dbpath = self.useFixture(TempDir()).join("db.sqlite")
-        conn = with_postponed_replication(connect(dbpath))
+        conn = with_postponed_replication(connect(":memory:"))
         imp = conn.cursor().important()
 
         class ApplicationError(Exception):
