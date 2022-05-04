@@ -83,7 +83,7 @@ from ..recover import (
 from ..replicate import (
     Change,
     EventStream,
-    add_event,
+    add_events,
     get_events,
     prune_events_to,
     with_replication,
@@ -885,10 +885,10 @@ class EventStreamTests(TestCase):
                 )
                 with store._connection:
                     curse = store._connection.cursor()
-                    add_event(curse, change.bound_statement(curse))
+                    add_events(curse, [change.bound_statement(curse)])
 
         with store._connection:
-            events = get_events(store._connection.cursor())
+            events = get_events(store._connection)
         self.assertThat(
             events.changes,
             Equals(tuple(sql_statements)),
@@ -925,19 +925,17 @@ class EventStreamTests(TestCase):
 
         with store._connection:
             curse = store._connection.cursor()
-            for change in changes:
-                add_event(curse, change.bound_statement(curse))
+            add_events(curse, [change.bound_statement(curse) for change in changes])
 
         with store._connection:
-            pre_events = get_events(store._connection.cursor())
+            pre_events = get_events(store._connection)
 
         # prune it somewhere
         where = random.randrange(1, len(changes))
-        with store._connection:
-            prune_events_to(store._connection.cursor(), where)
+        prune_events_to(store._connection, where)
 
         with store._connection:
-            post_events = get_events(store._connection.cursor())
+            post_events = get_events(store._connection)
 
         self.assertThat(
             len(post_events.changes) + where, Equals(len(pre_events.changes))

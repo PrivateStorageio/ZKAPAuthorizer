@@ -79,7 +79,7 @@ from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
 from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
-from twisted.python.failure import Failure
+from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
@@ -513,44 +513,130 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_event(cursor: _SQLite3Cursor, sql_statement: str) -> None:
+def add_events(cursor: _SQLite3Cursor, sql_statements: Iterable[str]) -> None:
     """
-    Add a new change to the event-log.
+    Add some new changes to the event-log.
     """
-    cursor.execute(
+    cursor.executemany(
         """
         INSERT INTO [event-stream]([statement]) VALUES (?)
         """,
-        (sql_statement,),
+        ((sql,) for sql in sql_statements),
     )
 
 
-def get_events(cursor: _SQLite3Cursor) -> EventStream:
+def get_events(conn: _SQLite3Connection) -> EventStream:
     """
     Return all events currently in our event-log.
     """
-    cursor.execute(
-        """
-        SELECT [sequence-number], [statement]
-        FROM [event-stream]
-        """
-    )
-    rows = cursor.fetchall()
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT [sequence-number], [statement]
+            FROM [event-stream]
+            """
+        )
+        rows = cursor.fetchall()
     return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
 
 
-def prune_events_to(cursor: _SQLite3Cursor, sequence_number: int) -> None:
+def prune_events_to(conn: _SQLite3Connection, sequence_number: int) -> None:
     """
     Remove all events <= sequence_number
     """
-    cursor.execute(
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM [event-stream]
+            WHERE [sequence-number] <= (?)
+            """,
+            (sequence_number,),
+        )
+        cursor.fetchall()
+
+
+@frozen
+class AccumulatedChanges:
+    """
+    A summary of some changes that have been made.
+
+    :ivar important: Are any of these "important" changes?
+
+    :ivar size: The approximate size in bytes to represent all of the changes.
+    """
+
+    important: bool
+    size: int
+
+    @classmethod
+    def no_changes(cls):
         """
-        DELETE FROM [event-stream]
-        WHERE [sequence-number] <= (?)
-        """,
-        (sequence_number,),
-    )
-    cursor.fetchall()
+        Create an ``AccumulatedChanges`` that represents no changes.
+        """
+        return cls(False, 0)
+
+    @classmethod
+    def from_connection(cls, connection: _SQLite3Connection) -> AccumulatedChanges:
+        """
+        Load information about unreplicated changes from the database.
+        """
+        # this size is larger than what we would have computed via
+        # `from_changes` which only counts the statement-sizes .. but maybe
+        # fine?
+        events = get_events(connection)
+        data = events.to_bytes()
+        size = data.seek(0, os.SEEK_END)
+        # XXX We don't really know this should be False.
+        return cls(False, size)
+
+    @classmethod
+    def from_statements(
+        cls, important: bool, bound_statements: Iterable[str]
+    ) -> AccumulatedChanges:
+        """
+        Load information about unreplicated changes from SQL statements giving
+        those changes.
+        """
+        # note that we're ignoring a certain amount of size overhead here: the
+        # _actual_ size will be some CBOR information and the sequence number,
+        # although the statement text should still dominate.
+        return cls(important, sum(map(len, bound_statements)))
+
+    def __add__(self, other):
+        return AccumulatedChanges(
+            self.size + other.size, self.important or other.important
+        )
+
+
+def bind_statements(
+    cursor: _SQLite3Cursor, changes: Iterable[Mutation]
+) -> tuple[bool, Iterable[str]]:
+    """
+    Bind some statements with their parameters while also summarizing
+    importance.
+
+    :return: A tuple where the first elements indicates whether any of the
+        changes are "important" and the second element is an iterable of all
+        of the bound statements.
+    """
+    any_important = False
+    statements = []
+    for (important, statement, list_of_args) in changes:
+        for args in list_of_args:
+            statements.append(bind_arguments(cursor, statement, args))
+        if important:
+            any_important = True
+    return (any_important, statements)
+
+
+def event_stream_name(high_seq: int) -> str:
+    """
+    Construct the basename of the event stream object containing the given
+    highest sequence number.
+    """
+    return f"event-stream-{high_seq}"
 
 
 @define
@@ -559,6 +645,9 @@ class _ReplicationService(Service):
     Perform all activity related to maintaining a remote replica of the local
     ZKAPAuthorizer database.
 
+    If this service is running for a database then the database is in
+    replication mode and changes will be uploaded.
+
     :ivar _connection: A connection to the database being replicated.
 
     :ivar _replicating: The long-running replication operation.  This is never
@@ -566,64 +655,71 @@ class _ReplicationService(Service):
     """
 
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
+    _logger = Logger()
 
     _connection: _ReplicationCapableConnection = field()
     _uploader: Uploader
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
-    _accumulated_size: int = 0
+    _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
     _trigger: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
+
+    @property
+    def _unreplicated_connection(self):
+        """
+        A normal SQLite3 connection object, changes made via which will not be
+        replicated.
+        """
+        return self._connection._conn
 
     def startService(self) -> None:
         super().startService()
 
+        # Register ourselves as a change observer (first! we don't want to
+        # miss anything) and then put the database into replication mode so
+        # that there are recorded events for us to work with.
+        self._connection.add_mutation_observer(self.observed_event)
         self._connection.enable_replication()
 
-        # restore our state .. this number will be bigger than what we
-        # would have recorded through "normal" means which only counts
-        # the statement-sizes .. but maybe fine?
-        with self._connection._conn:
-            events = get_events(self._connection._conn.cursor())
-        data = events.to_bytes()
-        data.seek(0, os.SEEK_END)
-        self._accumulated_size = data.tell()
+        # Reflect whatever state is left over in the database from previous
+        # efforts.
+        self._changes = AccumulatedChanges.from_connection(
+            self._unreplicated_connection
+        )
 
         # should we do an upload immediately? or hold the lock?
-        if not self.big_enough():
+        if not self.should_upload_eventstream(self._changes):
+            # If we hold the lock, the upload cannot happen.
             self._trigger.acquire()
 
-        # Tell the store to initiate replication when appropriate.  The
-        # service should only be created and started if replication has been
-        # turned on - so, make sure replication is turned on at the database
-        # layer.
-        self._replicating = Deferred.fromCoroutine(self.wait_for_uploads())
+        # Start the actual work of reacting to changes by uploading them (as
+        # appropriate).
+        self._replicating = Deferred.fromCoroutine(self._replicate())
 
-        def catch_cancelled(err: Failure) -> None:
-            """
-            Ignore cancels; this will be the normal way we quit -- see stopService
-            """
-            err.trap(CancelledError)
-            return None
-
-        self._replicating.addErrback(catch_cancelled)
-        # if something besides a "cancel" happens, do something with it
-        self._replicating.addErrback(self._replication_fail)
-        self._connection.add_mutation_observer(self.observed_event)
-
-    def _replication_fail(self, fail: Failure) -> None:
+    async def _replicate(self) -> None:
         """
-        Replicating has failed for some reason
+        React to changes by replicating them to remote storage.
         """
-        print(f"Replication failure: {fail}")
+        try:
+            await self.wait_for_uploads()
+        except CancelledError:
+            # Ignore cancels; this will be the normal way we quit -- see
+            # stopService.
+            pass
+        except Exception:
+            # If something besides a cancel happens, at least make it visible.
+            self._logger.failure("unexpected wait_for_uploads error")
+
+        return None
 
     def queue_upload(self) -> None:
         """
-        Ask for an upload to occur
+        Ask for an upload to occur.
         """
         if self._trigger.tokens == 0:
             self._trigger.release()
         else:
-            # we're already uploading
+            # An upload is already running so we don't have to do anything.
             pass
 
     async def wait_for_uploads(self) -> None:
@@ -631,34 +727,33 @@ class _ReplicationService(Service):
         An infinite async loop that processes uploads
         """
         while True:
+            # Wait for an upload to be queued.
             await self._trigger.acquire()
-            # note that errors in here mean our "forever loop" will
-            # stop .. so we might want to simply log all/most errors
-            # instead?
+            # Then perform one.
+            #
+            # Errors in here mean our "forever loop" will stop .. so we might
+            # want to simply log all/most errors instead?  Or some retry logic
+            # might be appropriate.  Some transient network errors will be
+            # automatically retried by a lower level but no doubt some make it
+            # up to this level.
             await self._do_one_upload()
 
     async def _do_one_upload(self) -> None:
         """
-        Process a single upload.
+        Perform the upload of one event stream.
         """
-        with self._connection._conn:
-            events = get_events(self._connection._conn.cursor())
+        events = get_events(self._unreplicated_connection)
 
         high_seq = events.highest_sequence()
         # if this is None there are no events at all
         if high_seq is None:
             return
 
-        # upload latest event-stream
-        await self._uploader(
-            "event-stream-{}".format(high_seq),
-            events.to_bytes,
-        )
+        # otherwise, upload the events we found.
+        await self._uploader(event_stream_name(high_seq), events.to_bytes)
 
-        # prune the database
-        with self._connection._conn:
-            curse = self._connection._conn.cursor()
-            prune_events_to(curse, high_seq)
+        # then discard the uploaded events from the local database.
+        prune_events_to(self._unreplicated_connection, high_seq)
 
     def stopService(self) -> Deferred[None]:
         """
@@ -689,19 +784,11 @@ class _ReplicationService(Service):
             immediate upload; statement is the SQL statement; and args
             are the arguments for the SQL.
         """
-        any_importants = False
-        for (important, statement, list_of_args) in all_changes:
-            for args in list_of_args:
-                bound_statement = bind_arguments(unobserved_cursor, statement, args)
-                add_event(unobserved_cursor, bound_statement)
-                # note that we're ignoring a certain amount of size overhead
-                # here: the _actual_ size will be some CBOR information and
-                # the sequence number, although the statement text should
-                # still dominate.
-                self._accumulated_size += len(bound_statement)
-            if important:
-                any_importants = True
-        if any_importants or self.big_enough():
+        important, bound_statements = bind_statements(unobserved_cursor, all_changes)
+        add_events(unobserved_cursor, bound_statements)
+        changes = AccumulatedChanges.from_statements(important, bound_statements)
+        self._changes = self._changes + changes
+        if self.should_upload_eventstream(self._changes):
             return self._complete_upload
         else:
             return lambda: None
@@ -713,14 +800,14 @@ class _ReplicationService(Service):
         _ReplicationCapableConnection.__exit__
         """
         self.queue_upload()
-        self._accumulated_size = 0
+        self._changes = AccumulatedChanges.no_changes()
 
-    def big_enough(self) -> bool:
+    def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
         """
         :returns: True if we have accumulated enough statements to upload
             an event-stream record.
         """
-        return self._accumulated_size >= 570000
+        return changes.important or changes.size >= 570000
 
 
 def replication_service(

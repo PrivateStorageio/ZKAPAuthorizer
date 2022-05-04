@@ -404,9 +404,7 @@ class ReplicationServiceTests(TestCase):
 
         # since we've uploaded everything, there should be no
         # events in the store
-        self.assertEqual(
-            tuple(), get_events(tvs.store._connection._conn.cursor()).changes
-        )
+        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
 
 
 class HypothesisReplicationServiceTests(TestCase):
