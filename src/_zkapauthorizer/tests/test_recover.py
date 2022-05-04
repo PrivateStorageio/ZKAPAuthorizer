@@ -5,7 +5,6 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from sqlite3 import connect
 
-from allmydata.client import read_config
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -15,7 +14,6 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from, text
-from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -25,12 +23,7 @@ from testtools.matchers import (
     IsInstance,
     MatchesStructure,
 )
-from testtools.twistedsupport import (
-    AsynchronousDeferredRunTest,
-    failed,
-    has_no_result,
-    succeeded,
-)
+from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
 from zope.interface import Interface
 
@@ -54,11 +47,9 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import ITahoeClient, MemoryGrid, Tahoe, attenuate_writecap, make_directory
+from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
 from .common import delayedProxy
-from .fixtures import Treq
 from .matchers import equals_database, matches_capability, raises
-from .resources import client_manager
 from .strategies import (
     deletes,
     inserts,
@@ -308,31 +299,15 @@ class TahoeLAFSDownloaderTests(TestCase):
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    # Support test methods that return a Deferred.
-    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
-
-    # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", client_manager)]
-
-    def setUp(self):
-        super().setUp()
-        setUpResources(self, self.resources, None)
-        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
-
     @inlineCallbacks
     def test_uploader_and_downloader(self):
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
         """
-        config = read_config(self.client.node_dir.path, "tub.port")
-        # AsynchronousDeferredRunTest sets reactor on us.
-        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
-        tahoeclient = Tahoe(httpclient, config)
-
-        replica_dir_cap_str = yield Deferred.fromCoroutine(
-            make_directory(httpclient, self.client.node_url),
-        )
+        grid = MemoryGrid()
+        tahoeclient = grid.client()
+        replica_dir_cap_str = grid.make_directory()
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
@@ -340,7 +315,7 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
         )
         expected = b"snapshot data"
-        yield Deferred.fromCoroutine(upload(lambda: BytesIO(expected)))
+        yield Deferred.fromCoroutine(upload("snapshot.sql", lambda: BytesIO(expected)))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)

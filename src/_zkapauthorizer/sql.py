@@ -7,13 +7,16 @@ to support testing the replication/recovery system.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
 from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
 
 from attrs import frozen
+from sqlparse import parse
 
-SQLType = Union[int, float, str, bytes, None]
+SQLType = Union[int, float, str, bytes, datetime, None]
 
 
 class AbstractCursor(Protocol):
@@ -177,16 +180,13 @@ class Insert:
         return self.fields
 
 
-def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) -> str:
+def quote_sql_value(cursor: Cursor, value: SQLType) -> str:
     """
-    Use the SQL `quote()` function to return the quoted version of
-    `value`. Supports `int`, `float`, `None`, `str` and `bytes`.
+    Use the SQL `quote()` function to return the quoted version of `value`.
 
     :returns: the quoted value
     """
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
+    if isinstance(value, (int, float, datetime)):
         return str(value)
     if value is None:
         return "NULL"
@@ -195,7 +195,31 @@ def quote_sql_value(cursor: Cursor, value: Union[int, float, str, bytes, None]) 
         result = cursor.fetchall()[0][0]
         assert isinstance(result, str)
         return result
-    raise ValueError("Do not know how to quote value of type f{type(value)}")
+    raise ValueError(f"Do not know how to quote value of type {type(value)}")
+
+
+def bind_arguments(cursor: Cursor, statement: str, args: tuple[SQLType, ...]) -> str:
+    """
+    Interpolate the arguments into position in the statement. For
+    example, a statement 'INSERT INTO foo VALUES (?, ?)' and args (1,
+    'bar') should result in 'INSERT INTO foo VALUES (1, "bar")'
+
+    This is a simple substitution based on the ? character, which MUST
+    NOT appear elsewhere in the SQL.
+
+    :raise: ``ValueError`` if it looks like the ? placeholders do not agree
+        with the given arguments.
+    """
+    if statement.count("?") != len(args):
+        raise ValueError(f"Cannot bind arguments for {statement!r}")
+
+    to_sub = [] if args is None else list(args)
+
+    def substitute_args(match):
+        return quote_sql_value(cursor, to_sub.pop(0))
+
+    # replace subsequent "?" characters with the next argument, quoted
+    return re.sub(r"([?])", substitute_args, statement)
 
 
 @frozen
@@ -240,6 +264,30 @@ class Update:
 
 
 @frozen
+class Select:
+    """
+    Represent a query about a certain table
+
+    :ivar table_name: valid SQL identifier for a table
+    """
+
+    table_name: str
+
+    def statement(self):
+        return f"SELECT * FROM {escape_identifier(self.table_name)}"
+
+    def bound_statement(self, cursor):
+        """
+        :returns: the statement with all values interpolated into it
+            rather than as separate values
+        """
+        return self.statement()
+
+    def arguments(self):
+        return tuple()
+
+
+@frozen
 class Delete:
     """
     Represent the deletion of some rows from a table.
@@ -269,7 +317,7 @@ def escape_identifier(string: str) -> str:
     """
     Escape an arbitrary string for use as a SQLite3 identifier.
     """
-    return f"[{string}]"
+    return f"'{string}'"
 
 
 def column_ddl(name: str, column: Column) -> str:
@@ -287,3 +335,13 @@ def create_table(name: str, table: Table) -> str:
     """
     columns = ", ".join(column_ddl(name, column) for (name, column) in table.columns)
     return f"CREATE TABLE {escape_identifier(name)} ({columns})"
+
+
+def statement_mutates(statement: str) -> bool:
+    """
+    predicate to decide if `statement` will change the database
+    """
+    if statement == "BEGIN IMMEDIATE TRANSACTION":
+        return False
+    (parsed,) = parse(statement)
+    return parsed.get_type() not in {"SELECT"}

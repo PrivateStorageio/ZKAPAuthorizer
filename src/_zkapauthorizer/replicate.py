@@ -59,23 +59,37 @@ __all__ = [
     "snapshot",
 ]
 
+import os
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
-from typing import Any, BinaryIO, Callable, ContextManager, Iterable, Iterator, Optional
+from typing import (
+    Any,
+    Awaitable,
+    BinaryIO,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Optional,
+)
 
 import cbor2
-from attrs import define, field, frozen
+from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, succeed
-from twisted.python.failure import Failure
+from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
+from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
+from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
-from .sql import Connection, Cursor
+from .sql import Connection, Cursor, SQLType, bind_arguments, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
+
+# function which can set remote ZKAPAuthorizer state.
+Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
 
 
 @frozen
@@ -203,6 +217,32 @@ def is_replication_setup(config: Config) -> bool:
     return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
 
 
+def get_replica_rwcap(config: Config) -> CapStr:
+    """
+    :return: a mutable directory capability for our replica.
+    :raises: Exception if replication is not setup
+    """
+    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))
+    return rwcap_file.getContent()
+
+
+@define
+class _Important:
+    """
+    A context-manager to set and unset the ._important flag on a
+    _ReplicationCapableConnection
+    """
+
+    _replication_cursor: _ReplicationCapableCursor
+
+    def __enter__(self) -> None:
+        self._replication_cursor._important = True
+
+    def __exit__(self, *args) -> None:
+        self._replication_cursor._important = False
+        return None
+
+
 def with_replication(
     connection: _SQLite3Connection, enable_replication: bool
 ) -> _ReplicationCapableConnection:
@@ -223,6 +263,10 @@ def with_replication(
     return _ReplicationCapableConnection(connection, enable_replication)
 
 
+Mutation = tuple[bool, str, Iterable[tuple[SQLType, ...]]]
+MutationObserver = Callable[[_SQLite3Cursor, Iterable[Mutation]], Callable[[], None]]
+
+
 @define
 class _ReplicationCapableConnection:
     """
@@ -238,8 +282,11 @@ class _ReplicationCapableConnection:
         ``False`` otherwise.
     """
 
+    # the "real" / normal sqlite connection
     _conn: _SQLite3Connection
     _replicating: bool
+    _observers: tuple[MutationObserver, ...] = Factory(tuple)
+    _mutations: list[Mutation] = Factory(list)
 
     def enable_replication(self) -> None:
         """
@@ -247,18 +294,28 @@ class _ReplicationCapableConnection:
         """
         self._replicating = True
 
-    def iterdump(self) -> Iterable[str]:
+    def add_mutation_observer(self, fn: MutationObserver) -> None:
+        """
+        Add another observer of changes made through this connection.
+
+        :param fn: An object to call after any transaction with changes is
+            committed on this connection.
+        """
+        self._observers = self._observers + (fn,)
+
+    def iterdump(self) -> Iterator[str]:
         """
         :return: SQL statements which can be used to reconstruct the database
             state.
         """
         return self._conn.iterdump()
 
-    def close(self):
+    def close(self) -> None:
         return self._conn.close()
 
-    def __enter__(self) -> ContextManager:
-        return self._conn.__enter__()
+    def __enter__(self) -> _ReplicationCapableConnection:
+        self._conn.__enter__()
+        return self
 
     def __exit__(
         self,
@@ -266,14 +323,45 @@ class _ReplicationCapableConnection:
         exc_value: Optional[BaseException],
         exc_tb: Optional[Any],
     ) -> bool:
-        return self._conn.__exit__(exc_type, exc_value, exc_tb)
+        propagate = self._conn.__exit__(exc_type, exc_value, exc_tb)
+        if exc_type is None:
+            # There was no exception, signal observers that a change has been
+            # committed.
+            post_txn_fns: list[Callable[[], None]] = []
+            with self._conn:
+                curse = self._conn.cursor()
+                curse.execute("BEGIN IMMEDIATE TRANSACTION")
+                post_txn_fns.extend(self._maybe_signal_observers(curse))
+            for f in post_txn_fns:
+                f()
+        # Respect the underlying propagation decision.
+        return propagate
+
+    def _maybe_signal_observers(
+        self, cursor
+    ) -> Generator[Callable[[], None], None, None]:
+        """
+        If there are recorded mutations, deliver them to each of the observers and
+        then forget about them.
+
+        :return: A generator of the return values of the observers.
+        """
+        if self._mutations:
+            to_signal = self._mutations
+            self._mutations = list()
+            for ob in self._observers:
+                yield ob(cursor, to_signal)
 
     def cursor(self, factory: Optional[type] = None) -> Cursor:
+        """
+        Get a replication-capable cursor for this connection.
+        """
         kwargs = {}
         if factory is not None:
             kwargs["factory"] = factory
         cursor = self._conn.cursor(**kwargs)
-        return _ReplicationCapableCursor(cursor)
+        # this cursor honors the ._replicating flag in this instance
+        return _ReplicationCapableCursor(cursor, self)
 
 
 @define
@@ -288,6 +376,11 @@ class _ReplicationCapableCursor:
     """
 
     _cursor: _SQLite3Cursor
+    _connection: _ReplicationCapableConnection
+    # true while statements are "important" (which is pased along to
+    # the observers and interpreted as being "important data that the
+    # user will be interested in preserving")
+    _important: bool = field(init=False, default=False)
 
     @property
     def lastrowid(self):
@@ -300,12 +393,19 @@ class _ReplicationCapableCursor:
     def close(self):
         return self._cursor.close()
 
-    def execute(self, statement, row=None):
-        if row is None:
-            args = (statement,)
-        else:
-            args = (statement, row)
-        self._cursor.execute(*args)
+    def execute(self, statement: str, row: Iterable[SQLType] = ()) -> Cursor:
+        """
+        sqlite's Cursor API
+
+        :param row: the arguments
+        """
+        assert isinstance(row, tuple)
+        self._cursor.execute(statement, row)
+        if self._connection._replicating and statement_mutates(statement):
+            # note that this interface is for multiple statements, so
+            # we turn our single row into a one-tuple
+            self._connection._mutations.append((self._important, statement, (row,)))
+        return self
 
     def fetchall(self):
         return self._cursor.fetchall()
@@ -316,8 +416,18 @@ class _ReplicationCapableCursor:
     def fetchone(self):
         return self._cursor.fetchone()
 
-    def executemany(self, statement, rows):
+    def executemany(self, statement: str, rows: Iterable[Any]) -> Cursor:
         self._cursor.executemany(statement, rows)
+        if self._connection._replicating and statement_mutates(statement):
+            self._connection._mutations.append((self._important, statement, rows))
+        return self
+
+    def important(self) -> _Important:
+        """
+        Create a new context-manager that -- while active -- sets the
+        'important' flag to true and resets it afterwards.
+        """
+        return _Important(self)
 
 
 def netstring(bs: bytes) -> bytes:
@@ -382,25 +492,151 @@ async def tahoe_lafs_uploader(
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
     directory_mutable_cap: str,
-    entry_name: str = "snapshot.sql",
-):
+) -> Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     upload some data and link it into the mutable directory under the
     given name.
 
-    :return Callable[[Callable[[], BinaryIO]], None]: A callable that
-        will upload some data as the latest replica snapshot. The data
-        isn't given directly, but instead from a zero-argument callable
-        itself to facilitate retrying.
+    :return: A callable that will upload some data as the latest replica
+        snapshot. The data isn't given directly, but instead from a
+        zero-argument callable itself to facilitate retrying.
     """
 
-    async def upload(get_data_provider: Callable[[], BinaryIO]) -> None:
+    async def upload(
+        entry_name: str, get_data_provider: Callable[[], BinaryIO]
+    ) -> None:
         await tahoe_lafs_uploader(
             client, directory_mutable_cap, get_data_provider, entry_name
         )
 
     return upload
+
+
+def add_events(cursor: _SQLite3Cursor, sql_statements: Iterable[str]) -> None:
+    """
+    Add some new changes to the event-log.
+    """
+    cursor.executemany(
+        """
+        INSERT INTO [event-stream]([statement]) VALUES (?)
+        """,
+        ((sql,) for sql in sql_statements),
+    )
+
+
+def get_events(conn: _SQLite3Connection) -> EventStream:
+    """
+    Return all events currently in our event-log.
+    """
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT [sequence-number], [statement]
+            FROM [event-stream]
+            """
+        )
+        rows = cursor.fetchall()
+    return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+
+
+def prune_events_to(conn: _SQLite3Connection, sequence_number: int) -> None:
+    """
+    Remove all events <= sequence_number
+    """
+    with conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM [event-stream]
+            WHERE [sequence-number] <= (?)
+            """,
+            (sequence_number,),
+        )
+        cursor.fetchall()
+
+
+@frozen
+class AccumulatedChanges:
+    """
+    A summary of some changes that have been made.
+
+    :ivar important: Are any of these "important" changes?
+
+    :ivar size: The approximate size in bytes to represent all of the changes.
+    """
+
+    important: bool
+    size: int
+
+    @classmethod
+    def no_changes(cls):
+        """
+        Create an ``AccumulatedChanges`` that represents no changes.
+        """
+        return cls(False, 0)
+
+    @classmethod
+    def from_connection(cls, connection: _SQLite3Connection) -> AccumulatedChanges:
+        """
+        Load information about unreplicated changes from the database.
+        """
+        # this size is larger than what we would have computed via
+        # `from_changes` which only counts the statement-sizes .. but maybe
+        # fine?
+        events = get_events(connection)
+        data = events.to_bytes()
+        size = data.seek(0, os.SEEK_END)
+        # XXX We don't really know this should be False.
+        return cls(False, size)
+
+    @classmethod
+    def from_statements(
+        cls, important: bool, bound_statements: Iterable[str]
+    ) -> AccumulatedChanges:
+        """
+        Load information about unreplicated changes from SQL statements giving
+        those changes.
+        """
+        # note that we're ignoring a certain amount of size overhead here: the
+        # _actual_ size will be some CBOR information and the sequence number,
+        # although the statement text should still dominate.
+        return cls(important, sum(map(len, bound_statements)))
+
+    def __add__(self, other):
+        return AccumulatedChanges(
+            self.size + other.size, self.important or other.important
+        )
+
+
+def bind_statements(
+    cursor: _SQLite3Cursor, changes: Iterable[Mutation]
+) -> tuple[bool, Iterable[str]]:
+    """
+    Bind some statements with their parameters while also summarizing
+    importance.
+
+    :return: A tuple where the first elements indicates whether any of the
+        changes are "important" and the second element is an iterable of all
+        of the bound statements.
+    """
+    any_important = False
+    statements = []
+    for (important, statement, list_of_args) in changes:
+        for args in list_of_args:
+            statements.append(bind_arguments(cursor, statement, args))
+        if important:
+            any_important = True
+    return (any_important, statements)
+
+
+def event_stream_name(high_seq: int) -> str:
+    """
+    Construct the basename of the event stream object containing the given
+    highest sequence number.
+    """
+    return f"event-stream-{high_seq}"
 
 
 @define
@@ -409,6 +645,9 @@ class _ReplicationService(Service):
     Perform all activity related to maintaining a remote replica of the local
     ZKAPAuthorizer database.
 
+    If this service is running for a database then the database is in
+    replication mode and changes will be uploaded.
+
     :ivar _connection: A connection to the database being replicated.
 
     :ivar _replicating: The long-running replication operation.  This is never
@@ -416,20 +655,107 @@ class _ReplicationService(Service):
     """
 
     name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
+    _logger = Logger()
 
-    _connection: _ReplicationCapableConnection
+    _connection: _ReplicationCapableConnection = field()
+    _uploader: Uploader
     _replicating: Optional[Deferred] = field(init=False, default=None)
+
+    _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
+    _trigger: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
+
+    @property
+    def _unreplicated_connection(self):
+        """
+        A normal SQLite3 connection object, changes made via which will not be
+        replicated.
+        """
+        return self._connection._conn
 
     def startService(self) -> None:
         super().startService()
-        # Tell the store to initiate replication when appropriate.  The
-        # service should only be created and started if replication has been
-        # turned on - so, make sure replication is turned on at the database
-        # layer.
-        self._connection.enable_replication()
-        self._replicating = succeed(None)
 
-    def stopService(self) -> Deferred:
+        # Register ourselves as a change observer (first! we don't want to
+        # miss anything) and then put the database into replication mode so
+        # that there are recorded events for us to work with.
+        self._connection.add_mutation_observer(self.observed_event)
+        self._connection.enable_replication()
+
+        # Reflect whatever state is left over in the database from previous
+        # efforts.
+        self._changes = AccumulatedChanges.from_connection(
+            self._unreplicated_connection
+        )
+
+        # should we do an upload immediately? or hold the lock?
+        if not self.should_upload_eventstream(self._changes):
+            # If we hold the lock, the upload cannot happen.
+            self._trigger.acquire()
+
+        # Start the actual work of reacting to changes by uploading them (as
+        # appropriate).
+        self._replicating = Deferred.fromCoroutine(self._replicate())
+
+    async def _replicate(self) -> None:
+        """
+        React to changes by replicating them to remote storage.
+        """
+        try:
+            await self.wait_for_uploads()
+        except CancelledError:
+            # Ignore cancels; this will be the normal way we quit -- see
+            # stopService.
+            pass
+        except Exception:
+            # If something besides a cancel happens, at least make it visible.
+            self._logger.failure("unexpected wait_for_uploads error")
+
+        return None
+
+    def queue_upload(self) -> None:
+        """
+        Ask for an upload to occur.
+        """
+        if self._trigger.tokens == 0:
+            self._trigger.release()
+        else:
+            # An upload is already running so we don't have to do anything.
+            pass
+
+    async def wait_for_uploads(self) -> None:
+        """
+        An infinite async loop that processes uploads
+        """
+        while True:
+            # Wait for an upload to be queued.
+            await self._trigger.acquire()
+            # Then perform one.
+            #
+            # Errors in here mean our "forever loop" will stop .. so we might
+            # want to simply log all/most errors instead?  Or some retry logic
+            # might be appropriate.  Some transient network errors will be
+            # automatically retried by a lower level but no doubt some make it
+            # up to this level.
+            await self._do_one_upload()
+
+    async def _do_one_upload(self) -> None:
+        """
+        Perform the upload of one event stream.
+        """
+        events = get_events(self._unreplicated_connection)
+
+        high_seq = events.highest_sequence()
+        # if this is None there are no events at all
+        if high_seq is None:
+            return
+
+        # otherwise, upload the events we found.
+        await self._uploader(event_stream_name(high_seq), events.to_bytes)
+
+        # then discard the uploaded events from the local database.
+        prune_events_to(self._unreplicated_connection, high_seq)
+
+    def stopService(self) -> Deferred[None]:
         """
         Cancel the replication operation and then wait for it to complete.
         """
@@ -440,19 +766,59 @@ class _ReplicationService(Service):
             return succeed(None)
 
         self._replicating = None
-
-        def catch_cancelled(err: Failure) -> None:
-            err.trap(CancelledError)
-            return None
-
-        replicating.addErrback(catch_cancelled)
         replicating.cancel()
         return replicating
 
+    def observed_event(
+        self,
+        unobserved_cursor: _SQLite3Cursor,
+        all_changes: Iterable[Mutation],
+    ) -> Callable[[], None]:
+        """
+        A mutating SQL statement was observed by the cursor. This is like
+        the executemany interface: there is always a list of args. For
+        a single statement, we call this with the len(args) == 1
 
-def replication_service(connection) -> IService:
+        :param all_changes: 3-tuples of (important, statement, args)
+            where important is whether this should trigger an
+            immediate upload; statement is the SQL statement; and args
+            are the arguments for the SQL.
+        """
+        important, bound_statements = bind_statements(unobserved_cursor, all_changes)
+        add_events(unobserved_cursor, bound_statements)
+        changes = AccumulatedChanges.from_statements(important, bound_statements)
+        self._changes = self._changes + changes
+        if self.should_upload_eventstream(self._changes):
+            return self._complete_upload
+        else:
+            return lambda: None
+
+    def _complete_upload(self) -> None:
+        """
+        This is called after the transaction closes (because we return it
+        from our observer function). See
+        _ReplicationCapableConnection.__exit__
+        """
+        self.queue_upload()
+        self._changes = AccumulatedChanges.no_changes()
+
+    def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
+        """
+        :returns: True if we have accumulated enough statements to upload
+            an event-stream record.
+        """
+        return changes.important or changes.size >= 570000
+
+
+def replication_service(
+    replicated_connection: _ReplicationCapableConnection,
+    uploader: Uploader,
+) -> IService:
     """
     Return a service which implements the replication process documented in
     the ``backup-recovery`` design document.
     """
-    return _ReplicationService(connection=connection)
+    return _ReplicationService(
+        connection=replicated_connection,
+        uploader=uploader,
+    )

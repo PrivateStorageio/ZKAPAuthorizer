@@ -43,7 +43,7 @@ from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
 from . import NAME
-from ._types import GetTime
+from ._types import CapStr, GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
@@ -57,16 +57,19 @@ from .model import VoucherStore
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import (
+    _ReplicationCapableConnection,
+    get_replica_rwcap,
+    get_tahoe_lafs_direntry_uploader,
     is_replication_setup,
     replication_service,
     setup_tahoe_lafs_replication,
+    with_replication,
 )
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
-from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
-from .tahoe import ITahoeClient, get_tahoe_client
+from .tahoe import ITahoeClient, attenuate_writecap, get_tahoe_client
 
 _log = Logger()
 
@@ -79,25 +82,22 @@ class AnnounceableStorageServer(object):
 
 
 def open_store(
-    now: GetTime, connect: UnboundConnect, node_config: Config
+    now: GetTime, conn: _ReplicationCapableConnection, node_config: Config
 ) -> VoucherStore:
     """
     Open a ``VoucherStore`` for the given configuration.
 
     :param now: A function that can be used to get the current time.
 
+    :param conn: The database connection to give to the store.
+
     :param node_config: The Tahoe-LAFS configuration object for the node
         for which we want to open a store.
 
-    :param connect: A function that can be used to connect to the underlying
-        database.
+    :return: A new ``VoucherStore`` instance.
     """
-    db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-    conn = _open_database(partial(connect, db_path.path))
     pass_value = get_configured_pass_value(node_config)
-    return VoucherStore.from_connection(
-        pass_value, now, conn, is_replication_setup(node_config)
-    )
+    return VoucherStore.from_connection(pass_value, now, conn)
 
 
 @implementer(IFoolscapStoragePlugin)
@@ -139,27 +139,39 @@ class ZKAPAuthorizer(object):
         self.reactor.addSystemEventTrigger("before", "shutdown", svc.stopService)
         return svc
 
-    def _get_store(self, node_config):
+    def _get_store(self, node_config: Config) -> VoucherStore:
         """
-        :return VoucherStore: The database for the given node.  At most one
-            connection is made to the database per ``ZKAPAuthorizer`` instance.
+        :return: The ``VoucherStore`` for the given node.  At most one connection
+            is made to the database per ``ZKAPAuthorizer`` instance.
         """
         key = node_config.get_config_path()
         try:
-            s = self._stores[key]
+            store = self._stores[key]
         except KeyError:
-            s = open_store(datetime.now, _connect, node_config)
-            if is_replication_setup(node_config):
-                self._add_replication_service(s)
-            self._stores[key] = s
-        return s
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+            unreplicated_conn = _open_database(partial(_connect, db_path.path))
+            replicated_conn = with_replication(
+                unreplicated_conn, is_replication_setup(node_config)
+            )
+            store = open_store(datetime.now, replicated_conn, node_config)
 
-    def _add_replication_service(self, store: VoucherStore) -> None:
+            if is_replication_setup(node_config):
+                self._add_replication_service(replicated_conn, node_config)
+            self._stores[key] = store
+        return store
+
+    def _add_replication_service(
+        self, replicated_conn: _ReplicationCapableConnection, node_config: Config
+    ) -> CapStr:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        replication_service(store._connection).setServiceParent(self._service)
+        client = get_tahoe_client(self.reactor, node_config)
+        mutable = get_replica_rwcap(node_config)
+        uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
+        replication_service(replicated_conn, uploader).setServiceParent(self._service)
+        return mutable
 
     def _get_redeemer(self, node_config, announcement):
         """
@@ -256,7 +268,8 @@ class ZKAPAuthorizer(object):
             await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
-            self._add_replication_service(store)
+            mutable = self._add_replication_service(store._connection, node_config)
+            return attenuate_writecap(mutable)
 
         return resource_from_configuration(
             node_config,

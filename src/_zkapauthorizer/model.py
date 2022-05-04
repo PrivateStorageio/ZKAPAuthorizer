@@ -39,9 +39,9 @@ from zope.interface import Interface, implementer
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._types import GetTime
-from .replicate import Change, EventStream, snapshot, with_replication
+from .replicate import _ReplicationCapableConnection, snapshot
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
-from .sql import BoundConnect, Connection, Cursor
+from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
 from .validators import greater_than, has_length, is_base64_encoded
 
@@ -101,7 +101,7 @@ def open_database(connect: BoundConnect) -> _SQLite3Connection:
         raise StoreOpenError(e)
 
 
-def initialize_database(conn: Connection) -> None:
+def initialize_database(conn: _ReplicationCapableConnection) -> None:
     """
     Make any persistent and temporary schema changes required to make the
     given database compatible with this version of the software.
@@ -224,6 +224,8 @@ def path_to_memory_uri(path: FilePath) -> str:
     :return: A string suitable to be passed as the first argument to
         ``sqlite3.connect`` along with the `uri=True` keyword argument.
     """
+    # See https://www.sqlite.org/uri.html for docs on URI-style database
+    # paths.
     return (
         DecodedURL()
         .replace(
@@ -233,6 +235,10 @@ def path_to_memory_uri(path: FilePath) -> str:
             path=path.asTextMode().path.split(os.sep),
         )
         .add("mode", "memory")
+        # The shared cache mode is required for two connections to the same
+        # memory-mode database.
+        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
+        .add("cache", "shared")
         .to_text()
     )
 
@@ -262,7 +268,7 @@ class VoucherStore(object):
 
     pass_value: int
     now: GetTime
-    _connection: Connection
+    _connection: _ReplicationCapableConnection
 
     _log = Logger()
 
@@ -271,14 +277,8 @@ class VoucherStore(object):
         cls,
         pass_value: int,
         now: GetTime,
-        conn: _SQLite3Connection,
-        enable_replication: bool,
+        replicating_conn: _ReplicationCapableConnection,
     ) -> VoucherStore:
-        # Make sure we always have a replication-enabled connection even if
-        # we're not doing replication yet because we might want to turn it on
-        # later.  Also, if we're doing it, we need it to get involved in
-        # database initialization which happens next.
-        replicating_conn = with_replication(conn, enable_replication)
         initialize_database(replicating_conn)
         return cls(pass_value=pass_value, now=now, connection=replicating_conn)
 
@@ -361,7 +361,6 @@ class VoucherStore(object):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
         voucher_text = voucher.decode("ascii")
-
         cursor.execute(
             """
             SELECT [text]
@@ -389,25 +388,26 @@ class VoucherStore(object):
                 voucher=voucher_text,
                 counter=counter,
             )
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
-                """,
-                (voucher_text, expected_tokens, self.now()),
-            )
-            cursor.executemany(
-                """
-                INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
-                """,
-                list(
-                    (
-                        voucher_text,
-                        counter,
-                        token.token_value.decode("ascii"),
-                    )
-                    for token in tokens
-                ),
-            )
+            with cursor.important():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
+                    """,
+                    (voucher_text, expected_tokens, self.now()),
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
+                    """,
+                    list(
+                        (
+                            voucher_text,
+                            counter,
+                            token.token_value.decode("ascii"),
+                        )
+                        for token in tokens
+                    ),
+                )
         return tokens
 
     @with_cursor
@@ -789,33 +789,6 @@ class VoucherStore(object):
             parse_datetime(finished, delimiter=" "),
         )
 
-    @with_cursor
-    def add_event(self, cursor, sql_statement: str):
-        """
-        Add a new change to the event-log.
-        """
-        cursor.execute(
-            """
-            INSERT INTO [event-stream]([statement]) VALUES (?)
-            """,
-            (sql_statement,),
-        )
-
-    @with_cursor
-    def get_events(self, cursor):
-        """
-        Return all events currently in our event-log.
-        """
-        cursor.execute(
-            """
-            SELECT [sequence-number], [statement]
-            FROM [event-stream]
-            """
-        )
-        rows = cursor.fetchall()
-
-        return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
-
 
 @implementer(ILeaseMaintenanceObserver)
 @define
@@ -843,7 +816,7 @@ class LeaseMaintenance(object):
 
     _pass_value: int
     _now: GetTime
-    _connection: Connection
+    _connection: _ReplicationCapableConnection
     _rowid: Optional[int] = None
 
     @with_cursor

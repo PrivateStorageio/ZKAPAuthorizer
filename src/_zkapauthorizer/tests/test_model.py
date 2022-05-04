@@ -56,7 +56,9 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
+from twisted.python.filepath import FilePath
 
+from ..config import EmptyConfig
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
@@ -67,6 +69,7 @@ from ..model import (
     Redeemed,
     Voucher,
     VoucherStore,
+    memory_connect,
     with_cursor_async,
 )
 from ..recover import (
@@ -76,8 +79,15 @@ from ..recover import (
     make_canned_downloader,
     recover,
 )
-from ..replicate import Change, EventStream
-from .fixtures import ConfiglessMemoryVoucherStore, TemporaryVoucherStore
+from ..replicate import (
+    Change,
+    EventStream,
+    add_events,
+    get_events,
+    prune_events_to,
+    with_replication,
+)
+from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     deletes,
@@ -175,15 +185,9 @@ class WithCursorAsyncTests(TestCase):
         # If we want to observe transactional side-effects then we need
         # transactionally independent views on the database.  For SQLite3 (at
         # least), this means two different connections to the same database.
-        # see https://www.sqlite.org/uri.html for docs on URI-style database
-        # paths.
-        #
-        # The shared cache mode is required for two connections to the same
-        # memory-mode database.
-        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
-        dbpath = "file:async?mode=memory&cache=shared"
-        conn_a = connect(dbpath, uri=True)
-        conn_b = connect(dbpath, uri=True)
+        path = self.useFixture(TempDir()).join("async")
+        conn_a = memory_connect(path)
+        conn_b = memory_connect(path)
 
         class Database:
             _connection: Connection = conn_a
@@ -236,7 +240,10 @@ class VoucherStoreCallIfEmptyTests(TestCase):
 
     def setup_example(self):
         self.store_fixture = self.useFixture(
-            ConfiglessMemoryVoucherStore(get_now=datetime.now),
+            TemporaryVoucherStore(
+                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
+                get_now=datetime.now,
+            ),
         )
 
     def test_empty(self):
@@ -501,7 +508,10 @@ class VoucherStoreSnapshotTests(TestCase):
         Vouchers are present in the snapshot.
         """
         store = self.useFixture(
-            ConfiglessMemoryVoucherStore(get_now=lambda: now),
+            TemporaryVoucherStore(
+                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
+                get_now=lambda: now,
+            ),
         ).store
         store.add(voucher, expected, 0, lambda: tokens)
         snapshot = store.snapshot()
@@ -513,8 +523,7 @@ class VoucherStoreSnapshotTests(TestCase):
         recovered = VoucherStore.from_connection(
             store.pass_value,
             store.now,
-            connection,
-            enable_replication=False,
+            with_replication(connection, False),
         )
         self.assertThat(
             recovered.get(voucher),
@@ -537,9 +546,10 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     def __init__(self, case):
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
-        self.configless = ConfiglessMemoryVoucherStore(
+        self.configless = TemporaryVoucherStore(
+            get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
             # Time probably not actually relevant to this state machine.
-            datetime.now,
+            get_now=datetime.now,
         )
         self.configless.setUp()
 
@@ -867,9 +877,11 @@ class EventStreamTests(TestCase):
                         change.bound_statement(store._connection.cursor()),
                     )
                 )
-                store.add_event(change.bound_statement(store._connection.cursor()))
+                with store._connection:
+                    curse = store._connection.cursor()
+                    add_events(curse, [change.bound_statement(curse)])
 
-        events = store.get_events()
+        events = get_events(store._connection)
         self.assertThat(
             events.changes,
             Equals(tuple(sql_statements)),
@@ -882,6 +894,43 @@ class EventStreamTests(TestCase):
         self.assertThat(
             events.highest_sequence(),
             Equals(len(sql_statements)),
+        )
+
+    @given(
+        tahoe_configs(),
+        posix_safe_datetimes(),
+        lists(
+            tuples(
+                sampled_from([inserts, deletes, updates]),
+                sql_identifiers(),
+                tables(),
+            ).flatmap(
+                lambda x: x[0](x[1], x[2]),
+            ),
+            min_size=2,
+        ),
+        randoms(),
+    )
+    def test_event_stream_prune(self, get_config, now, changes, random):
+        """
+        We can prune the event-stream
+        """
+        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+
+        with store._connection:
+            curse = store._connection.cursor()
+            add_events(curse, [change.bound_statement(curse) for change in changes])
+
+        pre_events = get_events(store._connection)
+
+        # prune it somewhere
+        where = random.randrange(1, len(changes))
+        prune_events_to(store._connection, where)
+
+        post_events = get_events(store._connection)
+
+        self.assertThat(
+            len(post_events.changes) + where, Equals(len(pre_events.changes))
         )
 
 
@@ -1184,9 +1233,10 @@ class ReplicationTests(TestCase):
         ``StatefulRecoverer.recover``.
         """
         store = self.useFixture(
-            ConfiglessMemoryVoucherStore(
+            TemporaryVoucherStore(
+                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
                 # Time is not relevant to this test
-                datetime.now,
+                get_now=datetime.now,
             )
         ).store
         snapshot_bytes = store.snapshot()
@@ -1211,3 +1261,52 @@ class ReplicationTests(TestCase):
                 ),
             ),
         )
+
+
+class MemoryConnectTests(TestCase):
+    """
+    Tests for ``memory_connect``.
+    """
+
+    def test_shared(self) -> None:
+        """
+        ``memory_connect`` returns connections to the same database when passed
+        the same path.
+        """
+        path = self.useFixture(TempDir()).join("db.sqlite3")
+        first = memory_connect(path)
+        second = memory_connect(path)
+
+        with first:
+            cursor = first.cursor()
+            cursor.execute("CREATE TABLE foo ( a INT )")
+            cursor.execute("INSERT INTO foo VALUES (?)", (1,))
+
+        with second:
+            cursor = second.cursor()
+            cursor.execute("SELECT a FROM foo")
+            rows = cursor.fetchall()
+
+        self.assertThat(rows, Equals([(1,)]))
+
+    def test_distinct(self) -> None:
+        """
+        ``memory_connect`` returns connections to different databases when passed
+        different paths.
+        """
+        first_path = self.useFixture(TempDir()).join("db.sqlite3")
+        first = memory_connect(first_path)
+        second_path = self.useFixture(TempDir()).join("db.sqlite3")
+        second = memory_connect(second_path)
+
+        with first:
+            cursor = first.cursor()
+            cursor.execute("CREATE TABLE foo ( a INT )")
+            cursor.execute("INSERT INTO foo VALUES (?)", (1,))
+
+        with second:
+            cursor = second.cursor()
+            self.assertThat(
+                partial(cursor.execute, "SELECT a FROM foo"),
+                raises(OperationalError),
+            )

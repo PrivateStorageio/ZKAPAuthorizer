@@ -64,7 +64,7 @@ from ..model import (
     Unpaid,
     Voucher,
 )
-from ..sql import Column, Delete, Insert, StorageAffinity, Table, Update
+from ..sql import Column, Delete, Insert, Select, StorageAffinity, Table, Update
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
@@ -1195,7 +1195,9 @@ def sql_identifiers() -> SearchStrategy[str]:
             # Maybe ] should be allowed but I don't know how to quote it.  '
             # certainly should be but Python sqlite3 module has lots of
             # problems with it.
-            blacklist_characters=("\x00", "]", "'"),
+            # ? is disallowed due to how we substitute variables into
+            # SQL statements for the event-log
+            blacklist_characters=("\x00", "]", "'", "?"),
         ),
     )
 
@@ -1259,7 +1261,7 @@ _sql_text = text(
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: _sql_text,
+    StorageAffinity.TEXT: one_of(_sql_text, datetimes()),
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
@@ -1294,6 +1296,13 @@ def updates(name: str, table: Table) -> SearchStrategy[Update]:
             )
         ),
     )
+
+
+def selects(name: str) -> SearchStrategy[Select]:
+    """
+    Build objects describing SELECT statements on the given table.
+    """
+    return just(Select(table_name=name))
 
 
 def deletes(name, table):
