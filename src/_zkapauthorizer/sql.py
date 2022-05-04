@@ -337,7 +337,7 @@ def create_table(name: str, table: Table) -> str:
     return f"CREATE TABLE {escape_identifier(name)} ({columns})"
 
 
-def statement_mutates(statement):
+def statement_mutates(statement: str) -> bool:
     """
     predicate to decide if `statement` will change the database
     """
