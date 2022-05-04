@@ -492,14 +492,13 @@ async def tahoe_lafs_uploader(
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
     directory_mutable_cap: str,
-):
+) -> Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     upload some data and link it into the mutable directory under the
     given name.
 
-    :return Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
-        A callable that will upload some data as the latest replica
+    :return: A callable that will upload some data as the latest replica
         snapshot. The data isn't given directly, but instead from a
         zero-argument callable itself to facilitate retrying.
     """
