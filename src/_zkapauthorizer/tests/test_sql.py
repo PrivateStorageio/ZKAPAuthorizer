@@ -26,6 +26,7 @@ from testtools import TestCase
 from testtools.matchers import Equals
 
 from ..sql import bind_arguments, statement_mutates
+from .matchers import raises
 from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
 
 mutations = tuples(
@@ -42,17 +43,51 @@ class BindTests(TestCase):
     Tests for ``bind_arguments``
     """
 
+    def setUp(self):
+        super().setUp()
+        conn = sqlite3.connect(":memory:")
+        self.cursor = conn.cursor()
+
     @given(mutations)
     def test_mutate(self, change) -> None:
         """
         ``bind_arguments`` creates a SQL statement as a single string which
         represents the statement and the given arguments.
         """
-        conn = sqlite3.connect(":memory:")
-        cursor = conn.cursor()
         self.assertThat(
-            bind_arguments(cursor, change.statement(), change.arguments()),
-            Equals(change.bound_statement(cursor)),
+            bind_arguments(self.cursor, change.statement(), change.arguments()),
+            Equals(change.bound_statement(self.cursor)),
+        )
+
+    def test_no_arguments(self):
+        """
+        ``bind_arguments`` returns the input statement if there are no
+        placeholders and no arguments.
+        """
+        statement = "SELECT 1"
+        self.assertThat(
+            bind_arguments(self.cursor, statement, ()),
+            Equals(statement),
+        )
+
+    def test_too_few_placeholders(self):
+        """
+        ``bind_arguments`` raises ``ValueError`` if called with a statement with
+        fewer placeholders than arguments.
+        """
+        self.assertThat(
+            lambda: bind_arguments(self.cursor, "SELECT 1", (1,)),
+            raises(ValueError),
+        )
+
+    def test_too_many_placeholders(self):
+        """
+        ``bind_arguments`` raises ``ValueError`` if called with a statement with
+        more placeholders than arguments.
+        """
+        self.assertThat(
+            lambda: bind_arguments(self.cursor, "SELECT '?' WHERE x = ?", (1,)),
+            raises(ValueError),
         )
 
 

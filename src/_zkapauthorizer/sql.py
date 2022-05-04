@@ -198,7 +198,7 @@ def quote_sql_value(cursor: Cursor, value: SQLType) -> str:
     raise ValueError(f"Do not know how to quote value of type {type(value)}")
 
 
-def bind_arguments(cursor, statement, args):
+def bind_arguments(cursor: Cursor, statement: str, args: tuple[SQLType, ...]) -> str:
     """
     Interpolate the arguments into position in the statement. For
     example, a statement 'INSERT INTO foo VALUES (?, ?)' and args (1,
@@ -206,9 +206,14 @@ def bind_arguments(cursor, statement, args):
 
     This is a simple substitution based on the ? character, which MUST
     NOT appear elsewhere in the SQL.
-    """
 
-    to_sub = list(args) if args is not None else []
+    :raise: ``ValueError`` if it looks like the ? placeholders do not agree
+        with the given arguments.
+    """
+    if statement.count("?") != len(args):
+        raise ValueError(f"Cannot bind arguments for {statement!r}")
+
+    to_sub = [] if args is None else list(args)
 
     def substitute_args(match):
         return quote_sql_value(cursor, to_sub.pop(0))
