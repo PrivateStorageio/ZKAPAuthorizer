@@ -341,6 +341,12 @@ class _ReplicationCapableConnection:
     def _maybe_signal_observers(
         self, cursor
     ) -> Generator[Callable[[], None], None, None]:
+        """
+        If there are recorded mutations, deliver them to each of the observers and
+        then forget about them.
+
+        :return: A generator of the return values of the observers.
+        """
         if self._mutations:
             to_signal = self._mutations
             self._mutations = list()
@@ -348,6 +354,9 @@ class _ReplicationCapableConnection:
                 yield ob(cursor, to_signal)
 
     def cursor(self, factory: Optional[type] = None) -> Cursor:
+        """
+        Get a replication-capable cursor for this connection.
+        """
         kwargs = {}
         if factory is not None:
             kwargs["factory"] = factory
