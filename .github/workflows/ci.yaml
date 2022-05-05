@@ -35,7 +35,7 @@ jobs:
 
     - name: "Install CI Dependencies"
       run: |
-        python -m pip install -v wheel
+        python -m pip install -v wheel slipcover==0.1.2 coveralls
 
     - name: "Install ZKAPAuthorizer and dependencies"
       run: |
@@ -50,19 +50,15 @@ jobs:
       env:
         MAGIC_FOLDER_HYPOTHESIS_PROFILE: "ci"
       run: |
-        python -m coverage run --debug=config -m twisted.trial _zkapauthorizer
+        # We have to tell slipcover where to find the source we want it to
+        # instrument.  Find where our package was installed.
+        $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
+        python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
 
     - name: "Convert Coverage"
       run: |
-        echo "Files:"
-        dir
-        echo "Combining"
-        coverage combine
-        echo "Reporting"
-        coverage report
-        echo "Converting to XML"
-        coverage xml
+        Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
 
-    - uses: codecov/codecov-action@v1
-      with:
-        file: "./coverage.xml"
+    - name: "Upload Coverage"
+      run: |
+        coveralls --merge=coveralls.json
