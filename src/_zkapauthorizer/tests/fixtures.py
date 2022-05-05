@@ -18,8 +18,7 @@ Common fixtures to let the test suite focus on application logic.
 
 import gc
 from base64 import b64encode
-from datetime import datetime
-from typing import Any, Callable, Generator, Optional
+from typing import Any, Generator
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -34,9 +33,10 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from .._plugin import open_store
-from ..config import empty_config
-from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import VoucherStore, memory_connect
+from ..config import CONFIG_DB_NAME
+from ..controller import DummyRedeemer, PaymentController
+from ..model import memory_connect
+from ..replicate import with_replication
 
 
 @attr.s(auto_attribs=True)
@@ -82,42 +82,22 @@ class TemporaryVoucherStore(Fixture):
 
     get_config = attr.ib()
     get_now = attr.ib()
-
-    def _setUp(self):
-        self.tempdir = self.useFixture(TempDir())
-        self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        self.store = open_store(self.get_now, memory_connect, self.config)
-        self.addCleanup(self._cleanUp)
-
-    def _cleanUp(self):
-        """
-        Drop the reference to the ``VoucherStore`` so the underlying SQLite3
-        connection can close.
-        """
-        self.store = None
-
-
-@define
-class ConfiglessMemoryVoucherStore(Fixture):
-    """
-    Create a ``VoucherStore`` backed by an in-memory database and with no
-    associated Tahoe-LAFS configuration or node.
-
-    This is like ``TemporaryVoucherStore`` but faster because it skips the
-    Tahoe-LAFS parts.
-    """
-
-    get_now: Callable[[], datetime]
-    _public_key: str = b64encode(b"A" * 32).decode("utf-8")
-    redeemer: IRedeemer = field(init=False)
-    store: Optional[VoucherStore] = None
+    redeemer = attr.ib(init=False)
+    _public_key = b64encode(b"A" * 32).decode("utf-8")
 
     @redeemer.default
     def _redeemer_default(self):
         return DummyRedeemer(self._public_key)
 
     def _setUp(self):
-        self.store = open_store(self.get_now, memory_connect, empty_config)
+        self.tempdir = self.useFixture(TempDir())
+        self.config = self.get_config(self.tempdir.join("node"), "tub.port")
+        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME))
+        self.store = open_store(
+            self.get_now,
+            with_replication(memory_connect(db_path.path), False),
+            self.config,
+        )
         self.addCleanup(self._cleanUp)
 
     def _cleanUp(self):

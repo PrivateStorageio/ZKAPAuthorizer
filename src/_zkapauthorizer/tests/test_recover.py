@@ -5,7 +5,6 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from sqlite3 import connect
 
-from allmydata.client import read_config
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -15,7 +14,6 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import data, lists, randoms, sampled_from, text
-from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -25,8 +23,9 @@ from testtools.matchers import (
     IsInstance,
     MatchesStructure,
 )
-from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
+from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred, inlineCallbacks
+from zope.interface import Interface
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
@@ -40,6 +39,7 @@ from ..recover import (
     statements_from_snapshot,
 )
 from ..replicate import (
+    AlreadySettingUp,
     ReplicationAlreadySetup,
     get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
@@ -47,12 +47,10 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import MemoryGrid, Tahoe, attenuate_writecap, make_directory
-from .fixtures import Treq
-from .matchers import equals_database, matches_capability
-from .resources import client_manager
+from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
+from .common import delayedProxy
+from .matchers import equals_database, matches_capability, raises
 from .strategies import (
-    api_auth_tokens,
     deletes,
     inserts,
     sql_identifiers,
@@ -301,31 +299,15 @@ class TahoeLAFSDownloaderTests(TestCase):
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    # Support test methods that return a Deferred.
-    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
-
-    # Get a Tahoe-LAFS client node connected to a storage node.
-    resources = [("client", client_manager)]
-
-    def setUp(self):
-        super().setUp()
-        setUpResources(self, self.resources, None)
-        self.addCleanup(lambda: tearDownResources(self, self.resources, None))
-
     @inlineCallbacks
     def test_uploader_and_downloader(self):
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
         """
-        config = read_config(self.client.node_dir.path, "tub.port")
-        # AsynchronousDeferredRunTest sets reactor on us.
-        httpclient = self.useFixture(Treq(self.reactor, case=self)).client()
-        tahoeclient = Tahoe(httpclient, config)
-
-        replica_dir_cap_str = yield Deferred.fromCoroutine(
-            make_directory(httpclient, self.client.node_url),
-        )
+        grid = MemoryGrid()
+        tahoeclient = grid.client()
+        replica_dir_cap_str = grid.make_directory()
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
@@ -333,7 +315,7 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
         )
         expected = b"snapshot data"
-        yield Deferred.fromCoroutine(upload(lambda: BytesIO(expected)))
+        yield Deferred.fromCoroutine(upload("snapshot.sql", lambda: BytesIO(expected)))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
@@ -355,9 +337,8 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
     @given(
         tahoe_configs(),
-        api_auth_tokens(),
     )
-    def test_already_setup(self, get_config, api_auth_token):
+    def test_already_setup(self, get_config):
         """
         If replication is already set up, ``setup_tahoe_lafs_replication`` signals
         failure with ``ReplicationAlreadySetup``.
@@ -377,9 +358,29 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
     @given(
         tahoe_configs(),
-        api_auth_tokens(),
     )
-    def test_setup(self, get_config, api_auth_token):
+    def test_already_setting_up(self, get_config):
+        """
+        If ``setup_tahoe_lafs_replication`` is called a second time before a first
+        call has finished then the second call fails with
+        ``AlreadySettingUp``.
+        """
+        grid = MemoryGrid()
+        controller, client = delayedProxy(ITahoeClient, grid.client())
+        first = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
+        second = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
+
+        controller.run()
+        self.assertThat(first, succeeded(Always()))
+        self.assertThat(
+            second,
+            failed(AfterPreprocessing(lambda f: f.type, Equals(AlreadySettingUp))),
+        )
+
+    @given(
+        tahoe_configs(),
+    )
+    def test_setup(self, get_config):
         """
         If replication was not previously set up then
         ``setup_tahoe_lafs_replication`` signals success with a read-only
@@ -411,4 +412,57 @@ class SetupTahoeLAFSReplicationTests(TestCase):
                 attenuate_writecap,
                 Equals(ro_cap),
             ),
+        )
+
+
+class IFoo(Interface):
+    async def bar(a):
+        pass
+
+    def baz(a):
+        pass
+
+
+class Foo:
+    async def bar(self, a):
+        return (self, a)
+
+    def baz(self, a):
+        return [self, a]
+
+
+class DelayedTests(TestCase):
+    """
+    Tests for ``delayedProxy``.
+    """
+
+    def test_asynchronous(self):
+        """
+        A coroutine function on the proxied object can have its execution
+        arbitrarily delayed using the controller.
+        """
+        original = Foo()
+        controller, delayed = delayedProxy(IFoo, original)
+        d = Deferred.fromCoroutine(delayed.bar(10))
+        self.assertThat(d, has_no_result())
+        controller.run()
+        self.assertThat(d, succeeded(Equals((original, 10))))
+
+    def test_synchronous(self):
+        """
+        A regular function on the proxied object is executed as normal with no
+        delay.
+        """
+        original = Foo()
+        controller, delayed = delayedProxy(IFoo, original)
+        self.assertThat(delayed.baz(5), Equals([original, 5]))
+
+    def test_nothing_waiting(self):
+        """
+        If nothing is waiting then ``controller.run`` raises ``ValueError``.
+        """
+        controller, delayed = delayedProxy(IFoo, Foo())
+        self.assertThat(
+            lambda: controller.run(),
+            raises(ValueError),
         )

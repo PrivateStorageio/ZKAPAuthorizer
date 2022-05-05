@@ -64,7 +64,7 @@ from ..model import (
     Unpaid,
     Voucher,
 )
-from ..sql import Column, Delete, Insert, StorageAffinity, Table, Update
+from ..sql import Column, Delete, Insert, Select, StorageAffinity, Table, Update
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0)
 
@@ -87,7 +87,7 @@ def posix_safe_datetimes():
         # integers, we can't round-trip through all the things that expect a
         # time_t.  Stay back from the absolute top to give tests a little
         # space to advance time, too.
-        max_value=datetime.utcfromtimestamp(2 ** 31),
+        max_value=datetime.utcfromtimestamp(2**31),
     )
 
 
@@ -377,7 +377,7 @@ def token_counts():
     Build integers that are plausible as a number of tokens to receive in
     exchange for a voucher.
     """
-    return integers(min_value=16, max_value=2 ** 16)
+    return integers(min_value=16, max_value=2**16)
 
 
 def client_doublespendredeemer_configurations(default_token_counts=token_counts()):
@@ -797,7 +797,7 @@ def share_versions():
     """
     Build integers which could be Tahoe-LAFS share file version numbers.
     """
-    return integers(min_value=0, max_value=2 ** 32 - 1)
+    return integers(min_value=0, max_value=2**32 - 1)
 
 
 def sharenums():
@@ -826,7 +826,7 @@ def sizes(
     min_value=1,
     # Let this be larger than a single segment (2 ** 17) in case that matters
     # to Tahoe-LAFS storage at all.  I don't think it does, though.
-    max_value=2 ** 18,
+    max_value=2**18,
 ):
     """
     Build Tahoe-LAFS share sizes.
@@ -844,7 +844,7 @@ def offsets():
     return integers(
         min_value=0,
         # Just for practical purposes...
-        max_value=2 ** 16,
+        max_value=2**16,
     )
 
 
@@ -1044,7 +1044,7 @@ def pass_counts():
     at least one pass in a group and there are never "too many", whatever that
     means.
     """
-    return integers(min_value=1, max_value=2 ** 8)
+    return integers(min_value=1, max_value=2**8)
 
 
 def api_auth_tokens():
@@ -1195,7 +1195,9 @@ def sql_identifiers() -> SearchStrategy[str]:
             # Maybe ] should be allowed but I don't know how to quote it.  '
             # certainly should be but Python sqlite3 module has lots of
             # problems with it.
-            blacklist_characters=("\x00", "]", "'"),
+            # ? is disallowed due to how we substitute variables into
+            # SQL statements for the event-log
+            blacklist_characters=("\x00", "]", "'", "?"),
         ),
     )
 
@@ -1209,7 +1211,7 @@ def tables() -> SearchStrategy[Table]:
         columns=lists(
             tuples(
                 sql_identifiers(),
-                builds(Column),
+                builds(Column, affinity=sampled_from(StorageAffinity)),
             ),
             min_size=1,
             unique_by=lambda x: x[0],
@@ -1228,7 +1230,7 @@ def sql_schemas(dict_kwargs=None) -> SearchStrategy[dict[str, Table]]:
 
 # Python has unbounded integers but SQLite3 integers must fall into this
 # range.
-_sql_integer = integers(min_value=-(2 ** 63) + 1, max_value=2 ** 63 - 1)
+_sql_integer = integers(min_value=-(2**63) + 1, max_value=2**63 - 1)
 
 # SQLite3 can do infinity and NaN but I don't know how to get them through the
 # Python interface.
@@ -1259,7 +1261,7 @@ _sql_text = text(
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: _sql_text,
+    StorageAffinity.TEXT: one_of(_sql_text, datetimes()),
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
@@ -1294,6 +1296,13 @@ def updates(name: str, table: Table) -> SearchStrategy[Update]:
             )
         ),
     )
+
+
+def selects(name: str) -> SearchStrategy[Select]:
+    """
+    Build objects describing SELECT statements on the given table.
+    """
+    return just(Select(table_name=name))
 
 
 def deletes(name, table):

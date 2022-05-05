@@ -16,7 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
@@ -55,6 +55,7 @@ from testtools.matchers import (
     Matcher,
     MatchesAll,
     MatchesListwise,
+    MatchesPredicate,
     MatchesStructure,
     Not,
     Raises,
@@ -75,12 +76,16 @@ from twisted.plugins.zkapauthorizer import storage_server_plugin
 from .. import NAME
 from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
 from .._storage_client import IncorrectStorageServerReference
-from ..config import EmptyConfig
+from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, memory_connect
-from ..replicate import _ReplicationService, setup_tahoe_lafs_replication
+from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, open_database
+from ..replicate import (
+    _ReplicationService,
+    setup_tahoe_lafs_replication,
+    with_replication,
+)
 from ..spending import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid
 from .common import skipIf
@@ -131,9 +136,10 @@ class OpenStoreTests(TestCase):
         mkdir(nodedir.path, 0o500)
 
         config = get_config(nodedir.path, "tub.port")
+        db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
 
         self.assertThat(
-            partial(open_store, lambda: now, connect, config),
+            lambda: open_database(partial(connect, db_path.path)),
             Raises(
                 AfterPreprocessing(
                     lambda exc_info: exc_info[1],
@@ -145,76 +151,22 @@ class OpenStoreTests(TestCase):
     @skipIf(
         platform.isWindows(), "Hard to prevent database from being opened on Windows"
     )
-    @given(tahoe_configs(), datetimes())
-    def test_unopenable_store(self, get_config, now):
+    def test_unopenable_database(self):
         """
-        If the underlying database file cannot be opened then ``open_store``
+        If the underlying database file cannot be opened then ``open_database``
         raises ``StoreOpenError``.
         """
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
 
-        config = get_config(nodedir.path, "tub.port")
-
-        # Create the underlying database file.
-        open_store(lambda: now, connect, config)
-
         # Prevent further access to it.
         nodedir.child("private").chmod(0o000)
+        db_path = nodedir.child("private").child(CONFIG_DB_NAME)
 
         self.assertThat(
-            lambda: open_store(lambda: now, connect, config),
+            lambda: open_database(partial(connect, db_path.path)),
             raises(StoreOpenError),
         )
-
-    def _replication_enabled_connection_test(self, now: datetime, enabled: bool):
-        """
-        Test that the database connection ends up in replication mode (or not)
-        based on whether replication has been set up or not.
-
-        :param enabled: If True, set up replication and require the connection
-            to be in replication mode.  If False, don't set it up and require
-            it not to be in replication mode.
-        """
-        grid = MemoryGrid()
-
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
-        tahoe = grid.client(nodedir)
-        config = EmptyConfig(nodedir)
-
-        if enabled:
-            self.assertThat(
-                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
-                succeeded(Always()),
-            )
-
-        # Create the underlying database file.
-        store = open_store(lambda: now, memory_connect, config)
-
-        self.assertThat(
-            # Right now enabling replication does absolutely nothing except
-            # flip this flag, so there's no other behavior to observe in this
-            # test.  Maybe later when there's more replication implementation,
-            # we can assert something more meaningful.
-            store._connection._replicating,
-            Equals(enabled),
-        )
-
-    @given(datetimes())
-    def test_replication_enabled_connection(self, now):
-        """
-        If replication has been set up then ``open_store`` puts the SQLite3
-        connection into replication mode.
-        """
-        self._replication_enabled_connection_test(now, True)
-
-    @given(datetimes())
-    def test_replication_disabled_connection(self, now):
-        """
-        If replication has not been set up then ``open_store`` does not put the
-        SQLite3 connection into replication mode.
-        """
-        self._replication_enabled_connection_test(now, False)
 
 
 class GetRRefTests(TestCase):
@@ -457,22 +409,11 @@ class ServiceTests(TestCase):
         )
 
     @given(tahoe_configs().flatmap(just))
-    def test_replicating(self, get_config):
+    def test_replicating(self, get_config) -> None:
         """
         There is a replication service for a database which has been placed into
         replication mode.
         """
-        self._replication_service_test(get_config, True)
-
-    @given(tahoe_configs().flatmap(just))
-    def test_not_replicating(self, get_config):
-        """
-        There is not a replication service for a database which has not been
-        placed into replication mode.
-        """
-        self._replication_service_test(get_config, False)
-
-    def _replication_service_test(self, get_config, replicating: bool):
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         node_config = get_config(nodedir.path, "tub.port")
         grid = MemoryGrid()
@@ -481,20 +422,41 @@ class ServiceTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        if replicating:
-            # Place it into replication mode.
-            self.assertThat(
-                Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
-                succeeded(Always()),
-            )
+        # Place it into replication mode.
+        self.assertThat(
+            Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
+            succeeded(Always()),
+        )
+
+        # This causes MemoryReactorClock to run all the hooks, which
+        # we need to actually get startService() called and
+        # _replicating getting set
+        reactor.run()
 
         # There is no public interface for just getting the database
         # abstraction, so...
         store = plugin._get_store(node_config)
+        self.assertThat(
+            plugin._service,
+            AnyMatch(
+                MatchesPredicate(
+                    lambda svc: service_matches(store, svc),
+                    "not a replicating service with matching connection: %s",
+                ),
+            ),
+        )
+
+    def test_not_replicating(self) -> None:
+        """
+        There is not a replication service for a database which has not been
+        placed into replication mode.
+        """
+        reactor = MemoryReactorClock()
+        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
         self.assertThat(
-            [svc for svc in plugin._service if service_matches(store, svc)],
-            HasLength(1 if replicating else 0),
+            list(plugin._service),
+            Equals([]),
         )
 
 
@@ -503,7 +465,11 @@ def service_matches(store: VoucherStore, svc: object) -> bool:
     :return: ``True`` if ``svc`` is a replication service for the given
         store's database connection, ``False`` otherwise.
     """
-    return isinstance(svc, _ReplicationService) and svc._connection is store._connection
+    return (
+        isinstance(svc, _ReplicationService)
+        and svc._connection is store._connection
+        and svc._connection._replicating
+    )
 
 
 def has_metric(name_matcher, value_matcher):
@@ -696,7 +662,10 @@ class ClientPluginTests(TestCase):
 
         # Populate the database with unspent tokens.
         def redeem():
-            store = open_store(lambda: now, connect, node_config)
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+            store = open_store(
+                lambda: now, with_replication(connect(db_path.path), False), node_config
+            )
 
             controller = PaymentController(
                 store,
@@ -808,13 +777,19 @@ class ClientResourceTests(TestCase):
             succeeded(matches_response(code_matcher=Equals(201))),
         )
 
+        # This causes MemoryReactorClock to run all the hooks, which
+        # we need to actually get startService() called and
+        # _replicating getting set
+        self.reactor.run()
+
         self.assertThat(
-            [
-                svc
-                for svc in self.plugin._service
-                if service_matches(self.plugin._get_store(config), svc)
-            ],
-            HasLength(1),
+            self.plugin._service,
+            AnyMatch(
+                MatchesPredicate(
+                    lambda svc: service_matches(self.plugin._get_store(config), svc),
+                    "not a replicating service with matching connection: %s",
+                ),
+            ),
         )
 
 

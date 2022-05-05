@@ -40,7 +40,7 @@ in
     # depend on the relevant packages.
     dependency-fixes = {
       _ = {
-        # If there were any they would go here.
+        # If we had any, they would go here.
       };
     };
 

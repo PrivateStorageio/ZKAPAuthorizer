@@ -23,13 +23,14 @@ import os
 from datetime import datetime
 from functools import wraps
 from json import loads
-from sqlite3 import Connection, Cursor, OperationalError
+from sqlite3 import Connection as _SQLite3Connection
+from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, Optional, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
-from attr import define, frozen
+from attrs import define, frozen
 from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -37,10 +38,11 @@ from zope.interface import Interface, implementer
 
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from ._types import Connect, GetTime
-from .replicate import Change, EventStream, with_replication
+from ._types import GetTime
+from .replicate import _ReplicationCapableConnection, snapshot
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
-from .storage_common import pass_value_attribute, required_passes
+from .sql import BoundConnect, Cursor
+from .storage_common import required_passes
 from .validators import greater_than, has_length, is_base64_encoded
 
 _T = TypeVar("_T")
@@ -88,22 +90,7 @@ class NotEnoughTokens(Exception):
     """
 
 
-def open_and_initialize(connect: Connect) -> Connection:
-    """
-    Open a SQLite3 database for use as a voucher store.
-
-    Create the database and populate it with a schema, if it does not already
-    exist.
-
-    :return: A SQLite3 connection object in which any necessary application
-        schema has been created.
-    """
-    conn = open_database(connect)
-    initialize_database(conn)
-    return conn
-
-
-def open_database(connect: Connect) -> Connection:
+def open_database(connect: BoundConnect) -> _SQLite3Connection:
     """
     Create and return a database connection using the required connect
     parameters.
@@ -114,7 +101,7 @@ def open_database(connect: Connect) -> Connection:
         raise StoreOpenError(e)
 
 
-def initialize_database(conn: Connection) -> None:
+def initialize_database(conn: _ReplicationCapableConnection) -> None:
     """
     Make any persistent and temporary schema changes required to make the
     given database compatible with this version of the software.
@@ -129,7 +116,7 @@ def initialize_database(conn: Connection) -> None:
         # be enabled on a per-connection basis.  This is a helpful feature to
         # ensure consistency so we want it enforced and we use it in our
         # schema.
-        cursor.execute("PRAGMA foreign_keys = ON")
+        cursor.execute("PRAGMA foreign_keys = ON", ())
 
         # Upgrade the database to the most recent version of the schema.  That
         # is the only schema the Python code will actually work against.
@@ -154,6 +141,7 @@ def initialize_database(conn: Connection) -> None:
                 -- be in a different database than normal tables).
             )
             """,
+            (),
         )
         cursor.execute(
             """
@@ -164,6 +152,7 @@ def initialize_database(conn: Connection) -> None:
                 [unblinded-token] text
             )
             """,
+            (),
         )
         cursor.execute(
             """
@@ -173,6 +162,7 @@ def initialize_database(conn: Connection) -> None:
                 [unblinded-token] text
             )
             """,
+            (),
         )
 
     cursor.close()
@@ -234,6 +224,8 @@ def path_to_memory_uri(path: FilePath) -> str:
     :return: A string suitable to be passed as the first argument to
         ``sqlite3.connect`` along with the `uri=True` keyword argument.
     """
+    # See https://www.sqlite.org/uri.html for docs on URI-style database
+    # paths.
     return (
         DecodedURL()
         .replace(
@@ -243,21 +235,26 @@ def path_to_memory_uri(path: FilePath) -> str:
             path=path.asTextMode().path.split(os.sep),
         )
         .add("mode", "memory")
+        # The shared cache mode is required for two connections to the same
+        # memory-mode database.
+        # https://www.sqlite.org/sharedcache.html#shared_cache_and_in_memory_databases
+        .add("cache", "shared")
         .to_text()
     )
 
 
-def memory_connect(path: str, *a, uri=None, **kw) -> Connection:
+def memory_connect(path: str, *a, uri=None, **kw) -> _SQLite3Connection:
     """
     Always connect to an in-memory SQLite3 database.
     """
     kw["uri"] = True
-    return _connect(path_to_memory_uri(FilePath(path)), *a, **kw)
+    conn = _connect(path_to_memory_uri(FilePath(path)), *a, **kw)
+    return conn
 
 
 # The largest integer SQLite3 can represent in an integer column.  Larger than
 # this an the representation loses precision as a floating point.
-_SQLITE3_INTEGER_MAX = 2 ** 63 - 1
+_SQLITE3_INTEGER_MAX = 2**63 - 1
 
 
 @frozen
@@ -269,9 +266,9 @@ class VoucherStore(object):
         ``datetime`` instance.
     """
 
-    pass_value: int = pass_value_attribute()
-    now: GetTime = attr.ib()
-    _connection = attr.ib()
+    pass_value: int
+    now: GetTime
+    _connection: _ReplicationCapableConnection
 
     _log = Logger()
 
@@ -280,14 +277,8 @@ class VoucherStore(object):
         cls,
         pass_value: int,
         now: GetTime,
-        conn: Connection,
-        enable_replication: bool,
+        replicating_conn: _ReplicationCapableConnection,
     ) -> VoucherStore:
-        # Make sure we always have a replication-enabled connection even if
-        # we're not doing replication yet because we might want to turn it on
-        # later.  Also, if we're doing it, we need it to get involved in
-        # database initialization which happens next.
-        replicating_conn = with_replication(conn, enable_replication)
         initialize_database(replicating_conn)
         return cls(pass_value=pass_value, now=now, connection=replicating_conn)
 
@@ -296,7 +287,7 @@ class VoucherStore(object):
         Create and return a consistent, self-contained snapshot of the underlying
         database state.
         """
-        return self._connection.snapshot()
+        return snapshot(self._connection)
 
     @with_cursor_async
     async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
@@ -370,7 +361,6 @@ class VoucherStore(object):
             raise TypeError("{} returned {}, expected datetime".format(self.now, now))
 
         voucher_text = voucher.decode("ascii")
-
         cursor.execute(
             """
             SELECT [text]
@@ -398,25 +388,26 @@ class VoucherStore(object):
                 voucher=voucher_text,
                 counter=counter,
             )
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
-                """,
-                (voucher_text, expected_tokens, self.now()),
-            )
-            cursor.executemany(
-                """
-                INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
-                """,
-                list(
-                    (
-                        voucher_text,
-                        counter,
-                        token.token_value.decode("ascii"),
-                    )
-                    for token in tokens
-                ),
-            )
+            with cursor.important():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO [vouchers] ([number], [expected-tokens], [created]) VALUES (?, ?, ?)
+                    """,
+                    (voucher_text, expected_tokens, self.now()),
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO [tokens] ([voucher], [counter], [text]) VALUES (?, ?, ?)
+                    """,
+                    list(
+                        (
+                            voucher_text,
+                            counter,
+                            token.token_value.decode("ascii"),
+                        )
+                        for token in tokens
+                    ),
+                )
         return tokens
 
     @with_cursor
@@ -798,33 +789,6 @@ class VoucherStore(object):
             parse_datetime(finished, delimiter=" "),
         )
 
-    @with_cursor
-    def add_event(self, cursor, sql_statement: str):
-        """
-        Add a new change to the event-log.
-        """
-        cursor.execute(
-            """
-            INSERT INTO [event-stream]([statement]) VALUES (?)
-            """,
-            (sql_statement,),
-        )
-
-    @with_cursor
-    def get_events(self, cursor):
-        """
-        Return all events currently in our event-log.
-        """
-        cursor.execute(
-            """
-            SELECT [sequence-number], [statement]
-            FROM [event-stream]
-            """
-        )
-        rows = cursor.fetchall()
-
-        return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
-
 
 @implementer(ILeaseMaintenanceObserver)
 @define
@@ -850,10 +814,10 @@ class LeaseMaintenance(object):
         This is used to make sure future updates go to the right row.
     """
 
-    _pass_value = pass_value_attribute()
-    _now = attr.ib()
-    _connection = attr.ib()
-    _rowid = attr.ib(default=None)
+    _pass_value: int
+    _now: GetTime
+    _connection: _ReplicationCapableConnection
+    _rowid: Optional[int] = None
 
     @with_cursor
     def start(self, cursor):

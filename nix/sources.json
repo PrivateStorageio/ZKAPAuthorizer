@@ -5,10 +5,10 @@
         "homepage": "",
         "owner": "PrivateStorageio",
         "repo": "mach-nix",
-        "rev": "4d2cc6c6fe5b2875e7b48a84a1b1f688c6991c42",
-        "sha256": "03xabrwzbby6dcp3w4li7p9cxsca5n2jlz452sz7r4h1n5sx9mwg",
+        "rev": "31b21203a1350bff7c541e9dfdd4e07f76d874be",
+        "sha256": "0przsgmbbcnnqdff7n43zv5girix83ky4mjlxq7m2ksr3wyj2va2",
         "type": "tarball",
-        "url": "https://github.com/PrivateStorageio/mach-nix/archive/4d2cc6c6fe5b2875e7b48a84a1b1f688c6991c42.tar.gz",
+        "url": "https://github.com/PrivateStorageio/mach-nix/archive/31b21203a1350bff7c541e9dfdd4e07f76d874be.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -29,10 +29,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "8a5c3f6468914647a97a49eed4df41bb7e3dc9b1",
-        "sha256": "1j3iih4lyx57xjrfdbqavjk4zi1m3p06cwpna0np35pskghqx4pk",
+        "rev": "3e6c4e328bdae5c9f1e8131833275cce26df47f0",
+        "sha256": "01rjxxv2chjjz5l55vplj76d616fld7226ai6lw6rhv93ypzfc13",
         "type": "tarball",
-        "url": "https://github.com/DavHau/pypi-deps-db/archive/8a5c3f6468914647a97a49eed4df41bb7e3dc9b1.tar.gz",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/3e6c4e328bdae5c9f1e8131833275cce26df47f0.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2105": {
