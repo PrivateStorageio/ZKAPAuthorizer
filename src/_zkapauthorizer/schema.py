@@ -221,5 +221,6 @@ _UPGRADES = {
             [statement] TEXT
         )
         """,
+        # XXX note to self: add bool column for 'important' at some point
     ],
 }

@@ -639,6 +639,23 @@ def event_stream_name(high_seq: int) -> str:
     return f"event-stream-{high_seq}"
 
 
+async def prune_events_from_replica(tahoe: Tahoe, mutable: CapStr, highest_seq: int):
+    """
+    Unlink all event-streams from the remote replica in `mutable` as
+    long as they contain only events less than `highest_seq`.
+    """
+
+    entries = await tahoe.list_directory(mutable)
+    print(entries)
+    for entry in entries:
+        m = re.match("event-stream-([0-9]*)", entry)
+        if m:
+            seq = int(entry.group(1))
+            print("delete", seq)
+            await tahoe.unlink(mutable, entry)
+
+
+
 @define
 class _ReplicationService(Service):
     """
@@ -658,11 +675,13 @@ class _ReplicationService(Service):
     _logger = Logger()
 
     _connection: _ReplicationCapableConnection = field()
+    _client: Tahoe  # could maybe make "pruner" or something
     _uploader: Uploader
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
-    _trigger: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
+    _trigger_events: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
+    _trigger_snapshot: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
 
     @property
     def _unreplicated_connection(self):
@@ -687,10 +706,16 @@ class _ReplicationService(Service):
             self._unreplicated_connection
         )
 
-        # should we do an upload immediately? or hold the lock?
+        # by acquiring the lock here, we won't do an event upload
+        # until .queue_event_upload() is called
         if not self.should_upload_eventstream(self._changes):
-            # If we hold the lock, the upload cannot happen.
-            self._trigger.acquire()
+            self._trigger_events.acquire()
+
+        # XXX could introduce a local table to store "what seq-num and
+        # when did we last upload a snapshot" or just always discover
+        # it "from the source" (i.e. the replica mutable) .. but then
+        # we need to do async work to list the contents of it.
+        self._trigger_snapshot.acquire()
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
@@ -712,35 +737,72 @@ class _ReplicationService(Service):
 
         return None
 
-    def queue_upload(self) -> None:
+    def queue_event_upload(self) -> None:
         """
-        Ask for an upload to occur.
+        Request an event-stream upload of outstanding events.
         """
-        if self._trigger.tokens == 0:
-            self._trigger.release()
+        if self._trigger_events.tokens == 0:
+            self._trigger_events.release()
         else:
             # An upload is already running so we don't have to do anything.
             pass
 
+    def queue_snapshot_upload(self) -> None:
+        """
+        Request that an upload of a new snapshot occur. Stale
+        event-streams will also be pruned after the snapshot is
+        successfully uploaded.
+        """
+        if self._trigger_snapshot.tokens == 0:
+            self._trigger_snapshot.release()
+        else:
+            # we're already uploading a snapshot
+            pass
+
     async def wait_for_uploads(self) -> None:
         """
-        An infinite async loop that processes uploads
+        An infinite async loop that processes uploads of event-streams or
+        snapshots
         """
+        # having this as a single loop listening for "either an
+        # event-stream _or_ a snapshot" trigger means we'll only ever
+        # be running one kind of update at a time .. which is
+        # important because these updates mutate our replica mutable
         while True:
-            # Wait for an upload to be queued.
-            await self._trigger.acquire()
-            # Then perform one.
-            #
+            event_or_snapshot = DeferredList(
+                [
+                    Deferred.fromCoroutine(self._trigger_events.acquire()),
+                    Deferred.fromCoroutine(self._trigger_snapshot.acquire()),
+                ],
+                fireOnOneCallback=True,
+            )
+            result, index = await event_or_snapshot
+
             # Errors in here mean our "forever loop" will stop .. so we might
             # want to simply log all/most errors instead?  Or some retry logic
             # might be appropriate.  Some transient network errors will be
             # automatically retried by a lower level but no doubt some make it
             # up to this level.
-            await self._do_one_upload()
+            if index == 0:
+                await self._do_one_event_upload()
+            else:
+                await self._do_one_snapshot_upload()
 
-    async def _do_one_upload(self) -> None:
+    async def _do_one_snapshot_upload() -> None:
         """
-        Perform the upload of one event stream.
+        Perform a single snapshot upload, including pruning event-streams
+        from the replica that are no longer relevant.
+        """
+        seqnum = int(self._connection.cursor().execute(
+            """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
+        ).fetchall()[0])
+        snapshot = snapshot(self._connection)
+        print("seq={}, snap={}bytes".format(seqnum, snapshot))
+
+    async def _do_one_event_upload(self) -> None:
+        """
+        Process a single upload of all current events and then delete them
+        from our database.
         """
         events = get_events(self._unreplicated_connection)
 
