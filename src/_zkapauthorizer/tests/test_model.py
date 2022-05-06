@@ -875,11 +875,12 @@ class EventStreamTests(TestCase):
                     Change(
                         next(sequence),
                         change.bound_statement(store._connection.cursor()),
+                        False,
                     )
                 )
                 with store._connection:
                     curse = store._connection.cursor()
-                    add_events(curse, [change.bound_statement(curse)])
+                    add_events(curse, [change.bound_statement(curse)], False)
 
         events = get_events(store._connection)
         self.assertThat(
@@ -919,7 +920,7 @@ class EventStreamTests(TestCase):
 
         with store._connection:
             curse = store._connection.cursor()
-            add_events(curse, [change.bound_statement(curse) for change in changes])
+            add_events(curse, [change.bound_statement(curse) for change in changes], False)
 
         pre_events = get_events(store._connection)
 
