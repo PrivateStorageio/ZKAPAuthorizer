@@ -775,7 +775,11 @@ class _ReplicationService(Service):
                     self._trigger_snapshot.acquire(),
                 ],
                 fireOnOneCallback=True,
+                consumeErrors=True,
             )
+            # WTF? this looks like it retuns the "normal thing"
+            # _unless_ a result comes in .. so if they both fail, we
+            # get a 2-item list of 2-tuples?
             result, index = await event_or_snapshot
 
             # Errors in here mean our "forever loop" will stop .. so we might
@@ -783,6 +787,7 @@ class _ReplicationService(Service):
             # might be appropriate.  Some transient network errors will be
             # automatically retried by a lower level but no doubt some make it
             # up to this level.
+            print("RES", result, index)
             if index == 0:
                 await self._do_one_event_upload()
             else:
@@ -793,14 +798,15 @@ class _ReplicationService(Service):
         Perform a single snapshot upload, including pruning event-streams
         from the replica that are no longer relevant.
         """
-        # seqnum = int(self._connection.cursor().execute(
-        #     """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
-        # ).fetchall()[0])
+        seqnum = 1
+        rows = self._connection.cursor().execute(
+            """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
+        ).fetchall()
+        if len(rows):
+            seqnum = int(rows[0])
+        else:
+            print("only default")
 
-        # not sure we need to care about "the sequence number of the
-        # snapshot" because I believe we're clear to just delete _all_
-        # event-stream objects from the replica (and delete any local
-        # events) when we upload a snapshot
         snap = snapshot(self._connection)
         print("snap={}bytes".format(len(snap)))
 
