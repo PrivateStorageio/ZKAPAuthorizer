@@ -348,7 +348,10 @@ class ReplicationServiceTests(TestCase):
             nonlocal upload_completed
             upload_completed = True
 
-        srv = replication_service(tvs.store._connection, uploader)
+        class FakeClient:
+            pass
+
+        srv = replication_service(tvs.store._connection, FakeClient(), uploader)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -406,6 +409,100 @@ class ReplicationServiceTests(TestCase):
         # events in the store
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
 
+    def test_snapshot(self) -> None:
+        """
+        Making changes to the voucher store while replication is turned on
+        causes event-stream objects to be uploaded.
+
+        Uploading a snapshot causes those events to be pruned from the
+        replica
+        """
+
+        def get_config(rootpath, portnumfile):
+            return EmptyConfig(FilePath(rootpath))
+
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
+
+        rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
+        rwcap_file.parent().makedirs()
+        rwcap_file.setContent(b"URL:DIR2:stuff")
+
+        # we use this to contol when the first upload happens, so that we
+        # actually use the queue
+        wait_d: Deferred[None] = Deferred()
+
+        uploads = []
+        upload_completed = False
+
+        async def uploader(name, get_data):
+            uploads.append((name, get_data))
+            await wait_d
+            nonlocal upload_completed
+            upload_completed = True
+
+        class FakeClient:
+            pass
+
+        srv = replication_service(tvs.store._connection, FakeClient(), uploader)
+
+        # run the service and produce some fake voucher etc changes
+        # that cause "events" to be issued into the database
+        srv.startService()
+        self.addCleanup(srv.stopService)
+
+        def add_tokens():
+            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
+            voucher = urlsafe_b64encode(urandom(32))
+            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
+
+        # Add some tokens, which are considered important.
+        add_tokens()
+
+        # Still, the upload cannot complete until we fire wait_d.  Verify
+        # that's working as intended.
+        self.assertFalse(upload_completed)
+
+        # Add two more groups of tokens.  These are also important.  They
+        # should be included in an upload but they cannot be included in the
+        # upload that already started.
+        add_tokens()
+        add_tokens()
+
+        # Finish the first upload.
+        wait_d.callback(None)
+        self.assertTrue(upload_completed)
+
+        # Now both the first upload and a second upload should have completed.
+        # There is no third upload because the data for the 2nd and 3rd
+        # add_tokens calls should have been combined into a single upload.
+        self.assertThat(
+            uploads,
+            MatchesListwise(
+                [
+                    match_upload(
+                        Equals("event-stream-11"),
+                        MatchesStructure(
+                            changes=HasLength(11),
+                            highest_sequence=returns(Equals(11)),
+                        ),
+                    ),
+                    match_upload(
+                        Equals("event-stream-33"),
+                        MatchesStructure(
+                            changes=HasLength(22),
+                            highest_sequence=returns(Equals(33)),
+                        ),
+                    ),
+                ],
+            ),
+        )
+
+        # since we've uploaded everything, there should be no
+        # events in the store
+        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+
+        srv.queue_snapshot_upload()
+
 
 class HypothesisReplicationServiceTests(TestCase):
     """
@@ -422,7 +519,10 @@ class HypothesisReplicationServiceTests(TestCase):
         async def uploader(name, get_bytes):
             pass
 
-        service = replication_service(tvs.store._connection, uploader)
+        class FakeClient:
+            pass
+
+        service = replication_service(tvs.store._connection, FakeClient(), uploader)
         service.startService()
         try:
             self.assertThat(tvs.store._connection._replicating, Equals(True))

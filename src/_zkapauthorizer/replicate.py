@@ -78,7 +78,7 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
+from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed, DeferredList
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
@@ -771,8 +771,8 @@ class _ReplicationService(Service):
         while True:
             event_or_snapshot = DeferredList(
                 [
-                    Deferred.fromCoroutine(self._trigger_events.acquire()),
-                    Deferred.fromCoroutine(self._trigger_snapshot.acquire()),
+                    self._trigger_events.acquire(),
+                    self._trigger_snapshot.acquire(),
                 ],
                 fireOnOneCallback=True,
             )
@@ -788,16 +788,21 @@ class _ReplicationService(Service):
             else:
                 await self._do_one_snapshot_upload()
 
-    async def _do_one_snapshot_upload() -> None:
+    async def _do_one_snapshot_upload(self) -> None:
         """
         Perform a single snapshot upload, including pruning event-streams
         from the replica that are no longer relevant.
         """
-        seqnum = int(self._connection.cursor().execute(
-            """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
-        ).fetchall()[0])
-        snapshot = snapshot(self._connection)
-        print("seq={}, snap={}bytes".format(seqnum, snapshot))
+        # seqnum = int(self._connection.cursor().execute(
+        #     """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
+        # ).fetchall()[0])
+
+        # not sure we need to care about "the sequence number of the
+        # snapshot" because I believe we're clear to just delete _all_
+        # event-stream objects from the replica (and delete any local
+        # events) when we upload a snapshot
+        snap = snapshot(self._connection)
+        print("snap={}bytes".format(len(snap)))
 
     async def _do_one_event_upload(self) -> None:
         """
@@ -828,6 +833,7 @@ class _ReplicationService(Service):
             return succeed(None)
 
         self._replicating = None
+        print("CANCEL", replicating)
         replicating.cancel()
         return replicating
 
@@ -861,7 +867,7 @@ class _ReplicationService(Service):
         from our observer function). See
         _ReplicationCapableConnection.__exit__
         """
-        self.queue_upload()
+        self.queue_event_upload()
         self._changes = AccumulatedChanges.no_changes()
 
     def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
@@ -874,6 +880,7 @@ class _ReplicationService(Service):
 
 def replication_service(
     replicated_connection: _ReplicationCapableConnection,
+    client: Tahoe,
     uploader: Uploader,
 ) -> IService:
     """
@@ -882,5 +889,6 @@ def replication_service(
     """
     return _ReplicationService(
         connection=replicated_connection,
+        client=client,
         uploader=uploader,
     )

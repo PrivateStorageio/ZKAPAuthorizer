@@ -564,6 +564,9 @@ class _MemoryTahoe:
     async def link(self, dir_cap, entry_name, entry_cap):
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
+    async def unlink(self, dir_cap, entry_name):
+        return self._grid.unlink(dir_cap, entry_name)
+
     async def list_directory(self, dir_cap):
         return self._grid.list_directory(dir_cap)
 
