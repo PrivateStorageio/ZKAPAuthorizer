@@ -100,7 +100,7 @@ class Change:
 
     sequence: int  # the sequence-number of this event
     statement: str  # the SQL statement string
-    important: bool  # whether this was "important" or not when we started
+    important: bool  # whether this change was "important" or not
 
 
 @frozen
