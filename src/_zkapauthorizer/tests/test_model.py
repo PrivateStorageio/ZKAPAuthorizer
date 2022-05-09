@@ -920,7 +920,9 @@ class EventStreamTests(TestCase):
 
         with store._connection:
             curse = store._connection.cursor()
-            add_events(curse, [change.bound_statement(curse) for change in changes], False)
+            add_events(
+                curse, [change.bound_statement(curse) for change in changes], False
+            )
 
         pre_events = get_events(store._connection)
 

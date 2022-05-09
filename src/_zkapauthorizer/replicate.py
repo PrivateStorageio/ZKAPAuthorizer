@@ -130,9 +130,13 @@ class EventStream:
                 {
                     "version": self.version,
                     "events": tuple(
-                        (event.sequence, event.statement.encode("utf8"), event.important)
+                        (
+                            event.sequence,
+                            event.statement.encode("utf8"),
+                            event.important,
+                        )
                         for event in self.changes
-                    )
+                    ),
                 }
             )
         )
@@ -147,9 +151,7 @@ class EventStream:
         data = cbor2.load(stream)
         serial_version = data.get("version", None)
         if serial_version != 1:
-            raise ValueError(
-                f"Unknown serialized version {serial_version}"
-            )
+            raise ValueError(f"Unknown serialized version {serial_version}")
         return cls(
             changes=tuple(
                 Change(seq, statement.decode("utf8"), important)
@@ -521,7 +523,9 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_events(cursor: _SQLite3Cursor, sql_statements: Iterable[str], important: bool) -> None:
+def add_events(
+    cursor: _SQLite3Cursor, sql_statements: Iterable[str], important: bool
+) -> None:
     """
     Add some new changes to the event-log.
     """
@@ -546,7 +550,9 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
             """
         )
         rows = cursor.fetchall()
-    return EventStream(changes=tuple(Change(seq, stmt, important) for seq, stmt, important in rows))
+    return EventStream(
+        changes=tuple(Change(seq, stmt, important) for seq, stmt, important in rows)
+    )
 
 
 def prune_events_to(conn: _SQLite3Connection, sequence_number: int) -> None:
