@@ -897,6 +897,16 @@ class EventStreamTests(TestCase):
             Equals(len(sql_statements)),
         )
 
+    def test_event_stream_invalid_version(self):
+        """
+        An EventStream with an unknown version errors on deserialization
+        """
+        es = EventStream(tuple(), version=-1)
+        self.assertThat(
+            lambda: EventStream.from_bytes(es.to_bytes()),
+            raises(ValueError)
+        )
+
     @given(
         tahoe_configs(),
         posix_safe_datetimes(),
