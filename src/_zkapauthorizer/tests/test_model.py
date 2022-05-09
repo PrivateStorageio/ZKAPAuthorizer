@@ -903,8 +903,7 @@ class EventStreamTests(TestCase):
         """
         es = EventStream(tuple(), version=-1)
         self.assertThat(
-            lambda: EventStream.from_bytes(es.to_bytes()),
-            raises(ValueError)
+            lambda: EventStream.from_bytes(es.to_bytes()), raises(ValueError)
         )
 
     @given(
