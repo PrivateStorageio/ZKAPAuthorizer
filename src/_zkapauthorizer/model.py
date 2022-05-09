@@ -20,7 +20,7 @@ the storage plugin.
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from json import loads
 from sqlite3 import Connection as _SQLite3Connection
@@ -30,7 +30,7 @@ from typing import Awaitable, Callable, Optional, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
-from attrs import define, frozen
+from attrs import define, field, frozen
 from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
@@ -43,9 +43,22 @@ from .replicate import _ReplicationCapableConnection, snapshot
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
-from .validators import greater_than, has_length, is_base64_encoded
+from .validators import (
+    aware_datetime_validator,
+    greater_than,
+    has_length,
+    is_aware_datetime,
+    is_base64_encoded,
+)
 
 _T = TypeVar("_T")
+
+
+def aware_now() -> datetime:
+    """
+    Get the current time as a timezone-aware UTC datetime.
+    """
+    return datetime.now(timezone.utc)
 
 
 class NotEmpty(Exception):
@@ -357,8 +370,10 @@ class VoucherStore(object):
         :param list[RandomToken]: The tokens to add alongside the voucher.
         """
         now = self.now()
-        if not isinstance(now, datetime):
-            raise TypeError("{} returned {}, expected datetime".format(self.now, now))
+        if not is_aware_datetime(now):
+            raise TypeError(
+                "{} returned {}, expected aware datetime".format(self.now, now)
+            )
 
         voucher_text = voucher.decode("ascii")
         cursor.execute(
@@ -869,9 +884,9 @@ class LeaseMaintenance(object):
 
 @frozen
 class LeaseMaintenanceActivity(object):
-    started = attr.ib()
-    passes_required = attr.ib()
-    finished = attr.ib()
+    started: datetime = field(validator=aware_datetime_validator)
+    passes_required: int
+    finished: datetime = field(validator=aware_datetime_validator)
 
 
 # store = ...
@@ -899,7 +914,7 @@ class UnblindedToken(object):
         ``decode_base64`` method.
     """
 
-    unblinded_token = attr.ib(
+    unblinded_token = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -915,7 +930,7 @@ class Pass(object):
 
     """
 
-    preimage = attr.ib(
+    preimage = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -923,7 +938,7 @@ class Pass(object):
         ),
     )
 
-    signature = attr.ib(
+    signature = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -956,7 +971,7 @@ class RandomToken(object):
         token.
     """
 
-    token_value = attr.ib(
+    token_value = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(),
@@ -966,7 +981,7 @@ class RandomToken(object):
 
 
 def _counter_attribute():
-    return attr.ib(
+    return field(
         validator=attr.validators.and_(
             attr.validators.instance_of(int),
             greater_than(-1),
@@ -1003,8 +1018,8 @@ class Redeeming(object):
     progress.
     """
 
-    started = attr.ib(validator=attr.validators.instance_of(datetime))
-    counter = _counter_attribute()
+    started: datetime = field(validator=aware_datetime_validator)
+    counter: int = _counter_attribute()
 
     def should_start_redemption(self):
         return False
@@ -1023,13 +1038,13 @@ class Redeemed(object):
     The voucher was successfully redeemed.  Associated tokens were retrieved
     and stored locally.
 
-    :ivar datetime finished: The time when the redemption finished.
+    :ivar finished: The time when the redemption finished.
 
-    :ivar int token_count: The number of tokens the voucher was redeemed for.
+    :ivar token_count: The number of tokens the voucher was redeemed for.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    token_count = attr.ib(validator=attr.validators.instance_of(int))
+    finished: datetime = field(validator=aware_datetime_validator)
+    token_count: int
 
     def should_start_redemption(self):
         return False
@@ -1044,7 +1059,7 @@ class Redeemed(object):
 
 @frozen
 class DoubleSpend(object):
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    finished: datetime = field(validator=aware_datetime_validator)
 
     def should_start_redemption(self):
         return False
@@ -1064,7 +1079,7 @@ class Unpaid(object):
     to lack of payment.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
+    finished: datetime = field(validator=aware_datetime_validator)
 
     def should_start_redemption(self):
         return True
@@ -1084,8 +1099,8 @@ class Error(object):
     to an error that is not handled by any other part of the system.
     """
 
-    finished = attr.ib(validator=attr.validators.instance_of(datetime))
-    details = attr.ib(validator=attr.validators.instance_of(str))
+    finished: datetime = field(validator=aware_datetime_validator)
+    details: str
 
     def should_start_redemption(self):
         return True
@@ -1101,23 +1116,21 @@ class Error(object):
 @frozen
 class Voucher(object):
     """
-    :ivar bytes number: The byte string which gives this voucher its
-        identity.
-
-    :ivar datetime created: The time at which this voucher was added to this
-        node.
+    :ivar number: The byte string which gives this voucher its identity.
 
     :ivar expected_tokens: The total number of tokens for which we expect to
         be able to redeem this voucher.  Tokens are redeemed in smaller
         groups, progress of which is tracked in ``state``.  This only gives
         the total we expect to reach at completion.
 
+    :ivar created: The time at which this voucher was added to this node.
+
     :ivar state: An indication of the current state of this voucher.  This is
         an instance of ``Pending``, ``Redeeming``, ``Redeemed``,
         ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
 
-    number = attr.ib(
+    number: bytes = field(
         validator=attr.validators.and_(
             attr.validators.instance_of(bytes),
             is_base64_encoded(urlsafe_b64decode),
@@ -1125,7 +1138,7 @@ class Voucher(object):
         ),
     )
 
-    expected_tokens = attr.ib(
+    expected_tokens: Optional[int] = field(
         validator=attr.validators.optional(
             attr.validators.and_(
                 attr.validators.instance_of(int),
@@ -1134,12 +1147,12 @@ class Voucher(object):
         ),
     )
 
-    created = attr.ib(
+    created: Optional[datetime] = field(
         default=None,
-        validator=attr.validators.optional(attr.validators.instance_of(datetime)),
+        validator=attr.validators.optional(aware_datetime_validator),
     )
 
-    state = attr.ib(
+    state = field(
         default=Pending(counter=0),
         validator=attr.validators.instance_of(
             (

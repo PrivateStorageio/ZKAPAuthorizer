@@ -3,7 +3,6 @@ Tests for the replication system in ``_zkapauthorizer.replicate``.
 """
 
 from base64 import b64encode, urlsafe_b64encode
-from datetime import datetime
 from functools import partial
 from io import BytesIO
 from os import urandom
@@ -26,7 +25,7 @@ from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
-from ..model import RandomToken
+from ..model import RandomToken, aware_now
 from ..recover import recover
 from ..replicate import (
     EventStream,
@@ -37,7 +36,7 @@ from ..replicate import (
 )
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Matcher, equals_database, returns
-from .strategies import datetimes, tahoe_configs
+from .strategies import aware_datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -329,7 +328,7 @@ class ReplicationServiceTests(TestCase):
         def get_config(rootpath, portnumfile):
             return EmptyConfig(FilePath(rootpath))
 
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, aware_now))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
@@ -412,7 +411,7 @@ class HypothesisReplicationServiceTests(TestCase):
     Tests for ``_ReplicationService``.
     """
 
-    @given(tahoe_configs(), datetimes())
+    @given(tahoe_configs(), aware_datetimes())
     def test_enable_replication_on_connection(self, get_config, now):
         """
         When the service starts it enables replication on its database connection.

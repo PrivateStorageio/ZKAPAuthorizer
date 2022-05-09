@@ -37,7 +37,7 @@ from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
-from hypothesis.strategies import datetimes, just, sampled_from, timedeltas
+from hypothesis.strategies import just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
 from testtools import TestCase
@@ -94,6 +94,7 @@ from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_ser
 from .matchers import Provides, matches_response, raises
 from .strategies import (
     announcements,
+    aware_datetimes,
     client_dummyredeemer_configurations,
     client_lease_maintenance_configurations,
     dummy_ristretto_keys,
@@ -123,7 +124,7 @@ def get_rref(interface=None):
 
 class OpenStoreTests(TestCase):
     @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
-    @given(tahoe_configs(), datetimes())
+    @given(tahoe_configs(), aware_datetimes())
     def test_uncreateable_store_directory(self, get_config, now):
         """
         If the underlying directory in the node configuration cannot be created
@@ -632,7 +633,7 @@ class ClientPluginTests(TestCase):
 
     @given(
         get_config=tahoe_configs_with_dummy_redeemer,
-        now=datetimes(),
+        now=aware_datetimes(),
         announcement=announcements(),
         voucher=vouchers(),
         num_passes=pass_counts(),

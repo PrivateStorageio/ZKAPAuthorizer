@@ -17,19 +17,16 @@ Hypothesis strategies for property testing.
 """
 
 from base64 import b64encode, urlsafe_b64encode
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
+from hypothesis.strategies import SearchStrategy, binary, builds, characters
+from hypothesis.strategies import datetimes as naive_datetimes
 from hypothesis.strategies import (
-    SearchStrategy,
-    binary,
-    builds,
-    characters,
-    datetimes,
     dictionaries,
     fixed_dictionaries,
     floats,
@@ -66,7 +63,14 @@ from ..model import (
 )
 from ..sql import Column, Delete, Insert, Select, StorageAffinity, Table, Update
 
-_POSIX_EPOCH = datetime.utcfromtimestamp(0)
+_POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
+
+
+def aware_datetimes(**kwargs) -> SearchStrategy[datetime]:
+    """
+    Build timezone-aware (UTC) datetime instances.
+    """
+    return naive_datetimes(timezones=just(timezone.utc), **kwargs)
 
 
 def posix_safe_datetimes():
@@ -74,11 +78,11 @@ def posix_safe_datetimes():
     Build datetime instances in a range that can be represented as floats
     without losing microsecond precision.
     """
-    return datetimes(
+    return aware_datetimes(
         # I don't know that time-based parts of the system break down
         # before the POSIX epoch but I don't know that they work, either.
         # Don't time travel with this code.
-        min_value=_POSIX_EPOCH,
+        min_value=datetime.utcfromtimestamp(0),
         # Once we get far enough into the future we lose the ability to
         # represent a timestamp with microsecond precision in a floating point
         # number, which we do with any POSIX timestamp-like API (eg
@@ -566,7 +570,7 @@ def redeemed_states():
     """
     return builds(
         Redeemed,
-        finished=datetimes(),
+        finished=aware_datetimes(),
         token_count=one_of(integers(min_value=1)),
     )
 
@@ -595,21 +599,21 @@ def voucher_states():
         ),
         builds(
             Redeeming,
-            started=datetimes(),
+            started=aware_datetimes(),
             counter=voucher_counters(),
         ),
         redeemed_states(),
         builds(
             DoubleSpend,
-            finished=datetimes(),
+            finished=aware_datetimes(),
         ),
         builds(
             Unpaid,
-            finished=datetimes(),
+            finished=aware_datetimes(),
         ),
         builds(
             Error,
-            finished=datetimes(),
+            finished=aware_datetimes(),
             details=text(),
         ),
     )
@@ -622,7 +626,7 @@ def voucher_objects(states=voucher_states()):
     return builds(
         Voucher,
         number=vouchers(),
-        created=one_of(none(), datetimes()),
+        created=one_of(none(), aware_datetimes()),
         expected_tokens=integers(min_value=1),
         state=states,
     )
@@ -1261,7 +1265,7 @@ _sql_text = text(
 # all very well tested inside SQLite3 itself.
 _storage_affinity_strategies = {
     StorageAffinity.INT: _sql_integer,
-    StorageAffinity.TEXT: one_of(_sql_text, datetimes()),
+    StorageAffinity.TEXT: one_of(_sql_text, aware_datetimes()),
     StorageAffinity.BLOB: binary(),
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
