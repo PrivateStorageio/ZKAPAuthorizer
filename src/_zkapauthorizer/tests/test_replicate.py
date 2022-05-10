@@ -348,10 +348,10 @@ class ReplicationServiceTests(TestCase):
             nonlocal upload_completed
             upload_completed = True
 
-        class FakeClient:
+        async def pruner(predicate):
             pass
 
-        srv = replication_service(tvs.store._connection, FakeClient(), uploader)
+        srv = replication_service(tvs.store._connection, uploader, pruner)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -440,10 +440,10 @@ class ReplicationServiceTests(TestCase):
             nonlocal upload_completed
             upload_completed = True
 
-        class FakeClient:
+        async def pruner(predicate):
             pass
 
-        srv = replication_service(tvs.store._connection, FakeClient(), uploader)
+        srv = replication_service(tvs.store._connection, uploader, pruner)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -519,10 +519,10 @@ class HypothesisReplicationServiceTests(TestCase):
         async def uploader(name, get_bytes):
             pass
 
-        class FakeClient:
+        async def pruner(predicate):
             pass
 
-        service = replication_service(tvs.store._connection, FakeClient(), uploader)
+        service = replication_service(tvs.store._connection, uploader, pruner)
         service.startService()
         try:
             self.assertThat(tvs.store._connection._replicating, Equals(True))

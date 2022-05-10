@@ -176,6 +176,7 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
 
     :see: http://cr.yp.to/proto/netstrings.txt
     """
+    # maybe cbor2 not netstrings...
     s = data.read()
     pos = 0
     while pos < len(s):
