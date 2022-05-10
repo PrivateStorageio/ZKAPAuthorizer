@@ -34,11 +34,13 @@ from hypothesis.stateful import (
 )
 from hypothesis.strategies import (
     booleans,
+    builds,
     data,
     integers,
     lists,
     randoms,
     sampled_from,
+    text,
     timedeltas,
     tuples,
 )
@@ -98,6 +100,7 @@ from .strategies import (
     posix_safe_datetimes,
     random_tokens,
     sql_identifiers,
+    sql_values,
     tables,
     tahoe_configs,
     unblinded_tokens,
@@ -847,6 +850,29 @@ class EventStreamTests(TestCase):
     Tests related to the event-stream storage of VoucherStore
     """
 
+    # Hypothesis can't auto-build EventStream because the module uses
+    # __future__.annotations. :(
+    @given(
+        builds(
+            EventStream,
+            lists(
+                builds(
+                    Change,
+                    integers(),
+                    text(),
+                    lists(sql_values()),
+                ),
+            ),
+        ),
+    )
+    def test_roundtrip_through_bytes(self, eventstream) -> None:
+        """
+        ``EventStream`` instances round-trip through ``to_bytes`` and
+        ``from_bytes``.
+        """
+        reloaded = EventStream.from_bytes(eventstream.to_bytes())
+        self.assertThat(reloaded, Equals(eventstream))
+
     @given(
         tahoe_configs(),
         posix_safe_datetimes(),
@@ -857,7 +883,7 @@ class EventStreamTests(TestCase):
     )
     def test_event_stream_serialization(
         self, get_config, now, ids, table, data, change_types
-    ):
+    ) -> None:
         """
         Various kinds of SQL statements can be serialized into and out of
         the event-stream.
@@ -866,35 +892,38 @@ class EventStreamTests(TestCase):
             TemporaryVoucherStore(get_config, lambda: now),
         ).store
 
-        # generate some SQL events
-        sql_statements = []
+        # Generate some changes
+        expected_changes = []
         sequence = count(1)
         for sql_id in ids:
             for change_type in change_types:
                 change = data.draw(change_type(sql_id, table))
-                sql_statements.append(
+                expected_changes.append(
                     Change(
                         next(sequence),
-                        change.bound_statement(store._connection.cursor()),
+                        change.statement(),
+                        change.arguments(),
                     )
                 )
                 with store._connection:
                     curse = store._connection.cursor()
-                    add_events(curse, [change.bound_statement(curse)])
+                    add_events(curse, [(change.statement(), change.arguments())])
 
-        events = get_events(store._connection)
+        # List comprehension has incompatible type List[Change]; expected List[_T_co]
+        expected_stream = EventStream(expected_changes)  # type: ignore
+        actual_changes = get_events(store._connection)
         self.assertThat(
-            events.changes,
-            Equals(tuple(sql_statements)),
+            actual_changes,
+            Equals(expected_stream),
         )
         # also ensure the serializer works
         self.assertThat(
-            EventStream.from_bytes(events.to_bytes()),
-            Equals(events),
+            EventStream.from_bytes(actual_changes.to_bytes()),
+            Equals(expected_stream),
         )
         self.assertThat(
-            events.highest_sequence(),
-            Equals(len(sql_statements)),
+            actual_changes.highest_sequence(),
+            Equals(len(expected_changes)),
         )
 
     @given(
@@ -912,15 +941,19 @@ class EventStreamTests(TestCase):
         ),
         randoms(),
     )
-    def test_event_stream_prune(self, get_config, now, changes, random):
+    def test_event_stream_prune(self, get_config, now, changes, random) -> None:
         """
-        We can prune the event-stream
+        After ``prune_events_to``, ``get_events`` only returns events events with
+        a greater sequence number.
         """
         store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
 
         with store._connection:
             curse = store._connection.cursor()
-            add_events(curse, [change.bound_statement(curse) for change in changes])
+            add_events(
+                curse,
+                [(change.statement(), change.arguments()) for change in changes],
+            )
 
         pre_events = get_events(store._connection)
 
@@ -931,7 +964,8 @@ class EventStreamTests(TestCase):
         post_events = get_events(store._connection)
 
         self.assertThat(
-            len(post_events.changes) + where, Equals(len(pre_events.changes))
+            post_events.changes,
+            Equals(pre_events.changes[where:]),
         )
 
 

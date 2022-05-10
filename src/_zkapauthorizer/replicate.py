@@ -72,6 +72,7 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
+    Sequence,
 )
 
 import cbor2
@@ -85,7 +86,7 @@ from twisted.python.lockfile import FilesystemLock
 
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
-from .sql import Connection, Cursor, SQLType, bind_arguments, statement_mutates
+from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
 from .tahoe import ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
@@ -96,10 +97,26 @@ Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
 class Change:
     """
     Represent an item in a replication event stream
+
+    :ivar sequence: The sequence number of this event.
+    :ivar statement: The SQL statement associated with this event.
+    :ivar arguments: Any arguments for the SQL statement.
     """
 
-    sequence: int  # the sequence-number of this event
-    statement: str  # the SQL statement string
+    sequence: int
+    statement: str
+    arguments: Sequence[SQLType] = field(converter=tuple)
+
+    @arguments.validator
+    def _validate_arguments(self, attribute, value) -> None:
+        """
+        Require that the value has as elements only values are legal SQL values.
+
+        :note: attrs validators run after attrs converters.
+        """
+        if all(isinstance(o, SQLRuntimeType) for o in value):
+            return None
+        raise ValueError("sequence contains values incompatible with SQL")
 
 
 @frozen
@@ -108,7 +125,7 @@ class EventStream:
     A series of database operations represented as `Change` instances.
     """
 
-    changes: tuple[Change, ...]
+    changes: Sequence[Change] = field(converter=tuple)
 
     def highest_sequence(self) -> Optional[int]:
         """
@@ -127,7 +144,11 @@ class EventStream:
             cbor2.dumps(
                 {
                     "events": tuple(
-                        (event.sequence, event.statement.encode("utf8"))
+                        (
+                            event.sequence,
+                            event.statement,
+                            event.arguments,
+                        )
                         for event in self.changes
                     )
                 }
@@ -135,7 +156,7 @@ class EventStream:
         )
 
     @classmethod
-    def from_bytes(cls, stream: BinaryIO):
+    def from_bytes(cls, stream: BinaryIO) -> EventStream:
         """
         :returns EventStream: an instance of EventStream from the given
             bytes (which should have been produced by a prior call to
@@ -143,10 +164,12 @@ class EventStream:
         """
         data = cbor2.load(stream)
         return cls(
-            changes=tuple(
-                Change(seq, statement.decode("utf8"))
-                for seq, statement in data["events"]
-            )
+            changes=[
+                # List comprehension has incompatible type List[Change]; expected List[_T_co]
+                # https://github.com/python-attrs/attrs/issues/519
+                Change(seq, statement, arguments)  # type: ignore
+                for seq, statement, arguments in data["events"]
+            ]
         )
 
 
@@ -513,15 +536,23 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_events(cursor: _SQLite3Cursor, sql_statements: Iterable[str]) -> None:
+def add_events(
+    cursor: _SQLite3Cursor, events: Iterable[tuple[str, Sequence[SQLType]]]
+) -> None:
     """
     Add some new changes to the event-log.
     """
+    sql_args = []
+    for sql, args in events:
+        assert all(
+            isinstance(a, SQLRuntimeType) for a in args
+        ), f"{args} contains non-SQL value"
+        sql_args.append((sql, cbor2.dumps(args)))
     cursor.executemany(
         """
-        INSERT INTO [event-stream]([statement]) VALUES (?)
+        INSERT INTO [event-stream]([statement], [serialized_arguments]) VALUES (?, ?)
         """,
-        ((sql,) for sql in sql_statements),
+        sql_args,
     )
 
 
@@ -533,12 +564,19 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT [sequence-number], [statement]
+            SELECT [sequence-number], [statement], [serialized_arguments]
             FROM [event-stream]
             """
         )
         rows = cursor.fetchall()
-    return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+    return EventStream(
+        changes=[
+            # List comprehension has incompatible type List[Change]; expected List[_T_co]
+            # https://github.com/python-attrs/attrs/issues/519
+            Change(seq, stmt, cbor2.loads(arguments))  # type: ignore
+            for seq, stmt, arguments in rows
+        ]
+    )
 
 
 def prune_events_to(conn: _SQLite3Connection, sequence_number: int) -> None:
@@ -593,7 +631,9 @@ class AccumulatedChanges:
 
     @classmethod
     def from_statements(
-        cls, important: bool, bound_statements: Iterable[str]
+        cls,
+        important: bool,
+        statements: Iterable[tuple[str, Sequence[SQLType]]],
     ) -> AccumulatedChanges:
         """
         Load information about unreplicated changes from SQL statements giving
@@ -602,33 +642,13 @@ class AccumulatedChanges:
         # note that we're ignoring a certain amount of size overhead here: the
         # _actual_ size will be some CBOR information and the sequence number,
         # although the statement text should still dominate.
-        return cls(important, sum(map(len, bound_statements)))
+        # XXX Fix the size calculation
+        return cls(important, sum(len(sql) for (sql, _) in statements))
 
     def __add__(self, other):
         return AccumulatedChanges(
             self.size + other.size, self.important or other.important
         )
-
-
-def bind_statements(
-    cursor: _SQLite3Cursor, changes: Iterable[Mutation]
-) -> tuple[bool, Iterable[str]]:
-    """
-    Bind some statements with their parameters while also summarizing
-    importance.
-
-    :return: A tuple where the first elements indicates whether any of the
-        changes are "important" and the second element is an iterable of all
-        of the bound statements.
-    """
-    any_important = False
-    statements = []
-    for (important, statement, list_of_args) in changes:
-        for args in list_of_args:
-            statements.append(bind_arguments(cursor, statement, args))
-        if important:
-            any_important = True
-    return (any_important, statements)
 
 
 def event_stream_name(high_seq: int) -> str:
@@ -784,9 +804,16 @@ class _ReplicationService(Service):
             immediate upload; statement is the SQL statement; and args
             are the arguments for the SQL.
         """
-        important, bound_statements = bind_statements(unobserved_cursor, all_changes)
-        add_events(unobserved_cursor, bound_statements)
-        changes = AccumulatedChanges.from_statements(important, bound_statements)
+        # A mutation contains one statement and one or more rows of arguments
+        # that go with it.  We're going to generate an event per
+        # statement/argument pair - so "unroll" those rows and pair each
+        # individual argument tuple with its statement.
+        events = [
+            (sql, args) for (_, sql, manyargs) in all_changes for args in manyargs
+        ]
+        important = any(important for (important, _, _) in all_changes)
+        add_events(unobserved_cursor, events)
+        changes = AccumulatedChanges.from_statements(important, events)
         self._changes = self._changes + changes
         if self.should_upload_eventstream(self._changes):
             return self._complete_upload
