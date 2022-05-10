@@ -16,9 +16,10 @@
 Tests for ``_zkapauthorizer.controller``.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import loads
+from typing import Callable
 
 import attr
 from challenge_bypass_ristretto import (
@@ -31,7 +32,7 @@ from challenge_bypass_ristretto import (
     random_signing_key,
 )
 from hypothesis import assume, given
-from hypothesis.strategies import datetimes, integers, lists, randoms, sampled_from
+from hypothesis.strategies import integers, lists, randoms, sampled_from
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -48,6 +49,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
 from twisted.internet.defer import fail, succeed
+from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.url import URL
@@ -88,6 +90,7 @@ from ..model import Unpaid as model_Unpaid
 from .fixtures import TemporaryVoucherStore
 from .matchers import Provides, between, raises
 from .strategies import (
+    aware_datetimes,
     clocks,
     dummy_ristretto_keys,
     redemption_group_counts,
@@ -96,6 +99,20 @@ from .strategies import (
     voucher_objects,
     vouchers,
 )
+
+
+def clock_to_now(clock: IReactorTime) -> Callable[[], datetime]:
+    """
+    :return: A function which returns a timezone-aware UTC datetime
+        representing the time of ``clock`` at the time of each call.
+    """
+
+    def now():
+        s = clock.seconds()
+        d = datetime.utcfromtimestamp(s)
+        return d.replace(tzinfo=timezone.utc)
+
+    return now
 
 
 class TokenCountForGroupTests(TestCase):
@@ -167,7 +184,7 @@ class PaymentControllerTests(TestCase):
     Tests for ``PaymentController``.
     """
 
-    @given(tahoe_configs(), datetimes(), vouchers(), dummy_ristretto_keys())
+    @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
     def test_should_not_redeem(self, get_config, now, voucher, public_key):
         """
         ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
@@ -204,7 +221,7 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
+    @given(tahoe_configs(), aware_datetimes(), vouchers())
     def test_not_redeemed_while_redeeming(self, get_config, now, voucher):
         """
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
@@ -231,7 +248,7 @@ class PaymentControllerTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         voucher_counters(),
         dummy_ristretto_keys(),
@@ -280,7 +297,7 @@ class PaymentControllerTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         voucher_counters(),
         voucher_counters().map(lambda v: v + 1),
@@ -366,7 +383,7 @@ class PaymentControllerTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         voucher_counters(),
         integers(min_value=0, max_value=100),
@@ -404,7 +421,7 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), dummy_ristretto_keys(), datetimes(), vouchers())
+    @given(tahoe_configs(), dummy_ristretto_keys(), aware_datetimes(), vouchers())
     def test_redeemed_after_redeeming(self, get_config, public_key, now, voucher):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
@@ -435,7 +452,7 @@ class PaymentControllerTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_error_state(self, get_config, now, voucher):
@@ -470,7 +487,7 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers())
+    @given(tahoe_configs(), aware_datetimes(), vouchers())
     def test_double_spent_after_double_spend(self, get_config, now, voucher):
         """
         A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
@@ -501,7 +518,7 @@ class PaymentControllerTests(TestCase):
             ),
         )
 
-    @given(tahoe_configs(), datetimes(), vouchers(), dummy_ristretto_keys())
+    @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
     def test_redeem_pending_on_startup(self, get_config, now, voucher, public_key):
         """
         When ``PaymentController`` is created, any vouchers in the store in the
@@ -555,7 +572,7 @@ class PaymentControllerTests(TestCase):
         a voucher, after some time passes it tries to redeem the voucher
         again.
         """
-        datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
+        datetime_now = clock_to_now(clock)
         store = self.useFixture(
             TemporaryVoucherStore(
                 get_config,
@@ -660,7 +677,7 @@ class PaymentControllerTests(TestCase):
         # presented once.
         num_redemption_groups = len(all_public_keys)
 
-        datetime_now = lambda: datetime.utcfromtimestamp(clock.seconds())
+        datetime_now = clock_to_now(clock)
         store = self.useFixture(
             TemporaryVoucherStore(
                 lambda basedir, portfile: EmptyConfig(FilePath(basedir)), datetime_now
