@@ -288,12 +288,22 @@ jobs:
             fi
 
       - run:
-          name: "extract coverage data"
+          name: "Upload Coverage"
           command: |
             cp ./result*/coverage/.coverage ./.coverage
 
-      - "coveralls/upload":
-          parallel: true
+            # Put some job information into the env vars coveralls looks at.
+            CI_NAME="circleci"
+            CI_BUILD_NUMBER=$CIRCLECI_BUILD_NUM
+            CI_CI_BUILD_URL=$CIRCLE_BUILD_URL
+            CI_BRANCH=$CIRCLE_BRANCH
+            # CI_PULL_REQUEST is useful but already set by CircleCI.
+
+            # Note we're doing more than one build.
+            COVERALLS_PARALLEL=true
+
+            # Send it.
+            coveralls
 
   typecheck:
     <<: *LINUX_TESTS
