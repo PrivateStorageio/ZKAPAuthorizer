@@ -303,7 +303,7 @@ jobs:
             COVERALLS_PARALLEL=true
 
             # Send it.
-            coveralls
+            nix-shell -p python3Packages.coveralls --run 'coveralls'
 
   typecheck:
     <<: *LINUX_TESTS
