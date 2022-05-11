@@ -76,7 +76,7 @@ jobs:
             # We have to tell slipcover where to find the source we want it to
             # instrument.  Find where our package was installed.
             $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
-            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
+            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
       - run:
           name: "Convert Coverage"
           command: |
@@ -169,7 +169,7 @@ jobs:
             # because the resource class documented at
             # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
             # says "Medium: 4 vCPUs, 8GB RAM".
-            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
+            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer.tests.test_private
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
@@ -255,7 +255,8 @@ jobs:
               --argstr hypothesisProfile ci \
               --arg collectCoverage true \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
-              --argstr python python<< parameters.py-version >>
+              --argstr python python<< parameters.py-version >> \
+              --argstr testSuite _zkapauthorizer.tests.test_private
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
