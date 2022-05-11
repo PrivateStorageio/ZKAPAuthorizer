@@ -81,7 +81,7 @@ jobs:
           command: |
             Get-Content slipcover.json |
               python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" |
-              Set-Content -Encoding utf8 coveralls.json
+              Set-Content -Encoding ASCII coveralls.json
 
       - run:
           name: "Dump Coverage"
