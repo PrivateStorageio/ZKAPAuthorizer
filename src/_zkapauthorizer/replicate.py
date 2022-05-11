@@ -114,7 +114,7 @@ class EventStream:
     """
 
     changes: tuple[Change, ...]
-    version: int = field(default=1)
+    version: int = 1
 
     def highest_sequence(self) -> Optional[int]:
         """
