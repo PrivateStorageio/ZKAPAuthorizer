@@ -17,7 +17,7 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import partial
 from io import BytesIO
 from itertools import count
@@ -35,7 +35,6 @@ from hypothesis.stateful import (
 from hypothesis.strategies import (
     booleans,
     data,
-    datetimes,
     integers,
     lists,
     randoms,
@@ -69,6 +68,7 @@ from ..model import (
     Redeemed,
     Voucher,
     VoucherStore,
+    aware_now,
     memory_connect,
     with_cursor_async,
 )
@@ -90,6 +90,7 @@ from ..replicate import (
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
+    aware_datetimes,
     deletes,
     dummy_ristretto_keys,
     inserts,
@@ -242,7 +243,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         self.store_fixture = self.useFixture(
             TemporaryVoucherStore(
                 get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
-                get_now=datetime.now,
+                get_now=aware_now,
             ),
         )
 
@@ -336,7 +337,7 @@ class VoucherStoreTests(TestCase):
     Tests for ``VoucherStore``.
     """
 
-    @given(tahoe_configs(), datetimes(), vouchers())
+    @given(tahoe_configs(), aware_datetimes(), vouchers())
     def test_get_missing(self, get_config, now, voucher):
         """
         ``VoucherStore.get`` raises ``KeyError`` when called with a
@@ -352,7 +353,7 @@ class VoucherStoreTests(TestCase):
         tahoe_configs(),
         vouchers(),
         lists(random_tokens(), min_size=1, unique=True),
-        datetimes(),
+        aware_datetimes(),
     )
     def test_add(self, get_config, voucher, tokens, now):
         """
@@ -376,7 +377,7 @@ class VoucherStoreTests(TestCase):
         vouchers(),
         lists(voucher_counters(), unique=True, min_size=2, max_size=2),
         lists(random_tokens(), min_size=2, unique=True),
-        datetimes(),
+        aware_datetimes(),
     )
     def test_add_with_distinct_counters(
         self, get_config, voucher, counters, tokens, now
@@ -412,7 +413,7 @@ class VoucherStoreTests(TestCase):
     @given(
         tahoe_configs(),
         vouchers(),
-        datetimes(),
+        aware_datetimes(),
         lists(random_tokens(), min_size=1, unique=True),
     )
     def test_add_idempotent(self, get_config, voucher, now, tokens):
@@ -456,7 +457,7 @@ class VoucherStoreTests(TestCase):
             Equals(tokens),
         )
 
-    @given(tahoe_configs(), datetimes(), lists(vouchers(), unique=True), data())
+    @given(tahoe_configs(), aware_datetimes(), lists(vouchers(), unique=True), data())
     def test_list(self, get_config, now, vouchers, data):
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
@@ -549,7 +550,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.configless = TemporaryVoucherStore(
             get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
             # Time probably not actually relevant to this state machine.
-            get_now=datetime.now,
+            get_now=aware_now,
         )
         self.configless.setUp()
 
@@ -996,7 +997,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
         lists(unblinded_tokens(), unique=True),
@@ -1022,7 +1023,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
         booleans(),
@@ -1061,7 +1062,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
         paired_tokens(),
@@ -1096,7 +1097,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         lists(random_tokens(), min_size=1, unique=True),
     )
@@ -1124,7 +1125,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
         dummy_ristretto_keys(),
         paired_tokens(),
@@ -1148,7 +1149,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         tahoe_configs(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_mark_invalid_vouchers_double_spent(self, get_config, now, voucher_value):
@@ -1163,7 +1164,7 @@ class UnblindedTokenStoreTests(TestCase):
 
     @given(
         get_config=tahoe_configs(),
-        now=datetimes(),
+        now=aware_datetimes(),
         voucher_value=vouchers(),
         public_key=dummy_ristretto_keys(),
         completed=booleans(),
@@ -1248,7 +1249,7 @@ class ReplicationTests(TestCase):
             TemporaryVoucherStore(
                 get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
                 # Time is not relevant to this test
-                get_now=datetime.now,
+                get_now=aware_now,
             )
         ).store
         snapshot_bytes = store.snapshot()

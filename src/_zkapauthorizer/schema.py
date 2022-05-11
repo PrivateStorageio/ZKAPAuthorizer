@@ -225,4 +225,38 @@ _UPGRADES = {
         )
         """,
     ],
+    7: [
+        # Original rows inserted into the vouchers table used naive datetime
+        # values serialized with no timezone information.  These values are
+        # all in the system's localtime (or at least, whatever the local time
+        # was when they were created - that information is lost, though).
+        # Convert them to UTC and add a timezone marker for compatibility with
+        # new code and to avoid further information loss.
+        #
+        # We can do this with the builtin SQLite3 datetime function and string
+        # concatenation.  Note in particular:
+        #
+        #     "utc" assumes that the time value to its left is in the local
+        #     timezone and adjusts that time value to be in UTC.
+        #
+        # This conversion will do weird stuff for times arbitrarily far in the
+        # past or the future because timezones are hard.  Since there should
+        # be no real values to upgrade that are very far in the past or the
+        # future, we'll just accept that.
+        #
+        # https://www.sqlite.org/lang_datefunc.html
+        """
+        UPDATE [vouchers]
+        SET [created] = datetime([created], "utc") || "+00:00"
+        """,
+        """
+        UPDATE [lease-maintenance-spending]
+        SET [started] = datetime([started], "utc") || "+00:00"
+        """,
+        """
+        UPDATE [lease-maintenance-spending]
+        SET [finished] = datetime([finished], "utc") || "+00:00"
+        WHERE [finished] IS NOT NULL
+        """,
+    ],
 }

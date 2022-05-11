@@ -17,11 +17,30 @@ This module implements validators for ``attrs``-defined attributes.
 """
 
 from base64 import b64decode
+from datetime import datetime
+
+
+def is_aware_datetime(value: datetime) -> bool:
+    """
+    :return: ``True`` if and only iff the given value is a timezone-aware
+        datetime instance.
+    """
+    return isinstance(value, datetime) and value.tzinfo is not None
+
+
+def aware_datetime_validator(inst, attr, value) -> None:
+    """
+    An attrs validator that verifies the attribute value is a timezone-aware
+    datetime instance.
+    """
+    if is_aware_datetime(value):
+        return None
+    raise TypeError(f"{attr.name!r} must be an aware datetime instance (got {value!r})")
 
 
 def is_base64_encoded(b64decode=b64decode):
     """
-    Return a a attrs validator that verifies that the attributes is a base64
+    Return an attrs validator that verifies that the attributes is a base64
     encoded byte string.
     """
 
