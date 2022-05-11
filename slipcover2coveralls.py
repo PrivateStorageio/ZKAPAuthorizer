@@ -6,7 +6,7 @@ from sys import argv, stdin, stdout, stderr
 from typing import Iterator, Union
 
 
-def main(service_job_id, service_name) -> int:
+def main(service_job_id: str, service_name: str, sources_relative_to: str) -> int:
     print(
         f" stdin.encoding: {stdin.encoding}\n"
         f"stdout.encoding: {stdout.encoding}\n",
@@ -14,13 +14,33 @@ def main(service_job_id, service_name) -> int:
     )
 
     slipcover_data = load(stdin)
+
     digests = dict(digest_source_files(slipcover_data))
-    dump(
-        slipcover_to_coveralls(service_job_id, service_name, slipcover_data, digests),
-        stdout,
-    )
+    raw_coveralls = slipcover_to_coveralls(service_job_id, service_name, slipcover_data, digests)
+    relative_coveralls = make_relative_paths(sources_relative_to, raw_coveralls)
+    dump(relative_coveralls, stdout)
     return 0
 
+
+def make_relative_paths(sources_relative_to: str, raw_coveralls: dict) -> dict:
+    def relative_source_file(src):
+        name = src["name"]
+        if name.startswith(sources_relative_to):
+            name = name[len(sources_relative_to):]
+        return {
+            "name": name,
+            "source_digest": src["source_digest"],
+            "coverage": src["coverage"],
+        }
+    return {
+        "service_job_id": raw_coveralls["service_job_id"],
+        "service_name": raw_coveralls["service_name"],
+        "source_files": [
+            relative_source_file(src)
+            for src
+            in raw_coveralls["source_files"]
+        ],
+    }
 
 def slipcover_to_coveralls(
     service_job_id: str, service_name: str, slipcover_data: dict, digests: dict

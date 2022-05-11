@@ -80,7 +80,7 @@ jobs:
           name: "Convert Coverage"
           command: |
             Get-Content slipcover.json |
-              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" |
+              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" |
               Set-Content -Encoding ASCII coveralls.json
 
       - run:
