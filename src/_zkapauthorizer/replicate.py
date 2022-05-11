@@ -174,7 +174,7 @@ class EventStream:
         """
         data = cbor2.load(stream)
         serial_version = data.get("version", None)
-        if serial_version != 2:
+        if serial_version != cls.version:
             raise ValueError(f"Unknown serialized version {serial_version}")
         return cls(
             changes=[
