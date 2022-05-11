@@ -2,11 +2,17 @@
 
 from hashlib import md5
 from json import dump, load
-from sys import argv, stdin, stdout
+from sys import argv, stdin, stdout, stderr
 from typing import Iterator, Union
 
 
 def main(service_job_id, service_name) -> int:
+    print(
+        f" stdin.encoding: {stdin.encoding}\n"
+        f"stdout.encoding: {stdout.encoding}\n",
+        file=stderr,
+    )
+
     slipcover_data = load(stdin)
     digests = dict(digest_source_files(slipcover_data))
     dump(
