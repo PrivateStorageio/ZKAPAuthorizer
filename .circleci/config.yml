@@ -84,7 +84,7 @@ jobs:
       - run:
           name: "Dump Coverage"
           command: |
-            Get-Content coveralls.json
+            python -c "print(repr(open('coveralls.json', 'rb').read(16)))"
 
       - run:
           name: "Upload Coverage"
