@@ -57,9 +57,6 @@ jobs:
       # resource class, can be "medium", "large", "xlarge", "2xlarge"
       size: "medium"
 
-    environment:
-      PYTHONUTF8: "1"
-
     steps:
       # Commands are run in a Windows virtual machine environment
       - "checkout"
@@ -82,7 +79,9 @@ jobs:
       - run:
           name: "Convert Coverage"
           command: |
-            Get-Content slipcover.json | python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" > coveralls.json
+            Get-Content slipcover.json |
+              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" |
+              Set-Content -Encoding utf8 coveralls.json
 
       - run:
           name: "Dump Coverage"
