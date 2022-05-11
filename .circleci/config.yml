@@ -92,7 +92,7 @@ jobs:
             $Env:COVERALLS_PARALLEL=true
 
             # Send it.
-            coveralls
+            coveralls --merge=coveralls.json
 
   macos-tests:
     parameters:
