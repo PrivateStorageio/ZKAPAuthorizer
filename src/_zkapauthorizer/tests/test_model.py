@@ -25,7 +25,6 @@ from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
 
 import cbor2
-
 from hypothesis import assume, given, note
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -935,9 +934,7 @@ class EventStreamTests(TestCase):
         An EventStream with an unknown version errors on deserialization
         """
         serialized = cbor2.dumps({"version": -1})
-        self.assertThat(
-            lambda: EventStream.from_bytes(serialized), raises(ValueError)
-        )
+        self.assertThat(lambda: EventStream.from_bytes(serialized), raises(ValueError))
 
     @given(
         tahoe_configs(),
