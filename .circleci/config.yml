@@ -340,10 +340,11 @@ workflows:
         xcode-version: "12.3.0"
 
     - "windows-tests":
-        name: "Windows tests, python 3.10"
+        name: "Windows tests, python 3.9"
 
     - "finish-coverage":
         requires:
-          - "linux-tests"
-          - "macos-tests"
-          - "windows-tests"
+          - "Linux tests, python 3.9"
+          - "Linux tests, python 3.9, Tahoe-LAFS master"
+          - "macOS tests, python 3.9 xcode 12.3.0"
+          - "Windows tests, python 3.9"
