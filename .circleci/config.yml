@@ -57,6 +57,9 @@ jobs:
       # resource class, can be "medium", "large", "xlarge", "2xlarge"
       size: "medium"
 
+    environment:
+      PYTHONUTF8: "1"
+
     steps:
       # Commands are run in a Windows virtual machine environment
       - "checkout"
