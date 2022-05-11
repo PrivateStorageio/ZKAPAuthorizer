@@ -312,7 +312,7 @@ jobs:
             COVERALLS_PARALLEL=true
 
             # Get the tool (which depends on pyyaml...) and send the report.
-            nix-shell -p python3Packages.coveralls python3Packages.pyyaml --run 'coveralls'
+            nix-shell -p git python3Packages.coveralls python3Packages.pyyaml --run 'coveralls'
 
   typecheck:
     <<: *LINUX_TESTS
@@ -340,7 +340,7 @@ jobs:
       - run:
           name: "Finish Parallel Report"
           command: |
-            nix-shell -p python3Packages.coveralls python3Packages.pyyaml --run 'coveralls --finish'
+            nix-shell -p git python3Packages.coveralls python3Packages.pyyaml --run 'coveralls --finish'
 
 
 workflows:
