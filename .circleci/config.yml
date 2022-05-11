@@ -16,7 +16,6 @@ version: 2.1
 
 orbs:
   win: "circleci/windows@4.1"
-  coveralls: "coveralls/coveralls@1.0.6"
 
 aliases:
   - &PREPARE_VIRTUALENV
@@ -324,11 +323,13 @@ jobs:
 
   finish-coverage:
     docker:
-      - image: "circleci/node:10.0.0"
+      - image: "nixos/nix:2.5.1"
 
     steps:
-      - "coveralls/upload":
-          parallel_finished: true
+      - run:
+          name: "Finish Parallel Report"
+          command: |
+            nix-shell -p python3Packages.coveralls python3Packages.pyyaml --run 'coveralls --finish'
 
 
 workflows:
