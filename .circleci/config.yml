@@ -302,14 +302,14 @@ jobs:
             cp ./result*/coverage/.coverage ./.coverage
 
             # Put some job information into the env vars coveralls looks at.
-            CI_NAME="circleci"
-            CI_BUILD_NUMBER=$CIRCLECI_BUILD_NUM
-            CI_CI_BUILD_URL=$CIRCLE_BUILD_URL
-            CI_BRANCH=$CIRCLE_BRANCH
+            export CI_NAME="circleci"
+            export CI_BUILD_NUMBER=$CIRCLECI_BUILD_NUM
+            export CI_BUILD_URL=$CIRCLE_BUILD_URL
+            export CI_BRANCH=$CIRCLE_BRANCH
             # CI_PULL_REQUEST is useful but already set by CircleCI.
 
             # Note we're doing more than one build.
-            COVERALLS_PARALLEL=true
+            export COVERALLS_PARALLEL=true
 
             # Get the tool (which depends on pyyaml...) and send the report.
             nix-shell -p git python3Packages.coveralls python3Packages.pyyaml --run 'coveralls'
