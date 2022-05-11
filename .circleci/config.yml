@@ -302,8 +302,8 @@ jobs:
             # Note we're doing more than one build.
             COVERALLS_PARALLEL=true
 
-            # Send it.
-            nix-shell -p python3Packages.coveralls --run 'coveralls'
+            # Get the tool (which depends on pyyaml...) and send the report.
+            nix-shell -p python3Packages.coveralls python3Packages.pyyaml --run 'coveralls'
 
   typecheck:
     <<: *LINUX_TESTS
