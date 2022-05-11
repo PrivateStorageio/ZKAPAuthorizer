@@ -16,6 +16,7 @@ version: 2.1
 
 orbs:
   win: "circleci/windows@4.1"
+  coveralls: "coveralls/coveralls@1.0.6"
 
 aliases:
   - &PREPARE_VIRTUALENV
@@ -81,10 +82,8 @@ jobs:
           command: |
             Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
 
-      - run:
-          name: "Upload Coverage"
-          command: |
-            coveralls --merge=coveralls.json
+      - "coveralls/upload":
+          parallel: true
 
   macos-tests:
     parameters:
@@ -277,9 +276,12 @@ jobs:
             fi
 
       - run:
-          name: "Report Coverage"
+          name: "extract coverage data"
           command: |
-            ./.circleci/report-coverage.sh
+            cp ./result*/coverage/.coverage ./.coverage
+
+      - "coveralls/upload":
+          parallel: true
 
   typecheck:
     <<: *LINUX_TESTS
@@ -296,6 +298,15 @@ jobs:
             nix-shell --run 'mypy src'
       - run:
           <<: *PUSH_TO_CACHIX
+
+
+  finish-coverage:
+    docker:
+      - image: "circleci/node:10.0.0"
+
+    steps:
+      - "coveralls/upload":
+          parallel_finished: true
 
 
 workflows:
@@ -329,3 +340,9 @@ workflows:
 
     - "windows-tests":
         name: "Windows tests, python 3.10"
+
+    - "finish-coverage":
+        requires:
+          - "linux-tests"
+          - "macos-tests"
+          - "windows-tests"
