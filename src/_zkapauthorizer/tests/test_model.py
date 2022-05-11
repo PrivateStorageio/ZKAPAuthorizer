@@ -24,6 +24,8 @@ from itertools import count
 from sqlite3 import Connection, OperationalError, connect
 from typing import TypeVar
 
+import cbor2
+
 from hypothesis import assume, given, note
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -861,6 +863,7 @@ class EventStreamTests(TestCase):
                     integers(),
                     text(),
                     lists(sql_values()),
+                    booleans(),
                 ),
             ),
         ),
@@ -903,11 +906,12 @@ class EventStreamTests(TestCase):
                         next(sequence),
                         change.statement(),
                         change.arguments(),
+                        False,
                     )
                 )
                 with store._connection:
                     curse = store._connection.cursor()
-                    add_events(curse, [(change.statement(), change.arguments())])
+                    add_events(curse, [(change.statement(), change.arguments())], False)
 
         # List comprehension has incompatible type List[Change]; expected List[_T_co]
         expected_stream = EventStream(expected_changes)  # type: ignore
@@ -924,6 +928,15 @@ class EventStreamTests(TestCase):
         self.assertThat(
             actual_changes.highest_sequence(),
             Equals(len(expected_changes)),
+        )
+
+    def test_event_stream_invalid_version(self):
+        """
+        An EventStream with an unknown version errors on deserialization
+        """
+        serialized = cbor2.dumps({"version": -1})
+        self.assertThat(
+            lambda: EventStream.from_bytes(serialized), raises(ValueError)
         )
 
     @given(
@@ -953,6 +966,7 @@ class EventStreamTests(TestCase):
             add_events(
                 curse,
                 [(change.statement(), change.arguments()) for change in changes],
+                False,
             )
 
         pre_events = get_events(store._connection)

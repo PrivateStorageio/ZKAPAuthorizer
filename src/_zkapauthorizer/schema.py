@@ -218,7 +218,10 @@ _UPGRADES = {
             [sequence-number] INTEGER PRIMARY KEY,
 
             -- A SQL statement which likely made a change to the database state.
-            [statement] TEXT
+            [statement] TEXT,
+
+            -- True if this statement was deemed "important" when recorded
+            [important] BOOL
         )
         """,
     ],

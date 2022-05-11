@@ -68,6 +68,7 @@ from typing import (
     Awaitable,
     BinaryIO,
     Callable,
+    ClassVar,
     Generator,
     Iterable,
     Iterator,
@@ -100,12 +101,14 @@ class Change:
 
     :ivar sequence: The sequence number of this event.
     :ivar statement: The SQL statement associated with this event.
+    :ivar important: Whether this change was "important" or not.
     :ivar arguments: Any arguments for the SQL statement.
     """
 
     sequence: int
     statement: str
     arguments: Sequence[SQLType] = field(converter=tuple)
+    important: bool
 
     @arguments.validator
     def _validate_arguments(self, attribute, value) -> None:
@@ -123,9 +126,14 @@ class Change:
 class EventStream:
     """
     A series of database operations represented as `Change` instances.
+
+    :ivar version: An identifier for the schema of the serialized form of this
+        event stream.  This will appear inside the serialized form.  A change
+        to the schema will be accompanied with an increment to this value.
     """
 
     changes: Sequence[Change] = field(converter=tuple)
+    version: ClassVar[int] = 2
 
     def highest_sequence(self) -> Optional[int]:
         """
@@ -143,14 +151,16 @@ class EventStream:
         return BytesIO(
             cbor2.dumps(
                 {
+                    "version": self.version,
                     "events": tuple(
                         (
                             event.sequence,
                             event.statement,
                             event.arguments,
+                            event.important,
                         )
                         for event in self.changes
-                    )
+                    ),
                 }
             )
         )
@@ -163,12 +173,15 @@ class EventStream:
             ``to_bytes``)
         """
         data = cbor2.load(stream)
+        serial_version = data.get("version", None)
+        if serial_version != 2:
+            raise ValueError(f"Unknown serialized version {serial_version}")
         return cls(
             changes=[
                 # List comprehension has incompatible type List[Change]; expected List[_T_co]
                 # https://github.com/python-attrs/attrs/issues/519
-                Change(seq, statement, arguments)  # type: ignore
-                for seq, statement, arguments in data["events"]
+                Change(*args)  # type: ignore
+                for args in data["events"]
             ]
         )
 
@@ -537,7 +550,9 @@ def get_tahoe_lafs_direntry_uploader(
 
 
 def add_events(
-    cursor: _SQLite3Cursor, events: Iterable[tuple[str, Sequence[SQLType]]]
+    cursor: _SQLite3Cursor,
+    events: Iterable[tuple[str, Sequence[SQLType]]],
+    important: bool,
 ) -> None:
     """
     Add some new changes to the event-log.
@@ -547,10 +562,11 @@ def add_events(
         assert all(
             isinstance(a, SQLRuntimeType) for a in args
         ), f"{args} contains non-SQL value"
-        sql_args.append((sql, cbor2.dumps(args)))
+        sql_args.append((sql, cbor2.dumps(args), important))
     cursor.executemany(
         """
-        INSERT INTO [event-stream]([statement], [serialized_arguments]) VALUES (?, ?)
+        INSERT INTO [event-stream]([statement], [serialized_arguments], [important])
+        VALUES (?, ?, ?)
         """,
         sql_args,
     )
@@ -564,7 +580,7 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT [sequence-number], [statement], [serialized_arguments]
+            SELECT [sequence-number], [statement], [serialized_arguments], [important]
             FROM [event-stream]
             """
         )
@@ -573,8 +589,8 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
         changes=[
             # List comprehension has incompatible type List[Change]; expected List[_T_co]
             # https://github.com/python-attrs/attrs/issues/519
-            Change(seq, stmt, cbor2.loads(arguments))  # type: ignore
-            for seq, stmt, arguments in rows
+            Change(seq, stmt, cbor2.loads(arguments), important)  # type: ignore
+            for seq, stmt, arguments, important in rows
         ]
     )
 
@@ -621,13 +637,14 @@ class AccumulatedChanges:
         Load information about unreplicated changes from the database.
         """
         # this size is larger than what we would have computed via
-        # `from_changes` which only counts the statement-sizes .. but maybe
-        # fine?
+        # `from_changes` which only counts the statement-sizes .. but
+        # maybe fine? (also could fix by just accumulating the
+        # statement-sizes instead below)
         events = get_events(connection)
         data = events.to_bytes()
         size = data.seek(0, os.SEEK_END)
-        # XXX We don't really know this should be False.
-        return cls(False, size)
+        any_important = any(change.important for change in events.changes)
+        return cls(any_important, size)
 
     @classmethod
     def from_statements(
@@ -808,12 +825,14 @@ class _ReplicationService(Service):
         # that go with it.  We're going to generate an event per
         # statement/argument pair - so "unroll" those rows and pair each
         # individual argument tuple with its statement.
-        events = [
-            (sql, args) for (_, sql, manyargs) in all_changes for args in manyargs
-        ]
-        important = any(important for (important, _, _) in all_changes)
-        add_events(unobserved_cursor, events)
-        changes = AccumulatedChanges.from_statements(important, events)
+        events = []
+        any_important = False
+        for (important, sql, manyargs) in all_changes:
+            any_important = any_important or important
+            for args in manyargs:
+                events.append((sql, args))
+        add_events(unobserved_cursor, events, any_important)
+        changes = AccumulatedChanges.from_statements(any_important, events)
         self._changes = self._changes + changes
         if self.should_upload_eventstream(self._changes):
             return self._complete_upload
