@@ -78,12 +78,22 @@ jobs:
             $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
             python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
       - run:
-          name: "Convert Coverage"
+          name: Upload Coverage"
           command: |
             Get-Content slipcover.json | python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" > coveralls.json
 
-      - "coveralls/upload":
-          parallel: true
+            # Put some job information into the env vars coveralls looks at.
+            $Env:CI_NAME="circleci"
+            $Env:CI_BUILD_NUMBER=$Env:CIRCLECI_BUILD_NUM
+            $Env:CI_CI_BUILD_URL=$Env:CIRCLE_BUILD_URL
+            $Env:CI_BRANCH=$Env:CIRCLE_BRANCH
+            # CI_PULL_REQUEST is useful but already set by CircleCI.
+
+            # Note we're doing more than one build.
+            $Env:COVERALLS_PARALLEL=true
+
+            # Send it.
+            coveralls
 
   macos-tests:
     parameters:
