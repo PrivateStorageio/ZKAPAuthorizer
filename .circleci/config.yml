@@ -77,10 +77,18 @@ jobs:
             $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
             python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
       - run:
-          name: "Upload Coverage"
+          name: "Convert Coverage"
           command: |
             Get-Content slipcover.json | python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" > coveralls.json
 
+      - run:
+          name: "Dump Coverage"
+          command: |
+            Get-Content coveralls.json
+
+      - run:
+          name: "Upload Coverage"
+          command: |
             # Put some job information into the env vars coveralls looks at.
             $Env:CI_NAME="circleci"
             $Env:CI_BUILD_NUMBER=$Env:CIRCLECI_BUILD_NUM
