@@ -14,6 +14,9 @@
 
 version: 2.1
 
+orbs:
+  win: "circleci/windows@4.1"
+
 aliases:
   - &PREPARE_VIRTUALENV
     run:
@@ -46,6 +49,42 @@ jobs:
       - store_artifacts:
           path: "docs/build"
           destination: "docs"
+
+  windows-tests:
+    executor:
+      # https://circleci.com/developer/orbs/orb/circleci/windows
+      name: "win/server-2022"
+      # resource class, can be "medium", "large", "xlarge", "2xlarge"
+      size: "medium"
+
+    steps:
+      # Commands are run in a Windows virtual machine environment
+      - "checkout"
+      - run:
+          name: "Setup Environment"
+          command: |
+            python -V
+            python -m pip install -v --upgrade pip
+            python -m pip install -v wheel slipcover coveralls
+            python -m pip install -v .
+            python -m pip install -v  -r requirements/test.in
+            pip freeze
+      - run:
+          name: "Run Tests"
+          command: |
+            # We have to tell slipcover where to find the source we want it to
+            # instrument.  Find where our package was installed.
+            $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
+            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
+      - run:
+          name: "Convert Coverage"
+          command: |
+            Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
+
+      - run:
+          name: "Upload Coverage"
+          command: |
+            coveralls --merge=coveralls.json
 
   macos-tests:
     parameters:
@@ -268,12 +307,12 @@ workflows:
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
     - "linux-tests":
-        name: "Linux tests python 3.9"
+        name: "Linux tests, python 3.9"
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
 
     - "linux-tests":
-        name: "Linux tests python 3.9, Tahoe-LAFS master"
+        name: "Linux tests, python 3.9, Tahoe-LAFS master"
         py-version: "39"
         # This is usually not master@HEAD because it is still pinned to a
         # certain revision.  The intent is to update it frequently and
@@ -284,6 +323,9 @@ workflows:
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
-        name: "macOS tests python 3.9 xcode 12.3.0"
+        name: "macOS tests, python 3.9 xcode 12.3.0"
         py-version: "3.9"
         xcode-version: "12.3.0"
+
+    - "windows-tests":
+        name: "Windows tests, python 3.10"
