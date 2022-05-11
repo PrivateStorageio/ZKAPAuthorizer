@@ -107,6 +107,10 @@ class Change:
 class EventStream:
     """
     A series of database operations represented as `Change` instances.
+
+    :ivar version: An identifier for the schema of the serialized form of this
+        event stream.  This will appear inside the serialized form.  A change
+        to the schema will be accompanied with an increment to this value.
     """
 
     changes: tuple[Change, ...]
