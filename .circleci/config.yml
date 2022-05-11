@@ -326,6 +326,7 @@ jobs:
       - image: "nixos/nix:2.5.1"
 
     steps:
+      - "checkout"
       - run:
           name: "Finish Parallel Report"
           command: |
