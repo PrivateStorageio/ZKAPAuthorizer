@@ -876,11 +876,12 @@ class EventStreamTests(TestCase):
                     Change(
                         next(sequence),
                         change.bound_statement(store._connection.cursor()),
+                        False,
                     )
                 )
                 with store._connection:
                     curse = store._connection.cursor()
-                    add_events(curse, [change.bound_statement(curse)])
+                    add_events(curse, [change.bound_statement(curse)], False)
 
         events = get_events(store._connection)
         self.assertThat(
@@ -895,6 +896,15 @@ class EventStreamTests(TestCase):
         self.assertThat(
             events.highest_sequence(),
             Equals(len(sql_statements)),
+        )
+
+    def test_event_stream_invalid_version(self):
+        """
+        An EventStream with an unknown version errors on deserialization
+        """
+        es = EventStream(tuple(), version=-1)
+        self.assertThat(
+            lambda: EventStream.from_bytes(es.to_bytes()), raises(ValueError)
         )
 
     @given(
@@ -920,7 +930,9 @@ class EventStreamTests(TestCase):
 
         with store._connection:
             curse = store._connection.cursor()
-            add_events(curse, [change.bound_statement(curse) for change in changes])
+            add_events(
+                curse, [change.bound_statement(curse) for change in changes], False
+            )
 
         pre_events = get_events(store._connection)
 

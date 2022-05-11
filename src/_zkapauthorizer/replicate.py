@@ -100,15 +100,21 @@ class Change:
 
     sequence: int  # the sequence-number of this event
     statement: str  # the SQL statement string
+    important: bool  # whether this change was "important" or not
 
 
 @frozen
 class EventStream:
     """
     A series of database operations represented as `Change` instances.
+
+    :ivar version: An identifier for the schema of the serialized form of this
+        event stream.  This will appear inside the serialized form.  A change
+        to the schema will be accompanied with an increment to this value.
     """
 
     changes: tuple[Change, ...]
+    version: int = 1
 
     def highest_sequence(self) -> Optional[int]:
         """
@@ -126,10 +132,15 @@ class EventStream:
         return BytesIO(
             cbor2.dumps(
                 {
+                    "version": self.version,
                     "events": tuple(
-                        (event.sequence, event.statement.encode("utf8"))
+                        (
+                            event.sequence,
+                            event.statement.encode("utf8"),
+                            event.important,
+                        )
                         for event in self.changes
-                    )
+                    ),
                 }
             )
         )
@@ -142,10 +153,13 @@ class EventStream:
             ``to_bytes``)
         """
         data = cbor2.load(stream)
+        serial_version = data.get("version", None)
+        if serial_version != 1:
+            raise ValueError(f"Unknown serialized version {serial_version}")
         return cls(
             changes=tuple(
-                Change(seq, statement.decode("utf8"))
-                for seq, statement in data["events"]
+                Change(seq, statement.decode("utf8"), important)
+                for seq, statement, important in data["events"]
             )
         )
 
@@ -513,15 +527,17 @@ def get_tahoe_lafs_direntry_uploader(
     return upload
 
 
-def add_events(cursor: _SQLite3Cursor, sql_statements: Iterable[str]) -> None:
+def add_events(
+    cursor: _SQLite3Cursor, sql_statements: Iterable[str], important: bool
+) -> None:
     """
     Add some new changes to the event-log.
     """
     cursor.executemany(
         """
-        INSERT INTO [event-stream]([statement]) VALUES (?)
+        INSERT INTO [event-stream]([statement], [important]) VALUES (?, ?)
         """,
-        ((sql,) for sql in sql_statements),
+        ((sql, important) for sql in sql_statements),
     )
 
 
@@ -533,12 +549,14 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT [sequence-number], [statement]
+            SELECT [sequence-number], [statement], [important]
             FROM [event-stream]
             """
         )
         rows = cursor.fetchall()
-    return EventStream(changes=tuple(Change(seq, stmt) for seq, stmt in rows))
+    return EventStream(
+        changes=tuple(Change(seq, stmt, important) for seq, stmt, important in rows)
+    )
 
 
 def prune_events_to(conn: _SQLite3Connection, sequence_number: int) -> None:
@@ -583,13 +601,14 @@ class AccumulatedChanges:
         Load information about unreplicated changes from the database.
         """
         # this size is larger than what we would have computed via
-        # `from_changes` which only counts the statement-sizes .. but maybe
-        # fine?
+        # `from_changes` which only counts the statement-sizes .. but
+        # maybe fine? (also could fix by just accumulating the
+        # statement-sizes instead below)
         events = get_events(connection)
         data = events.to_bytes()
         size = data.seek(0, os.SEEK_END)
-        # XXX We don't really know this should be False.
-        return cls(False, size)
+        any_important = any(change.important for change in events.changes)
+        return cls(any_important, size)
 
     @classmethod
     def from_statements(
@@ -785,7 +804,7 @@ class _ReplicationService(Service):
             are the arguments for the SQL.
         """
         important, bound_statements = bind_statements(unobserved_cursor, all_changes)
-        add_events(unobserved_cursor, bound_statements)
+        add_events(unobserved_cursor, bound_statements, important)
         changes = AccumulatedChanges.from_statements(important, bound_statements)
         self._changes = self._changes + changes
         if self.should_upload_eventstream(self._changes):
