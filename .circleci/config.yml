@@ -80,7 +80,7 @@ jobs:
       - run:
           name: "Convert Coverage"
           command: |
-            Get-Content slipcover.json | python slipcover2coveralls.py "$Env:GITHUB_RUN_NUMBER" "github-actions" > coveralls.json
+            Get-Content slipcover.json | python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" > coveralls.json
 
       - "coveralls/upload":
           parallel: true
