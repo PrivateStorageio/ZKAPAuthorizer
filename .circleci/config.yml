@@ -73,12 +73,22 @@ jobs:
           name: "Run Tests"
           command: |
             # We have to tell slipcover where to find the source we want it to
-            # instrument.  Find where our package was installed.
-            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent.parent)")
+            # instrument.  Find where our package was installed.  This should
+            # be a path like `/foo/bar/_zkapauthorizer`
+            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent)")
             python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
 
-            # And convert coverage.  We need the awkward-to-create $Env:Src so
-            # do this in the same step.
+      - run:
+          name: "Convert Coverage"
+          command: |
+            # We want to convert the absolute paths in the coverage data to
+            # relative paths that can meaningfully be merged with data from
+            # other systems.
+            #
+            # If _zkapauthorizer is at /foo/bar/_zkapauthorizer then this
+            # should be a path like /foo/bar.
+            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent.parent)")
+
             Get-Content slipcover.json |
               python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" |
               Set-Content -Encoding ASCII coveralls.json
