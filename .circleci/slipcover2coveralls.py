@@ -2,42 +2,59 @@
 
 from hashlib import md5
 from json import dump, load
-from sys import argv, stdin, stdout, stderr
-from typing import Iterator, Union, TextIO
+from sys import argv, stderr, stdin, stdout
+from typing import Iterator, TextIO, Union
 
-def main(service_job_id: str, service_name: str, sources_relative_to: str, make_relative_to: str, stdin: TextIO = stdin, stdout: TextIO = stdout) -> int:
+
+def main(
+    service_job_id: str,
+    service_name: str,
+    sources_relative_to: str,
+    make_relative_to: str,
+    stdin: TextIO = stdin,
+    stdout: TextIO = stdout,
+) -> int:
     print(
-        f" stdin.encoding: {stdin.encoding}\n"
-        f"stdout.encoding: {stdout.encoding}\n",
+        f" stdin.encoding: {stdin.encoding}\n" f"stdout.encoding: {stdout.encoding}\n",
         file=stderr,
     )
 
     slipcover_data = load(stdin)
 
     digests = dict(digest_source_files(slipcover_data))
-    raw_coveralls = slipcover_to_coveralls(service_job_id, service_name, slipcover_data, digests)
-    relative_coveralls = make_relative_paths(sources_relative_to, make_relative_to, raw_coveralls)
+    raw_coveralls = slipcover_to_coveralls(
+        service_job_id, service_name, slipcover_data, digests
+    )
+    relative_coveralls = make_relative_paths(
+        sources_relative_to, make_relative_to, raw_coveralls
+    )
     dump(relative_coveralls, stdout)
     return 0
 
 
-def make_relative_paths(sources_relative_to: str, make_relative_to: str, raw_coveralls: dict) -> dict:
+def make_relative_paths(
+    sources_relative_to: str, make_relative_to: str, raw_coveralls: dict
+) -> dict:
     def relative_source_file(src):
-        name = src["name"].replace(sources_relative_to, make_relative_to).replace("\\", "/")
+        name = (
+            src["name"]
+            .replace(sources_relative_to, make_relative_to)
+            .replace("\\", "/")
+        )
         return {
             "name": name,
             "source_digest": src["source_digest"],
             "coverage": src["coverage"],
         }
+
     return {
         "service_job_id": raw_coveralls["service_job_id"],
         "service_name": raw_coveralls["service_name"],
         "source_files": [
-            relative_source_file(src)
-            for src
-            in raw_coveralls["source_files"]
+            relative_source_file(src) for src in raw_coveralls["source_files"]
         ],
     }
+
 
 def slipcover_to_coveralls(
     service_job_id: str, service_name: str, slipcover_data: dict, digests: dict

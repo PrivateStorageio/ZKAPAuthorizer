@@ -1,7 +1,9 @@
 import os
 import pathlib
-import _zkapauthorizer
+
 import slipcover2coveralls
+
+import _zkapauthorizer
 
 # We want to convert the absolute paths in the coverage data to
 # relative paths that can meaningfully be merged with data from

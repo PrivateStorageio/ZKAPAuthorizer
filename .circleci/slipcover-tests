@@ -1,6 +1,7 @@
-import sys
-import runpy
 import pathlib
+import runpy
+import sys
+
 import _zkapauthorizer
 
 # We have to tell slipcover where to find the source we want it to instrument.
@@ -9,11 +10,14 @@ import _zkapauthorizer
 src = pathlib.Path(_zkapauthorizer.__file__).parent
 
 sys.argv[1:] = [
-    "--source", str(src),
+    "--source",
+    str(src),
     "--json",
     "--pretty-print",
-    "--out", "slipcover.json",
-    "-m", "twisted.trial",
+    "--out",
+    "slipcover.json",
+    "-m",
+    "twisted.trial",
 ] + sys.argv[1:]
 
 runpy.run_module("slipcover", alter_sys=True)

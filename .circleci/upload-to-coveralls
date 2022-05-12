@@ -1,6 +1,6 @@
 import os
-import sys
 import runpy
+import sys
 
 # Put some job information into the env vars coveralls looks at.
 # CI_PULL_REQUEST is also useful but already set by CircleCI.
