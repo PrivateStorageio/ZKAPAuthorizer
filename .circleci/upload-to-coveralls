@@ -2,13 +2,6 @@ import os
 import runpy
 import sys
 
-# Put some job information into the env vars coveralls looks at.
-# CI_PULL_REQUEST is also useful but already set by CircleCI.
-os.environ["CI_NAME"] = "circleci"
-os.environ["CI_BUILD_NUMBER"] = os.environ["CIRCLE_BUILD_NUM"]
-os.environ["CI_BUILD_URL"] = os.environ["CIRCLE_BUILD_URL"]
-os.environ["CI_BRANCH"] = os.environ["CIRCLE_BRANCH"]
-
 # Note we're doing more than one build.
 os.environ["COVERALLS_PARALLEL"] = "true"
 
