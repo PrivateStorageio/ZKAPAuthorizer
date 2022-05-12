@@ -526,7 +526,6 @@ class ReplicationServiceTests(TestCase):
             uploads.append((name, get_data))
 
         async def pruner(predicate):
-            print("prune", predicate)
             pruned.append(predicate)
 
         srv = replication_service(tvs.store._connection, uploader, pruner)
@@ -571,13 +570,19 @@ class ReplicationServiceTests(TestCase):
         self.assertNotEqual(tuple(), get_events(tvs.store._connection).changes)
 
         # trigger a snapshot upload
-        print("ding", srv.queue_snapshot_upload())
+        srv.queue_snapshot_upload()
 
         # now there should be no local changes
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
-        # ...and we should have pruned the prior event-stream
-        # ("event-stream-21") after uploading the latest snapshot.
-        print("XXX", pruned)
+        # ...and we should have pruned the prior event-stream .. so we
+        # interrogate the predicate we _were_ given to ensure it would
+        # have said "yes" to the event-stream we did upload
+
+        self.assertThat(pruned, HasLength(1))
+        self.assertThat(
+            pruned[0]("event-stream-21"),
+            Equals(True)
+        )
 
 
 

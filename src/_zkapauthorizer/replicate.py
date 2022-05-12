@@ -60,6 +60,7 @@ __all__ = [
 ]
 
 import os
+import re
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
@@ -679,12 +680,10 @@ async def prune_events_from_replica(tahoe: Tahoe, mutable: CapStr, highest_seq: 
     """
 
     entries = await tahoe.list_directory(mutable)
-    print(entries)
     for entry in entries:
         m = re.match("event-stream-([0-9]*)", entry)
         if m:
             seq = int(entry.group(1))
-            print("delete", seq)
             await tahoe.unlink(mutable, entry)
 
 
@@ -773,7 +772,6 @@ class _ReplicationService(Service):
         """
         # XXX we want to inspect the queue to see if there's already an upload job in it
         self._jobs.put("event-stream") # XXX maybe enum
-        print("do-event")
         # XXX test(s) about whether we lost the logic of coalescing etc
 
     def queue_snapshot_upload(self) -> None:
@@ -783,7 +781,6 @@ class _ReplicationService(Service):
         successfully uploaded.
         """
         self._jobs.put("snapshot") # XXX maybe enum
-        print("do-snapshot")
 
     async def wait_for_uploads(self) -> None:
         """
@@ -812,7 +809,6 @@ class _ReplicationService(Service):
         if len(rows):
             seqnum = int(rows[0][0])
 
-        print("_do_one_snapshot_upload", seqnum)
         snap = snapshot(self._connection)
 
         # upload snapshot
@@ -852,7 +848,6 @@ class _ReplicationService(Service):
         from our database.
         """
         events = get_events(self._unreplicated_connection)
-        print("do_one_event_upload", events.highest_sequence())
 
         high_seq = events.highest_sequence()
         # if this is None there are no events at all
@@ -917,7 +912,6 @@ class _ReplicationService(Service):
         :returns: True if we have accumulated enough statements to upload
             an event-stream record.
         """
-        print("should upload?", changes.important, changes.size)
         return changes.important or changes.size >= 570000
 
 
