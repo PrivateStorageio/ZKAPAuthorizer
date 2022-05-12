@@ -70,6 +70,12 @@ let
           mkdir -p "$out/coverage"
           cp -v .coverage.* "$out/coverage"
           ${python}/bin/python -m coverage combine
+
+          # Make all of the paths relative to the root of the ZKAPAuthorizer
+          # repository.  15 is length("/site-packages/") so we strip
+          # everything up to the trailing / of that component.
+          ${sqlite3}/bin/sqlite3 .coverage 'UPDATE file SET path = substr(path, 15 + instr(path, "/site-packages/"))'
+
           cp -v .coverage "$out/coverage"
           ${python}/bin/python -m coverage html -d "$out/htmlcov"
         ''
