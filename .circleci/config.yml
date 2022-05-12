@@ -15,6 +15,7 @@
 version: 2.1
 
 orbs:
+  # Get easier access to the Windows machine executor.
   win: "circleci/windows@4.1"
 
 aliases:
@@ -91,7 +92,11 @@ jobs:
 
             # Convert to something we can send to coveralls.  Also make all of
             # the paths in the data look like "src/..." to match reports from
-            # other systems.
+            # other systems.  We use `Set-Content` and ASCII because otherwise
+            # PowerShell gives us UTF-16 (default) or UTF-8 with a BOM (when
+            # using `-Encoding utf8`) in coveralls.json, which makes it
+            # unparseable by later steps.  Luckily our JSON output should
+            # always be pure ASCII.
             Get-Content slipcover.json |
               python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" "src" |
               Set-Content -Encoding ASCII coveralls.json
