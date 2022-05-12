@@ -307,7 +307,7 @@ jobs:
       - run:
           name: "Upload Coverage"
           command: |
-            cp ./result*/coverage/.coverage ./.coverage
+            cp ./result*/.coverage ./.coverage
 
             # Put some job information into the env vars coveralls looks at.
             export CI_NAME="circleci"
