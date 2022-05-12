@@ -67,17 +67,28 @@ let
 
       ${lib.optionalString collectCoverage
         ''
-          mkdir -p "$out/coverage"
-          cp -v .coverage.* "$out/coverage"
-          ${python}/bin/python -m coverage combine
+          # Combine straight into the output location, also pointing coverage
+          # at the directory that contains all of the files to be combined
+          # (necessary) and the configuration file (abundance of caution).
+          echo "Combining coverage"
+          ${python}/bin/python -m coverage combine \
+              --rcfile ${zkapauthorizer.src}/.coveragerc \
+              --data-file "$out/.coverage" \
+              ./
 
-          # Make all of the paths relative to the root of the ZKAPAuthorizer
-          # repository.  15 is length("/site-packages/") so we strip
-          # everything up to the trailing / of that component.
-          ${sqlite3}/bin/sqlite3 .coverage 'UPDATE file SET path = substr(path, 15 + instr(path, "/site-packages/"))'
+          # Change to the source directory so `coverage html` can find the
+          # source files.
+          pushd ${zkapauthorizer.src}
 
-          cp -v .coverage "$out/coverage"
-          ${python}/bin/python -m coverage html -d "$out/htmlcov"
+          # Generate an HTML report too.
+          echo "Generating HTML report"
+          ${python}/bin/python -m coverage html \
+              --rcfile ${zkapauthorizer.src}/.coveragerc \
+              --data-file "$out/.coverage" \
+              --directory "$out/htmlcov"
+
+          # Go back, not that there's anything else to do.
+          popd
         ''
       }
     '';

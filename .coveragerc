@@ -25,11 +25,14 @@ omit =
 # file).
     */_zkapauthorizer/_version.py
 
+# Record relative paths
+relative_files = true
+
 [paths]
 source =
 # It looks like this in the checkout
     src/
 # It looks like this in the Nix build environment
     /nix/store/*/lib/python*/site-packages/
-# It looks like this in the Windows build environment
-    C:\hostedtoolcache\windows\Python\2.7.18\x64\Lib\site-packages\
+# There used to be a line for Windows here but Windows takes care of itself
+# now.
