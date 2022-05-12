@@ -33,8 +33,8 @@ Copyright
 
 .. _PrivacyPass: https://privacypass.github.io/
 
-.. |coverage| image:: https://codecov.io/gh/PrivateStorageio/ZKAPAuthorizer/branch/master/graph/badge.svg
-.. _coverage: https://codecov.io/gh/PrivateStorageio/ZKAPAuthorizer
+.. |coverage| image:: https://coveralls.io/repos/github/PrivateStorageio/ZKAPAuthorizer/badge.svg?branch=main
+.. _coverage: https://coveralls.io/github/PrivateStorageio/ZKAPAuthorizer?branch=main
 
 .. |circleci| image:: https://circleci.com/gh/PrivateStorageio/ZKAPAuthorizer.svg?style=svg
 .. _circleci: https://circleci.com/gh/PrivateStorageio/ZKAPAuthorizer
