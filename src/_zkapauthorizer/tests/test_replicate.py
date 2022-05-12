@@ -26,8 +26,9 @@ from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
-from ..model import RandomToken
+from ..model import RandomToken, UnblindedToken
 from ..recover import recover
+from ..spending import SpendingController
 from ..replicate import (
     EventStream,
     get_events,
@@ -502,6 +503,82 @@ class ReplicationServiceTests(TestCase):
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
 
         srv.queue_snapshot_upload()
+
+    def test_snapshot_prune(self) -> None:
+        """
+        Uploading a snapshot prunes irrelevant event-stream instances from
+        the replica
+        """
+
+        def get_config(rootpath, portnumfile):
+            return EmptyConfig(FilePath(rootpath))
+
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
+
+        rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
+        rwcap_file.parent().makedirs()
+        rwcap_file.setContent(b"URL:DIR2:stuff")
+
+        uploads = []
+        pruned = []
+
+        async def uploader(name, get_data):
+            uploads.append((name, get_data))
+
+        async def pruner(predicate):
+            print("prune", predicate)
+            pruned.append(predicate)
+
+        srv = replication_service(tvs.store._connection, uploader, pruner)
+
+        # run the service and produce some fake voucher etc changes
+        # that cause "events" to be issued into the database
+        srv.startService()
+        self.addCleanup(srv.stopService)
+
+        # Add some tokens, which are considered important.
+        voucher0 = urlsafe_b64encode(urandom(32))
+        tvs.redeem(voucher0, 20)
+
+        # ..so we should have uploaded here
+        self.assertThat(
+            uploads,
+            MatchesListwise(
+                [
+                    match_upload(
+                        Equals("event-stream-21"),
+                        MatchesStructure(
+                            changes=HasLength(21),
+                            highest_sequence=returns(Equals(21)),
+                        ),
+                    )
+                ]
+            )
+        )
+
+        # do some work that isn't deemed "important"
+        pass_factory = SpendingController.for_store(
+            tokens_to_passes=tvs.redeemer.tokens_to_passes,
+            store=tvs.store,
+        )
+        group0 = pass_factory.get(b"message0", 10)
+
+        self.assertNotEqual(tuple(), get_events(tvs.store._connection).changes)
+
+        # we should _not_ have uploaded the above changes yet (because
+        # they aren't "important") and so they should still exist in
+        # the store
+        self.assertNotEqual(tuple(), get_events(tvs.store._connection).changes)
+
+        # trigger a snapshot upload
+        print("ding", srv.queue_snapshot_upload())
+
+        # now there should be no local changes
+        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        # ...and we should have pruned the prior event-stream
+        # ("event-stream-21") after uploading the latest snapshot.
+        print("XXX", pruned)
+
 
 
 class HypothesisReplicationServiceTests(TestCase):

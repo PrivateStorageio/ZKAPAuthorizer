@@ -79,7 +79,7 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed, DeferredList
+from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed, DeferredList
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
@@ -534,11 +534,15 @@ def get_tahoe_lafs_direntry_pruner(
     async def maybe_unlink(
         predicate: Callable[[str], bool]
     ) -> None:
-        # -> list directory
-        # for each entry:
-        #     if predicate matches, delete it
+        """
+        For each child of `directory_mutable_cap` delete it iff the
+        predicate returns True for that name
+        """
+        entries = await client.list_directory(directory_mutable_cap)
+        for name in entries.keys():
+            if predicate(name):
+                await client.unlink(directory_mutable_cap, name)
 
-    #XXX does tahoe support doing >1 delete per HTTP call?
     return maybe_unlink
 
 
@@ -633,9 +637,9 @@ class AccumulatedChanges:
         # although the statement text should still dominate.
         return cls(important, sum(map(len, bound_statements)))
 
-    def __add__(self, other):
+    def __add__(self, other) -> AccumulatedChanges:
         return AccumulatedChanges(
-            self.size + other.size, self.important or other.important
+            self.important or other.important, self.size + other.size
         )
 
 
@@ -709,7 +713,7 @@ class _ReplicationService(Service):
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
-    _jobs = Factory(DeferredQueue)
+    _jobs: DeferredQueue = field(factory=DeferredQueue)
 
     @property
     def _unreplicated_connection(self):
@@ -769,6 +773,7 @@ class _ReplicationService(Service):
         """
         # XXX we want to inspect the queue to see if there's already an upload job in it
         self._jobs.put("event-stream") # XXX maybe enum
+        print("do-event")
         # XXX test(s) about whether we lost the logic of coalescing etc
 
     def queue_snapshot_upload(self) -> None:
@@ -778,6 +783,7 @@ class _ReplicationService(Service):
         successfully uploaded.
         """
         self._jobs.put("snapshot") # XXX maybe enum
+        print("do-snapshot")
 
     async def wait_for_uploads(self) -> None:
         """
@@ -798,47 +804,47 @@ class _ReplicationService(Service):
         Perform a single snapshot upload, including pruning event-streams
         from the replica that are no longer relevant.
         """
+        # extract sequence-number and snapshot data
         seqnum = 1
-        try:
-            rows = self._connection.cursor().execute(
-                """SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"""
-            ).fetchall()
-            if len(rows):
-                seqnum = int(rows[0])
-            else:
-                print("only default")
-        except sqlite3.OperationalError:
-            # do we need to introspect the string for "no such table"?
-            print("operational error; no table yet?")
+        rows = self._connection.cursor().execute(
+            "SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"
+        ).fetchall()
+        if len(rows):
+            seqnum = int(rows[0][0])
 
+        print("_do_one_snapshot_upload", seqnum)
         snap = snapshot(self._connection)
-        print("snap={}bytes".format(len(snap)))
+
         # upload snapshot
         await self._uploader("snapshot", snap)
 
-        # XXX what happens if we crash here?
-        # - will recover when next snapshot occurs (but until then, extra event-stream objects)
+        # remove local event history (that should now be encapsulated
+        # by the snapshot we just uploaded)
+        prune_events_to(self._connection._conn, seqnum)
+
+        # if we crash here, there will be extra event-stream objects
+        # in the replica. This will be fixed correctly upon our next
+        # snapshot upload. The extra event-stream objects will be
+        # ignored by the recovery code.
 
         # possible to _not_ have a snapshot? -> make sure we do one when replication is turned on.
 
-        # recovery is:
-        # - download snapshot
-        # - replay all the statements
-        # - determine next sequence-number
-        # - examine event-streams:
-        #   - if event-stream-* is > sequence-number:
-        #      - download it, replay all events > sequence-number
-        # - replication turned on again
-        # - new replica (so old one will eventually be GC'd)
+        # prune old events from the replica
 
-        # prune old events
-        def is_old_eventstream(fname):
-            # xxx
+        def is_old_eventstream(fname: str) -> bool:
+            """
+            :returns: True if the `fname` is an event-stream object and the
+                sequence number is strictly less than our snapshot's
+                maximum sequence.
+            """
+            m = re.match("event-stream-([0-9]*)", fname)
+            if m:
+                seq = int(m.group(1))
+                if seq < seqnum:
+                    return True
+            return False
 
         await self._pruner(is_old_eventstream)
-
-# PyCDDL for event-stream cbor2
-# i.e. document schema w/ cddl
 
     async def _do_one_event_upload(self) -> None:
         """
@@ -846,6 +852,7 @@ class _ReplicationService(Service):
         from our database.
         """
         events = get_events(self._unreplicated_connection)
+        print("do_one_event_upload", events.highest_sequence())
 
         high_seq = events.highest_sequence()
         # if this is None there are no events at all
@@ -910,6 +917,7 @@ class _ReplicationService(Service):
         :returns: True if we have accumulated enough statements to upload
             an event-stream record.
         """
+        print("should upload?", changes.important, changes.size)
         return changes.important or changes.size >= 570000
 
 
@@ -925,5 +933,5 @@ def replication_service(
     return _ReplicationService(
         connection=replicated_connection,
         uploader=uploader,
-        deleter=deleter,
+        pruner=pruner,
     )
