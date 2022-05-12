@@ -141,7 +141,7 @@ jobs:
             venv/bin/python -m pip wheel \
               --wheel-dir wheelhouse \
               -r requirements/test.in \
-              pip wheel .
+              pip wheel coveralls .
 
       - save_cache:
           paths:
@@ -157,6 +157,7 @@ jobs:
               --no-index \
               --find-links file://${PWD}/wheelhouse \
               -r requirements/test.in \
+              coveralls \
               .
 
       - run:
@@ -165,13 +166,47 @@ jobs:
             # The test suite might leak file descriptors.  macOS defaults to a
             # limit of 256.  This should be fixed, but not now ...
             ulimit -Sn 1024
+
+            # Tell coverage in the worker processes where it can find our
+            # configuration file.
+            export COVERAGE_PROCESS_START=${PWD}/.coveragerc
+
             # And finally we can run the tests.  We'll run them with 4 jobs
             # because the resource class documented at
             # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
             # says "Medium: 4 vCPUs, 8GB RAM".
-            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
+            venv/bin/python -m coverage run \
+                --debug=config \
+                --rcfile=${PWD}/.coveragerc \
+                --module twisted.trial \
+                  --jobs 4 \
+                  --rterrors \
+                  _zkapauthorizer
+
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
+
+      - run:
+          name: "Upload Coverage"
+          command: |
+            # Combine data from all the workers into a single file.
+            venv/bin/python -m coverage combine \
+                --rcfile=${PWD}/.coveragerc \
+                --data-file=${PWD}/.coverage \
+                ./
+
+            # Put some job information into the env vars coveralls looks at.
+            export CI_NAME="circleci"
+            export CI_BUILD_NUMBER=$CIRCLECI_BUILD_NUM
+            export CI_BUILD_URL=$CIRCLE_BUILD_URL
+            export CI_BRANCH=$CIRCLE_BRANCH
+            # CI_PULL_REQUEST is useful but already set by CircleCI.
+
+            # Note we're doing more than one build.
+            export COVERALLS_PARALLEL=true
+
+            coveralls debug
+            coveralls
 
   linux-tests: &LINUX_TESTS
     parameters:
