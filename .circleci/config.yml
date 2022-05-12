@@ -74,7 +74,7 @@ jobs:
           command: |
             # We have to tell slipcover where to find the source we want it to
             # instrument.  Find where our package was installed.
-            $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
+            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent.parent)")
             python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
 
             # And convert coverage.  We need the awkward-to-create $Env:Src so
