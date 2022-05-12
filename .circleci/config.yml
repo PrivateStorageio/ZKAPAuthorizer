@@ -16,7 +16,7 @@ version: 2.1
 
 orbs:
   # Get easier access to the Windows machine executor.
-  win: "circleci/windows@v4.1.1"
+  win: "circleci/windows@4.1.1"
 
 aliases:
   - &PREPARE_VIRTUALENV
