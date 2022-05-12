@@ -77,7 +77,7 @@ jobs:
             # instrument.  Find where our package was installed.  This should
             # be a path like `/foo/bar/_zkapauthorizer`
             $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent)")
-            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
+            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
 
       - run:
           name: "Convert Coverage"
@@ -201,7 +201,7 @@ jobs:
             # because the resource class documented at
             # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
             # says "Medium: 4 vCPUs, 8GB RAM".
-            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer.tests.test_private
+            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
@@ -288,7 +288,7 @@ jobs:
               --arg collectCoverage true \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
               --argstr python python<< parameters.py-version >> \
-              --argstr testSuite _zkapauthorizer.tests.test_private
+              --argstr testSuite _zkapauthorizer
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
