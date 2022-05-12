@@ -345,6 +345,8 @@ jobs:
           <<: *PUSH_TO_CACHIX
 
 
+  # A job that tells coveralls that we've reported all of our coverage data
+  # and it can generate a combined report.
   finish-coverage:
     docker:
       - image: "nixos/nix:2.5.1"
@@ -390,6 +392,7 @@ workflows:
         name: "Windows tests, python 3.9"
 
     - "finish-coverage":
+        # Make sure it depends on all coverage-collecting jobs!
         requires:
           - "Linux tests, python 3.9"
           - "Linux tests, python 3.9, Tahoe-LAFS master"
