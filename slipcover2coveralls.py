@@ -24,7 +24,7 @@ def main(service_job_id: str, service_name: str, sources_relative_to: str, make_
 
 def make_relative_paths(sources_relative_to: str, make_relative_to: str, raw_coveralls: dict) -> dict:
     def relative_source_file(src):
-        name = src["name"].replace(sources_relative_to, make_relative_to)
+        name = src["name"].replace(sources_relative_to, make_relative_to).replace("\\", "/")
         return {
             "name": name,
             "source_digest": src["source_digest"],
