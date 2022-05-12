@@ -107,7 +107,7 @@ jobs:
             # Put some job information into the env vars coveralls looks at.
             $Env:CI_NAME="circleci"
             $Env:CI_BUILD_NUMBER=$Env:CIRCLECI_BUILD_NUM
-            $Env:CI_CI_BUILD_URL=$Env:CIRCLE_BUILD_URL
+            $Env:CI_BUILD_URL=$Env:CIRCLE_BUILD_URL
             $Env:CI_BRANCH=$Env:CIRCLE_BRANCH
             # CI_PULL_REQUEST is useful but already set by CircleCI.
 
