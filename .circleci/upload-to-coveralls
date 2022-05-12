@@ -13,5 +13,5 @@ os.environ["CI_BRANCH"] = os.environ["CIRCLE_BRANCH"]
 os.environ["COVERALLS_PARALLEL"] = "true"
 
 # Send it.
-sys.argv[1:] = ["--merge=coveralls.json"]
-runpy.run_module("coveralls", alter_sys=True)
+sys.argv[1:] = ["debug", "--merge=coveralls.json"]
+runpy.run_module("coveralls", run_name="__main__", alter_sys=True)
