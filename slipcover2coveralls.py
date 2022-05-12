@@ -6,7 +6,7 @@ from sys import argv, stdin, stdout, stderr
 from typing import Iterator, Union
 
 
-def main(service_job_id: str, service_name: str, sources_relative_to: str) -> int:
+def main(service_job_id: str, service_name: str, sources_relative_to: str, make_relative_to: str) -> int:
     print(
         f" stdin.encoding: {stdin.encoding}\n"
         f"stdout.encoding: {stdout.encoding}\n",
@@ -17,16 +17,14 @@ def main(service_job_id: str, service_name: str, sources_relative_to: str) -> in
 
     digests = dict(digest_source_files(slipcover_data))
     raw_coveralls = slipcover_to_coveralls(service_job_id, service_name, slipcover_data, digests)
-    relative_coveralls = make_relative_paths(sources_relative_to, raw_coveralls)
+    relative_coveralls = make_relative_paths(sources_relative_to, make_relative_to, raw_coveralls)
     dump(relative_coveralls, stdout)
     return 0
 
 
-def make_relative_paths(sources_relative_to: str, raw_coveralls: dict) -> dict:
+def make_relative_paths(sources_relative_to: str, make_relative_to: str, raw_coveralls: dict) -> dict:
     def relative_source_file(src):
-        name = src["name"]
-        if name.startswith(sources_relative_to):
-            name = name[len(sources_relative_to):]
+        name = src["name"].replace(sources_relative_to, make_relative_to)
         return {
             "name": name,
             "source_digest": src["source_digest"],

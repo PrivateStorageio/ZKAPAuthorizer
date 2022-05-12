@@ -89,8 +89,11 @@ jobs:
             # should be a path like /foo/bar.
             $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent.parent)")
 
+            # Convert to something we can send to coveralls.  Also make all of
+            # the paths in the data look like "src/..." to match reports from
+            # other systems.
             Get-Content slipcover.json |
-              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" |
+              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" "src" |
               Set-Content -Encoding ASCII coveralls.json
 
       - run:
@@ -317,6 +320,7 @@ jobs:
             export COVERALLS_PARALLEL=true
 
             # Get the tool (which depends on pyyaml...) and send the report.
+            nix-shell -p git python3Packages.coveralls python3Packages.pyyaml --run 'coveralls debug'
             nix-shell -p git python3Packages.coveralls python3Packages.pyyaml --run 'coveralls'
 
   typecheck:
