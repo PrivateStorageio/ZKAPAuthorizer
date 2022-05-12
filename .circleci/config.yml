@@ -76,17 +76,12 @@ jobs:
             # instrument.  Find where our package was installed.
             $Env:Src=$(python -c "import os.path, _zkapauthorizer; print(os.path.dirname(_zkapauthorizer.__file__))")
             python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer.tests.test_private
-      - run:
-          name: "Convert Coverage"
-          command: |
+
+            # And convert coverage.  We need the awkward-to-create $Env:Src so
+            # do this in the same step.
             Get-Content slipcover.json |
               python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" |
               Set-Content -Encoding ASCII coveralls.json
-
-      - run:
-          name: "Dump Coverage"
-          command: |
-            python -c "print(repr(open('coveralls.json', 'rb').read(16)))"
 
       - run:
           name: "Upload Coverage"
