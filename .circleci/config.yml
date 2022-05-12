@@ -73,7 +73,7 @@ jobs:
       - run:
           name: "Run Tests"
           command: |
-            python .circleci/slipcover-tests _zkapauthorizer
+            python .circleci/slipcover-tests _zkapauthorizer.tests.test_private
 
       - run:
           name: "Convert Coverage"
@@ -181,7 +181,7 @@ jobs:
                 --module twisted.trial \
                   --jobs 4 \
                   --rterrors \
-                  _zkapauthorizer
+                  _zkapauthorizer.tests.test_private
 
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
@@ -280,7 +280,7 @@ jobs:
               --arg collectCoverage true \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
               --argstr python python<< parameters.py-version >> \
-              --argstr testSuite _zkapauthorizer
+              --argstr testSuite _zkapauthorizer.tests.test_private
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
