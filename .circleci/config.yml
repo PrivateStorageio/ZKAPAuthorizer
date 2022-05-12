@@ -73,49 +73,17 @@ jobs:
       - run:
           name: "Run Tests"
           command: |
-            # We have to tell slipcover where to find the source we want it to
-            # instrument.  Find where our package was installed.  This should
-            # be a path like `/foo/bar/_zkapauthorizer`
-            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent)")
-            python -m slipcover --source "$Env:Src" --json --pretty-print --out slipcover.json -m twisted.trial _zkapauthorizer
+            python .circleci/slipcover-tests
 
       - run:
           name: "Convert Coverage"
           command: |
-            # We want to convert the absolute paths in the coverage data to
-            # relative paths that can meaningfully be merged with data from
-            # other systems.
-            #
-            # If _zkapauthorizer is at /foo/bar/_zkapauthorizer then this
-            # should be a path like /foo/bar.
-            $Env:Src=$(python -c "import pathlib as p, _zkapauthorizer as z; print(p.Path(z.__file__).parent.parent)")
-
-            # Convert to something we can send to coveralls.  Also make all of
-            # the paths in the data look like "src/..." to match reports from
-            # other systems.  We use `Set-Content` and ASCII because otherwise
-            # PowerShell gives us UTF-16 (default) or UTF-8 with a BOM (when
-            # using `-Encoding utf8`) in coveralls.json, which makes it
-            # unparseable by later steps.  Luckily our JSON output should
-            # always be pure ASCII.
-            Get-Content slipcover.json |
-              python slipcover2coveralls.py "$Env:CIRCLE_BUILD_NUM" "circleci" "$Env:Src" "src" |
-              Set-Content -Encoding ASCII coveralls.json
+            python .circleci/convert-slipcover-data
 
       - run:
           name: "Upload Coverage"
           command: |
-            # Put some job information into the env vars coveralls looks at.
-            $Env:CI_NAME="circleci"
-            $Env:CI_BUILD_NUMBER=$Env:CIRCLECI_BUILD_NUM
-            $Env:CI_BUILD_URL=$Env:CIRCLE_BUILD_URL
-            $Env:CI_BRANCH=$Env:CIRCLE_BRANCH
-            # CI_PULL_REQUEST is useful but already set by CircleCI.
-
-            # Note we're doing more than one build.
-            $Env:COVERALLS_PARALLEL=true
-
-            # Send it.
-            coveralls --merge=coveralls.json
+            python .circleci/upload-to-coveralls
 
   macos-tests:
     parameters:

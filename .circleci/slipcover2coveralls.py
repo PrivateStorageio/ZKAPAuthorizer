@@ -3,10 +3,9 @@
 from hashlib import md5
 from json import dump, load
 from sys import argv, stdin, stdout, stderr
-from typing import Iterator, Union
+from typing import Iterator, Union, TextIO
 
-
-def main(service_job_id: str, service_name: str, sources_relative_to: str, make_relative_to: str) -> int:
+def main(service_job_id: str, service_name: str, sources_relative_to: str, make_relative_to: str, stdin: TextIO = stdin, stdout: TextIO = stdout) -> int:
     print(
         f" stdin.encoding: {stdin.encoding}\n"
         f"stdout.encoding: {stdout.encoding}\n",

@@ -1,0 +1,25 @@
+import os
+import pathlib
+import _zkapauthorizer
+import slipcover2coveralls
+
+# We want to convert the absolute paths in the coverage data to
+# relative paths that can meaningfully be merged with data from
+# other systems.
+#
+# If _zkapauthorizer is at /foo/bar/_zkapauthorizer then this
+# should be a path like /foo/bar.
+site_packages = pathlib.Path(_zkapauthorizer.__file__).parent.parent
+
+# Convert to something we can send to coveralls.  Also make all of the paths
+# in the data look like "src/..." to match reports from other systems.
+with open("slipcover.json", "rt") as slipcover:
+    with open("coveralls.json", "wt") as coveralls:
+        slipcover2coveralls.main(
+            service_job_id=os.environ["CIRCLE_BUILD_NUM"],
+            service_name="circleci",
+            sources_relative_to=str(site_packages),
+            make_relative_to="src",
+            stdin=slipcover,
+            stdout=coveralls,
+        )
