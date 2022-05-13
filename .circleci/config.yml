@@ -190,7 +190,9 @@ jobs:
           name: "Persist Coverage to Workspace"
           command: |
             mkdir -p coverage-workspace
-            mv -v .coverage.* coverage-workspace
+            cp -v .coverage.* coverage-workspace
+            coverage combine
+            coverage report
 
       - persist_to_workspace:
           root: "coverage-workspace"
