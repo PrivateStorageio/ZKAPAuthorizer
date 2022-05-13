@@ -392,7 +392,7 @@ class DirectoryTestsMixin:
         try:
             result = yield Deferred.fromCoroutine(tahoe.unlink(ro_dir_cap, entry_name))
         except NotWriteableError as e:
-            print("got the error", e)
+            pass
         else:
             self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
 
