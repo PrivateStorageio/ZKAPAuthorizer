@@ -61,7 +61,6 @@ __all__ = [
 
 import os
 import re
-import sqlite3
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
@@ -83,7 +82,6 @@ from twisted.application.service import IService, Service
 from twisted.internet.defer import (
     CancelledError,
     Deferred,
-    DeferredList,
     DeferredQueue,
     succeed,
 )
