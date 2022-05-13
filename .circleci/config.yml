@@ -191,8 +191,8 @@ jobs:
           command: |
             mkdir -p coverage-workspace
             cp -v .coverage.* coverage-workspace
-            coverage combine
-            coverage report
+            venv/bin/python -m coverage combine
+            venv/bin/python -m coverage report
 
       - persist_to_workspace:
           root: "coverage-workspace"
