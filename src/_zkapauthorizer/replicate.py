@@ -673,21 +673,6 @@ def event_stream_name(high_seq: int) -> str:
     return f"event-stream-{high_seq}"
 
 
-async def prune_events_from_replica(tahoe: Tahoe, mutable: CapStr, highest_seq: int):
-    """
-    Unlink all event-streams from the remote replica in `mutable` as
-    long as they contain only events less than `highest_seq`.
-    """
-
-    entries = await tahoe.list_directory(mutable)
-    for entry in entries:
-        m = re.match("event-stream-([0-9]*)", entry)
-        if m:
-            seq = int(entry.group(1))
-            await tahoe.unlink(mutable, entry)
-
-
-
 @define
 class _ReplicationService(Service):
     """
