@@ -337,7 +337,6 @@ class DirectoryTestsMixin:
         """
         ``unlink`` removes an entry from a directory.
         """
-        tmp = FilePath(self.useFixture(TempDir()).path)
         content = b"some content"
         tahoe = self.get_client()
 
@@ -367,7 +366,6 @@ class DirectoryTestsMixin:
         """
         ``unlink`` fails to remove an entry from a read-only directory.
         """
-        tmp = FilePath(self.useFixture(TempDir()).path)
         content = b"some content"
         tahoe = self.get_client()
 
@@ -392,14 +390,11 @@ class DirectoryTestsMixin:
         ro_dir_cap = attenuate_writecap(dir_cap)
 
         try:
-            result = yield Deferred.fromCoroutine(tahoe.unlink(dir_cap, entry_name))
+            result = yield Deferred.fromCoroutine(tahoe.unlink(ro_dir_cap, entry_name))
         except NotWriteableError as e:
             print("got the error", e)
         else:
-            print("result", result)
-
-
-##            self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
+            self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
 
 
 class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
