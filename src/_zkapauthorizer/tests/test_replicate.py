@@ -423,7 +423,7 @@ class ReplicationServiceTests(TestCase):
         def get_config(rootpath, portnumfile):
             return EmptyConfig(FilePath(rootpath))
 
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: aware_now()))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
@@ -514,7 +514,7 @@ class ReplicationServiceTests(TestCase):
         def get_config(rootpath, portnumfile):
             return EmptyConfig(FilePath(rootpath))
 
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: datetime.now()))
+        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: aware_now()))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
