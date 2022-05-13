@@ -807,7 +807,9 @@ class _ReplicationService(Service):
         seqnum = 1
         rows = (
             self._connection.cursor()
-            .execute("SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'", args=())
+            .execute(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'", args=()
+            )
             .fetchall()
         )
         if len(rows):
