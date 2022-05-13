@@ -198,6 +198,8 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
     tables = cursor.fetchall()
     for (table_name,) in tables:
+        if table_name in ("sqlite_sequence", ):
+            continue
         cursor.execute(f"DROP TABLE {escape_identifier(table_name)}")
 
     # The order of statements does not necessarily guarantee that foreign key
