@@ -41,7 +41,7 @@ source =
     /nix/store/*/lib/python*/site-packages/
 
 # It looks like this in a virtualenv, like the macOS CI environment
-    /root/project/venv/lib/python3.9/site-packages/
+    venv/lib/python3.9/site-packages
 
 # There used to be a line for Windows here but Windows takes care of itself
 # now.
