@@ -66,7 +66,7 @@ jobs:
           command: |
             python -V
             python -m pip install -v --upgrade pip
-            python -m pip install -v wheel slipcover coveralls
+            python -m pip install -v wheel slipcover
             python -m pip install -v .
             python -m pip install -v  -r requirements/test.in
             pip freeze
@@ -76,14 +76,15 @@ jobs:
             python .circleci/slipcover-tests _zkapauthorizer.tests.test_private
 
       - run:
-          name: "Convert Coverage"
+          name: "Persist Coverage to Workspace"
           command: |
-            python .circleci/convert-slipcover-data
+            mkdir -p coverage-workspace
+            mv slipcover.json coverage-workspace/py39-windows.slipcover+json
 
-      - run:
-          name: "Upload Coverage"
-          command: |
-            python .circleci/upload-to-coveralls --merge=coveralls.json 0
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   macos-tests:
     parameters:
@@ -141,7 +142,7 @@ jobs:
             venv/bin/python -m pip wheel \
               --wheel-dir wheelhouse \
               -r requirements/test.in \
-              pip wheel coveralls .
+              pip wheel .
 
       - save_cache:
           paths:
@@ -157,7 +158,6 @@ jobs:
               --no-index \
               --find-links file://${PWD}/wheelhouse \
               -r requirements/test.in \
-              coveralls \
               .
 
       - run:
@@ -187,15 +187,15 @@ jobs:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
 
       - run:
-          name: "Upload Coverage"
+          name: "Persist Coverage to Workspace"
           command: |
-            # Combine data from all the workers into a single file.
-            venv/bin/python -m coverage combine \
-                --rcfile=${PWD}/.coveragerc \
-                --data-file=${PWD}/.coverage \
-                ./
+            mkdir -p coverage-workspace
+            mv -v .coverage.* coverage-workspace
 
-            venv/bin/python .circleci/upload-to-coveralls 1
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   linux-tests: &LINUX_TESTS
     parameters:
@@ -308,16 +308,15 @@ jobs:
             equal: [ "true", << parameters.coverage >> ]
           steps:
             - run:
-                name: "Upload Coverage"
+                name: "Persist Coverage to Workspace"
                 command: |
-                  # Put the data where it can be discovered.
-                  cp ./result*/.coverage ./.coverage
+                  mkdir -p coverage-workspace
+                  cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs-source >>
 
-                  # Get the tools and send the report.
-                  nix-shell -p \
-                      git \
-                      'python3.withPackages (ps: [ ps.coveralls ps.pyyaml ])' \
-                      --run 'python .circleci/upload-to-coveralls 2'
+            - persist_to_workspace:
+                root: "coverage-workspace"
+                paths:
+                  - "*"
 
   typecheck:
     <<: *LINUX_TESTS
@@ -336,21 +335,20 @@ jobs:
           <<: *PUSH_TO_CACHIX
 
 
-  # A job that tells coveralls that we've reported all of our coverage data
-  # and it can generate a combined report.
+  # A job that merges all of the coverage data and generates a report.
   finish-coverage:
     docker:
       - image: "nixos/nix:2.5.1"
 
     steps:
       - "checkout"
+      - attach_workspace:
+          at: "coverage-workspace"
+
       - run:
-          name: "Finish Parallel Report"
+          name: "Finish Coverage Report"
           command: |
-            nix-shell -p \
-                git \
-                'python3.withPackages (ps: [ ps.coveralls ps.pyyaml ])' \
-                --run 'coveralls --finish'
+            .circleci/finish-coverage-report ./coverage-workspace
 
 
 workflows:
