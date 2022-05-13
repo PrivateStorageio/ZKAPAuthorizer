@@ -28,17 +28,17 @@ from twisted.python.filepath import FilePath
 from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
 from ..model import RandomToken, UnblindedToken, aware_now
 from ..recover import recover
-from ..spending import SpendingController
 from ..replicate import (
     EventStream,
     get_events,
+    get_tahoe_lafs_direntry_pruner,
     replication_service,
     snapshot,
     with_replication,
-    get_tahoe_lafs_direntry_pruner,
 )
+from ..spending import SpendingController
 from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import Matcher, equals_database, returns, Always
+from .matchers import Always, Matcher, equals_database, returns
 from .strategies import aware_datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
@@ -553,7 +553,7 @@ class ReplicationServiceTests(TestCase):
                         ),
                     )
                 ]
-            )
+            ),
         )
 
         # do some work that isn't deemed "important"
@@ -580,14 +580,8 @@ class ReplicationServiceTests(TestCase):
         # have said "yes" to the event-stream we did upload
 
         self.assertThat(pruned, HasLength(1))
-        self.assertThat(
-            pruned[0]("event-stream-21"),
-            Equals(True)
-        )
-        self.assertThat(
-            pruned[0]("event-stream-1234"),
-            Equals(False)
-        )
+        self.assertThat(pruned[0]("event-stream-21"), Equals(True))
+        self.assertThat(pruned[0]("event-stream-1234"), Equals(False))
 
 
 class TahoeDirectoryPrunerTests(TestCase):
@@ -606,10 +600,7 @@ class TahoeDirectoryPrunerTests(TestCase):
                 # XXX docs/type-hints for this look wrong, but are
                 # accidentally right because CapStr is actually just a
                 # str
-                return {
-                    k: object()
-                    for k in ignore + delete
-                }
+                return {k: object() for k in ignore + delete}
 
             async def unlink(self, cap, name):
                 observed_deletes.append(name)
@@ -620,7 +611,7 @@ class TahoeDirectoryPrunerTests(TestCase):
         # ask the pruner to delete some of the files
         self.assertThat(
             Deferred.fromCoroutine(pruner(lambda fname: fname in delete)),
-            succeeded(Always())
+            succeeded(Always()),
         )
 
         self.assertThat(

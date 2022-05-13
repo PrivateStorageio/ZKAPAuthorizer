@@ -61,10 +61,10 @@ __all__ = [
 
 import os
 import re
+import sqlite3
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
-import sqlite3
 from typing import (
     Any,
     Awaitable,
@@ -80,7 +80,13 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed, DeferredList
+from twisted.internet.defer import (
+    CancelledError,
+    Deferred,
+    DeferredList,
+    DeferredQueue,
+    succeed,
+)
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
@@ -546,9 +552,7 @@ def get_tahoe_lafs_direntry_pruner(
         consider.
     """
 
-    async def maybe_unlink(
-        predicate: Callable[[str], bool]
-    ) -> None:
+    async def maybe_unlink(predicate: Callable[[str], bool]) -> None:
         """
         For each child of `directory_mutable_cap` delete it iff the
         predicate returns True for that name
@@ -749,7 +753,7 @@ class _ReplicationService(Service):
         # by acquiring the lock here, we won't do an event upload
         # until .queue_event_upload() is called
         if self.should_upload_eventstream(self._changes):
-            self._jobs.put("event-stream") # XXX maybe enum
+            self._jobs.put("event-stream")  # XXX maybe enum
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
@@ -776,7 +780,7 @@ class _ReplicationService(Service):
         Request an event-stream upload of outstanding events.
         """
         # XXX we want to inspect the queue to see if there's already an upload job in it
-        self._jobs.put("event-stream") # XXX maybe enum
+        self._jobs.put("event-stream")  # XXX maybe enum
         # XXX test(s) about whether we lost the logic of coalescing etc
 
     def queue_snapshot_upload(self) -> None:
@@ -785,7 +789,7 @@ class _ReplicationService(Service):
         event-streams will also be pruned after the snapshot is
         successfully uploaded.
         """
-        self._jobs.put("snapshot") # XXX maybe enum
+        self._jobs.put("snapshot")  # XXX maybe enum
 
     async def wait_for_uploads(self) -> None:
         """
@@ -808,9 +812,11 @@ class _ReplicationService(Service):
         """
         # extract sequence-number and snapshot data
         seqnum = 1
-        rows = self._connection.cursor().execute(
-            "SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'"
-        ).fetchall()
+        rows = (
+            self._connection.cursor()
+            .execute("SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'")
+            .fetchall()
+        )
         if len(rows):
             seqnum = int(rows[0][0])
 

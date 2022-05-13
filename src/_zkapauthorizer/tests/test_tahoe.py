@@ -355,18 +355,12 @@ class DirectoryTestsMixin:
 
         # ensure the file is in the directory
         entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
-        self.assertThat(
-            list(entries_before.keys()),
-            Equals([entry_name])
-        )
+        self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # unlink the file, leaving the directory empty again
         yield Deferred.fromCoroutine(tahoe.unlink(dir_cap, entry_name))
         entries_after = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
-        self.assertThat(
-            list(entries_after.keys()),
-            Equals([])
-        )
+        self.assertThat(list(entries_after.keys()), Equals([]))
 
     @inlineCallbacks
     def test_unlink_readonly(self):
@@ -391,10 +385,7 @@ class DirectoryTestsMixin:
 
         # ensure the file is in the directory
         entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
-        self.assertThat(
-            list(entries_before.keys()),
-            Equals([entry_name])
-        )
+        self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # try to unlink the file but pass only the read-only cap so we
         # expect failure
@@ -406,6 +397,8 @@ class DirectoryTestsMixin:
             print("got the error", e)
         else:
             print("result", result)
+
+
 ##            self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
 
 

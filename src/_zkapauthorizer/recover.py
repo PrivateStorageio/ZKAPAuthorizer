@@ -199,7 +199,7 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     # information in the database so these tables should be in the
     # same state as they would be if we'd been able to drop it. This
     # table exists because we use AUTOINCREMENT in the schema.
-    do_not_drop = ("sqlite_sequence", )
+    do_not_drop = ("sqlite_sequence",)
 
     # Discard all existing data in the database.
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
