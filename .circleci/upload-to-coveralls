@@ -7,3 +7,9 @@ os.environ["COVERALLS_PARALLEL"] = "true"
 
 # Send it.
 runpy.run_module("coveralls", run_name="__main__", alter_sys=True)
+
+# Also, debug info.
+sys.argv.insert(1, "--output=coveralls-report")
+runpy.run_module("coveralls", run_name="__main__", alter_sys=True)
+with open("coveralls-report") as f:
+    print(f.read())
