@@ -535,7 +535,7 @@ def get_tahoe_lafs_direntry_uploader(
 def get_tahoe_lafs_direntry_pruner(
     client: ITahoeClient,
     directory_mutable_cap: str,
-) -> Callable[Callable[[str], bool], Awaitable[None]]:
+) -> Callable[[Callable[[str], bool]], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     unlink some entries. Which entries to unlink are controlled by a predicate.
@@ -807,7 +807,7 @@ class _ReplicationService(Service):
         seqnum = 1
         rows = (
             self._connection.cursor()
-            .execute("SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'")
+            .execute("SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'", args=())
             .fetchall()
         )
         if len(rows):
@@ -816,7 +816,7 @@ class _ReplicationService(Service):
         snap = snapshot(self._connection)
 
         # upload snapshot
-        await self._uploader("snapshot", snap)
+        await self._uploader("snapshot", lambda: BytesIO(snap))
 
         # remove local event history (that should now be encapsulated
         # by the snapshot we just uploaded)

@@ -445,7 +445,7 @@ class ReplicationServiceTests(TestCase):
         async def pruner(predicate):
             pass
 
-        srv = replication_service(tvs.store._connection, uploader, pruner)
+        srv = replication_service(tvs.store._connection, uploader, pruner)  # type: ignore
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -503,7 +503,7 @@ class ReplicationServiceTests(TestCase):
         # events in the store
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
 
-        srv.queue_snapshot_upload()
+        srv.queue_snapshot_upload()  # type: ignore
 
     def test_snapshot_prune(self) -> None:
         """
@@ -571,7 +571,7 @@ class ReplicationServiceTests(TestCase):
         self.assertNotEqual(tuple(), get_events(tvs.store._connection).changes)
 
         # trigger a snapshot upload
-        srv.queue_snapshot_upload()
+        srv.queue_snapshot_upload()  # type: ignore
 
         # now there should be no local changes
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
