@@ -357,6 +357,8 @@ workflows:
     - "typecheck":
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
+        # factoring mistake makes this necessary
+        coverage: "false"
     - "linux-tests":
         name: "Linux tests, python 3.9"
         py-version: "39"
