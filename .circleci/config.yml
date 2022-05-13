@@ -305,6 +305,8 @@ jobs:
 
       - run:
           name: "Upload Coverage"
+          when:
+            - equal: [ "true", << parameters.covereage >> ]
           command: |
             # Put the data where it can be discovered.
             cp ./result*/.coverage ./.coverage
