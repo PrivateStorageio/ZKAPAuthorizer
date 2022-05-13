@@ -303,19 +303,21 @@ jobs:
               bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
             fi
 
-      - run:
-          name: "Upload Coverage"
-          when:
+      - when:
+          condition:
             - equal: [ "true", << parameters.coverage >> ]
-          command: |
-            # Put the data where it can be discovered.
-            cp ./result*/.coverage ./.coverage
+          steps:
+            - run:
+                name: "Upload Coverage"
+                command: |
+                  # Put the data where it can be discovered.
+                  cp ./result*/.coverage ./.coverage
 
-            # Get the tools and send the report.
-            nix-shell -p \
-                git \
-                'python3.withPackages (ps: [ ps.coveralls ps.pyyaml ])' \
-                --run 'python .circleci/upload-to-coveralls 2'
+                  # Get the tools and send the report.
+                  nix-shell -p \
+                      git \
+                      'python3.withPackages (ps: [ ps.coveralls ps.pyyaml ])' \
+                      --run 'python .circleci/upload-to-coveralls 2'
 
   typecheck:
     <<: *LINUX_TESTS
