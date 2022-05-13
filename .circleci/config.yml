@@ -305,7 +305,7 @@ jobs:
 
       - when:
           condition:
-            - equal: [ "true", << parameters.coverage >> ]
+            equal: [ "true", << parameters.coverage >> ]
           steps:
             - run:
                 name: "Upload Coverage"
