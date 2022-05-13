@@ -6,9 +6,34 @@ import sys
 os.environ["COVERALLS_PARALLEL"] = "true"
 
 # coveralls-python makes a particular choice about how to assign job ids.
-# It's not compatible with our CI configuration.  Lie to it so it does
-# something useful for us.
-os.environ["CIRCLE_NODE_INDEX"] = sys.argv.pop()
+# It's not compatible with our CI configuration.
+
+# Stop it from detecting circleci and overriding everything else we do.
+del os.environ["CIRCLECI"]
+
+# Now tell it how we want it to work.
+
+# Just an identifier so coveralls can report where the data came from.
+os.environ["CI_NAME"] = "circleci"
+
+# This gives coveralls a back-reference to a resource in the CI system to
+# place in its UI.
+os.environ["CI_BUILD_URL"] = os.environ["CIRCLE_BUILD_URL"]
+
+# Likewise, this appears in the UI to help describe what's being reported.
+os.environ["CI_BRANCH"] = os.environ["CIRCLE_BRANCH"]
+
+# This identifies an overall "build".  A "build" comprises one or more "jobs".
+# Each CircleCI job we define which collects and submits coverage information
+# is a "job".  All of those should share a CI_BUILD_NUMBER.  We can do this by
+# using the CircleCI workflow identifier which is shared in exactly that way.
+os.environ["CI_BUILD_NUMBER"] = os.environ["CIRCLE_WORKFLOW_ID"]
+
+# This identifies a "job" within a "build".  Coveralls suggests it is best if
+# it is a stable identifier.  For example, the (Python 3.9, Windows 2022) job
+# should always be 7.  We let our caller tell us what the stable identifier
+# for whatever we're about to upload is.
+os.environ["CI_JOB_ID"] = sys.argv.pop()
 
 # Send it.
 runpy.run_module("coveralls", run_name="__main__", alter_sys=True)
