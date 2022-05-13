@@ -189,6 +189,7 @@ jobs:
       - run:
           name: "Persist Coverage to Workspace"
           command: |
+            find
             mkdir -p coverage-workspace
             cp -v .coverage.* coverage-workspace
             venv/bin/python -m coverage combine
