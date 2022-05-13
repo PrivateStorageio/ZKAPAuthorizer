@@ -5,13 +5,27 @@ from json import load
 from base64 import b64encode
 from hashlib import md5
 
-def main(workspace_path: str, output_path: str) -> None:
-    for child in Path(workspace_path).glob("*.slipcover+json"):
+def main(workspace: str, output: str) -> None:
+    workspace_dir = Path(workspace)
+    output_dir = Path(output)
+    for child in workspace_dir.glob("*.slipcover+json"):
         with child.open() as infile:
-            with (Path(output_path) / (child.stem + ".lcov")).open("w") as outfile:
-                slipcover2lcov(infile, outfile)
+            output_path = output / (child.stem + ".lcov")
+            with output_path.open("w") as outfile:
+                slipcover2lcov(infile, outfile, make_relative_name)
 
-def slipcover2lcov(infile, outfile) -> None:
+
+def make_relative_name(filename):
+    prefixes = [
+        "/root/project/venv/lib/python3.9/site-packages/",
+    ]
+    for prefix in prefixes:
+        if filename.startswith(prefix):
+            return "src/" + filename[len(prefix):]
+    return filename
+
+
+def slipcover2lcov(infile, outfile, transform_filename) -> None:
     # slipcover data looks like
     # {"files": {"filename": {"executed_lines": [ints], "missing_lines": [ints]}}}
     #
@@ -30,7 +44,7 @@ def slipcover2lcov(infile, outfile) -> None:
     # <repeat>
     slipcover_data = load(infile)
     for filename, info in slipcover_data["files"].items():
-        outfile.writelines(one_lcov_entry(filename, info))
+        outfile.writelines(one_lcov_entry(transform_filename(filename), info))
 
 
 def one_lcov_entry(filename: str, info: dict) -> Iterator[str]:
