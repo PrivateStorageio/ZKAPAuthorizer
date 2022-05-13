@@ -26,7 +26,7 @@ from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
-from ..model import RandomToken, UnblindedToken, aware_now
+from ..model import RandomToken, aware_now
 from ..recover import recover
 from ..replicate import (
     EventStream,
@@ -561,7 +561,7 @@ class ReplicationServiceTests(TestCase):
             tokens_to_passes=tvs.redeemer.tokens_to_passes,
             store=tvs.store,
         )
-        group0 = pass_factory.get(b"message0", 10)
+        pass_factory.get(b"message0", 10)
 
         self.assertNotEqual(tuple(), get_events(tvs.store._connection).changes)
 
