@@ -194,11 +194,18 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     """
     statements = statements_from_snapshot(snapshot)
 
+    # There are certain tables that can't be dropped .. however, we
+    # should be refusing to run "recover" at all if there's useful
+    # information in the database so these tables should be in the
+    # same state as they would be if we'd been able to drop it. This
+    # table exists because we use AUTOINCREMENT in the schema.
+    do_not_drop = ("sqlite_sequence", )
+
     # Discard all existing data in the database.
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
     tables = cursor.fetchall()
     for (table_name,) in tables:
-        if table_name in ("sqlite_sequence", ):
+        if table_name in do_not_drop:
             continue
         cursor.execute(f"DROP TABLE {escape_identifier(table_name)}")
 

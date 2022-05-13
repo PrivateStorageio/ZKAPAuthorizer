@@ -214,7 +214,7 @@ _UPGRADES = {
         -- that modify the database -- except statements which modify this table
         --
         -- Note that 'AUTOINCREMENT' is required to create the
-        -- sqlite_sequence table, upon which we depend to discover the
+        -- 'sqlite_sequence' table, upon which we depend to discover the
         -- next sequence number
         CREATE TABLE [event-stream] (
             -- A sequence number which allows us to identify specific positions in
