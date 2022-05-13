@@ -394,7 +394,9 @@ class DirectoryTestsMixin:
         except NotWriteableError as e:
             pass
         else:
-            self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
+            self.fail(
+                f"Expected link to fail with NotWriteableError, got {result!r} instead"
+            )
 
 
 class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
