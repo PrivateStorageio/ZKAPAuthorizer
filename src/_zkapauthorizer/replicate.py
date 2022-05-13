@@ -79,12 +79,7 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import (
-    CancelledError,
-    Deferred,
-    DeferredQueue,
-    succeed,
-)
+from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
