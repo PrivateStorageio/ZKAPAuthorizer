@@ -5,6 +5,11 @@ import sys
 # Note we're doing more than one build.
 os.environ["COVERALLS_PARALLEL"] = "true"
 
+# coveralls-python makes a particular choice about how to assign job ids.
+# It's not compatible with our CI configuration.  Lie to it so it does
+# something useful for us.
+os.environ["CIRCLE_NODE_INDEX"] = sys.argv.pop()
+
 # Send it.
 runpy.run_module("coveralls", run_name="__main__", alter_sys=True)
 

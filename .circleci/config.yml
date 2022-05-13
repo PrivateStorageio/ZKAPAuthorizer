@@ -83,7 +83,7 @@ jobs:
       - run:
           name: "Upload Coverage"
           command: |
-            python .circleci/upload-to-coveralls --merge=coveralls.json
+            python .circleci/upload-to-coveralls --merge=coveralls.json 0
 
   macos-tests:
     parameters:
@@ -195,11 +195,13 @@ jobs:
                 --data-file=${PWD}/.coverage \
                 ./
 
-            venv/bin/python .circleci/upload-to-coveralls
+            venv/bin/python .circleci/upload-to-coveralls 1
 
   linux-tests: &LINUX_TESTS
     parameters:
       py-version:
+        type: "string"
+      coverage:
         type: "string"
       tahoe-lafs-source:
         # The name of a niv source in nix/sources.json which corresponds to
@@ -277,7 +279,7 @@ jobs:
             # our build.
             nix-build --cores 5 tests.nix \
               --argstr hypothesisProfile ci \
-              --arg collectCoverage true \
+              --arg collectCoverage << parameters.coverage >> \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
               --argstr python python<< parameters.py-version >> \
               --argstr testSuite _zkapauthorizer.tests.test_private
@@ -311,7 +313,7 @@ jobs:
             nix-shell -p \
                 git \
                 'python3.withPackages (ps: [ ps.coveralls ps.pyyaml ])' \
-                --run 'python .circleci/upload-to-coveralls'
+                --run 'python .circleci/upload-to-coveralls 2'
 
   typecheck:
     <<: *LINUX_TESTS
@@ -359,6 +361,7 @@ workflows:
         name: "Linux tests, python 3.9"
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
+        covereage: "true"
 
     - "linux-tests":
         name: "Linux tests, python 3.9, Tahoe-LAFS master"
@@ -369,6 +372,7 @@ workflows:
         # incompatibilities early enough to prevent them from going into a
         # release.
         tahoe-lafs-source: "tahoe-lafs-master"
+        coverage: "false"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
