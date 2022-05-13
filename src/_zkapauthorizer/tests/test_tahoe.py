@@ -332,6 +332,82 @@ class DirectoryTestsMixin:
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
             )
 
+    @inlineCallbacks
+    def test_unlink(self):
+        """
+        ``unlink`` removes an entry from a directory.
+        """
+        tmp = FilePath(self.useFixture(TempDir()).path)
+        content = b"some content"
+        tahoe = self.get_client()
+
+        # create a directory and put one entry in it
+        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        entry_name = "foo"
+        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
+        yield Deferred.fromCoroutine(
+            tahoe.link(
+                dir_cap,
+                entry_name,
+                entry_cap,
+            ),
+        )
+
+        # ensure the file is in the directory
+        entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        self.assertThat(
+            list(entries_before.keys()),
+            Equals([entry_name])
+        )
+
+        # unlink the file, leaving the directory empty again
+        yield Deferred.fromCoroutine(tahoe.unlink(dir_cap, entry_name))
+        entries_after = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        self.assertThat(
+            list(entries_after.keys()),
+            Equals([])
+        )
+
+    @inlineCallbacks
+    def test_unlink_readonly(self):
+        """
+        ``unlink`` fails to remove an entry from a read-only directory.
+        """
+        tmp = FilePath(self.useFixture(TempDir()).path)
+        content = b"some content"
+        tahoe = self.get_client()
+
+        # create a directory and put one entry in it
+        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        entry_name = "foo"
+        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
+        yield Deferred.fromCoroutine(
+            tahoe.link(
+                dir_cap,
+                entry_name,
+                entry_cap,
+            ),
+        )
+
+        # ensure the file is in the directory
+        entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        self.assertThat(
+            list(entries_before.keys()),
+            Equals([entry_name])
+        )
+
+        # try to unlink the file but pass only the read-only cap so we
+        # expect failure
+        ro_dir_cap = attenuate_writecap(dir_cap)
+
+        try:
+            result = yield Deferred.fromCoroutine(tahoe.unlink(dir_cap, entry_name))
+        except NotWriteableError as e:
+            print("got the error", e)
+        else:
+            print("result", result)
+##            self.fail(f"Expected link to fail with NotWriteableError, got {result!r} instead")
+
 
 class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
     """

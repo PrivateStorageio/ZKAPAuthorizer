@@ -639,6 +639,7 @@ class AccumulatedChanges:
         return cls(important, sum(map(len, bound_statements)))
 
     def __add__(self, other) -> AccumulatedChanges:
+        # if below args are backwards, mypy doesn't seem to complain; why?
         return AccumulatedChanges(
             self.important or other.important, self.size + other.size
         )

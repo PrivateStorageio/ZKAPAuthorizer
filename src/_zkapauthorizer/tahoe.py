@@ -476,6 +476,18 @@ class MemoryGrid:
                 f"Cannot link entry into non-directory capability ({dir_cap[:7]})"
             )
 
+    def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
+        d = capability_from_string(dir_cap)
+        if d.is_readonly():
+            raise NotWriteableError()
+        dirobj = self._objects[dir_cap]
+        if isinstance(dirobj, _Directory):
+            del dirobj.children[entry_name]
+        else:
+            raise ValueError(
+                f"Cannot unlink entry from non-directory capability ({dir_cap[:7]})"
+            )
+
     def list_directory(self, dir_cap: CapStr) -> dict[CapStr, list[Any]]:
         def kind(entry):
             if isinstance(entry, _Directory):

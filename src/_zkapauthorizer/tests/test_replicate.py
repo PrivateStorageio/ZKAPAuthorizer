@@ -22,6 +22,7 @@ from testtools.matchers import (
     raises,
 )
 from testtools.matchers._higherorder import MismatchesAll
+from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
@@ -35,9 +36,10 @@ from ..replicate import (
     replication_service,
     snapshot,
     with_replication,
+    get_tahoe_lafs_direntry_pruner,
 )
 from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import Matcher, equals_database, returns
+from .matchers import Matcher, equals_database, returns, Always
 from .strategies import datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
@@ -583,7 +585,49 @@ class ReplicationServiceTests(TestCase):
             pruned[0]("event-stream-21"),
             Equals(True)
         )
+        self.assertThat(
+            pruned[0]("event-stream-1234"),
+            Equals(False)
+        )
 
+
+class TahoeDirectoryPrunerTests(TestCase):
+    """
+    Tests for `get_tahoe_lafs_direntry_pruner`
+    """
+
+    def test_prune(self):
+
+        ignore = ["one", "two"]
+        delete = ["three", "four"]
+        observed_deletes = []
+
+        class FakeClient:
+            async def list_directory(self, cap):
+                # XXX docs/type-hints for this look wrong, but are
+                # accidentally right because CapStr is actually just a
+                # str
+                return {
+                    k: object()
+                    for k in ignore + delete
+                }
+
+            async def unlink(self, cap, name):
+                observed_deletes.append(name)
+
+        client = FakeClient()
+        pruner = get_tahoe_lafs_direntry_pruner(client, "fake capability")
+
+        # ask the pruner to delete some of the files
+        self.assertThat(
+            Deferred.fromCoroutine(pruner(lambda fname: fname in delete)),
+            succeeded(Always())
+        )
+
+        self.assertThat(
+            observed_deletes,
+            Equals(delete),
+        )
 
 
 class HypothesisReplicationServiceTests(TestCase):
