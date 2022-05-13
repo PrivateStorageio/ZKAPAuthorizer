@@ -1,6 +1,11 @@
 import os
 import runpy
 import sys
+import pprint
+
+# Almost all of the behavior implemented here is determined by the
+# environment.  So ...
+pprint.pprint(dict(os.environ))
 
 # Note we're doing more than one build.
 os.environ["COVERALLS_PARALLEL"] = "true"
