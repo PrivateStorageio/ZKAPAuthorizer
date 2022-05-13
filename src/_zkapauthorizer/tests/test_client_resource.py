@@ -32,7 +32,6 @@ from hypothesis.strategies import (
     SearchStrategy,
     binary,
     builds,
-    datetimes,
     dictionaries,
     fixed_dictionaries,
     integers,
@@ -94,6 +93,7 @@ from ..model import (
     Redeeming,
     Unpaid,
     Voucher,
+    aware_now,
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
@@ -114,6 +114,7 @@ from .json import loads
 from .matchers import between, matches_json, matches_response
 from .strategies import (
     api_auth_tokens,
+    aware_datetimes,
     client_doublespendredeemer_configurations,
     client_dummyredeemer_configurations,
     client_errorredeemer_configurations,
@@ -730,7 +731,7 @@ class RecoverTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         create(root.store, existing_state)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
@@ -852,7 +853,7 @@ class RecoverTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now, make_downloader)
+        root = root_from_config(config, aware_now, make_downloader)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -884,7 +885,7 @@ class RecoverTests(TestCase):
         reason = "some interesting information"
         fail_downloader = make_fail_downloader(Exception(reason))
         get_fail_downloader = lambda cap: fail_downloader
-        root = root_from_config(config, datetime.now, get_fail_downloader)
+        root = root_from_config(config, aware_now, get_fail_downloader)
         agent = RequestTraversalAgent(root)
 
         # Kick off the recovery attempt.
@@ -960,7 +961,7 @@ class UnblindedTokenTests(TestCase):
                 min_size=1,
             ),
         ),
-        datetimes(),
+        aware_datetimes(),
     )
     def test_latest_lease_maintenance_spending(
         self, get_config, api_auth_token, size_observations, now
@@ -1068,7 +1069,7 @@ class VoucherTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         data = BytesIO(dumps_utf8({"voucher": voucher.decode("ascii")}))
         requesting = authorized_request(
@@ -1101,7 +1102,7 @@ class VoucherTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -1132,7 +1133,7 @@ class VoucherTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         url = "http://127.0.0.1/voucher/{}".format(
             quote(
@@ -1165,7 +1166,7 @@ class VoucherTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -1183,7 +1184,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_nonredeemer_configurations()),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_get_known_voucher_redeeming(self, config, api_auth_token, now, voucher):
@@ -1215,7 +1216,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_dummyredeemer_configurations()),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_get_known_voucher_redeemed(self, config, api_auth_token, now, voucher):
@@ -1247,7 +1248,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_doublespendredeemer_configurations()),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_get_known_voucher_doublespend(self, config, api_auth_token, now, voucher):
@@ -1279,7 +1280,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_unpaidredeemer_configurations()),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_get_known_voucher_unpaid(self, config, api_auth_token, now, voucher):
@@ -1311,7 +1312,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_errorredeemer_configurations(TRANSIENT_ERROR)),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         vouchers(),
     )
     def test_get_known_voucher_error(self, config, api_auth_token, now, voucher):
@@ -1404,7 +1405,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         lists(vouchers(), unique=True),
     )
     def test_list_vouchers(self, config, api_auth_token, now, vouchers):
@@ -1439,7 +1440,7 @@ class VoucherTests(TestCase):
     @given(
         direct_tahoe_configs(client_unpaidredeemer_configurations()),
         api_auth_tokens(),
-        datetimes(),
+        aware_datetimes(),
         lists(vouchers(), unique=True),
     )
     def test_list_vouchers_transient_states(
@@ -1687,7 +1688,7 @@ class CalculatePriceTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         self.assertThat(
             authorized_request(
@@ -1747,7 +1748,7 @@ class CalculatePriceTests(TestCase):
             config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
 
         expected_price = PriceCalculator(
