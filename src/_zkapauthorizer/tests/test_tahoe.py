@@ -176,7 +176,7 @@ class UploadDownloadTestsMixin:
                 Contains("Files have no children named"),
             )
         else:
-            self.fail(f"Expected TahoeAPIError, got {result!r}")
+            self.fail(f"Expected TahoeAPIError, got {result!r}")  # pragma: nocover
 
 
 class UploadDownloadIntegrationTests(
@@ -276,7 +276,7 @@ class DirectoryTestsMixin:
         except ValueError:
             pass
         else:
-            self.fail(f"expected ValueError, got {result!r}")
+            self.fail(f"expected ValueError, got {result!r}")  # pragma: nocover
 
     @inlineCallbacks
     def test_link(self):
@@ -330,7 +330,7 @@ class DirectoryTestsMixin:
         else:
             self.fail(
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
-            )
+            )  # pragma: nocover
 
     @inlineCallbacks
     def test_unlink(self):
@@ -396,7 +396,7 @@ class DirectoryTestsMixin:
         else:
             self.fail(
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
-            )
+            )  # pragma: nocover
 
     @inlineCallbacks
     def test_unlink_non_directory(self):
@@ -425,7 +425,7 @@ class DirectoryTestsMixin:
         else:
             self.fail(
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
-            )
+            )  # pragma: nocover
 
 
 class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
