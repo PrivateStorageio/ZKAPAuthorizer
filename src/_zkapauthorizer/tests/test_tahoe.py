@@ -398,6 +398,35 @@ class DirectoryTestsMixin:
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
             )
 
+    @inlineCallbacks
+    def test_unlink_non_directory(self):
+        """
+        ``unlink`` fails to remove an entry from "directory capability"
+        that isn't actually a directory
+        """
+        content = b"some content"
+        tahoe = self.get_client()
+
+        # create a non-directory
+        content = b"some content"
+        non_dir_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
+
+        # try to unlink some file from the non-directory (expecting
+        # failure)
+        try:
+            result = yield Deferred.fromCoroutine(tahoe.unlink(non_dir_cap, "foo"))
+        except NotWriteableError:
+            pass
+        except TahoeAPIError as e:
+            self.assertThat(
+                e.status,
+                Equals(400)
+            )
+        else:
+            self.fail(
+                f"Expected link to fail with NotWriteableError, got {result!r} instead"
+            )
+
 
 class DirectoryIntegrationTests(IntegrationMixin, DirectoryTestsMixin, TestCase):
     """
