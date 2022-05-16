@@ -61,6 +61,7 @@ __all__ = [
 
 import os
 import re
+from enum import Enum
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
@@ -94,6 +95,14 @@ Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
 
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
+
+
+class ReplicationJob(Enum):
+    """
+    The kinds of jobs that the Replication queue knows about
+    """
+    event_stream = 1
+    snapshot = 2
 
 
 @frozen
@@ -746,7 +755,7 @@ class _ReplicationService(Service):
         # by acquiring the lock here, we won't do an event upload
         # until .queue_event_upload() is called
         if self.should_upload_eventstream(self._changes):
-            self._jobs.put("event-stream")  # XXX maybe enum
+            self._jobs.put(ReplicationJobType.event_stream)
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
@@ -773,7 +782,7 @@ class _ReplicationService(Service):
         Request an event-stream upload of outstanding events.
         """
         # XXX we want to inspect the queue to see if there's already an upload job in it
-        self._jobs.put("event-stream")  # XXX maybe enum
+        self._jobs.put(ReplicationJob.event_stream)
         # XXX test(s) about whether we lost the logic of coalescing etc
 
     def queue_snapshot_upload(self) -> None:
@@ -782,7 +791,7 @@ class _ReplicationService(Service):
         event-streams will also be pruned after the snapshot is
         successfully uploaded.
         """
-        self._jobs.put("snapshot")  # XXX maybe enum
+        self._jobs.put(ReplicationJob.snapshot)
 
     async def wait_for_uploads(self) -> None:
         """
