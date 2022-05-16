@@ -444,7 +444,14 @@ class MemoryGrid:
     def upload(self, data: bytes) -> CapStr:
         def encode(s: str) -> str:
             return b32encode(s.encode("ascii")).decode("ascii")
-        cap = "URI:CHK:{}:{}:{}:{}:{}".format(encode("{:016}".format(self._counter)), encode("{:032}".format(self._counter)), self._counter, self._counter, self._counter)
+
+        cap = "URI:CHK:{}:{}:{}:{}:{}".format(
+            encode("{:016}".format(self._counter)),
+            encode("{:032}".format(self._counter)),
+            self._counter,
+            self._counter,
+            self._counter,
+        )
         self._objects[cap] = data
         self._counter += 1
         return cap

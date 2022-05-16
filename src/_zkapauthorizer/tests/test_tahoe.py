@@ -409,7 +409,9 @@ class DirectoryTestsMixin:
 
         # create a non-directory
         content = b"some content"
-        non_dir_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
+        non_dir_cap = yield Deferred.fromCoroutine(
+            tahoe.upload(lambda: BytesIO(content))
+        )
 
         # try to unlink some file from the non-directory (expecting
         # failure)
@@ -418,10 +420,7 @@ class DirectoryTestsMixin:
         except NotWriteableError:
             pass
         except TahoeAPIError as e:
-            self.assertThat(
-                e.status,
-                Equals(400)
-            )
+            self.assertThat(e.status, Equals(400))
         else:
             self.fail(
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
