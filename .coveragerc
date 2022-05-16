@@ -38,7 +38,7 @@ source =
        src/
 
        # A Nix build embeds source paths like this one.
-       /nix/store/*-python*-circleci-python-coverage-*/lib/python*/site-packages/
+       /nix/store/*-python*-zero-knowledge-access-pass-authorizer-*/lib/python*/site-packages/
 
        # A Windows build embeds source paths like this one.
        C:\tools\miniconda3\Lib\site-packages\
