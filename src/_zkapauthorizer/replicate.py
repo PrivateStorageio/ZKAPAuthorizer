@@ -748,12 +748,11 @@ class _ReplicationService(Service):
             self._unreplicated_connection
         )
 
-        # XXX any circumstances under which we should upload a snapshot immediately?
-        # -> if we did, no eventstream
-        # we should upload a snapshot immediately if there isn't one already
+        # we should upload a snapshot immediately if there isn't one
+        # already (but also that's async-work to determine..) and if
+        # we _do_ decide to upload a snapshot, we should _not_ upload
+        # an event-stream immediately
 
-        # by acquiring the lock here, we won't do an event upload
-        # until .queue_event_upload() is called
         if self.should_upload_eventstream(self._changes):
             self._jobs.put(ReplicationJobType.event_stream)
 
