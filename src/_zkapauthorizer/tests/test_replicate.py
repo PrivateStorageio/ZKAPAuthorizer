@@ -415,9 +415,6 @@ class ReplicationServiceTests(TestCase):
         """
         Making changes to the voucher store while replication is turned on
         causes event-stream objects to be uploaded.
-
-        Uploading a snapshot causes those events to be pruned from the
-        replica
         """
 
         def get_config(rootpath, portnumfile):
@@ -502,8 +499,6 @@ class ReplicationServiceTests(TestCase):
         # since we've uploaded everything, there should be no
         # events in the store
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
-
-        srv.queue_snapshot_upload()  # type: ignore
 
     def test_snapshot_prune(self) -> None:
         """
