@@ -41,7 +41,7 @@ source =
        /nix/store/*-python*-zero-knowledge-access-pass-authorizer-*/lib/python*/site-packages/
 
        # Then the Nix test step combines the data files and rewrites the paths to look like this.
-       /tmp/nix-build-zkapauthorizer-tests.drv-*/
+       /tmp/nix-build-zkapauthorizer-tests.drv-*/src/
 
        # A Windows build embeds source paths like this one.
        C:\tools\miniconda3\Lib\site-packages\
