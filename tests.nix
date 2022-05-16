@@ -76,9 +76,10 @@ let
               --data-file "$out/.coverage" \
               ./
 
-          # Change to the source directory so `coverage html` can find the
-          # source files.
-          pushd ${zkapauthorizer.src}
+          # We're in /build and the coverage data is going to tell `coverage
+          # html` to look in src/... where it won't find it.  So, make it
+          # available beneath that path.
+          ln -s ${zkapauthorizer.src}/src
 
           # Generate an HTML report too.
           echo "Generating HTML report"
@@ -86,9 +87,6 @@ let
               --rcfile ${zkapauthorizer.src}/.coveragerc \
               --data-file "$out/.coverage" \
               --directory "$out/htmlcov"
-
-          # Go back, not that there's anything else to do.
-          popd
         ''
       }
     '';
