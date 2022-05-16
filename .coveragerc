@@ -25,23 +25,23 @@ omit =
 # file).
     */_zkapauthorizer/_version.py
 
-# Record relative paths.  This makes it a bit easier to combine coverage data
-# from different systems.  Specifically, it seems to be what makes `coverage
-# combine` in the Nix build environment actually produce relative paths
-# beneath `src/` instead of absolute paths inside /nix/store.  I don't
-# *completely* understand why this setting matters to that behavior...
-relative_files = true
+# Record absolute paths.  This makes `coverage combine` successfully rewrite
+# paths from different systems as long as our `[paths]source` configuration is
+# correct.
+relative_files = False
 
 [paths]
 source =
-# It looks like this in the checkout
-    src/
+        # This is the nice path we would like to end up with.  It must also be
+        # where the source is actually available when `coverage combine` is
+        # run.
+       src/
 
-# It looks like this in the Nix build environment
-    /nix/store/*/lib/python*/site-packages/
+       # A Nix build embeds source paths like this one.
+       /nix/store/*-python*-circleci-python-coverage-*/lib/python*/site-packages/
 
-# It looks like this in a virtualenv, like the macOS CI environment
-    venv/lib/python3.9/site-packages/
+       # A Windows build embeds source paths like this one.
+       C:\tools\miniconda3\Lib\site-packages\
 
-# There used to be a line for Windows here but Windows takes care of itself
-# now.
+       # A macOS build embeds source paths like this one.
+       /Users/distiller/project/venv/lib/python*/site-packages/
