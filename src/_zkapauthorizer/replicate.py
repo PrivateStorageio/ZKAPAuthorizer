@@ -780,9 +780,8 @@ class _ReplicationService(Service):
         """
         Request an event-stream upload of outstanding events.
         """
-        # XXX we want to inspect the queue to see if there's already an upload job in it
-        self._jobs.put(ReplicationJob.event_stream)
-        # XXX test(s) about whether we lost the logic of coalescing etc
+        if ReplicationJob.event_stream not in self._jobs.pending:
+            self._jobs.put(ReplicationJob.event_stream)
 
     def queue_snapshot_upload(self) -> None:
         """
@@ -790,7 +789,8 @@ class _ReplicationService(Service):
         event-streams will also be pruned after the snapshot is
         successfully uploaded.
         """
-        self._jobs.put(ReplicationJob.snapshot)
+        if ReplicationJob.snapshot not in self._jobs.pending:
+            self._jobs.put(ReplicationJob.snapshot)
 
     async def wait_for_uploads(self) -> None:
         """
@@ -799,12 +799,12 @@ class _ReplicationService(Service):
         """
         while True:
             job = await self._jobs.get()
-            if job == "event-stream":
+            if job == ReplicationJob.event_stream:
                 await self._do_one_event_upload()
-            elif job == "snapshot":
+            elif job == ReplicationJob.snapshot:
                 await self._do_one_snapshot_upload()
             else:
-                raise Exception("internal error")
+                raise Exception("internal error")  # pragma: nocover
 
     async def _do_one_snapshot_upload(self) -> None:
         """
