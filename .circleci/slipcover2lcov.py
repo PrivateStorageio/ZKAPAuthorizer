@@ -10,7 +10,7 @@ def main(workspace: str, output: str) -> None:
     output_dir = Path(output)
     for child in workspace_dir.glob("*.slipcover+json"):
         with child.open() as infile:
-            output_path = output / (child.stem + ".lcov")
+            output_path = output_dir / (child.stem + ".lcov")
             with output_path.open("w") as outfile:
                 slipcover2lcov(infile, outfile, make_relative_name)
 
