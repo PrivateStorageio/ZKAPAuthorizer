@@ -7,7 +7,6 @@ to support testing the replication/recovery system.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
@@ -17,6 +16,7 @@ from attrs import frozen
 from sqlparse import parse
 
 SQLType = Union[int, float, str, bytes, datetime, None]
+SQLRuntimeType = (int, float, str, bytes, datetime, type(None))
 
 
 class AbstractCursor(Protocol):
@@ -161,22 +161,7 @@ class Insert:
             f"VALUES ({placeholders})"
         )
 
-    def bound_statement(self, cursor):
-        """
-        :returns: the statement with all values interpolated into it
-            rather than as separate values
-        """
-        names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
-        values = ", ".join(
-            (quote_sql_value(cursor, value) for value in self.arguments())
-        )
-        return (
-            f"INSERT INTO {escape_identifier(self.table_name)} "
-            f"({names}) "
-            f"VALUES ({values})"
-        )
-
-    def arguments(self):
+    def arguments(self) -> tuple[SQLType, ...]:
         return self.fields
 
 
@@ -196,30 +181,6 @@ def quote_sql_value(cursor: Cursor, value: SQLType) -> str:
         assert isinstance(result, str)
         return result
     raise ValueError(f"Do not know how to quote value of type {type(value)}")
-
-
-def bind_arguments(cursor: Cursor, statement: str, args: tuple[SQLType, ...]) -> str:
-    """
-    Interpolate the arguments into position in the statement. For
-    example, a statement 'INSERT INTO foo VALUES (?, ?)' and args (1,
-    'bar') should result in 'INSERT INTO foo VALUES (1, "bar")'
-
-    This is a simple substitution based on the ? character, which MUST
-    NOT appear elsewhere in the SQL.
-
-    :raise: ``ValueError`` if it looks like the ? placeholders do not agree
-        with the given arguments.
-    """
-    if statement.count("?") != len(args):
-        raise ValueError(f"Cannot bind arguments for {statement!r}")
-
-    to_sub = [] if args is None else list(args)
-
-    def substitute_args(match):
-        return quote_sql_value(cursor, to_sub.pop(0))
-
-    # replace subsequent "?" characters with the next argument, quoted
-    return re.sub(r"([?])", substitute_args, statement)
 
 
 @frozen
@@ -247,19 +208,7 @@ class Update:
         )
         return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
 
-    def bound_statement(self, cursor):
-        """
-        :returns: the statement with all values interpolated into it
-            rather than as separate values
-        """
-        field_names = list(name for (name, _) in self.table.columns)
-        assignments = ", ".join(
-            f"{escape_identifier(name)} = {quote_sql_value(cursor, value)}"
-            for name, value in zip(field_names, self.fields)
-        )
-        return f"UPDATE {escape_identifier(self.table_name)} SET {assignments}"
-
-    def arguments(self):
+    def arguments(self) -> tuple[SQLType, ...]:
         return self.fields
 
 
@@ -276,15 +225,8 @@ class Select:
     def statement(self):
         return f"SELECT * FROM {escape_identifier(self.table_name)}"
 
-    def bound_statement(self, cursor):
-        """
-        :returns: the statement with all values interpolated into it
-            rather than as separate values
-        """
-        return self.statement()
-
-    def arguments(self):
-        return tuple()
+    def arguments(self) -> tuple[()]:
+        return ()
 
 
 @frozen
@@ -302,14 +244,7 @@ class Delete:
     def statement(self):
         return f"DELETE FROM {escape_identifier(self.table_name)}"
 
-    def bound_statement(self, cursor):
-        """
-        :returns: the statement with all values interpolated into it
-            rather than as separate values
-        """
-        return self.statement()
-
-    def arguments(self):
+    def arguments(self) -> tuple[()]:
         return ()
 
 

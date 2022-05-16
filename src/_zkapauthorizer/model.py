@@ -889,17 +889,6 @@ class LeaseMaintenanceActivity(object):
     finished: datetime = field(validator=aware_datetime_validator)
 
 
-# store = ...
-# x = store.start_lease_maintenance()
-# x.observe(size=123)
-# x.observe(size=456)
-# ...
-# x.finish()
-#
-# x = store.get_latest_lease_maintenance_activity()
-# xs.started, xs.passes_required, xs.finished
-
-
 @frozen(order=True)
 class UnblindedToken(object):
     """

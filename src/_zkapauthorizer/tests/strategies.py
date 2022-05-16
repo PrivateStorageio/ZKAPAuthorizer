@@ -61,7 +61,16 @@ from ..model import (
     Unpaid,
     Voucher,
 )
-from ..sql import Column, Delete, Insert, Select, StorageAffinity, Table, Update
+from ..sql import (
+    Column,
+    Delete,
+    Insert,
+    Select,
+    SQLType,
+    StorageAffinity,
+    Table,
+    Update,
+)
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
@@ -1270,6 +1279,20 @@ _storage_affinity_strategies = {
     StorageAffinity.REAL: _sql_floats,
     StorageAffinity.NUMERIC: one_of(_sql_integer, _sql_floats),
 }
+
+
+def sql_values() -> SearchStrategy[SQLType]:
+    """
+    Build values which can be used as arguments in SQL statements.
+    """
+    return one_of(
+        _sql_integer,
+        _sql_floats,
+        _sql_text,
+        binary(),
+        aware_datetimes(),
+        none(),
+    )
 
 
 def inserts(name: str, table: Table) -> SearchStrategy[Insert]:
