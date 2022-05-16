@@ -341,7 +341,7 @@ jobs:
   # A job that merges all of the coverage data and generates a report.
   finish-coverage:
     docker:
-      - image: "nixos/nix:2.5.1"
+      - image: "nixos/nix:2.8.1"
 
     steps:
       - "checkout"
