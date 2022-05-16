@@ -101,6 +101,7 @@ class ReplicationJob(Enum):
     """
     The kinds of jobs that the Replication queue knows about
     """
+
     event_stream = 1
     snapshot = 2
 
