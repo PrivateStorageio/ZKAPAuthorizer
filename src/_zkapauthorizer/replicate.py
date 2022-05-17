@@ -772,7 +772,7 @@ class _ReplicationService(Service):
         # an event-stream immediately
 
         if self.should_upload_eventstream(self._changes):
-            self._jobs.put(ReplicationJob.event_stream)
+            self.queue_event_upload()
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
