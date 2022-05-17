@@ -37,6 +37,7 @@ from ..replicate import (
     with_replication,
 )
 from ..spending import SpendingController
+from ..tahoe import MemoryGrid
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, equals_database, returns
 from .strategies import aware_datetimes, tahoe_configs
@@ -587,34 +588,34 @@ class TahoeDirectoryPrunerTests(TestCase):
     Tests for `get_tahoe_lafs_direntry_pruner`
     """
 
-    def test_prune(self):
-
+    def test_prune(self) -> None:
+        """
+        ``get_tahoe_lafs_direntry_pruner`` returns a function that unlinks entries
+        from a Tahoe-LAFS mutable directory.
+        """
         ignore = ["one", "two"]
         delete = ["three", "four"]
-        observed_deletes = []
 
-        class FakeClient:
-            async def list_directory(self, cap):
-                # XXX docs/type-hints for this look wrong, but are
-                # accidentally right because CapStr is actually just a
-                # str
-                return {k: object() for k in ignore + delete}
+        grid = MemoryGrid()
+        dircap = grid.make_directory()
+        for name in ignore + delete:
+            filecap = grid.upload(b"some data")
+            grid.link(dircap, name, filecap)
 
-            async def unlink(self, cap, name):
-                observed_deletes.append(name)
-
-        client = FakeClient()
-        pruner = get_tahoe_lafs_direntry_pruner(client, "fake capability")
+        client = grid.client()
+        pruner = get_tahoe_lafs_direntry_pruner(client, dircap)
 
         # ask the pruner to delete some of the files
         self.assertThat(
-            Deferred.fromCoroutine(pruner(lambda fname: fname in delete)),
+            # prune(..) returns a Coroutine but it declares it as an Awaitable
+            # so mypy tells us it won't work with fromCoroutine.
+            Deferred.fromCoroutine(pruner(lambda fname: fname in delete)),  # type: ignore
             succeeded(Always()),
         )
 
         self.assertThat(
-            observed_deletes,
-            Equals(delete),
+            set(grid.list_directory(dircap).keys()),
+            Equals(set(ignore)),
         )
 
 
