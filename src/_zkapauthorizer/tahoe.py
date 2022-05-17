@@ -121,6 +121,12 @@ class NotWriteableError(Exception):
     """
 
 
+class NotADirectoryError(Exception):
+    """
+    An attempt was made to treat a non-directory as a directory.
+    """
+
+
 _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 
 
@@ -286,6 +292,12 @@ async def unlink(
         the link.
 
     :param entry_name: The name of the entry to delete.
+
+    :raise NotWriteableError: If the given directory capability is a read-only
+        capability.
+
+    :raise NotDirectoryError: If the given capability is not a directory
+        capability at all.
     """
     uri = api_root.child("uri").child(dir_cap).child(entry_name)
     resp = await client.delete(uri)
@@ -295,6 +307,8 @@ async def unlink(
 
     if resp.code == 500 and "allmydata.mutable.common.NotWriteableError" in content:
         raise NotWriteableError()
+    elif resp.code == 400 and "Files have no children named" in content:
+        raise NotADirectoryError()
 
     raise TahoeAPIError("delete", uri, resp.code, content)
 
@@ -493,9 +507,7 @@ class MemoryGrid:
         if isinstance(dirobj, _Directory):
             del dirobj.children[entry_name]
         else:
-            raise ValueError(
-                f"Cannot unlink entry from non-directory capability ({dir_cap[:7]})"
-            )
+            raise NotADirectoryError()
 
     def list_directory(self, dir_cap: CapStr) -> dict[CapStr, list[Any]]:
         def kind(entry):

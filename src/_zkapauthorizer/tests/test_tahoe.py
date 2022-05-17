@@ -26,6 +26,7 @@ from twisted.python.filepath import FilePath
 
 from ..tahoe import (
     MemoryGrid,
+    NotADirectoryError,
     NotWriteableError,
     Tahoe,
     TahoeAPIError,
@@ -417,13 +418,15 @@ class DirectoryTestsMixin:
         # failure)
         try:
             result = yield Deferred.fromCoroutine(tahoe.unlink(non_dir_cap, "foo"))
-        except NotWriteableError:
+        except (NotADirectoryError, NotWriteableError):
+            # The real implementation and the memory implementation differ in
+            # their behavior. :/ We need a create-mutable-non-directory API to
+            # be able to write a test that hits `NotADirectoryError` for both
+            # of them.
             pass
-        except TahoeAPIError as e:
-            self.assertThat(e.status, Equals(400))
         else:
             self.fail(
-                f"Expected link to fail with NotWriteableError, got {result!r} instead"
+                f"Expected link to fail with NotADirectoryError or NotWriteableError, got {result!r} instead"
             )  # pragma: nocover
 
 
