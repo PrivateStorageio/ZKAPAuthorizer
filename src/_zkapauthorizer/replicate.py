@@ -856,6 +856,7 @@ class _ReplicationService(Service):
         # ignored by the recovery code.
 
         # possible to _not_ have a snapshot? -> make sure we do one when replication is turned on.
+        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/379
 
         # prune old events from the replica
 
