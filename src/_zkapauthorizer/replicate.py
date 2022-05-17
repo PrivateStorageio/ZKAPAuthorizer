@@ -703,8 +703,7 @@ class AccumulatedChanges:
         # XXX Fix the size calculation
         return cls(important, sum(len(sql) for (sql, _) in statements))
 
-    def __add__(self, other) -> AccumulatedChanges:
-        # if below args are backwards, mypy doesn't seem to complain; why?
+    def __add__(self, other: AccumulatedChanges) -> AccumulatedChanges:
         return AccumulatedChanges(
             self.important or other.important, self.size + other.size
         )
