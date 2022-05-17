@@ -498,7 +498,10 @@ class ReplicationServiceTests(TestCase):
 
         # since we've uploaded everything, there should be no
         # events in the store
-        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        self.assertThat(
+            get_events(tvs.store._connection).changes,
+            HasLength(0),
+        )
 
     def test_snapshot_prune(self) -> None:
         """

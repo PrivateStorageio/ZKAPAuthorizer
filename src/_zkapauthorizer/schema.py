@@ -263,4 +263,12 @@ _UPGRADES = {
         WHERE [finished] IS NOT NULL
         """,
     ],
+    8: [
+        # Arguments were originally bound into the statement but this was
+        # found to be problematic.  Now they live in this separate column.
+        # The default value is the CBOR serialization of an empty sequence.
+        """
+        ALTER TABLE [event-stream] ADD COLUMN [serialized_arguments] TEXT DEFAULT X'80'
+        """,
+    ],
 }
