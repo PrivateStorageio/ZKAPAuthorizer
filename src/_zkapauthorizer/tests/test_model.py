@@ -58,9 +58,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
-from twisted.python.filepath import FilePath
 
-from ..config import EmptyConfig
 from ..model import (
     DoubleSpend,
     LeaseMaintenanceActivity,
@@ -246,7 +244,6 @@ class VoucherStoreCallIfEmptyTests(TestCase):
     def setup_example(self):
         self.store_fixture = self.useFixture(
             TemporaryVoucherStore(
-                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
                 get_now=aware_now,
             ),
         )
@@ -347,7 +344,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         self.assertThat(
             lambda: store.get(voucher),
             raises(KeyError),
@@ -364,7 +361,7 @@ class VoucherStoreTests(TestCase):
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher, len(tokens), 0, lambda: tokens)
         self.assertThat(
             store.get(voucher),
@@ -395,7 +392,7 @@ class VoucherStoreTests(TestCase):
         tokens_a = tokens[: len(tokens) // 2]
         tokens_b = tokens[len(tokens) // 2 :]
 
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         # We only have to get the expected_tokens value (len(tokens)) right on
         # the first call.
         added_tokens_a = store.add(voucher, len(tokens), counter_a, lambda: tokens_a)
@@ -425,7 +422,7 @@ class VoucherStoreTests(TestCase):
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         first_tokens = store.add(
             voucher,
             expected_tokens=len(tokens),
@@ -477,7 +474,7 @@ class VoucherStoreTests(TestCase):
                 ),
             )
         )
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         for voucher in vouchers:
             store.add(
                 voucher,
@@ -512,12 +509,7 @@ class VoucherStoreSnapshotTests(TestCase):
         """
         Vouchers are present in the snapshot.
         """
-        store = self.useFixture(
-            TemporaryVoucherStore(
-                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
-                get_now=lambda: now,
-            ),
-        ).store
+        store = self.useFixture(TemporaryVoucherStore(get_now=lambda: now)).store
         store.add(voucher, expected, 0, lambda: tokens)
         snapshot = store.snapshot()
         connection = connect(":memory:")
@@ -552,7 +544,6 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
         self.configless = TemporaryVoucherStore(
-            get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
             # Time probably not actually relevant to this state machine.
             get_now=aware_now,
         )
@@ -812,7 +803,7 @@ class LeaseMaintenanceTests(TestCase):
         finished lease maintenance activity.
         """
         store = self.useFixture(
-            TemporaryVoucherStore(get_config, lambda: now),
+            TemporaryVoucherStore(lambda: now, get_config),
         ).store
 
         expected = None
@@ -891,7 +882,7 @@ class EventStreamTests(TestCase):
         the event-stream.
         """
         store = self.useFixture(
-            TemporaryVoucherStore(get_config, lambda: now),
+            TemporaryVoucherStore(lambda: now, get_config),
         ).store
 
         # Generate some changes
@@ -956,7 +947,7 @@ class EventStreamTests(TestCase):
         After ``prune_events_to``, ``get_events`` only returns events events with
         a greater sequence number.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
 
         with store._connection:
             curse = store._connection.cursor()
@@ -1042,7 +1033,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         self.assertThat(
             lambda: store.insert_unblinded_tokens_for_voucher(
                 voucher_value,
@@ -1069,7 +1060,7 @@ class UnblindedTokenStoreTests(TestCase):
         Unblinded tokens that are added to the store can later be retrieved and counted.
         """
         random_tokens, unblinded_tokens = tokens
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.insert_unblinded_tokens_for_voucher(
             voucher_value, public_key, unblinded_tokens, completed, spendable=True
@@ -1109,7 +1100,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         random, unblinded = tokens
         num_tokens = len(random)
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
             voucher_value, public_key, unblinded, completed=True, spendable=True
@@ -1141,7 +1132,7 @@ class UnblindedTokenStoreTests(TestCase):
         A voucher which is reported as double-spent is marked in the database as
         such.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher_value, len(random_tokens), 0, lambda: random_tokens)
         store.mark_voucher_double_spent(voucher_value)
         voucher = store.get(voucher_value)
@@ -1170,7 +1161,7 @@ class UnblindedTokenStoreTests(TestCase):
         A voucher which has already been spent cannot be marked as double-spent.
         """
         random, unblinded = tokens
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
             voucher_value, public_key, unblinded, completed=True, spendable=True
@@ -1189,7 +1180,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         A voucher which is not known cannot be marked as double-spent.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         self.assertThat(
             lambda: store.mark_voucher_double_spent(voucher_value),
             raises(ValueError),
@@ -1222,7 +1213,7 @@ class UnblindedTokenStoreTests(TestCase):
         """
         random, unblinded = tokens
         num_tokens = len(random)
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         store.add(voucher_value, len(random), 0, lambda: random)
         store.insert_unblinded_tokens_for_voucher(
             voucher_value,
@@ -1280,7 +1271,6 @@ class ReplicationTests(TestCase):
         """
         store = self.useFixture(
             TemporaryVoucherStore(
-                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
                 # Time is not relevant to this test
                 get_now=aware_now,
             )

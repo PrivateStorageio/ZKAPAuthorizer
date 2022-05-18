@@ -10,7 +10,6 @@ from sqlite3 import OperationalError, ProgrammingError, connect
 from typing import BinaryIO, Callable, Optional
 
 from attrs import frozen
-from hypothesis import given
 from testtools import TestCase
 from testtools.matchers import (
     Equals,
@@ -25,7 +24,7 @@ from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
-from ..config import REPLICA_RWCAP_BASENAME, EmptyConfig
+from ..config import REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, aware_now
 from ..recover import recover
 from ..replicate import (
@@ -40,7 +39,6 @@ from ..spending import SpendingController
 from ..tahoe import MemoryGrid
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, equals_database, returns
-from .strategies import aware_datetimes, tahoe_configs
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -323,16 +321,30 @@ class ReplicationServiceTests(TestCase):
     Tests for ``_ReplicationService``.
     """
 
+    def test_enable_replication_on_connection(self) -> None:
+        """
+        When the service starts it enables replication on its database connection.
+        """
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+
+        async def uploader(name, get_bytes):
+            pass
+
+        async def pruner(predicate):
+            pass
+
+        service = replication_service(tvs.store._connection, uploader, pruner)
+        service.startService()
+        self.addCleanup(service.stopService)
+        self.assertThat(tvs.store._connection._replicating, Equals(True))
+
     def test_replicate(self) -> None:
         """
         Making changes to the voucher store while replication is turned on
         causes event-stream objects to be uploaded.
         """
 
-        def get_config(rootpath, portnumfile):
-            return EmptyConfig(FilePath(rootpath))
-
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, aware_now))
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
@@ -418,10 +430,7 @@ class ReplicationServiceTests(TestCase):
         causes event-stream objects to be uploaded.
         """
 
-        def get_config(rootpath, portnumfile):
-            return EmptyConfig(FilePath(rootpath))
-
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: aware_now()))
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
@@ -509,11 +518,7 @@ class ReplicationServiceTests(TestCase):
         Uploading a snapshot prunes irrelevant event-stream instances from
         the replica
         """
-
-        def get_config(rootpath, portnumfile):
-            return EmptyConfig(FilePath(rootpath))
-
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: aware_now()))
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
@@ -617,29 +622,3 @@ class TahoeDirectoryPrunerTests(TestCase):
             set(grid.list_directory(dircap).keys()),
             Equals(set(ignore)),
         )
-
-
-class HypothesisReplicationServiceTests(TestCase):
-    """
-    Tests for ``_ReplicationService``.
-    """
-
-    @given(tahoe_configs(), aware_datetimes())
-    def test_enable_replication_on_connection(self, get_config, now):
-        """
-        When the service starts it enables replication on its database connection.
-        """
-        tvs = self.useFixture(TemporaryVoucherStore(get_config, lambda: now))
-
-        async def uploader(name, get_bytes):
-            pass
-
-        async def pruner(predicate):
-            pass
-
-        service = replication_service(tvs.store._connection, uploader, pruner)
-        service.startService()
-        try:
-            self.assertThat(tvs.store._connection._replicating, Equals(True))
-        finally:
-            service.stopService()
