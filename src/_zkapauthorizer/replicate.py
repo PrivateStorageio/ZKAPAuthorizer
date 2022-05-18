@@ -666,7 +666,7 @@ class AccumulatedChanges:
     size: int
 
     @classmethod
-    def no_changes(cls):
+    def no_changes(cls) -> AccumulatedChanges:
         """
         Create an ``AccumulatedChanges`` that represents no changes.
         """

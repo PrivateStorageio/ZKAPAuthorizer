@@ -17,6 +17,7 @@ from testtools.matchers import (
     MatchesListwise,
     MatchesStructure,
     Mismatch,
+    Not,
     raises,
 )
 from testtools.matchers._higherorder import MismatchesAll
@@ -326,6 +327,14 @@ class ReplicationServiceTests(TestCase):
         When the service starts it enables replication on its database connection.
         """
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+        store = tvs.store
+
+        # We'll spy on "events" which are only captured when the connection is
+        # in replication mode.  To start, make sure that database changes are
+        # not already being captured.  They should not be since nothing has
+        # placed the connection into replication mode yet.
+        # store.start_lease_maintenance().finish()
+        # self.assertThat(get_events(store._connection).changes, HasLength(0))
 
         async def uploader(name, get_bytes):
             pass
@@ -333,10 +342,14 @@ class ReplicationServiceTests(TestCase):
         async def pruner(predicate):
             pass
 
-        service = replication_service(tvs.store._connection, uploader, pruner)
+        service = replication_service(store._connection, uploader, pruner)
         service.startService()
         self.addCleanup(service.stopService)
-        self.assertThat(tvs.store._connection._replicating, Equals(True))
+
+        # Now that replication has been enabled.  Some events should now be
+        # captured.
+        store.start_lease_maintenance().finish()
+        self.assertThat(get_events(store._connection).changes, Not(HasLength(0)))
 
     def test_replicate(self) -> None:
         """
