@@ -623,7 +623,7 @@ def get_tahoe_lafs_direntry_lister(
     the entries of that directory.
     """
 
-    async def lister():
+    async def lister() -> list[str]:
         entries = await client.list_directory(directory_mutable_cap)
         return sorted(entries.keys())
 
