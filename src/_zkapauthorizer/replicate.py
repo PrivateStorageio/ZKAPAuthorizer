@@ -298,7 +298,7 @@ def get_replica_rwcap(config: Config) -> CapStr:
     :raises: Exception if replication is not setup
     """
     rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))
-    return rwcap_file.getContent()
+    return rwcap_file.getContent().decode("ascii")
 
 
 @define
