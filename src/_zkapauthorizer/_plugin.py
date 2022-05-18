@@ -53,7 +53,7 @@ from .lease_maintenance import (
     lease_maintenance_service,
     maintain_leases_from_root,
 )
-from .model import VoucherStore
+from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
 from .recover import make_fail_downloader
 from .replicate import (
@@ -153,7 +153,7 @@ class ZKAPAuthorizer(object):
             replicated_conn = with_replication(
                 unreplicated_conn, is_replication_setup(node_config)
             )
-            store = open_store(datetime.now, replicated_conn, node_config)
+            store = open_store(aware_now, replicated_conn, node_config)
 
             if is_replication_setup(node_config):
                 self._add_replication_service(replicated_conn, node_config)
