@@ -167,7 +167,7 @@ class ZKAPAuthorizer(object):
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        client = get_tahoe_client(self.reactor, node_config)
+        client = self._get_tahoe_client(self.reactor, node_config)
         mutable = get_replica_rwcap(node_config)
         replica = get_tahoe_lafs_direntry_replica(client, mutable)
         replication_service(replicated_conn, replica).setServiceParent(self._service)

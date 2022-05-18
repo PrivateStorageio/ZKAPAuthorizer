@@ -420,13 +420,17 @@ class ServiceTests(TestCase):
         grid = MemoryGrid()
         tahoe = grid.client(FilePath(node_config._basedir))
 
-        reactor = MemoryReactorClock()
-        plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
-
         # Place it into replication mode.
         self.assertThat(
             Deferred.fromCoroutine(setup_tahoe_lafs_replication(tahoe)),
             succeeded(Always()),
+        )
+
+        reactor = MemoryReactorClock()
+        plugin = ZKAPAuthorizer(
+            NAME,
+            reactor,
+            lambda reactor, config: grid.client(FilePath(config._basedir)),
         )
 
         # This causes MemoryReactorClock to run all the hooks, which
