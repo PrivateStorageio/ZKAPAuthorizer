@@ -98,14 +98,39 @@ Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
 
+# function which can list all entries in ZKAPAuthorizer state
+Lister = Callable[[], Awaitable[list[str]]]
+
+
+@frozen
+class Replica:
+    """
+    Manage a specific replica.
+    """
+
+    upload: Uploader
+    prune: Pruner
+    list: Lister
+
 
 class ReplicationJob(Enum):
     """
     The kinds of jobs that the Replication queue knows about
+
+    :ivar startup: Represent the job that is run once when the replication
+        service starts and which is responsible for inspecting local and
+        remote state to determine if any actions are immediately necessary
+        (even before any further local changes are made).
+
+    :ivar event_stream: Represent the job to upload a new event stream object.
+
+    :ivar snapshot: Represent the job to upload a new snapshot object and
+        prune now-obsolete event stream objects.
     """
 
-    event_stream = 1
-    snapshot = 2
+    startup = 1
+    event_stream = 2
+    snapshot = 3
 
 
 @frozen
@@ -590,6 +615,34 @@ def get_tahoe_lafs_direntry_pruner(
     return maybe_unlink
 
 
+def get_tahoe_lafs_direntry_lister(
+    client: ITahoeClient, directory_mutable_cap: str
+) -> Lister:
+    """
+    Bind a Tahoe client to a mutable directory in a callable that will list
+    the entries of that directory.
+    """
+
+    async def lister():
+        entries = await client.list_directory(directory_mutable_cap)
+        return sorted(entries.keys())
+
+    return lister
+
+
+def get_tahoe_lafs_direntry_replica(
+    client: ITahoeClient, directory_mutable_cap: str
+) -> Replica:
+    """
+    Get an object that can interact with a replica stored in a Tahoe-LAFS
+    mutable directory.
+    """
+    uploader = get_tahoe_lafs_direntry_uploader(client, directory_mutable_cap)
+    pruner = get_tahoe_lafs_direntry_pruner(client, directory_mutable_cap)
+    lister = get_tahoe_lafs_direntry_lister(client, directory_mutable_cap)
+    return Replica(uploader, pruner, lister)
+
+
 def add_events(
     cursor: _SQLite3Cursor,
     events: Iterable[tuple[str, Sequence[SQLType]]],
@@ -736,8 +789,7 @@ class _ReplicationService(Service):
     _logger = Logger()
 
     _connection: _ReplicationCapableConnection = field()
-    _uploader: Uploader
-    _pruner: Pruner
+    _replica: Replica
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
@@ -766,13 +818,7 @@ class _ReplicationService(Service):
             self._unreplicated_connection
         )
 
-        # we should upload a snapshot immediately if there isn't one
-        # already (but also that's async-work to determine..) and if
-        # we _do_ decide to upload a snapshot, we should _not_ upload
-        # an event-stream immediately
-
-        if self.should_upload_eventstream(self._changes):
-            self.queue_event_upload()
+        self.queue_job(ReplicationJob.startup)
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
@@ -794,12 +840,19 @@ class _ReplicationService(Service):
 
         return None
 
+    def queue_job(self, job: ReplicationJob) -> None:
+        """
+        Queue a job, if it is not already queued, to be executed after any other
+        queued jobs.
+        """
+        if job not in self._jobs.pending:
+            self._jobs.put(job)
+
     def queue_event_upload(self) -> None:
         """
         Request an event-stream upload of outstanding events.
         """
-        if ReplicationJob.event_stream not in self._jobs.pending:
-            self._jobs.put(ReplicationJob.event_stream)
+        self.queue_job(ReplicationJob.event_stream)
 
     def queue_snapshot_upload(self) -> None:
         """
@@ -807,8 +860,7 @@ class _ReplicationService(Service):
         event-streams will also be pruned after the snapshot is
         successfully uploaded.
         """
-        if ReplicationJob.snapshot not in self._jobs.pending:
-            self._jobs.put(ReplicationJob.snapshot)
+        self.queue_job(ReplicationJob.snapshot)
 
     async def wait_for_uploads(self) -> None:
         """
@@ -821,8 +873,24 @@ class _ReplicationService(Service):
                 await self._do_one_event_upload()
             elif job == ReplicationJob.snapshot:
                 await self._do_one_snapshot_upload()
+            elif job == ReplicationJob.startup:
+                await self._do_startup()
             else:
                 raise Exception("internal error")  # pragma: nocover
+
+    async def _do_startup(self) -> None:
+        """
+        Check local and remote state to determine if there is any work that should
+        be done immediately.
+
+        Currently, this will upload a snapshot if none exists in the replica,
+        or upload an event stream if there are events that warrant immediate
+        upload.
+        """
+        if await self.should_upload_snapshot():
+            self.queue_snapshot_upload()
+        elif self.should_upload_eventstream(self._changes):
+            self.queue_event_upload()
 
     async def _do_one_snapshot_upload(self) -> None:
         """
@@ -844,7 +912,7 @@ class _ReplicationService(Service):
         snap = snapshot(self._connection)
 
         # upload snapshot
-        await self._uploader("snapshot", lambda: BytesIO(snap))
+        await self._replica.upload("snapshot", lambda: BytesIO(snap))
 
         # remove local event history (that should now be encapsulated
         # by the snapshot we just uploaded)
@@ -873,7 +941,7 @@ class _ReplicationService(Service):
                     return True
             return False
 
-        await self._pruner(is_old_eventstream)
+        await self._replica.prune(is_old_eventstream)
 
     async def _do_one_event_upload(self) -> None:
         """
@@ -888,7 +956,7 @@ class _ReplicationService(Service):
             return
 
         # otherwise, upload the events we found.
-        await self._uploader(event_stream_name(high_seq), events.to_bytes)
+        await self._replica.upload(event_stream_name(high_seq), events.to_bytes)
 
         # then discard the uploaded events from the local database.
         prune_events_to(self._unreplicated_connection, high_seq)
@@ -949,6 +1017,13 @@ class _ReplicationService(Service):
         self.queue_event_upload()
         self._changes = AccumulatedChanges.no_changes()
 
+    async def should_upload_snapshot(self) -> bool:
+        """
+        :returns: True if there is no remote snapshot
+        """
+        entries = await self._replica.list()
+        return "snapshot" not in entries
+
     def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
         """
         :returns: True if we have accumulated enough statements to upload
@@ -959,8 +1034,7 @@ class _ReplicationService(Service):
 
 def replication_service(
     replicated_connection: _ReplicationCapableConnection,
-    uploader: Uploader,
-    pruner: Pruner,
+    replica: Replica,
 ) -> IService:
     """
     Return a service which implements the replication process documented in
@@ -968,6 +1042,5 @@ def replication_service(
     """
     return _ReplicationService(
         connection=replicated_connection,
-        uploader=uploader,
-        pruner=pruner,
+        replica=replica,
     )

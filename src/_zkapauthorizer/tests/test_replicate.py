@@ -10,8 +10,11 @@ from sqlite3 import OperationalError, ProgrammingError, connect
 from typing import BinaryIO, Callable, Optional
 
 from attrs import frozen
+from hypothesis import given
+from hypothesis.strategies import lists, text
 from testtools import TestCase
 from testtools.matchers import (
+    Contains,
     Equals,
     HasLength,
     MatchesListwise,
@@ -30,8 +33,11 @@ from ..model import RandomToken, aware_now
 from ..recover import recover
 from ..replicate import (
     EventStream,
+    Replica,
     get_events,
+    get_tahoe_lafs_direntry_lister,
     get_tahoe_lafs_direntry_pruner,
+    get_tahoe_lafs_direntry_replica,
     replication_service,
     snapshot,
     with_replication,
@@ -317,6 +323,24 @@ class _MatchUpload(Matcher):
         return None
 
 
+async def noop_upload(name, get_bytes) -> None:
+    pass
+
+
+async def noop_prune(predicate) -> None:
+    pass
+
+
+async def noop_list() -> list[str]:
+    return []
+
+
+# A replica that actually does nothing.  Used by tests that don't interact
+# with this part of the replication system but still need a value of the right
+# type.
+noop_replica = Replica(noop_upload, noop_prune, noop_list)
+
+
 class ReplicationServiceTests(TestCase):
     """
     Tests for ``_ReplicationService``.
@@ -336,13 +360,7 @@ class ReplicationServiceTests(TestCase):
         # store.start_lease_maintenance().finish()
         # self.assertThat(get_events(store._connection).changes, HasLength(0))
 
-        async def uploader(name, get_bytes):
-            pass
-
-        async def pruner(predicate):
-            pass
-
-        service = replication_service(store._connection, uploader, pruner)
+        service = replication_service(store._connection, noop_replica)
         service.startService()
         self.addCleanup(service.stopService)
 
@@ -351,12 +369,33 @@ class ReplicationServiceTests(TestCase):
         store.start_lease_maintenance().finish()
         self.assertThat(get_events(store._connection).changes, Not(HasLength(0)))
 
+    def test_first_snapshot(self) -> None:
+        """
+        A snapshot is uploaded if there is no snapshot in the replica directory
+        already.
+        """
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+        store = tvs.store
+
+        grid = MemoryGrid()
+        replica_dircap = grid.make_directory()
+        client = grid.client()
+
+        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        service = replication_service(store._connection, replica)
+        service.startService()
+        self.addCleanup(service.stopService)
+
+        self.assertThat(
+            grid.list_directory(replica_dircap),
+            Contains("snapshot"),
+        )
+
     def test_replicate(self) -> None:
         """
         Making changes to the voucher store while replication is turned on
         causes event-stream objects to be uploaded.
         """
-
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
@@ -379,7 +418,12 @@ class ReplicationServiceTests(TestCase):
         async def pruner(predicate):
             pass
 
-        srv = replication_service(tvs.store._connection, uploader, pruner)
+        async def lister():
+            return []
+
+        srv = replication_service(
+            tvs.store._connection, Replica(uploader, pruner, lister)
+        )
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -465,7 +509,12 @@ class ReplicationServiceTests(TestCase):
         async def pruner(predicate):
             pass
 
-        srv = replication_service(tvs.store._connection, uploader, pruner)  # type: ignore
+        async def lister():
+            return []
+
+        srv = replication_service(
+            tvs.store._connection, Replica(uploader, pruner, lister)
+        )
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -546,7 +595,12 @@ class ReplicationServiceTests(TestCase):
         async def pruner(predicate):
             pruned.append(predicate)
 
-        srv = replication_service(tvs.store._connection, uploader, pruner)
+        async def lister():
+            return []
+
+        srv = replication_service(
+            tvs.store._connection, Replica(uploader, pruner, lister)
+        )
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
@@ -599,6 +653,30 @@ class ReplicationServiceTests(TestCase):
         self.assertThat(pruned, HasLength(1))
         self.assertThat(pruned[0]("event-stream-21"), Equals(True))
         self.assertThat(pruned[0]("event-stream-1234"), Equals(False))
+
+
+class TahoeDirectoryListerTests(TestCase):
+    """
+    Tests for ``get_tahoe_lafs_direntry_lister``.
+    """
+
+    @given(lists(text(max_size=100), max_size=3, unique=True))
+    def test_list(self, entry_names) -> None:
+        """
+        ``get_tahoe_lafs_direntry_lister`` returns a callable that can read the
+        entries names from a Tahoe-LAFS directory.
+        """
+        grid = MemoryGrid()
+        dircap = grid.make_directory()
+        for name in entry_names:
+            grid.link(dircap, name, grid.make_directory())
+
+        client = grid.client()
+        lister = get_tahoe_lafs_direntry_lister(client, dircap)
+        self.assertThat(
+            Deferred.fromCoroutine(lister()),  # type: ignore
+            succeeded(Equals(sorted(entry_names))),
+        )
 
 
 class TahoeDirectoryPrunerTests(TestCase):

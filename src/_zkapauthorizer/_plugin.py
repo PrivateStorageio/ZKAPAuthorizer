@@ -59,8 +59,7 @@ from .recover import make_fail_downloader
 from .replicate import (
     _ReplicationCapableConnection,
     get_replica_rwcap,
-    get_tahoe_lafs_direntry_pruner,
-    get_tahoe_lafs_direntry_uploader,
+    get_tahoe_lafs_direntry_replica,
     is_replication_setup,
     replication_service,
     setup_tahoe_lafs_replication,
@@ -170,11 +169,8 @@ class ZKAPAuthorizer(object):
         """
         client = get_tahoe_client(self.reactor, node_config)
         mutable = get_replica_rwcap(node_config)
-        uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-        pruner = get_tahoe_lafs_direntry_pruner(client, mutable)
-        replication_service(replicated_conn, uploader, pruner).setServiceParent(
-            self._service
-        )
+        replica = get_tahoe_lafs_direntry_replica(client, mutable)
+        replication_service(replicated_conn, replica).setServiceParent(self._service)
         return mutable
 
     def _get_redeemer(self, node_config, announcement):
