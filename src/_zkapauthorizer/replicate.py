@@ -60,6 +60,8 @@ __all__ = [
 ]
 
 import os
+import re
+from enum import Enum
 from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
@@ -80,7 +82,7 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from twisted.application.service import IService, Service
-from twisted.internet.defer import CancelledError, Deferred, DeferredSemaphore, succeed
+from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
@@ -92,6 +94,18 @@ from .tahoe import ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
+
+# function which can remove entries from ZKAPAuthorizer state.
+Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
+
+
+class ReplicationJob(Enum):
+    """
+    The kinds of jobs that the Replication queue knows about
+    """
+
+    event_stream = 1
+    snapshot = 2
 
 
 @frozen
@@ -493,6 +507,7 @@ def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
         # Use netstrings to frame each statement.  Statements can have
         # embedded newlines (and CREATE TABLE statements especially tend to).
         yield netstring(statement.strip().encode("utf-8"))
+        # XXX probably use cbor2 above
 
 
 def connection_to_statements(connection: Connection) -> Iterator[str]:
@@ -547,6 +562,32 @@ def get_tahoe_lafs_direntry_uploader(
         )
 
     return upload
+
+
+def get_tahoe_lafs_direntry_pruner(
+    client: ITahoeClient,
+    directory_mutable_cap: str,
+) -> Callable[[Callable[[str], bool]], Awaitable[None]]:
+    """
+    Bind a Tahoe client to a mutable directory in a callable that will
+    unlink some entries. Which entries to unlink are controlled by a predicate.
+
+    :return: A callable that will unlink some entries given a
+        predicate. The prediate is given a filename inside the mutable to
+        consider.
+    """
+
+    async def maybe_unlink(predicate: Callable[[str], bool]) -> None:
+        """
+        For each child of `directory_mutable_cap` delete it iff the
+        predicate returns True for that name
+        """
+        entries = await client.list_directory(directory_mutable_cap)
+        for name in entries.keys():
+            if predicate(name):
+                await client.unlink(directory_mutable_cap, name)
+
+    return maybe_unlink
 
 
 def add_events(
@@ -662,9 +703,9 @@ class AccumulatedChanges:
         # XXX Fix the size calculation
         return cls(important, sum(len(sql) for (sql, _) in statements))
 
-    def __add__(self, other):
+    def __add__(self, other: AccumulatedChanges) -> AccumulatedChanges:
         return AccumulatedChanges(
-            self.size + other.size, self.important or other.important
+            self.important or other.important, self.size + other.size
         )
 
 
@@ -696,10 +737,11 @@ class _ReplicationService(Service):
 
     _connection: _ReplicationCapableConnection = field()
     _uploader: Uploader
+    _pruner: Pruner
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
-    _trigger: DeferredSemaphore = Factory(lambda: DeferredSemaphore(1))
+    _jobs: DeferredQueue = field(factory=DeferredQueue)
 
     @property
     def _unreplicated_connection(self):
@@ -724,10 +766,13 @@ class _ReplicationService(Service):
             self._unreplicated_connection
         )
 
-        # should we do an upload immediately? or hold the lock?
-        if not self.should_upload_eventstream(self._changes):
-            # If we hold the lock, the upload cannot happen.
-            self._trigger.acquire()
+        # we should upload a snapshot immediately if there isn't one
+        # already (but also that's async-work to determine..) and if
+        # we _do_ decide to upload a snapshot, we should _not_ upload
+        # an event-stream immediately
+
+        if self.should_upload_eventstream(self._changes):
+            self.queue_event_upload()
 
         # Start the actual work of reacting to changes by uploading them (as
         # appropriate).
@@ -749,35 +794,91 @@ class _ReplicationService(Service):
 
         return None
 
-    def queue_upload(self) -> None:
+    def queue_event_upload(self) -> None:
         """
-        Ask for an upload to occur.
+        Request an event-stream upload of outstanding events.
         """
-        if self._trigger.tokens == 0:
-            self._trigger.release()
-        else:
-            # An upload is already running so we don't have to do anything.
-            pass
+        if ReplicationJob.event_stream not in self._jobs.pending:
+            self._jobs.put(ReplicationJob.event_stream)
+
+    def queue_snapshot_upload(self) -> None:
+        """
+        Request that an upload of a new snapshot occur. Stale
+        event-streams will also be pruned after the snapshot is
+        successfully uploaded.
+        """
+        if ReplicationJob.snapshot not in self._jobs.pending:
+            self._jobs.put(ReplicationJob.snapshot)
 
     async def wait_for_uploads(self) -> None:
         """
-        An infinite async loop that processes uploads
+        An infinite async loop that processes uploads of event-streams or
+        snapshots
         """
         while True:
-            # Wait for an upload to be queued.
-            await self._trigger.acquire()
-            # Then perform one.
-            #
-            # Errors in here mean our "forever loop" will stop .. so we might
-            # want to simply log all/most errors instead?  Or some retry logic
-            # might be appropriate.  Some transient network errors will be
-            # automatically retried by a lower level but no doubt some make it
-            # up to this level.
-            await self._do_one_upload()
+            job = await self._jobs.get()
+            if job == ReplicationJob.event_stream:
+                await self._do_one_event_upload()
+            elif job == ReplicationJob.snapshot:
+                await self._do_one_snapshot_upload()
+            else:
+                raise Exception("internal error")  # pragma: nocover
 
-    async def _do_one_upload(self) -> None:
+    async def _do_one_snapshot_upload(self) -> None:
         """
-        Perform the upload of one event stream.
+        Perform a single snapshot upload, including pruning event-streams
+        from the replica that are no longer relevant.
+        """
+        # extract sequence-number and snapshot data
+        seqnum = 1
+        rows = (
+            self._connection.cursor()
+            .execute(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'event-stream'", tuple()
+            )
+            .fetchall()
+        )
+        if len(rows):
+            seqnum = int(rows[0][0])
+
+        snap = snapshot(self._connection)
+
+        # upload snapshot
+        await self._uploader("snapshot", lambda: BytesIO(snap))
+
+        # remove local event history (that should now be encapsulated
+        # by the snapshot we just uploaded)
+        prune_events_to(self._connection._conn, seqnum)
+
+        # if we crash here, there will be extra event-stream objects
+        # in the replica. This will be fixed correctly upon our next
+        # snapshot upload. The extra event-stream objects will be
+        # ignored by the recovery code.
+
+        # possible to _not_ have a snapshot? -> make sure we do one when replication is turned on.
+        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/379
+
+        # prune old events from the replica
+
+        def is_old_eventstream(fname: str) -> bool:
+            """
+            :returns: True if the `fname` is an event-stream object and the
+                sequence number is strictly less than our snapshot's
+                maximum sequence.
+            """
+            m = re.match("event-stream-([0-9]*)", fname)
+            if m:
+                seq = int(m.group(1))
+                if seq < seqnum:
+                    return True
+            return False
+
+        await self._pruner(is_old_eventstream)
+
+    async def _do_one_event_upload(self) -> None:
+        """
+        Process a single upload of all current events and then delete them
+        from our database.
         """
         events = get_events(self._unreplicated_connection)
 
@@ -845,7 +946,7 @@ class _ReplicationService(Service):
         from our observer function). See
         _ReplicationCapableConnection.__exit__
         """
-        self.queue_upload()
+        self.queue_event_upload()
         self._changes = AccumulatedChanges.no_changes()
 
     def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
@@ -859,6 +960,7 @@ class _ReplicationService(Service):
 def replication_service(
     replicated_connection: _ReplicationCapableConnection,
     uploader: Uploader,
+    pruner: Pruner,
 ) -> IService:
     """
     Return a service which implements the replication process documented in
@@ -867,4 +969,5 @@ def replication_service(
     return _ReplicationService(
         connection=replicated_connection,
         uploader=uploader,
+        pruner=pruner,
     )

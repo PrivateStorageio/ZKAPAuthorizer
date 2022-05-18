@@ -176,6 +176,7 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
 
     :see: http://cr.yp.to/proto/netstrings.txt
     """
+    # maybe cbor2 not netstrings...
     s = data.read()
     pos = 0
     while pos < len(s):
@@ -193,10 +194,19 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     """
     statements = statements_from_snapshot(snapshot)
 
+    # There are certain tables that can't be dropped .. however, we
+    # should be refusing to run "recover" at all if there's useful
+    # information in the database so these tables should be in the
+    # same state as they would be if we'd been able to drop it. This
+    # table exists because we use AUTOINCREMENT in the schema.
+    do_not_drop = ("sqlite_sequence",)
+
     # Discard all existing data in the database.
     cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
     tables = cursor.fetchall()
     for (table_name,) in tables:
+        if table_name in do_not_drop:
+            continue
         cursor.execute(f"DROP TABLE {escape_identifier(table_name)}")
 
     # The order of statements does not necessarily guarantee that foreign key

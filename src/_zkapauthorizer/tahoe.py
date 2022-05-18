@@ -121,6 +121,12 @@ class NotWriteableError(Exception):
     """
 
 
+class NotADirectoryError(Exception):
+    """
+    An attempt was made to treat a non-directory as a directory.
+    """
+
+
 _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 
 
@@ -272,6 +278,41 @@ async def link(
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
+@async_retry(_common_tahoe_errors)
+async def unlink(
+    client: HTTPClient,
+    api_root: DecodedURL,
+    dir_cap: str,
+    entry_name: str,
+) -> None:
+    """
+    Unink an object from a directory.
+
+    :param dir_cap: The capability string of the directory in which to create
+        the link.
+
+    :param entry_name: The name of the entry to delete.
+
+    :raise NotWriteableError: If the given directory capability is a read-only
+        capability.
+
+    :raise NotDirectoryError: If the given capability is not a directory
+        capability at all.
+    """
+    uri = api_root.child("uri").child(dir_cap).child(entry_name)
+    resp = await client.delete(uri)
+    content = (await treq.content(resp)).decode("utf-8")
+    if resp.code == 200:
+        return None
+
+    if resp.code == 500 and "allmydata.mutable.common.NotWriteableError" in content:
+        raise NotWriteableError()
+    elif resp.code == 400 and "Files have no children named" in content:
+        raise NotADirectoryError()
+
+    raise TahoeAPIError("delete", uri, resp.code, content)
+
+
 class ITahoeClient(Interface):
     """
     A simple Tahoe-LAFS client interface.
@@ -309,6 +350,14 @@ class ITahoeClient(Interface):
         :param dir_cap: The capability of the directory to link into.
         :param entry_name: The name of the new link.
         :param entry_cap: The capability of the object to link in.
+        """
+
+    async def unlink(dir_cap: CapStr, entry_name: str) -> None:
+        """
+        Delete an object out of a directory.
+
+        :param dir_cap: The capability of the directory to unlink from.
+        :param entry_name: The name of the entry to remove.
         """
 
     async def list_directory(dir_cap: CapStr) -> dict[CapStr, list[Any]]:
@@ -360,6 +409,9 @@ class Tahoe(object):
     def link(self, dir_cap, entry_name, entry_cap):
         return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
+    def unlink(self, dir_cap, entry_name):
+        return unlink(self.client, self._api_root, dir_cap, entry_name)
+
 
 @define
 class _Directory:
@@ -404,7 +456,16 @@ class MemoryGrid:
         return _MemoryTahoe(self, basedir)
 
     def upload(self, data: bytes) -> CapStr:
-        cap = str(self._counter)
+        def encode(s: str) -> str:
+            return b32encode(s.encode("ascii")).decode("ascii")
+
+        cap = "URI:CHK:{}:{}:{}:{}:{}".format(
+            encode("{:016}".format(self._counter)),
+            encode("{:032}".format(self._counter)),
+            self._counter,
+            self._counter,
+            self._counter,
+        )
         self._objects[cap] = data
         self._counter += 1
         return cap
@@ -437,6 +498,16 @@ class MemoryGrid:
             raise ValueError(
                 f"Cannot link entry into non-directory capability ({dir_cap[:7]})"
             )
+
+    def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
+        d = capability_from_string(dir_cap)
+        if d.is_readonly():
+            raise NotWriteableError()
+        dirobj = self._objects[dir_cap]
+        if isinstance(dirobj, _Directory):
+            del dirobj.children[entry_name]
+        else:
+            raise NotADirectoryError()
 
     def list_directory(self, dir_cap: CapStr) -> dict[CapStr, list[Any]]:
         def kind(entry):
@@ -525,6 +596,9 @@ class _MemoryTahoe:
 
     async def link(self, dir_cap, entry_name, entry_cap):
         return self._grid.link(dir_cap, entry_name, entry_cap)
+
+    async def unlink(self, dir_cap, entry_name):
+        return self._grid.unlink(dir_cap, entry_name)
 
     async def list_directory(self, dir_cap):
         return self._grid.list_directory(dir_cap)
