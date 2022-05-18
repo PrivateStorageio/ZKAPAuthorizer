@@ -35,7 +35,7 @@ from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
-from twisted.application.service import IService, IServiceCollection, MultiService
+from twisted.application.service import IService, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
@@ -120,7 +120,7 @@ class ZKAPAuthorizer(object):
     _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field()
 
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
-    _service: IServiceCollection = field()
+    _service: MultiService = field()
 
     @_service.default
     def _service_default(self):

@@ -434,6 +434,9 @@ class ServiceTests(TestCase):
         # _replicating getting set
         reactor.run()
 
+        # Let's make sure the service eventually stops.
+        self.addCleanup(plugin._service.stopService)
+
         # There is no public interface for just getting the database
         # abstraction, so...
         store = plugin._get_store(node_config)
