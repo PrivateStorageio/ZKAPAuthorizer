@@ -10,14 +10,17 @@ from sqlite3 import OperationalError, ProgrammingError, connect
 from typing import BinaryIO, Callable, Optional
 
 from attrs import frozen
+from eliot import log_call, start_action
 from hypothesis import given
 from hypothesis.strategies import lists, text
 from testtools import TestCase
 from testtools.matchers import (
+    AfterPreprocessing,
     Contains,
     Equals,
     HasLength,
-    MatchesListwise,
+    MatchesAll,
+    MatchesDict,
     MatchesStructure,
     Mismatch,
     Not,
@@ -29,7 +32,7 @@ from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME
-from ..model import RandomToken, aware_now
+from ..model import RandomToken, VoucherStore, aware_now
 from ..recover import recover
 from ..replicate import (
     EventStream,
@@ -43,7 +46,8 @@ from ..replicate import (
     with_replication,
 )
 from ..spending import SpendingController
-from ..tahoe import MemoryGrid
+from ..tahoe import CapStr, ITahoeClient, MemoryGrid
+from .common import delayedProxy
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, equals_database, returns
 
@@ -341,6 +345,46 @@ async def noop_list() -> list[str]:
 noop_replica = Replica(noop_upload, noop_prune, noop_list)
 
 
+def has_files(grid: MemoryGrid, dir_cap: CapStr, count: int) -> bool:
+    """
+    A predicate that returns True only when the directory indicated has at
+    least the given number of children in it.
+    """
+    return len(grid.list_directory(dir_cap)) >= count
+
+
+def repeatUntil(condition: Callable[[], bool], action: Callable[[], object]) -> None:
+    """
+    Run an action repeatedly until a condition is true.
+    """
+    while True:
+        action()
+        if condition():
+            break
+
+
+def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, dict]]:
+    """
+    Match a Tahoe-LAFS directory entry representing a file which can be
+    retrieved from the given grid and which contains an ``EventStream`` with a
+    structure matched by the given keyword arguments.
+    """
+
+    def is_filenode():
+        return AfterPreprocessing(lambda item: item[0], Equals("filenode"))
+
+    def download_event_stream(cap):
+        return EventStream.from_bytes(BytesIO(grid.download(cap)))
+
+    return MatchesAll(
+        is_filenode(),
+        AfterPreprocessing(
+            lambda item: download_event_stream(item[1]["ro_uri"]),
+            MatchesStructure(**kwargs),
+        ),
+    )
+
+
 class ReplicationServiceTests(TestCase):
     """
     Tests for ``_ReplicationService``.
@@ -398,182 +442,104 @@ class ReplicationServiceTests(TestCase):
         """
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
+        grid = MemoryGrid()
+        replica_cap = grid.make_directory()
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
-        rwcap_file.setContent(b"URL:DIR2:stuff")
+        rwcap_file.setContent(replica_cap.encode("ascii"))
+
+        # Predicate to check if the replica directory has at least some number
+        # of files in it.
+        has_files_bound = partial(has_files, grid, replica_cap)
 
         # we use this to contol when the first upload happens, so that we
         # actually use the queue
-        wait_d: Deferred[None] = Deferred()
-
-        uploads = []
-        upload_completed = False
-
-        async def uploader(name, get_data):
-            uploads.append((name, get_data))
-            await wait_d
-            nonlocal upload_completed
-            upload_completed = True
-
-        async def pruner(predicate):
-            pass
-
-        async def lister():
-            return []
+        delay_controller, delay_client = delayedProxy(
+            ITahoeClient,
+            grid.client(tvs.config._basedir),
+        )
 
         srv = replication_service(
-            tvs.store._connection, Replica(uploader, pruner, lister)
+            tvs.store._connection,
+            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
         )
+
+        @log_call(action_type="zkapauthorizer:tests:add-tokens")
+        def add_tokens(store: VoucherStore) -> None:
+            tokens = [RandomToken(b64encode(urandom(96)))]
+            voucher = urlsafe_b64encode(urandom(32))
+            store.add(voucher, len(tokens), 1, lambda: tokens)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
         srv.startService()
         self.addCleanup(srv.stopService)
 
-        def add_tokens():
-            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-            voucher = urlsafe_b64encode(urandom(32))
-            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
+        with start_action(action_type="zkapauthorizer:tests:wait-for-snapshot"):
+            repeatUntil(partial(has_files_bound, 1), delay_controller.run)
+
+        # then it does a list_directory for pruning purposes.  if we don't let
+        # it run then the event-stream upload for the first add_tokens() can't
+        # start and the subsequent add_tokens calls have their data merged
+        # into an upload with the first.
+        with start_action(action_type="zkapauthorizer:tests:run-list-directory"):
+            delay_controller.run()
 
         # Add some tokens, which are considered important.
-        add_tokens()
+        add_tokens(tvs.store)
 
-        # Still, the upload cannot complete until we fire wait_d.  Verify
-        # that's working as intended.
-        self.assertFalse(upload_completed)
+        # Still, no uploads can complete until we let them.  Verify that's
+        # working as intended by asserting there are no event streams on the
+        # grid.
+        self.assertThat(
+            sorted(grid.list_directory(replica_cap)),
+            Equals(["snapshot"]),
+        )
 
         # Add two more groups of tokens.  These are also important.  They
         # should be included in an upload but they cannot be included in the
         # upload that already started.
-        add_tokens()
-        add_tokens()
+        add_tokens(tvs.store)
+        add_tokens(tvs.store)
 
-        # Finish the first upload.
-        wait_d.callback(None)
-        self.assertTrue(upload_completed)
+        # Finish the first event-stream upload.
+        with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
+            repeatUntil(partial(has_files_bound, 2), delay_controller.run)
+
+        self.assertThat(
+            sorted(grid.list_directory(replica_cap)),
+            Equals(sorted(["snapshot", "event-stream-2"])),
+        )
+
+        # Allow subsequent uploads.
+        with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
+            repeatUntil(partial(has_files_bound, 3), delay_controller.run)
 
         # Now both the first upload and a second upload should have completed.
         # There is no third upload because the data for the 2nd and 3rd
         # add_tokens calls should have been combined into a single upload.
         self.assertThat(
-            uploads,
-            MatchesListwise(
-                [
-                    match_upload(
-                        Equals("event-stream-11"),
-                        MatchesStructure(
-                            changes=HasLength(11),
-                            highest_sequence=returns(Equals(11)),
-                        ),
+            grid.list_directory(replica_cap),
+            MatchesDict(
+                {
+                    "snapshot": Always(),
+                    "event-stream-2": is_event_stream(
+                        grid,
+                        changes=HasLength(2),
+                        highest_sequence=returns(Equals(2)),
                     ),
-                    match_upload(
-                        Equals("event-stream-33"),
-                        MatchesStructure(
-                            changes=HasLength(22),
-                            highest_sequence=returns(Equals(33)),
-                        ),
+                    "event-stream-6": is_event_stream(
+                        grid,
+                        changes=HasLength(4),
+                        highest_sequence=returns(Equals(6)),
                     ),
-                ],
+                }
             ),
         )
 
         # since we've uploaded everything, there should be no
         # events in the store
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
-
-    def test_snapshot(self) -> None:
-        """
-        Making changes to the voucher store while replication is turned on
-        causes event-stream objects to be uploaded.
-        """
-
-        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
-
-        rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
-        rwcap_file.parent().makedirs()
-        rwcap_file.setContent(b"URL:DIR2:stuff")
-
-        # we use this to contol when the first upload happens, so that we
-        # actually use the queue
-        wait_d: Deferred[None] = Deferred()
-
-        uploads = []
-        upload_completed = False
-
-        async def uploader(name, get_data):
-            uploads.append((name, get_data))
-            await wait_d
-            nonlocal upload_completed
-            upload_completed = True
-
-        async def pruner(predicate):
-            pass
-
-        async def lister():
-            return []
-
-        srv = replication_service(
-            tvs.store._connection, Replica(uploader, pruner, lister)
-        )
-
-        # run the service and produce some fake voucher etc changes
-        # that cause "events" to be issued into the database
-        srv.startService()
-        self.addCleanup(srv.stopService)
-
-        def add_tokens():
-            tokens = [RandomToken(b64encode(urandom(96))) for _ in range(10)]
-            voucher = urlsafe_b64encode(urandom(32))
-            tvs.store.add(voucher, len(tokens), 1, lambda: tokens)
-
-        # Add some tokens, which are considered important.
-        add_tokens()
-
-        # Still, the upload cannot complete until we fire wait_d.  Verify
-        # that's working as intended.
-        self.assertFalse(upload_completed)
-
-        # Add two more groups of tokens.  These are also important.  They
-        # should be included in an upload but they cannot be included in the
-        # upload that already started.
-        add_tokens()
-        add_tokens()
-
-        # Finish the first upload.
-        wait_d.callback(None)
-        self.assertTrue(upload_completed)
-
-        # Now both the first upload and a second upload should have completed.
-        # There is no third upload because the data for the 2nd and 3rd
-        # add_tokens calls should have been combined into a single upload.
-        self.assertThat(
-            uploads,
-            MatchesListwise(
-                [
-                    match_upload(
-                        Equals("event-stream-11"),
-                        MatchesStructure(
-                            changes=HasLength(11),
-                            highest_sequence=returns(Equals(11)),
-                        ),
-                    ),
-                    match_upload(
-                        Equals("event-stream-33"),
-                        MatchesStructure(
-                            changes=HasLength(22),
-                            highest_sequence=returns(Equals(33)),
-                        ),
-                    ),
-                ],
-            ),
-        )
-
-        # since we've uploaded everything, there should be no
-        # events in the store
-        self.assertThat(
-            get_events(tvs.store._connection).changes,
-            HasLength(0),
-        )
 
     def test_snapshot_prune(self) -> None:
         """
@@ -582,24 +548,26 @@ class ReplicationServiceTests(TestCase):
         """
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
+        grid = MemoryGrid()
+        replica_cap = grid.make_directory()
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
-        rwcap_file.setContent(b"URL:DIR2:stuff")
+        rwcap_file.setContent(replica_cap.encode("ascii"))
 
-        uploads = []
-        pruned = []
+        # Predicate to check if the replica directory has at least some number
+        # of files in it.
+        has_files_bound = partial(has_files, grid, replica_cap)
 
-        async def uploader(name, get_data):
-            uploads.append((name, get_data))
-
-        async def pruner(predicate):
-            pruned.append(predicate)
-
-        async def lister():
-            return []
+        # we use this to contol when the first upload happens, so that we
+        # actually use the queue
+        delay_controller, delay_client = delayedProxy(
+            ITahoeClient,
+            grid.client(tvs.config._basedir),
+        )
 
         srv = replication_service(
-            tvs.store._connection, Replica(uploader, pruner, lister)
+            tvs.store._connection,
+            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
         )
 
         # run the service and produce some fake voucher etc changes
@@ -607,23 +575,36 @@ class ReplicationServiceTests(TestCase):
         srv.startService()
         self.addCleanup(srv.stopService)
 
+        with start_action(action_type="zkapauthorizer:tests:wait-for-snapshot"):
+            repeatUntil(partial(has_files_bound, 1), delay_controller.run)
+
+        # then it does a list_directory for pruning purposes.  if we don't let
+        # it run then the event-stream upload for the first add_tokens() can't
+        # start and the subsequent add_tokens calls have their data merged
+        # into an upload with the first.
+        with start_action(action_type="zkapauthorizer:tests:run-list-directory"):
+            delay_controller.run()
+
         # Add some tokens, which are considered important.
         voucher0 = urlsafe_b64encode(urandom(32))
         tvs.redeem(voucher0, 20)
 
+        # Allow the resulting event-stream upload to complete.
+        with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
+            repeatUntil(partial(has_files_bound, 2), delay_controller.run)
+
         # ..so we should have uploaded here
         self.assertThat(
-            uploads,
-            MatchesListwise(
-                [
-                    match_upload(
-                        Equals("event-stream-21"),
-                        MatchesStructure(
-                            changes=HasLength(21),
-                            highest_sequence=returns(Equals(21)),
-                        ),
-                    )
-                ]
+            grid.list_directory(replica_cap),
+            MatchesDict(
+                {
+                    "snapshot": Always(),
+                    "event-stream-21": is_event_stream(
+                        grid,
+                        changes=HasLength(21),
+                        highest_sequence=returns(Equals(21)),
+                    ),
+                }
             ),
         )
 
@@ -644,15 +625,26 @@ class ReplicationServiceTests(TestCase):
         # trigger a snapshot upload
         srv.queue_snapshot_upload()  # type: ignore
 
+        # Let the snapshot upload and pruning processes run.
+        delay_controller.run()
+        delay_controller.run()
+        delay_controller.run()
+        delay_controller.run()
+
         # now there should be no local changes
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
         # ...and we should have pruned the prior event-stream .. so we
         # interrogate the predicate we _were_ given to ensure it would
         # have said "yes" to the event-stream we did upload
 
-        self.assertThat(pruned, HasLength(1))
-        self.assertThat(pruned[0]("event-stream-21"), Equals(True))
-        self.assertThat(pruned[0]("event-stream-1234"), Equals(False))
+        self.assertThat(
+            grid.list_directory(replica_cap),
+            MatchesDict(
+                {
+                    "snapshot": Always(),
+                }
+            ),
+        )
 
 
 class TahoeDirectoryListerTests(TestCase):
