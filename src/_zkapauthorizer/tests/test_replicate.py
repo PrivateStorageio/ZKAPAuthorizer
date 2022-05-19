@@ -401,8 +401,8 @@ class ReplicationServiceTests(TestCase):
         # in replication mode.  To start, make sure that database changes are
         # not already being captured.  They should not be since nothing has
         # placed the connection into replication mode yet.
-        # store.start_lease_maintenance().finish()
-        # self.assertThat(get_events(store._connection).changes, HasLength(0))
+        store.start_lease_maintenance().finish()
+        self.assertThat(get_events(store._connection).changes, HasLength(0))
 
         service = replication_service(store._connection, noop_replica)
         service.startService()
