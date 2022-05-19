@@ -25,6 +25,7 @@ from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 
 from ..tahoe import (
+    CapStr,
     MemoryGrid,
     NotADirectoryError,
     NotWriteableError,
@@ -213,18 +214,24 @@ class DirectoryTestsMixin:
         """
         tahoe = self.get_client()
         dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
-        entry_names = range(5)
+        entry_names = list(map(str, range(5)))
 
-        def file_content(n):
-            return b"x" * (n + 1)
+        def file_content(name: str) -> bytes:
+            return b"x" * (int(name) + 1)
 
-        async def upload(n):
-            cap = await tahoe.upload(lambda: BytesIO(file_content(n)))
-            await tahoe.link(dir_cap, str(n), cap)
+        async def upload(name: str) -> tuple[str, CapStr]:
+            cap = await tahoe.upload(lambda: BytesIO(file_content(name)))
+            await tahoe.link(dir_cap, name, cap)
+            return (name, cap)
 
         # Populate it a little
-        yield gatherResults([Deferred.fromCoroutine(upload(n)) for n in entry_names])
-
+        expected_entry_caps = dict(
+            (
+                yield gatherResults(
+                    [Deferred.fromCoroutine(upload(n)) for n in entry_names]
+                )
+            )
+        )
         # Put another directory in it too.
         inner_dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
         yield Deferred.fromCoroutine(tahoe.link(dir_cap, "directory", inner_dir_cap))
@@ -232,11 +239,9 @@ class DirectoryTestsMixin:
         # Read it back
         children = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
 
-        self.expectThat(
-            set(children), Equals({"directory"} | set(map(str, entry_names)))
-        )
+        self.expectThat(set(children), Equals({"directory"} | set(entry_names)))
         for name in entry_names:
-            kind, details = children[str(name)]
+            kind, details = children[name]
             self.expectThat(
                 kind,
                 Equals("filenode"),
@@ -245,6 +250,10 @@ class DirectoryTestsMixin:
                 details["size"],
                 Equals(len(file_content(name))),
                 f"child {name} has unexpected size",
+            )
+            self.expectThat(
+                details["ro_uri"],
+                Equals(expected_entry_caps[name]),
             )
 
         kind, details = children["directory"]

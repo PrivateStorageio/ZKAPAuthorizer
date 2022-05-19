@@ -519,7 +519,7 @@ class MemoryGrid:
             obj = self._objects[cap]
             if kind(obj) == "dirnode":
                 return ["dirnode", {"rw_uri": cap}]
-            return ["filenode", {"size": len(obj)}]
+            return ["filenode", {"size": len(obj), "ro_uri": cap}]
 
         dirobj = self._objects[dir_cap]
         if isinstance(dirobj, _Directory):
