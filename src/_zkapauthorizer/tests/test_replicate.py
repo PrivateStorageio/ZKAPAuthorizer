@@ -353,7 +353,7 @@ def has_files(grid: MemoryGrid, dir_cap: CapStr, count: int) -> bool:
     return len(grid.list_directory(dir_cap)) >= count
 
 
-def repeatUntil(condition: Callable[[], bool], action: Callable[[], object]) -> None:
+def repeat_until(condition: Callable[[], bool], action: Callable[[], object]) -> None:
     """
     Run an action repeatedly until a condition is true.
     """
@@ -476,7 +476,7 @@ class ReplicationServiceTests(TestCase):
         self.addCleanup(srv.stopService)
 
         with start_action(action_type="zkapauthorizer:tests:wait-for-snapshot"):
-            repeatUntil(partial(has_files_bound, 1), delay_controller.run)
+            repeat_until(partial(has_files_bound, 1), delay_controller.run)
 
         # then it does a list_directory for pruning purposes.  if we don't let
         # it run then the event-stream upload for the first add_tokens() can't
@@ -504,7 +504,7 @@ class ReplicationServiceTests(TestCase):
 
         # Finish the first event-stream upload.
         with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
-            repeatUntil(partial(has_files_bound, 2), delay_controller.run)
+            repeat_until(partial(has_files_bound, 2), delay_controller.run)
 
         self.assertThat(
             sorted(grid.list_directory(replica_cap)),
@@ -513,7 +513,7 @@ class ReplicationServiceTests(TestCase):
 
         # Allow subsequent uploads.
         with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
-            repeatUntil(partial(has_files_bound, 3), delay_controller.run)
+            repeat_until(partial(has_files_bound, 3), delay_controller.run)
 
         # Now both the first upload and a second upload should have completed.
         # There is no third upload because the data for the 2nd and 3rd
@@ -576,7 +576,7 @@ class ReplicationServiceTests(TestCase):
         self.addCleanup(srv.stopService)
 
         with start_action(action_type="zkapauthorizer:tests:wait-for-snapshot"):
-            repeatUntil(partial(has_files_bound, 1), delay_controller.run)
+            repeat_until(partial(has_files_bound, 1), delay_controller.run)
 
         # then it does a list_directory for pruning purposes.  if we don't let
         # it run then the event-stream upload for the first add_tokens() can't
@@ -591,7 +591,7 @@ class ReplicationServiceTests(TestCase):
 
         # Allow the resulting event-stream upload to complete.
         with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
-            repeatUntil(partial(has_files_bound, 2), delay_controller.run)
+            repeat_until(partial(has_files_bound, 2), delay_controller.run)
 
         # ..so we should have uploaded here
         self.assertThat(
