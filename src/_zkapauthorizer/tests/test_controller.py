@@ -51,7 +51,6 @@ from treq.testing import StubTreq
 from twisted.internet.defer import fail, succeed
 from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import Clock
-from twisted.python.filepath import FilePath
 from twisted.python.url import URL
 from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
 from twisted.web.http_headers import Headers
@@ -60,7 +59,6 @@ from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
 from .._json import dumps_utf8
-from ..config import EmptyConfig
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
@@ -190,7 +188,7 @@ class PaymentControllerTests(TestCase):
         ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
         a state when redemption should not be started.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             DummyRedeemer(public_key),
@@ -227,7 +225,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
         completes.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             NonRedeemer(),
@@ -266,7 +264,7 @@ class PaymentControllerTests(TestCase):
         redeemer = IndexedRedeemer(
             [DummyRedeemer(public_key)] * num_successes + [NonRedeemer()],
         )
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             redeemer,
@@ -324,7 +322,7 @@ class PaymentControllerTests(TestCase):
         # Give it enough tokens so each group can have one.
         num_tokens = num_redemption_groups
 
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
 
         def first_try():
             controller = PaymentController(
@@ -400,7 +398,7 @@ class PaymentControllerTests(TestCase):
         num_tokens = num_redemption_groups + extra_tokens
         redeemer = RecordingRedeemer(UnpaidRedeemer())
 
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             redeemer,
@@ -426,7 +424,7 @@ class PaymentControllerTests(TestCase):
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             DummyRedeemer(public_key),
@@ -461,7 +459,7 @@ class PaymentControllerTests(TestCase):
         voucher is put into the error state.
         """
         details = "these are the reasons it broke"
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             ErrorRedeemer(details),
@@ -493,7 +491,7 @@ class PaymentControllerTests(TestCase):
         A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
         with ``AlreadySpent``.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             store,
             DoubleSpendRedeemer(),
@@ -524,7 +522,7 @@ class PaymentControllerTests(TestCase):
         When ``PaymentController`` is created, any vouchers in the store in the
         pending state are redeemed.
         """
-        store = self.useFixture(TemporaryVoucherStore(get_config, lambda: now)).store
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         # Create the voucher state in the store with a redemption that will
         # certainly fail.
         unpaid_controller = PaymentController(
@@ -575,8 +573,8 @@ class PaymentControllerTests(TestCase):
         datetime_now = clock_to_now(clock)
         store = self.useFixture(
             TemporaryVoucherStore(
-                get_config,
                 datetime_now,
+                get_config,
             ),
         ).store
         controller = PaymentController(
@@ -678,11 +676,7 @@ class PaymentControllerTests(TestCase):
         num_redemption_groups = len(all_public_keys)
 
         datetime_now = clock_to_now(clock)
-        store = self.useFixture(
-            TemporaryVoucherStore(
-                lambda basedir, portfile: EmptyConfig(FilePath(basedir)), datetime_now
-            )
-        ).store
+        store = self.useFixture(TemporaryVoucherStore(datetime_now)).store
 
         redeemers = list(DummyRedeemer(public_key) for public_key in all_public_keys)
 

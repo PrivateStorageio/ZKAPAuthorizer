@@ -360,7 +360,7 @@ class ITahoeClient(Interface):
         :param entry_name: The name of the entry to remove.
         """
 
-    async def list_directory(dir_cap: CapStr) -> dict[CapStr, list[Any]]:
+    async def list_directory(dir_cap: CapStr) -> dict[str, list[Any]]:
         """
         List the entries linked into a directory.
         """
@@ -509,7 +509,7 @@ class MemoryGrid:
         else:
             raise NotADirectoryError()
 
-    def list_directory(self, dir_cap: CapStr) -> dict[CapStr, list[Any]]:
+    def list_directory(self, dir_cap: CapStr) -> dict[str, list[Any]]:
         def kind(entry):
             if isinstance(entry, _Directory):
                 return "dirnode"
@@ -519,7 +519,7 @@ class MemoryGrid:
             obj = self._objects[cap]
             if kind(obj) == "dirnode":
                 return ["dirnode", {"rw_uri": cap}]
-            return ["filenode", {"size": len(obj)}]
+            return ["filenode", {"size": len(obj), "ro_uri": cap}]
 
         dirobj = self._objects[dir_cap]
         if isinstance(dirobj, _Directory):

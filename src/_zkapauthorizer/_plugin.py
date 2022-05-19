@@ -35,7 +35,7 @@ from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
-from twisted.application.service import IService, IServiceCollection, MultiService
+from twisted.application.service import IService, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
@@ -59,8 +59,7 @@ from .recover import make_fail_downloader
 from .replicate import (
     _ReplicationCapableConnection,
     get_replica_rwcap,
-    get_tahoe_lafs_direntry_pruner,
-    get_tahoe_lafs_direntry_uploader,
+    get_tahoe_lafs_direntry_replica,
     is_replication_setup,
     replication_service,
     setup_tahoe_lafs_replication,
@@ -121,7 +120,7 @@ class ZKAPAuthorizer(object):
     _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field()
 
     _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
-    _service: IServiceCollection = field()
+    _service: MultiService = field()
 
     @_service.default
     def _service_default(self):
@@ -168,13 +167,10 @@ class ZKAPAuthorizer(object):
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
         """
-        client = get_tahoe_client(self.reactor, node_config)
+        client = self._get_tahoe_client(self.reactor, node_config)
         mutable = get_replica_rwcap(node_config)
-        uploader = get_tahoe_lafs_direntry_uploader(client, mutable)
-        pruner = get_tahoe_lafs_direntry_pruner(client, mutable)
-        replication_service(replicated_conn, uploader, pruner).setServiceParent(
-            self._service
-        )
+        replica = get_tahoe_lafs_direntry_replica(client, mutable)
+        replication_service(replicated_conn, replica).setServiceParent(self._service)
         return mutable
 
     def _get_redeemer(self, node_config, announcement):

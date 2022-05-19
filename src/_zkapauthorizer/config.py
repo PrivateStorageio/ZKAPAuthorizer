@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 from datetime import timedelta
-from typing import TypeVar, Union
+from typing import Protocol, TypeVar, Union
 
 from allmydata.node import _Config as Config
 from attrs import define
@@ -47,6 +47,31 @@ REPLICA_RWCAP_BASENAME = NAME + ".replica-rwcap"
 # where we're versioning our ability to open the database at all.  The schema
 # inside the database is versioned by yet another mechanism.
 CONFIG_DB_NAME = "privatestorageio-zkapauthz-v1.sqlite3"
+
+
+class TahoeConfig(Protocol):
+    """
+    A representation of the configuration for a Tahoe-LAFS node.
+    """
+
+    def get_config(
+        self,
+        section: str,
+        option: str,
+        default: object = object(),
+        boolean: bool = False,
+    ) -> object:
+        """
+        Read an option from a section of the configuration.
+        """
+
+    def get_private_path(self, name: str) -> str:
+        """
+        Construct a path beneath the private directory of the node this
+        configuration belongs to.
+
+        :param name: A path relative to the private directory.
+        """
 
 
 @define

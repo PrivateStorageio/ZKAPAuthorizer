@@ -21,9 +21,10 @@ from __future__ import annotations
 
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, Union
+from typing import Awaitable, Callable, TypeVar, Union
 
 from attrs import Factory, define, field
+from eliot import log_call
 from twisted.internet.defer import Deferred
 from twisted.python.reflect import fullyQualifiedName
 from zope.interface import classImplements
@@ -68,7 +69,10 @@ def flushErrors(exc_type: type) -> list[Exception]:
     return _logObserver.flushErrors(exc_type)
 
 
-def delayedProxy(iface, obj) -> tuple[_DelayedController, object]:
+_A = TypeVar("_A")
+
+
+def delayedProxy(iface, obj: _A) -> tuple[_DelayedController, _A]:
     """
     Wrap ``obj`` in a proxy for ``iface`` which inserts an arbitrary delay
     prior to the execution of each method.
@@ -113,6 +117,7 @@ class _DelayedController:
 
     _waiting: list[Deferred[None]] = field(default=Factory(list))
 
+    @log_call(action_type="zkapauthorizer:tests:delayed-controller:run")
     def run(self) -> None:
         """
         Run all methods which have been called (and delayed) up to this point.

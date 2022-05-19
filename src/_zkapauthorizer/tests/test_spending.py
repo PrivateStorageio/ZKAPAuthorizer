@@ -28,9 +28,7 @@ from testtools.matchers import (
     MatchesStructure,
 )
 from testtools.twistedsupport import succeeded
-from twisted.python.filepath import FilePath
 
-from ..config import EmptyConfig
 from ..spending import IPassGroup, SpendingController
 from .fixtures import TemporaryVoucherStore
 from .matchers import Provides
@@ -48,12 +46,7 @@ class PassGroupTests(TestCase):
         ``IPassFactory.get`` returns an ``IPassGroup`` provider containing the
         requested number of passes.
         """
-        configless = self.useFixture(
-            TemporaryVoucherStore(
-                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
-                get_now=lambda: now,
-            ),
-        )
+        configless = self.useFixture(TemporaryVoucherStore(get_now=lambda: now))
         # Make sure there are enough tokens for us to extract!
         self.assertThat(
             configless.redeem(voucher, num_passes),
@@ -87,12 +80,7 @@ class PassGroupTests(TestCase):
         random,
         data,
     ):
-        configless = self.useFixture(
-            TemporaryVoucherStore(
-                get_config=lambda basedir, portfile: EmptyConfig(FilePath(basedir)),
-                get_now=lambda: now,
-            ),
-        )
+        configless = self.useFixture(TemporaryVoucherStore(get_now=lambda: now))
         # Make sure there are enough tokens for us to use!
         self.assertThat(
             configless.redeem(voucher, num_passes),

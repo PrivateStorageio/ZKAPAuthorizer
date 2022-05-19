@@ -18,7 +18,8 @@ Common fixtures to let the test suite focus on application logic.
 
 import gc
 from base64 import b64encode
-from typing import Any, Generator
+from datetime import datetime
+from typing import Any, Callable, Generator
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -33,8 +34,8 @@ from twisted.python.filepath import FilePath
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from .._plugin import open_store
-from ..config import CONFIG_DB_NAME
-from ..controller import DummyRedeemer, PaymentController
+from ..config import CONFIG_DB_NAME, EmptyConfig, TahoeConfig
+from ..controller import DummyRedeemer, IRedeemer, PaymentController
 from ..model import memory_connect
 from ..replicate import with_replication
 
@@ -67,7 +68,17 @@ class AnonymousStorageServer(Fixture):
         )
 
 
-@attr.s
+def _get_empty_config(rootpath: str, portnumfile: str) -> TahoeConfig:
+    """
+    Construct an empty Tahoe configuration object.
+
+    :param rootpath: The path of the node directory the configuration will
+        use.
+    """
+    return EmptyConfig(FilePath(rootpath))
+
+
+@define
 class TemporaryVoucherStore(Fixture):
     """
     Create a ``VoucherStore`` in a temporary directory associated with the
@@ -80,10 +91,10 @@ class TemporaryVoucherStore(Fixture):
     :ivar store: A newly created temporary store.
     """
 
-    get_config = attr.ib()
-    get_now = attr.ib()
-    redeemer = attr.ib(init=False)
-    _public_key = b64encode(b"A" * 32).decode("utf-8")
+    get_now: Callable[[], datetime]
+    get_config: Callable[[str, str], TahoeConfig] = _get_empty_config
+    _public_key: str = b64encode(b"A" * 32).decode("utf-8")
+    redeemer: IRedeemer = field(init=False)
 
     @redeemer.default
     def _redeemer_default(self):
