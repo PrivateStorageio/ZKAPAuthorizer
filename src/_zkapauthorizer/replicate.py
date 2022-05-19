@@ -81,6 +81,7 @@ from typing import (
 import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
+from eliot import log_call
 from twisted.application.service import IService, Service
 from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed
 from twisted.logger import Logger
@@ -848,12 +849,14 @@ class _ReplicationService(Service):
         if job not in self._jobs.pending:
             self._jobs.put(job)
 
+    @log_call(action_type="zkapauthorizer:replicate:queue-event-upload")
     def queue_event_upload(self) -> None:
         """
         Request an event-stream upload of outstanding events.
         """
         self.queue_job(ReplicationJob.event_stream)
 
+    @log_call(action_type="zkapauthorizer:replicate:queue-snapshot-upload")
     def queue_snapshot_upload(self) -> None:
         """
         Request that an upload of a new snapshot occur. Stale
@@ -892,6 +895,7 @@ class _ReplicationService(Service):
         elif self.should_upload_eventstream(self._changes):
             self.queue_event_upload()
 
+    @log_call(action_type="zkapauthorizer:replicate:snapshot-upload")
     async def _do_one_snapshot_upload(self) -> None:
         """
         Perform a single snapshot upload, including pruning event-streams
@@ -943,6 +947,7 @@ class _ReplicationService(Service):
 
         await self._replica.prune(is_old_eventstream)
 
+    @log_call(action_type="zkapauthorizer:replicate:event-upload")
     async def _do_one_event_upload(self) -> None:
         """
         Process a single upload of all current events and then delete them
@@ -956,7 +961,8 @@ class _ReplicationService(Service):
             return
 
         # otherwise, upload the events we found.
-        await self._replica.upload(event_stream_name(high_seq), events.to_bytes)
+        name = event_stream_name(high_seq)
+        await self._replica.upload(name, events.to_bytes)
 
         # then discard the uploaded events from the local database.
         prune_events_to(self._unreplicated_connection, high_seq)

@@ -24,6 +24,7 @@ from inspect import iscoroutinefunction
 from typing import Awaitable, Callable, Union
 
 from attrs import Factory, define, field
+from eliot import log_call
 from twisted.internet.defer import Deferred
 from twisted.python.reflect import fullyQualifiedName
 from zope.interface import classImplements
@@ -113,6 +114,7 @@ class _DelayedController:
 
     _waiting: list[Deferred[None]] = field(default=Factory(list))
 
+    @log_call(action_type="zkapauthorizer:tests:delayed-controller:run")
     def run(self) -> None:
         """
         Run all methods which have been called (and delayed) up to this point.
