@@ -385,6 +385,16 @@ def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, d
     )
 
 
+@log_call(action_type="zkapauthorizer:tests:add-tokens")
+def add_tokens(store: VoucherStore) -> None:
+    """
+    Add a token to the given store.
+    """
+    tokens = [RandomToken(b64encode(urandom(96)))]
+    voucher = urlsafe_b64encode(urandom(32))
+    store.add(voucher, len(tokens), 1, lambda: tokens)
+
+
 class ReplicationServiceTests(TestCase):
     """
     Tests for ``_ReplicationService``.
@@ -435,6 +445,73 @@ class ReplicationServiceTests(TestCase):
             Contains("snapshot"),
         )
 
+    def test_lingering_event_stream(self) -> None:
+        """
+        If there are changes recorded in the local event stream that should be
+        uploaded then they are uploaded soon after the replication service
+        starts even if no further local changes are made.
+        """
+        # The starting state that we want is:
+        #   (1) Replication is enabled
+        #   (2) A snapshot has been uploaded
+        #   (3) There is no replication service
+        #   (4) There are extra changes in the event-stream
+        #
+        # Then we can create the replication service and watch it react to the
+        # extra event-stream changes.
+        #
+        # To get to this state, we'll make a store and let it upload a
+        # snapshot.  Then we'll stop its service, make some changes, and make
+        # and start a new replication service for the new store.
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+        store = tvs.store
+
+        grid = MemoryGrid()
+        replica_dircap = grid.make_directory()
+        client = grid.client()
+
+        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        # This accomplishes (1).
+        service = replication_service(store._connection, replica)
+        service.startService()
+
+        # Demonstrate (2).
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
+        )
+
+        # Accomplish (3).
+        self.assertThat(service.stopService(), succeeded(Always()))
+
+        # Introduce some "important" changes to accomplish (4).
+        add_tokens(store)
+
+        # Verify the important changes are still in the local database and
+        # have not been uploaded to the replica.
+        self.assertThat(
+            get_events(store._connection).changes,
+            Not(HasLength(0)),
+        )
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
+        )
+
+        # Now create and start the new replication service, expecting it will
+        # upload the changes in the local event stream.
+        service = replication_service(store._connection, replica)
+        service.startService()
+
+        self.assertThat(
+            get_events(store._connection).changes,
+            HasLength(0),
+        )
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot", "event-stream-2"}),
+        )
+
     def test_replicate(self) -> None:
         """
         Making changes to the voucher store while replication is turned on
@@ -463,12 +540,6 @@ class ReplicationServiceTests(TestCase):
             tvs.store._connection,
             get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
         )
-
-        @log_call(action_type="zkapauthorizer:tests:add-tokens")
-        def add_tokens(store: VoucherStore) -> None:
-            tokens = [RandomToken(b64encode(urandom(96)))]
-            voucher = urlsafe_b64encode(urandom(32))
-            store.add(voucher, len(tokens), 1, lambda: tokens)
 
         # run the service and produce some fake voucher etc changes
         # that cause "events" to be issued into the database
