@@ -79,7 +79,7 @@ class SnapshotEncodingTests(TestCase):
         self.assertThat(
             # They are allowed to differ by leading and trailing whitespace
             # because such whitespace is meaningless in a SQL statement.
-            [s.strip() for s in statements],
+            statements,
             Equals(loaded),
         )
 
