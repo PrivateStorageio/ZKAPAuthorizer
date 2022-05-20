@@ -18,7 +18,6 @@ plugin.
 """
 
 from base64 import b32encode
-from datetime import datetime
 from io import BytesIO
 from typing import Container
 from urllib.parse import quote
@@ -352,7 +351,7 @@ class FromConfigurationTests(TestCase):
         allowed_public_keys = get_configured_allowed_public_keys(config)
 
         # root_from_config is just an easier way to call from_configuration
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         self.assertThat(
             root.controller,
             MatchesStructure(
@@ -414,7 +413,7 @@ class ResourceTests(TestCase):
         """
         tempdir = self.useFixture(TempDir())
         config = get_config(tempdir.join("tahoe"), "tub.port")
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         requesting = agent.request(
             b"GET",
@@ -457,7 +456,7 @@ class ResourceTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -493,7 +492,7 @@ class ResourceTests(TestCase):
             get_config,
             api_auth_token,
         )
-        root = root_from_config(config, datetime.now)
+        root = root_from_config(config, aware_now)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
@@ -541,9 +540,7 @@ class ReplicateTests(TestCase):
         async def setup_replication():
             raise ReplicationAlreadySetup()
 
-        root = root_from_config(
-            config, datetime.now, setup_replication=setup_replication
-        )
+        root = root_from_config(config, aware_now, setup_replication=setup_replication)
         agent = RequestTraversalAgent(root)
         configuring = authorized_request(
             api_auth_token,
@@ -578,9 +575,7 @@ class ReplicateTests(TestCase):
         async def setup_replication():
             raise SurpriseBug("surprise")
 
-        root = root_from_config(
-            config, datetime.now, setup_replication=setup_replication
-        )
+        root = root_from_config(config, aware_now, setup_replication=setup_replication)
         agent = RequestTraversalAgent(root)
         configuring = authorized_request(
             api_auth_token,
@@ -621,9 +616,7 @@ class ReplicateTests(TestCase):
         async def setup_replication():
             return cap_ro
 
-        root = root_from_config(
-            config, datetime.now, setup_replication=setup_replication
-        )
+        root = root_from_config(config, aware_now, setup_replication=setup_replication)
         agent = RequestTraversalAgent(root)
         configuring = authorized_request(
             api_auth_token,
@@ -684,7 +677,7 @@ class RecoverTests(TestCase):
         def broken_get_downloader(cap):
             raise DownloaderBroken()
 
-        root = root_from_config(config, datetime.now, broken_get_downloader)
+        root = root_from_config(config, aware_now, broken_get_downloader)
         agent = RequestTraversalAgent(root)
         requesting = authorized_request(
             api_auth_token,
