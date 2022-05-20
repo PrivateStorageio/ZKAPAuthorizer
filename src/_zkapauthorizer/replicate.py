@@ -120,20 +120,25 @@ class ReplicationJob(Enum):
     """
     The kinds of jobs that the Replication queue knows about
 
-    :ivar startup: Represent the job that is run once when the replication
-        service starts and which is responsible for inspecting local and
-        remote state to determine if any actions are immediately necessary
-        (even before any further local changes are made).
+    :ivar startup: The job that is run once when the replication service
+        starts and which is responsible for inspecting local and remote state
+        to determine if any actions are immediately necessary (even before any
+        further local changes are made).
 
-    :ivar event_stream: Represent the job to upload a new event stream object.
+    :ivar event_stream: The job to upload a new event stream object.
 
-    :ivar snapshot: Represent the job to upload a new snapshot object and
-        prune now-obsolete event stream objects.
+    :ivar snapshot: The job to upload a new snapshot object and prune
+        now-obsolete event stream objects.
+
+    :ivar consider_snapshot: The job to inspect replica event stream and
+        snapshot state and potentially schedule a new snapshot which will
+        allow pruning of existing event streams.
     """
 
     startup = 1
     event_stream = 2
     snapshot = 3
+    consider_snapshot = 4
 
 
 @frozen

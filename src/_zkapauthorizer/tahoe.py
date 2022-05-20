@@ -12,7 +12,7 @@ from typing import IO, Any, Callable, Iterable, Optional, Union
 import treq
 from allmydata.uri import from_string as capability_from_string
 from allmydata.util.base32 import b2a as b32encode
-from attrs import Factory, define, field
+from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.internet.error import ConnectionRefusedError
@@ -434,6 +434,27 @@ class _Directory:
         return {}
 
 
+@frozen
+class ShareEncoding:
+    """
+    :ivar needed: The number of shares required to re-assemble the ciphertext.
+
+    :ivar total: The total number of shares produced the ciphertext has been
+        encoded in to.
+    """
+
+    needed: int
+    total: int
+
+
+def share_size(encoding: ShareEncoding, ciphertext_size: int) -> int:
+    """
+    Compute the size in bytes of a single share for ciphertext of the given
+    size in bytes under the given encoding parameters.
+    """
+    return int(1 + encoding.total / encoding.needed * ciphertext_size)
+
+
 @define
 class MemoryGrid:
     """
@@ -451,14 +472,18 @@ class MemoryGrid:
     _counter: int = 0
     _objects: dict[CapStr, Union[bytes, _Directory]] = field(default=Factory(dict))
 
-    def client(self, basedir: Optional[FilePath] = None) -> ITahoeClient:
+    def client(
+        self,
+        basedir: Optional[FilePath] = None,
+        share_encoding: ShareEncoding = ShareEncoding(3, 10),
+    ) -> ITahoeClient:
         """
         Create a ``Tahoe``-alike that is backed by this object instead of by a
         real Tahoe-LAFS storage grid.
         """
         if basedir is None:
-            return _MemoryTahoe(self)
-        return _MemoryTahoe(self, basedir)
+            basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))
+        return _MemoryTahoe(self, basedir, share_encoding)
 
     def upload(self, data: bytes) -> CapStr:
         def encode(s: str) -> str:
@@ -552,11 +577,8 @@ class _MemoryTahoe:
     """
 
     _grid: MemoryGrid
-    _nodedir: FilePath = field()
-
-    @_nodedir.default
-    def _nodedir_default(self):
-        return FilePath(mkdtemp(suffix=".memory-tahoe"))
+    _nodedir: FilePath
+    share_encoding: ShareEncoding
 
     def __attrs_post_init__(self):
         self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)

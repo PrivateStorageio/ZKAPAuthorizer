@@ -45,7 +45,7 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid
+from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid, ShareEncoding
 from .common import delayedProxy
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, returns
@@ -690,6 +690,57 @@ class ReplicationServiceTests(TestCase):
                 }
             ),
         )
+
+    def test_snapshot_again(self):
+        """
+        A new snapshot is uploaded and existing event streams are pruned if the
+        cost to store a new snapshot of the database is %X (or less) of the
+        cost to maintain the current replica snapshot and event streams.
+        """
+        # The starting state that we want is:
+        #    (1) Replication is enabled
+        #    (2) A snapshot with storage cost S has been uploaded
+        #    (3) N event streams with storage cost E each have been uploaded
+        #
+        # Then we can make some changes in the local database which trigger an
+        # event stream upload and causes S × X <= N × E.
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+        store = tvs.store
+
+        grid = MemoryGrid()
+        replica_dircap = grid.make_directory()
+        share_encoding = ShareEncoding(
+            needed=1,
+            total=2,
+        )
+        client = grid.client(share_encoding=share_encoding)
+
+        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        # This accomplishes (1).
+        service = replication_service(store._connection, replica)
+        service.startService()
+
+        # Demonstrate (2).
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
+        )
+
+        # For our encoding parameters each object we upload will have 2 shares
+        # and each share will be the same size as the original ciphertext.
+        # The objects are all small so they're all going to have a cost of 2.
+        #
+        # So the initial snapshot has a cost of 2.  Each event stream we
+        # upload has a cost of 2.  The cost of storing the replica is 2 + (2 *
+        # E) where E is the number of uploaded event streams.
+        #
+        # Meanwhile the cost to store a new snapshot of the local database is
+        # not going to meaningfully increase.  It remains 2.  This means for X
+        # = 0.50 we'll upload a new snapshot after every event stream upload.
+        #
+        # That behavior seems like it sucks a bit.  I don't want to implement
+        # this.  Think about it some more.
+        add_tokens(store)
 
 
 class TahoeDirectoryListerTests(TestCase):
