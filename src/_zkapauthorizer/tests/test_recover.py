@@ -73,9 +73,7 @@ class SnapshotEncodingTests(TestCase):
         ``statements_from_snapshot``.
         """
         loaded = list(
-            statements_from_snapshot(
-                BytesIO(b"".join(statements_to_snapshot(statements)))
-            )
+            statements_from_snapshot(BytesIO(statements_to_snapshot(statements)))
         )
         self.assertThat(
             # They are allowed to differ by leading and trailing whitespace
@@ -209,13 +207,11 @@ class StatefulRecovererTests(TestCase):
         represented by the downloaded snapshot is present in the database
         itself.
         """
-        snapshot = b"".join(
-            statements_to_snapshot(
-                [
-                    "CREATE TABLE [succeeded] ( [a] TEXT );\n",
-                    "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
-                ]
-            )
+        snapshot = statements_to_snapshot(
+            [
+                "CREATE TABLE [succeeded] ( [a] TEXT );\n",
+                "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
+            ]
         )
         downloader = make_canned_downloader(snapshot)
         recoverer = StatefulRecoverer()

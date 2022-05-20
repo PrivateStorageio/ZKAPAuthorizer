@@ -506,34 +506,14 @@ class _ReplicationCapableCursor:
         return _Important(self)
 
 
-def netstring(bs: bytes) -> bytes:
-    """
-    Encode a single string as a netstring.
-
-    :see: http://cr.yp.to/proto/netstrings.txt
-    """
-    return b"".join(
-        [
-            str(len(bs)).encode("ascii"),
-            b":",
-            bs,
-            b",",
-        ]
-    )
-
-
-def statements_to_snapshot(statements: Iterator[str]) -> Iterator[bytes]:
+def statements_to_snapshot(statements: Iterator[str]) -> bytes:
     """
     Take a snapshot of the database reachable via the given connection.
 
     The snapshot is consistent and write transactions on the given connection
     are blocked until it has been completed.
     """
-    for statement in statements:
-        # Use netstrings to frame each statement.  Statements can have
-        # embedded newlines (and CREATE TABLE statements especially tend to).
-        yield netstring(statement.strip().encode("utf-8"))
-        # XXX probably use cbor2 above
+    return cbor2.dumps([x for x in statements])
 
 
 def connection_to_statements(connection: Connection) -> Iterator[str]:
@@ -545,10 +525,9 @@ def connection_to_statements(connection: Connection) -> Iterator[str]:
     return iter(connection.iterdump())
 
 
-# Convenience API to dump statements, netstring-encoding them, and
-# concatenating them all into a single byte string.
+# Convenience API to dump statements and encode them for storage.
 snapshot: Callable[[Connection], bytes] = compose(
-    b"".join, statements_to_snapshot, connection_to_statements
+    statements_to_snapshot, connection_to_statements
 )
 
 
