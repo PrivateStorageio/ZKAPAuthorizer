@@ -1208,9 +1208,9 @@ def sql_identifiers() -> SearchStrategy[str]:
             # Maybe ] should be allowed but I don't know how to quote it.  '
             # certainly should be but Python sqlite3 module has lots of
             # problems with it.
-            # ? is disallowed due to how we substitute variables into
-            # SQL statements for the event-log
-            blacklist_characters=("\x00", "]", "'", "?"),
+            # ; is disallowed because sqlparse can't parse statements using it
+            # in an identifier.
+            blacklist_characters=("\x00", "]", "'", ";"),
         ),
     )
 
