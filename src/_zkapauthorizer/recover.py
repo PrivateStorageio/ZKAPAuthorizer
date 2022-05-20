@@ -18,9 +18,11 @@ from io import BytesIO
 from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Iterator, Optional
 
+import cbor2
 from attrs import define
 from twisted.python.filepath import FilePath
 
+from .replicate import statements_to_snapshot
 from .sql import escape_identifier
 from .tahoe import Tahoe
 
@@ -166,26 +168,19 @@ def make_canned_downloader(data: bytes) -> Downloader:
     return canned_downloader
 
 
-# A downloader that does nothing and then succeeds with an empty string.
-noop_downloader = make_canned_downloader(b"")
+# A downloader that does nothing and then succeeds with an empty snapshot.
+noop_downloader = make_canned_downloader(statements_to_snapshot(iter([])))
 
 
 def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
-
-    :see: http://cr.yp.to/proto/netstrings.txt
     """
-    # maybe cbor2 not netstrings...
-    s = data.read()
-    pos = 0
-    while pos < len(s):
-        delim = s.index(b":", pos)
-        length = int(s[pos:delim])
-        new_pos = delim + 1 + length
-        statement = s[delim + 1 : new_pos]
-        yield statement.decode("utf-8")
-        pos = new_pos + 1
+    snapshot = cbor2.load(data)
+    version = snapshot.get("version", None)
+    if version != 1:
+        raise ValueError(f"Unknown serialized snapshot version {version}")
+    return snapshot["statements"]
 
 
 def recover(snapshot: BinaryIO, cursor: Cursor) -> None:

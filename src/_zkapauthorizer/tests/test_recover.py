@@ -5,6 +5,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from sqlite3 import connect
 
+import cbor2
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -73,15 +74,23 @@ class SnapshotEncodingTests(TestCase):
         ``statements_from_snapshot``.
         """
         loaded = list(
-            statements_from_snapshot(
-                BytesIO(b"".join(statements_to_snapshot(statements)))
-            )
+            statements_from_snapshot(BytesIO(statements_to_snapshot(statements)))
         )
         self.assertThat(
             # They are allowed to differ by leading and trailing whitespace
             # because such whitespace is meaningless in a SQL statement.
-            [s.strip() for s in statements],
+            statements,
             Equals(loaded),
+        )
+
+    def test_unknown_snapshot_version(self):
+        """
+        ``statements_from_snapshot`` raises ``ValueError`` when called with a
+        Snapshot with an unknown version number.
+        """
+        self.assertThat(
+            lambda: statements_from_snapshot(cbor2.dumps({"version": -1})),
+            raises(ValueError),
         )
 
 
@@ -209,13 +218,11 @@ class StatefulRecovererTests(TestCase):
         represented by the downloaded snapshot is present in the database
         itself.
         """
-        snapshot = b"".join(
-            statements_to_snapshot(
-                [
-                    "CREATE TABLE [succeeded] ( [a] TEXT );\n",
-                    "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
-                ]
-            )
+        snapshot = statements_to_snapshot(
+            [
+                "CREATE TABLE [succeeded] ( [a] TEXT );\n",
+                "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
+            ]
         )
         downloader = make_canned_downloader(snapshot)
         recoverer = StatefulRecoverer()
