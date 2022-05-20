@@ -215,7 +215,9 @@ class EventStream:
         data = cbor2.load(stream)
         serial_version = data.get("version", None)
         if serial_version != cls.version:
-            raise ValueError(f"Unknown serialized version {serial_version}")
+            raise ValueError(
+                f"Unknown serialized event stream version {serial_version}"
+            )
         return cls(
             changes=[
                 # List comprehension has incompatible type List[Change]; expected List[_T_co]
@@ -513,7 +515,7 @@ def statements_to_snapshot(statements: Iterator[str]) -> bytes:
     The snapshot is consistent and write transactions on the given connection
     are blocked until it has been completed.
     """
-    return cbor2.dumps([x for x in statements])
+    return cbor2.dumps({"version": 1, "statements": [x for x in statements]})
 
 
 def connection_to_statements(connection: Connection) -> Iterator[str]:

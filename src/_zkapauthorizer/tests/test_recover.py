@@ -5,6 +5,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from sqlite3 import connect
 
+import cbor2
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -80,6 +81,16 @@ class SnapshotEncodingTests(TestCase):
             # because such whitespace is meaningless in a SQL statement.
             [s.strip() for s in statements],
             Equals(loaded),
+        )
+
+    def test_unknown_snapshot_version(self):
+        """
+        ``statements_from_snapshot`` raises ``ValueError`` when called with a
+        Snapshot with an unknown version number.
+        """
+        self.assertThat(
+            lambda: statements_from_snapshot(cbor2.dumps({"version": -1})),
+            raises(ValueError),
         )
 
 
