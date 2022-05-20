@@ -20,6 +20,20 @@ from base64 import b64decode
 from datetime import datetime
 
 
+def returns_aware_datetime_validator(inst, attr, value) -> None:
+    """
+    An attrs validator that verifies the attribute value is a function that
+    returns a timezone-aware datetime instance for at least one call.
+    """
+    if is_aware_datetime(value()):
+        return None
+    # Is it really a TypeError and not a ValueError?  It doesn't matter and
+    # also attrs converts anything we raise into a TypeError.
+    raise TypeError(
+        f"{attr.name!r} must return aware datetime instances (returned {value!r})"
+    )
+
+
 def is_aware_datetime(value: datetime) -> bool:
     """
     :return: ``True`` if and only iff the given value is a timezone-aware

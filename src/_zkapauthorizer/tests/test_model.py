@@ -17,7 +17,7 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial
 from io import BytesIO
 from itertools import count
@@ -337,6 +337,20 @@ class VoucherStoreTests(TestCase):
     """
     Tests for ``VoucherStore``.
     """
+
+    @given(integers(min_value=1))
+    def test_reject_naive_datetime(self, pass_value):
+        """
+        ``VoucherStore`` raises ``TypeError`` on initialization if given a ``now``
+        that returns a datetime without a timezone.
+        """
+        naive_now = datetime.now
+        db_path = self.useFixture(TempDir()).join("reject-naive.db")
+        conn = with_replication(memory_connect(db_path), False)
+        self.assertThat(
+            lambda: VoucherStore(pass_value, naive_now, conn),
+            raises(TypeError),
+        )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
     def test_get_missing(self, get_config, now, voucher):

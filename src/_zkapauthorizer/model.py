@@ -49,6 +49,7 @@ from .validators import (
     has_length,
     is_aware_datetime,
     is_base64_encoded,
+    returns_aware_datetime_validator,
 )
 
 _T = TypeVar("_T")
@@ -270,6 +271,24 @@ def memory_connect(path: str, *a, uri=None, **kw) -> _SQLite3Connection:
 _SQLITE3_INTEGER_MAX = 2**63 - 1
 
 
+def _require_aware_time(now: GetTime) -> Callable[[], datetime]:
+    """
+    Get a timezone-aware datetime for the current time or raise ``ValueError``
+    if the function returns naive datetimes.
+    """
+
+    @wraps(now)
+    def f() -> datetime:
+        result = now()
+        if not is_aware_datetime(result):
+            raise TypeError(
+                "{} returned {}, expected aware datetime".format(now, result)
+            )
+        return result
+
+    return f
+
+
 @frozen
 class VoucherStore(object):
     """
@@ -280,7 +299,9 @@ class VoucherStore(object):
     """
 
     pass_value: int
-    now: GetTime
+    now: GetTime = field(
+        validator=returns_aware_datetime_validator, converter=_require_aware_time
+    )
     _connection: _ReplicationCapableConnection
 
     _log = Logger()
@@ -369,12 +390,6 @@ class VoucherStore(object):
 
         :param list[RandomToken]: The tokens to add alongside the voucher.
         """
-        now = self.now()
-        if not is_aware_datetime(now):
-            raise TypeError(
-                "{} returned {}, expected aware datetime".format(self.now, now)
-            )
-
         voucher_text = voucher.decode("ascii")
         cursor.execute(
             """
