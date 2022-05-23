@@ -1197,7 +1197,14 @@ def get_lease_grant_times(storage_server, storage_index):
     Get the grant times for all of the leases for all of the shares at the
     given storage index.
     """
-    shares = storage_server._get_bucket_shares(storage_index)
+    try:
+        # Tahoe-LAFS 1.17.1 and earlier
+        get_shares = storage_server._get_bucket_shares
+    except AttributeError:
+        # Newer than Tahoe-LAFS 1.17.1
+        get_shares = storage_server.get_shares
+
+    shares = get_shares(storage_index)
     for sharenum, sharepath in shares:
         sharefile = get_share_file(sharepath)
         leases = sharefile.get_leases()
