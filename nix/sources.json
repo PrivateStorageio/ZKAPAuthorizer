@@ -35,22 +35,16 @@
         "url": "https://github.com/DavHau/pypi-deps-db/archive/3e6c4e328bdae5c9f1e8131833275cce26df47f0.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
-    "release2105": {
-        "sha256": "112drvixj81vscj8cncmks311rk2ik5gydpd03d3r0yc939zjskg",
-        "type": "tarball",
-        "url": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz",
-        "url_template": "https://releases.nixos.org/nixos/21.05/nixos-21.05.3740.ce7a1190a0f/nixexprs.tar.xz"
-    },
     "release2111": {
         "branch": "release-21.11",
         "description": "Nix Packages collection",
         "homepage": "",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d887ac7aee92e8fc54dde9060d60d927afae9d69",
-        "sha256": "1bpgfv45b1yvrgpwdgc4fm4a6sav198yd41bsrvlmm3jn2wi6qx5",
+        "rev": "4cfde57fa833868781e0ba743a628d683adf96a8",
+        "sha256": "0wr64pkhx0wd252k3qaiggxhzd9ss0cv55drmjymllg3fwj3d014",
         "type": "tarball",
-        "url": "https://github.com/NixOS/nixpkgs/archive/d887ac7aee92e8fc54dde9060d60d927afae9d69.tar.gz",
+        "url": "https://github.com/NixOS/nixpkgs/archive/4cfde57fa833868781e0ba743a628d683adf96a8.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "tahoe-lafs": {
