@@ -1,6 +1,9 @@
 # See nixpkgs/nixos/lib/test-driver/test_driver/ for the test driver API.
 
-from test_driver.machine import Machine
+from __future__ import annotations
+
+if False:
+    from test_driver.machine import Machine
 
 from base64 import urlsafe_b64encode
 
@@ -27,7 +30,7 @@ def test() -> None:
 
 
 def boot_vms(vms: list[Machine]) -> None:
-    for vm in VMs:
+    for vm in vms:
         vm.start()
 
 
