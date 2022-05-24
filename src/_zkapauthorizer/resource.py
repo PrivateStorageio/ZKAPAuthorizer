@@ -263,7 +263,7 @@ class RecoverResource(Resource):
         # should be optional ("?async=true" or something?) because
         # existing clients will be depending on this completing the
         # recovery before finishing the request.
-        recovering = self._recover(request, self.store, cap)
+        recovering = self._recover(request, self.store, cap_str)
         d = Deferred.fromCoroutine(recovering)
         # _recover is responsible for generating the response.
         return NOT_DONE_YET
