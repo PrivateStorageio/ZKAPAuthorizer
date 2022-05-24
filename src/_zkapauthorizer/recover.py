@@ -253,10 +253,10 @@ async def tahoe_lafs_downloader(
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    snapshot_path = client.get_private_path("snapshot.sql")
+    snapshot_path = client.get_private_path("snapshot")
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
-    await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
+    await client.download(snapshot_path, recovery_cap, ["snapshot"])
     return snapshot_path
 
 
