@@ -80,7 +80,13 @@ from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
-from ..model import NotEnoughTokens, StoreOpenError, VoucherStore, open_database
+from ..model import (
+    NotEnoughTokens,
+    StoreOpenError,
+    VoucherStore,
+    memory_connect,
+    open_database,
+)
 from ..replicate import (
     _ReplicationService,
     setup_tahoe_lafs_replication,
@@ -738,7 +744,9 @@ class ClientResourceTests(TestCase):
     def setup_example(self):
         self.reactor = MemoryReactorClock()
         self.grid = MemoryGrid()
-        self.plugin = ZKAPAuthorizer(NAME, self.reactor, self.get_tahoe_client)
+        self.plugin = ZKAPAuthorizer(
+            NAME, self.reactor, self.get_tahoe_client, memory_connect
+        )
 
     def get_tahoe_client(self, reactor, node_config):
         return self.grid.client(FilePath(node_config._basedir))
