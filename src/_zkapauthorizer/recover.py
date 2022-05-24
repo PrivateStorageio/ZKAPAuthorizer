@@ -22,7 +22,7 @@ import cbor2
 from attrs import define
 from twisted.python.filepath import FilePath
 
-from .replicate import statements_to_snapshot
+from .replicate import statements_to_snapshot, SNAPSHOT_NAME
 from .sql import escape_identifier
 from .tahoe import Tahoe
 
@@ -253,10 +253,10 @@ async def tahoe_lafs_downloader(
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    snapshot_path = client.get_private_path("snapshot.sql")
+    snapshot_path = client.get_private_path(SNAPSHOT_NAME)
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
-    await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
+    await client.download(snapshot_path, recovery_cap, [SNAPSHOT_NAME])
     return snapshot_path
 
 

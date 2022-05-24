@@ -102,6 +102,7 @@ Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
 # function which can list all entries in ZKAPAuthorizer state
 Lister = Callable[[], Awaitable[list[str]]]
 
+SNAPSHOT_NAME = "snapshot"
 
 @frozen
 class Replica:
@@ -541,7 +542,7 @@ async def tahoe_lafs_uploader(
 ) -> None:
     """
     Upload a replica to Tahoe, linking the result into the given
-    recovery mutable capbility under the name 'snapshot.sql'
+    recovery mutable capbility under the name ``SNAPSHOT_NAME``.
     """
     snapshot_immutable_cap = await client.upload(get_snapshot_data)
     await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
@@ -1009,7 +1010,7 @@ class _ReplicationService(Service):
         :returns: True if there is no remote snapshot
         """
         entries = await self._replica.list()
-        return "snapshot" not in entries
+        return SNAPSHOT_NAME not in entries
 
     def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
         """
