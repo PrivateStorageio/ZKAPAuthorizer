@@ -541,7 +541,7 @@ async def tahoe_lafs_uploader(
 ) -> None:
     """
     Upload a replica to Tahoe, linking the result into the given
-    recovery mutable capbility under the name 'snapshot.sql'
+    recovery mutable capbility under the name 'snapshot'
     """
     snapshot_immutable_cap = await client.upload(get_snapshot_data)
     await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
