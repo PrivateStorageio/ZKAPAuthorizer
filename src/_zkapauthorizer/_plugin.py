@@ -55,7 +55,7 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
-from .recover import make_fail_downloader, get_tahoe_lafs_downloader
+from .recover import get_tahoe_lafs_downloader
 from .replicate import (
     _ReplicationCapableConnection,
     get_replica_rwcap,
