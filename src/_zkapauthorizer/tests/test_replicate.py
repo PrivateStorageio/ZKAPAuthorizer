@@ -271,7 +271,7 @@ class ReplicationConnectionTests(TestCase):
         conn_b = with_postponed_replication(connect(dbpath_b))
 
         with conn_b:
-            recover(BytesIO(a_snapshot), conn_b.cursor())
+            recover(lambda: BytesIO(a_snapshot), conn_b.cursor())
 
         self.assertThat(
             conn_a,

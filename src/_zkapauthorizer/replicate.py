@@ -104,6 +104,7 @@ Lister = Callable[[], Awaitable[list[str]]]
 
 SNAPSHOT_NAME = "snapshot"
 
+
 @frozen
 class Replica:
     """

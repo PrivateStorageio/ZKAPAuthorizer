@@ -529,7 +529,7 @@ class VoucherStoreSnapshotTests(TestCase):
         connection = connect(":memory:")
         cursor = connection.cursor()
         with connection:
-            recover(BytesIO(snapshot), cursor)
+            recover(lambda: BytesIO(snapshot), cursor)
 
         recovered = VoucherStore.from_connection(
             store.pass_value,

@@ -4,6 +4,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from io import BytesIO
 from sqlite3 import connect
+from typing import Any, Awaitable, Generator, TypeVar
 
 import cbor2
 from hypothesis import assume, given, note, settings
@@ -68,14 +69,16 @@ class SnapshotEncodingTests(TestCase):
     """
 
     @given(lists(text()))
-    def test_roundtrip(self, statements):
+    def test_roundtrip(self, statements) -> None:
         """
         Statements of a snapshot can be encoded to bytes and decoded to the same
         statements again using ``statements_to_snapshot`` and
         ``statements_from_snapshot``.
         """
         loaded = list(
-            statements_from_snapshot(BytesIO(statements_to_snapshot(statements)))
+            statements_from_snapshot(
+                lambda: BytesIO(statements_to_snapshot(statements))
+            )
         )
         self.assertThat(
             # They are allowed to differ by leading and trailing whitespace
@@ -84,13 +87,15 @@ class SnapshotEncodingTests(TestCase):
             Equals(loaded),
         )
 
-    def test_unknown_snapshot_version(self):
+    def test_unknown_snapshot_version(self) -> None:
         """
         ``statements_from_snapshot`` raises ``ValueError`` when called with a
         Snapshot with an unknown version number.
         """
         self.assertThat(
-            lambda: statements_from_snapshot(cbor2.dumps({"version": -1})),
+            lambda: statements_from_snapshot(
+                lambda: BytesIO(cbor2.dumps({"version": -1}))
+            ),
             raises(ValueError),
         )
 
@@ -118,7 +123,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(BytesIO(snapshot_bytes), cursor)
+            recover(lambda: BytesIO(snapshot_bytes), cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
@@ -302,13 +307,27 @@ class StatefulRecovererTests(TestCase):
             self.assertThat(recoverer.state().stage, Equals(stage))
 
 
+T = TypeVar("T")
+
+
+def from_awaitable(a: Awaitable[T]) -> Deferred[T]:
+    """
+    Get a ``Deferred`` that will fire with the result of an ``Awaitable``.
+    """
+
+    async def awaitable_to_coroutine():
+        return await a
+
+    return Deferred.fromCoroutine(awaitable_to_coroutine())
+
+
 class TahoeLAFSDownloaderTests(TestCase):
     """
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
     @inlineCallbacks
-    def test_uploader_and_downloader(self):
+    def test_uploader_and_downloader(self) -> Generator[Deferred[Any], Any, None]:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
@@ -323,15 +342,13 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
         )
         expected = b"snapshot data"
-        yield Deferred.fromCoroutine(upload(SNAPSHOT_NAME, lambda: BytesIO(expected)))
+        yield from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected)))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
-        downloaded_snapshot_path = yield Deferred.fromCoroutine(
-            download(lambda state: None)
-        )
+        downloaded_snapshot_path = yield from_awaitable(download(lambda state: None))
         self.assertThat(
             downloaded_snapshot_path.getContent(),
             Equals(expected),
