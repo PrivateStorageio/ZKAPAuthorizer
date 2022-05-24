@@ -18,7 +18,8 @@ Tests for the Tahoe-LAFS plugin.
 
 from datetime import timedelta
 from functools import partial
-from io import StringIO
+from io import BytesIO, StringIO
+from json import dumps
 from os import mkdir
 from sqlite3 import connect
 
@@ -62,6 +63,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
+from treq.testing import RequestTraversalAgent
 from twisted.internet.defer import Deferred
 from twisted.internet.testing import MemoryReactorClock
 from twisted.plugin import getPlugins
@@ -90,14 +92,15 @@ from ..model import (
 from ..replicate import (
     _ReplicationService,
     setup_tahoe_lafs_replication,
+    statements_to_snapshot,
     with_replication,
 )
 from ..spending import GET_PASSES
-from ..tahoe import ITahoeClient, MemoryGrid
+from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
-from .matchers import Provides, matches_response, raises
+from .matchers import Provides, matches_json, matches_response, raises
 from .strategies import (
     announcements,
     aware_datetimes,
@@ -118,6 +121,7 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
+from .test_client_resource import authorized_request
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
@@ -781,7 +785,6 @@ class ClientResourceTests(TestCase):
             f.write(token)
 
         root = self.plugin.get_client_resource(config)
-        from treq.testing import RequestTraversalAgent
 
         agent = RequestTraversalAgent(root)
         self.assertThat(
@@ -805,6 +808,67 @@ class ClientResourceTests(TestCase):
                     lambda svc: service_matches(self.plugin._get_store(config), svc),
                     "not a replicating service with matching connection: %s",
                 ),
+            ),
+        )
+
+    @given(tahoe_configs())
+    def test_downloader(self, get_config):
+        """
+        The recovery resource is configured with a downloader that retrieves
+        objects using the plugin's Tahoe-LAFS client.
+        """
+        # This test is too complicated.  The implementation should be factored so we can test what we want to test here without involving a Tahoe client, the plugin, and the client resource.
+        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir.child("private").makedirs()
+        config = get_config(nodedir.path, "tub.port")
+        token = "hello world"
+        with open(config.get_private_path("api_auth_token"), "w") as f:
+            f.write(token)
+
+        replica_dircap = self.grid.make_directory()
+        self.grid.link(
+            replica_dircap,
+            "snapshot",
+            self.grid.upload(statements_to_snapshot([])),
+        )
+
+        root = self.plugin.get_client_resource(config)
+        agent = RequestTraversalAgent(root)
+        self.assertThat(
+            authorized_request(
+                token.encode("ascii"),
+                agent,
+                b"POST",
+                b"http://127.0.0.1/recover",
+                headers={b"content-type": [b"application/json"]},
+                data=BytesIO(
+                    dumps(
+                        {"recovery-capability": attenuate_writecap(replica_dircap)}
+                    ).encode("utf-8")
+                ),
+            ),
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(202),
+                    body_matcher=Equals(b""),
+                )
+            ),
+        )
+
+        self.assertThat(
+            authorized_request(
+                token.encode("ascii"),
+                agent,
+                b"GET",
+                b"http://127.0.0.1/recover",
+            ),
+            succeeded(
+                matches_response(
+                    code_matcher=Equals(200),
+                    body_matcher=matches_json(
+                        Equals({"stage": "succeeded", "failure-reason": None}),
+                    ),
+                )
             ),
         )
 
