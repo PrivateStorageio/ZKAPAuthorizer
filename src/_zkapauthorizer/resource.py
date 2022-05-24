@@ -263,7 +263,7 @@ class RecoverResource(Resource):
         # attempt.  So we're not going to wait for `recovering` to complete.
         # However, we do have to schedule it in the event loop or it will
         # never even start.
-        recovering = self._recover(request, self.store, cap)
+        recovering = self._recover(request, self.store, cap_str)
         d = Deferred.fromCoroutine(recovering)
 
         # The recovery code is meant to be /pretty/ unlikely to raise an
