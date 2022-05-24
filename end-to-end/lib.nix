@@ -17,6 +17,8 @@ rec {
     test = None
     with open("${testpath}") as testfile:
         exec(testfile.read(), globals())
+    if test is None:
+        raise SystemExit("${testpath} did not define a test entrypoint")
     # For simple types, JSON is compatible with Python syntax!
     test(**${builtins.toJSON kwargs})
     '';
@@ -51,7 +53,7 @@ rec {
 
      The argument is a package to use to get Tahoe-LAFS and ZKAPAuthorizer.
   */
-  server = { zkapauthorizer }:
+  server = { zkapauthorizer, signingKeyPath }:
     { config, pkgs, ... }:
     {
       disabledModules = [ "services/network-filesystems/tahoe.nix" ];
@@ -61,18 +63,42 @@ rec {
 
       services.tahoe = {
         introducers.i = {
-          # package = zkapauthorizer;
+          package = zkapauthorizer;
           nickname = "introducer";
         };
-        # nodes.s.package = zkapauthorizer;
+        nodes.s.package = zkapauthorizer;
         nodes.s.settings = {
           node.nickname = "storage";
-          storage.enable = true;
           client."introducer.furl" = builtins.readFile (introducer.furlFile {
             hostname = "introducer";
             portNumber = 12345;
           });
+          storage = {
+            enable = true;
+            plugins = "privatestorageio-zkapauthz-v1";
+          };
+          "storageserver.plugins.privatestorageio-zkapauthz-v1" = {
+            "ristretto-issuer-root-url" = "http://payment/";
+            "ristretto-signing-key-path" = toString signingKeyPath;
+          };
         };
+      };
+    };
+
+  issuer = { issuer, signingKeyPath }:
+    { config, pkgs, ... }:
+    {
+      systemd.services.issuer = {
+        enable = true;
+        wantedBy = [ "multi-user.target" ];
+        script = ''
+          ${issuer.components.exes.PaymentServer-exe}/bin/PaymentServer \
+            --issuer ristretto \
+            --signing-key-path ${signingKeyPath} \
+            --database sqlite3 \
+            --database-path /tmp/issuer.sqlite3 \
+            --http-port 80
+        '';
       };
     };
 

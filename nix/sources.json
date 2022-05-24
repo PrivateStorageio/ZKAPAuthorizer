@@ -1,4 +1,16 @@
 {
+    "PaymentServer": {
+        "branch": "main",
+        "description": "Coordinate entities for the purchase of PrivateStorage.io vouchers.",
+        "homepage": null,
+        "owner": "PrivateStorageio",
+        "repo": "PaymentServer",
+        "rev": "dcb400968bee2d42b293531317d42d31593d4224",
+        "sha256": "0p92jvl95cf3faz0cr7yxphnp3nlhyn12i47rxzqz79sv3hi6iz9",
+        "type": "tarball",
+        "url": "https://github.com/PrivateStorageio/PaymentServer/archive/dcb400968bee2d42b293531317d42d31593d4224.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "mach-nix": {
         "branch": "master",
         "description": "Create highly reproducible python environments",

@@ -124,31 +124,15 @@ rec {
   #
   # attrset -> [ attrset ]
   introducerConfigPieces = cfg: [
-    # (optionalAttrs (cfg ? nickname)     { node = { inherit (cfg) nickname; }; })
-    # (optionalAttrs (cfg ? tub.port)     { node = { "tub.port"     = cfg.tub.port; }; })
-    # (optionalAttrs (cfg ? tub.location) { node = { "tub.location" = cfg.tub.location; }; })
+    (optionalAttrs (cfg ? nickname)     { node = { inherit (cfg) nickname; }; })
+    (optionalAttrs (cfg ? tub.port)     { node = { "tub.port"     = cfg.tub.port; }; })
+    (optionalAttrs (cfg ? tub.location) { node = { "tub.location" = cfg.tub.location; }; })
   ];
 
   # Like introducerConfigPieces, but for "node"-type services.
   #
   # attrset -> [ attrset ]
-  nodeConfigPieces = cfg: introducerConfigPieces cfg ++ [
-    # (optionalAttrs (cfg ? web.port)             { node   = { "web.port"        = "tcp:${toString cfg.web.port}"; }; })
-
-    # (optionalAttrs (cfg ? client.introducer)    { client = { "introducer.furl" = cfg.client.introducer; }; })
-    # (optionalAttrs (cfg ? client.helper)        { client = { "helper.furl"     = cfg.client.helper; }; })
-    # (optionalAttrs (cfg ? client.shares.needed) { client = { "shares.needed"   = cfg.client.shares.needed; }; })
-    # (optionalAttrs (cfg ? client.shares.happy)  { client = { "shares.happy"    = cfg.client.shares.happy; }; })
-    # (optionalAttrs (cfg ? client.shares.total)  { client = { "shares.total"    = cfg.client.shares.total; }; })
-
-    # (optionalAttrs (cfg ?  helper.enable)       { helper = { "enabled"         = cfg.helper.enable; }; })
-
-    # (optionalAttrs (cfg ? sftpd.enable)             { sftpd =  { "enabled"           = cfg.sftpd.enable; }; })
-    # (optionalAttrs (cfg ? sftpd.port)               { sftpd =  { "port"              = "tcp:${toString cfg.sftpd.port}"; }; })
-    # (optionalAttrs (cfg ? sftpd.hostPublicKeyFile)  { sftpd =  { "host_pubkey_file"  = cfg.sftpd.hostPublicKeyFile; }; })
-    # (optionalAttrs (cfg ? sftpd.hostPrivateKeyFile) { sftpd =  { "host_privkey_file" = cfg.sftpd.hostPrivateKeyFile; }; })
-    # (optionalAttrs (cfg ? sftpd.accounts.file)      { sftpd =  { "accounts.file"     = cfg.sftpd.accounts.file; }; })
-  ];
+  nodeConfigPieces = cfg: introducerConfigPieces cfg ++ [ cfg.settings ];
 
   # Generate the ini-format Tahoe-LAFS `tahoe.cfg` configuration file from the
   # NixOS service configuration value.
@@ -169,10 +153,10 @@ rec {
         else throw "Tahoe-LAFS kind must be node or introducer, not ${kind}";
 
       configPathFragment = "tahoe-lafs/${kind}-${name}.cfg";
-      configValue = mergePieces ([cfg.settings] ++ configPieces cfg);
+      configValue = mergePieces ((if cfg ? settings then [cfg.settings] else []) ++ configPieces cfg);
       configPath = settingsFormat.generate configPathFragment configValue;
     in
-      builtins.trace (builtins.toJSON cfg) configPath;
+      builtins.trace ("\n${kind}-${name}\n${builtins.readFile configPath}\n") configPath;
 
   # Construct the NixOS systemd service configuration for all of the given
   # node configurations.
