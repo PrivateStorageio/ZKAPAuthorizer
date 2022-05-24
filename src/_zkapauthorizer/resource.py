@@ -258,21 +258,13 @@ class RecoverResource(Resource):
             request.setResponseCode(BAD_REQUEST)
             return b"recovery-capability must be a read-only dircap string"
 
-        # The response to this request does not wait for recovery to complete.
-        # Instead, a separate endpoint exposes the progress of the recovery
-        # attempt.  So we're not going to wait for `recovering` to complete.
-        # However, we do have to schedule it in the event loop or it will
-        # never even start.
+        # if it's useful, this could be switched back to finish this
+        # Web request when the recovery _starts_ ... but then it
+        # should be optional ("?async=true" or something?) because
+        # existing clients will be depending on this completing the
+        # recovery before finishing the request.
         recovering = self._recover(request, self.store, cap)
         d = Deferred.fromCoroutine(recovering)
-
-        # The recovery code is meant to be /pretty/ unlikely to raise an
-        # exception - it directs all errors into the status information
-        # exposed by StatefulRecoverer instead of letting them get raised.
-        # Still, it's not _impossible_ that an exception could come out.  If
-        # it does, make sure it shows up in the log at least.
-        d.addErrback(partial(self._log.failure, "unhandled recovery failure"))
-
         # _recover is responsible for generating the response.
         return NOT_DONE_YET
 
@@ -283,19 +275,9 @@ class RecoverResource(Resource):
         cap: ReadonlyDirectoryURI,
     ):
         async def initiate(request, recoverer, downloader, cursor):
-            recovering = recoverer.recover(downloader, cursor)
-            recovering_d = Deferred.fromCoroutine(recovering)
-
-            # The only way to get to this point is if the store is empty and
-            # the recoverer appears to at least be willing to try to start.
-            # This is no guarantee that recovery will succeed but it is a
-            # guarantee that the *try* has begun.  Generate a response that
-            # reflects this.
+            await recoverer.recover(downloader, cursor)
             request.setResponseCode(ACCEPTED)
             request.finish()
-
-            # Really start the recovery attempt.
-            await recovering_d
 
         try:
             # If these things succeed then we will have started recovery and
