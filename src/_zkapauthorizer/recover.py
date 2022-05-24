@@ -176,7 +176,7 @@ def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
     """
-    snapshot = cbor2.load(data)
+    snapshot = cbor2.load(data.open("rb"))
     version = snapshot.get("version", None)
     if version != 1:
         raise ValueError(f"Unknown serialized snapshot version {version}")
