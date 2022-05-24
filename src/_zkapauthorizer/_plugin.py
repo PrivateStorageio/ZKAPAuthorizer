@@ -55,7 +55,7 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
-from .recover import make_fail_downloader
+from .recover import make_fail_downloader, get_tahoe_lafs_downloader
 from .replicate import (
     _ReplicationCapableConnection,
     get_replica_rwcap,
@@ -253,18 +253,11 @@ class ZKAPAuthorizer(object):
         :param allmydata.node._Config node_config: The configuration object
             for the relevant node.
         """
-        work_in_progress_error = Exception(
-            "The recovery system implementation is a work in progress.",
-        )
-
-        def get_downloader(cap):
-            return make_fail_downloader(work_in_progress_error)
-
         store = self._get_store(node_config)
+        tahoe = self._get_tahoe_client(self.reactor, node_config)
 
         async def setup_replication():
             # Setup replication
-            tahoe = self._get_tahoe_client(self.reactor, node_config)
             await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
@@ -274,7 +267,7 @@ class ZKAPAuthorizer(object):
         return resource_from_configuration(
             node_config,
             store=store,
-            get_downloader=get_downloader,
+            get_downloader=get_tahoe_lafs_downloader(tahoe),
             setup_replication=setup_replication,
             redeemer=self._get_redeemer(node_config, None),
             clock=self.reactor,
