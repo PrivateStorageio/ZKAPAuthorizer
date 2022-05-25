@@ -46,6 +46,7 @@ from ..replicate import (
     with_replication,
 )
 from ..spending import SpendingController
+from ..sql import Cursor
 from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid
 from .common import delayedProxy
 from .fixtures import TempDir, TemporaryVoucherStore
@@ -62,7 +63,7 @@ class ReplicationConnectionTests(TestCase):
     ``with_replication``.
     """
 
-    def test_close(self):
+    def test_close(self) -> None:
         """
         The connection object and its cursors can be closed.
         """
@@ -70,7 +71,7 @@ class ReplicationConnectionTests(TestCase):
         cursor = conn.cursor()
         cursor.close()
         self.assertThat(
-            lambda: cursor.execute("SELECT 1"),
+            lambda: cursor.execute("SELECT 1", ()),
             raises(ProgrammingError),
         )
         conn.close()
@@ -87,7 +88,7 @@ class ReplicationConnectionTests(TestCase):
                 f"using connection after close, nothing raised instead of {expected}"
             )
 
-    def test_context_manager_success(self):
+    def test_context_manager_success(self) -> None:
         """
         The connection object is a context manager that commits the transaction
         when the managed block completes normally.
@@ -95,20 +96,20 @@ class ReplicationConnectionTests(TestCase):
         dbpath = self.useFixture(TempDir()).join("db.sqlite")
         conn = with_postponed_replication(connect(dbpath))
         with conn:
-            cursor = conn.cursor()
-            cursor.execute("BEGIN")
-            cursor.execute('CREATE TABLE "foo" ("a" INT)')
+            cursor: Cursor = conn.cursor()
+            cursor.execute("BEGIN", ())
+            cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
             cursor.execute('INSERT INTO "foo" VALUES (?)', (42,))
 
         db = connect(dbpath)
         cursor = db.cursor()
-        cursor.execute('SELECT "a" FROM foo')
+        cursor.execute('SELECT "a" FROM foo', ())
         self.assertThat(
             cursor.fetchall(),
             Equals([(42,)]),
         )
 
-    def test_context_manager_exception(self):
+    def test_context_manager_exception(self) -> None:
         """
         The connection object is a context manager that rolls the transaction back
         when the managed block raises an exception.
@@ -121,9 +122,9 @@ class ReplicationConnectionTests(TestCase):
         conn = with_postponed_replication(connect(dbpath))
         try:
             with conn:
-                cursor = conn.cursor()
-                cursor.execute("BEGIN")
-                cursor.execute('CREATE TABLE "foo" ("a" INT)')
+                cursor: Cursor = conn.cursor()
+                cursor.execute("BEGIN", ())
+                cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
                 cursor.execute('INSERT INTO "foo" VALUES (?)', (42,))
                 raise ApplicationError()
         except ApplicationError:
@@ -136,11 +137,11 @@ class ReplicationConnectionTests(TestCase):
 
         # The table won't even exist.
         self.assertThat(
-            lambda: cursor.execute('SELECT "a" FROM foo'),
+            lambda: cursor.execute('SELECT "a" FROM foo', ()),
             raises(OperationalError),
         )
 
-    def test_important_exception(self):
+    def test_important_exception(self) -> None:
         """
         An exception inside an `important()` context-manager is allowed to
         propagate
@@ -159,7 +160,7 @@ class ReplicationConnectionTests(TestCase):
         else:
             self.fail("exception should propagate")
 
-    def test_importance_ends(self):
+    def test_importance_ends(self) -> None:
         """
         After the `important()` context-manager is exited, the cursor is no longer
         marked as important.
@@ -174,8 +175,8 @@ class ReplicationConnectionTests(TestCase):
         with conn:
             cursor = conn.cursor()
             with cursor.important():
-                cursor.execute(important_statement)
-            cursor.execute(less_important_statement)
+                cursor.execute(important_statement, ())
+            cursor.execute(less_important_statement, ())
 
         self.assertThat(
             mutations,
@@ -189,15 +190,15 @@ class ReplicationConnectionTests(TestCase):
             ),
         )
 
-    def test_executemany(self):
+    def test_executemany(self) -> None:
         """
         The connection's cursor objects have an ``executemany`` method that
         operates in the usual way.
         """
         conn = with_postponed_replication(connect(":memory:"))
         cursor = conn.cursor()
-        cursor.execute("BEGIN")
-        cursor.execute('CREATE TABLE "foo" ("a" INT)')
+        cursor.execute("BEGIN", ())
+        cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
         cursor.execute('INSERT INTO "foo" VALUES (?)', (1,))
         cursor.executemany('INSERT INTO "foo" VALUES (?)', [(3,), (5,), (7,)])
 
@@ -211,13 +212,13 @@ class ReplicationConnectionTests(TestCase):
             cursor.rowcount,
             Equals(3),
         )
-        cursor.execute('SELECT * FROM "foo"')
+        cursor.execute('SELECT * FROM "foo"', ())
         self.assertThat(
             cursor.fetchall(),
             Equals([(1,), (3,), (5,), (7,)]),
         )
 
-        cursor.execute('SELECT * FROM "foo"')
+        cursor.execute('SELECT * FROM "foo"', ())
         for expected in [1, 3, 5, 7]:
             self.assertThat(
                 cursor.fetchone(),
@@ -228,18 +229,18 @@ class ReplicationConnectionTests(TestCase):
             Equals(None),
         )
 
-    def test_fetchmany(self):
+    def test_fetchmany(self) -> None:
         """
         The connection's cursor objects have a ``fetchmany`` method that operates
         in the usual way.
         """
         conn = with_postponed_replication(connect(":memory:"))
         cursor = conn.cursor()
-        cursor.execute("BEGIN")
-        cursor.execute('CREATE TABLE "foo" ("a" INT)')
+        cursor.execute("BEGIN", ())
+        cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
         cursor.executemany('INSERT INTO "foo" VALUES (?)', [(3,), (5,), (7,)])
 
-        cursor.execute('SELECT "a" FROM "foo"')
+        cursor.execute('SELECT "a" FROM "foo"', ())
         self.assertThat(
             cursor.fetchmany(2),
             Equals([(3,), (5,)]),
@@ -253,7 +254,7 @@ class ReplicationConnectionTests(TestCase):
             Equals([]),
         )
 
-    def test_snapshot(self):
+    def test_snapshot(self) -> None:
         """
         The state of the database is available via the connection's ``snapshot``
         method.

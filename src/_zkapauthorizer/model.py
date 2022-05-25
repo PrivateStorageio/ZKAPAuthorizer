@@ -26,7 +26,7 @@ from json import loads
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, Optional, TypeVar
+from typing import Awaitable, Callable, List, Optional, TypeVar
 
 import attr
 from aniso8601 import parse_datetime
@@ -39,7 +39,11 @@ from zope.interface import Interface, implementer
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._types import GetTime
-from .replicate import _ReplicationCapableConnection, snapshot
+from .replicate import (
+    _ReplicationCapableConnection,
+    _ReplicationCapableCursor,
+    snapshot,
+)
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
@@ -190,7 +194,7 @@ def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitabl
     """
 
     @wraps(f)
-    async def with_cursor_async(self, *a, **kw):
+    async def with_cursor_async(self, *a, **kw) -> _T:
         with self._connection:
             cursor = self._connection.cursor()
             try:
@@ -202,7 +206,7 @@ def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitabl
     return with_cursor_async
 
 
-def with_cursor(f):
+def with_cursor(f: Callable[..., _T]) -> Callable[..., _T]:
     """
     Decorate a function so it is automatically passed a cursor with an active
     transaction as the first positional argument.  If the function returns
@@ -220,7 +224,8 @@ def with_cursor(f):
             finally:
                 cursor.close()
 
-    with_cursor.wrapped = f
+    # Callable has no attribute wrapped ... yea ... true.
+    with_cursor.wrapped = f  # type: ignore
     return with_cursor
 
 
@@ -337,17 +342,18 @@ class VoucherStore(object):
         # (or call `count_unblinded_tokens`) and the
         # `invalid-unblinded-tokens` table and maybe also look at lease
         # maintenance spending.
-        if self.list.wrapped(self, cursor) == []:
+        wrapped = self.list.wrapped  # type: ignore
+        if wrapped(self, cursor) == []:
             return await f(cursor)
         else:
             raise NotEmpty()
 
     @with_cursor
-    def get(self, cursor, voucher):
+    def get(self, cursor: Cursor, voucher: bytes) -> Voucher:
         """
-        :param bytes voucher: The text value of a voucher to retrieve.
+        :param voucher: The text value of a voucher to retrieve.
 
-        :return Voucher: The voucher object that matches the given value.
+        :return: The voucher object that matches the given value.
         """
         cursor.execute(
             """
@@ -366,7 +372,14 @@ class VoucherStore(object):
         return Voucher.from_row(refs[0])
 
     @with_cursor
-    def add(self, cursor, voucher, expected_tokens, counter, get_tokens):
+    def add(
+        self,
+        cursor: _ReplicationCapableCursor,
+        voucher: bytes,
+        expected_tokens: int,
+        counter: int,
+        get_tokens: Callable[[], list[RandomToken]],
+    ) -> list[RandomToken]:
         """
         Add random tokens associated with a voucher (possibly new, possibly
         existing) to the database.  If the (voucher, counter) pair is already
@@ -441,7 +454,7 @@ class VoucherStore(object):
         return tokens
 
     @with_cursor
-    def list(self, cursor):
+    def list(self, cursor: Cursor) -> list[Voucher]:
         """
         Get all known vouchers.
 
@@ -454,6 +467,7 @@ class VoucherStore(object):
             FROM
                 [vouchers]
             """,
+            (),
         )
         refs = cursor.fetchall()
 
@@ -461,8 +475,14 @@ class VoucherStore(object):
 
     @with_cursor
     def insert_unblinded_tokens_for_voucher(
-        self, cursor, voucher, public_key, unblinded_tokens, completed, spendable
-    ):
+        self,
+        cursor: Cursor,
+        voucher: bytes,
+        public_key: str,
+        unblinded_tokens: List[UnblindedToken],
+        completed: bool,
+        spendable: bool,
+    ) -> None:
         """
         Store some unblinded tokens received from redemption of a voucher.
 
@@ -566,7 +586,7 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def mark_voucher_double_spent(self, cursor, voucher):
+    def mark_voucher_double_spent(self, cursor: Cursor, voucher: bytes) -> None:
         """
         Mark a voucher as having failed redemption because it has already been
         spent.
@@ -593,17 +613,14 @@ class VoucherStore(object):
             )
             rows = cursor.fetchall()
             if len(rows) == 0:
-                raise ValueError("Voucher {} not found".format(voucher))
+                raise ValueError(f"Voucher {voucher!r} not found")
             else:
                 raise ValueError(
-                    "Voucher {} in state {} cannot transition to double-spend".format(
-                        voucher,
-                        rows[0][0],
-                    ),
+                    f"Voucher {voucher!r} in state {rows[0][0]} cannot transition to double-spend",
                 )
 
     @with_cursor
-    def get_unblinded_tokens(self, cursor, count):
+    def get_unblinded_tokens(self, cursor: Cursor, count: int) -> List[UnblindedToken]:
         """
         Get some unblinded tokens.
 
@@ -621,7 +638,7 @@ class VoucherStore(object):
             of tokens available to be spent.  In this case, all tokens remain
             available to future calls and do not need to be reset.
 
-        :return list[UnblindedToken]: The removed unblinded tokens.
+        :return: The removed unblinded tokens.
         """
         if count > _SQLITE3_INTEGER_MAX:
             # An unreasonable number of tokens and also large enough to
@@ -663,7 +680,7 @@ class VoucherStore(object):
         return count
 
     @with_cursor
-    def count_unblinded_tokens(self, cursor):
+    def count_unblinded_tokens(self, cursor: Cursor) -> int:
         """
         Return the largest number of unblinded tokens that can be requested from
         ``get_unblinded_tokens`` without causing it to raise
@@ -677,12 +694,15 @@ class VoucherStore(object):
             AND    G.[spendable] = 1
             AND    T.[token] NOT IN [in-use]
             """,
+            (),
         )
         (count,) = cursor.fetchone()
         return count
 
     @with_cursor
-    def discard_unblinded_tokens(self, cursor, unblinded_tokens):
+    def discard_unblinded_tokens(
+        self, cursor: Cursor, unblinded_tokens: List[UnblindedToken]
+    ) -> None:
         """
         Get rid of some unblinded tokens.  The tokens will be completely removed
         from the system.  This is useful when the tokens have been
@@ -705,21 +725,26 @@ class VoucherStore(object):
             DELETE FROM [in-use]
             WHERE [unblinded-token] IN [to-discard]
             """,
+            (),
         )
         cursor.execute(
             """
             DELETE FROM [unblinded-tokens]
             WHERE [token] IN [to-discard]
             """,
+            (),
         )
         cursor.execute(
             """
             DELETE FROM [to-discard]
             """,
+            (),
         )
 
     @with_cursor
-    def invalidate_unblinded_tokens(self, cursor, reason, unblinded_tokens):
+    def invalidate_unblinded_tokens(
+        self, cursor: Cursor, reason: str, unblinded_tokens: List[UnblindedToken]
+    ) -> None:
         """
         Mark some unblinded tokens as invalid and unusable.  Some record of the
         tokens may be retained for future inspection.  These tokens will not
@@ -727,7 +752,7 @@ class VoucherStore(object):
         useful when an attempt to spend a token has met with rejection by the
         validator.
 
-        :param list[UnblindedToken] unblinded_tokens: The tokens to mark.
+        :param unblinded_tokens: The tokens to mark.
 
         :return: ``None``
         """
@@ -745,16 +770,20 @@ class VoucherStore(object):
             DELETE FROM [in-use]
             WHERE [unblinded-token] IN (SELECT [token] FROM [invalid-unblinded-tokens])
             """,
+            (),
         )
         cursor.execute(
             """
             DELETE FROM [unblinded-tokens]
             WHERE [token] IN (SELECT [token] FROM [invalid-unblinded-tokens])
             """,
+            (),
         )
 
     @with_cursor
-    def reset_unblinded_tokens(self, cursor, unblinded_tokens):
+    def reset_unblinded_tokens(
+        self, cursor: Cursor, unblinded_tokens: List[UnblindedToken]
+    ) -> None:
         """
         Make some unblinded tokens available to be retrieved from the store again.
         This is useful if a spending operation has failed with a transient
@@ -773,14 +802,16 @@ class VoucherStore(object):
             DELETE FROM [in-use]
             WHERE [unblinded-token] IN [to-reset]
             """,
+            (),
         )
         cursor.execute(
             """
             DELETE FROM [to-reset]
             """,
+            (),
         )
 
-    def start_lease_maintenance(self):
+    def start_lease_maintenance(self) -> LeaseMaintenance:
         """
         Get an object which can track a newly started round of lease maintenance
         activity.
@@ -792,7 +823,9 @@ class VoucherStore(object):
         return m
 
     @with_cursor
-    def get_latest_lease_maintenance_activity(self, cursor):
+    def get_latest_lease_maintenance_activity(
+        self, cursor: Cursor
+    ) -> Optional[LeaseMaintenanceActivity]:
         """
         Get a description of the most recently completed lease maintenance
         activity.
@@ -808,6 +841,7 @@ class VoucherStore(object):
             ORDER BY [finished] DESC
             LIMIT 1
             """,
+            (),
         )
         activity = cursor.fetchall()
         if len(activity) == 0:
@@ -850,7 +884,7 @@ class LeaseMaintenance(object):
     _rowid: Optional[int] = None
 
     @with_cursor
-    def start(self, cursor):
+    def start(self, cursor: Cursor) -> None:
         """
         Record the start of a lease maintenance run.
         """
@@ -867,7 +901,7 @@ class LeaseMaintenance(object):
         self._rowid = cursor.lastrowid
 
     @with_cursor
-    def observe(self, cursor, sizes):
+    def observe(self, cursor: Cursor, sizes: list[int]) -> None:
         """
         Record a storage shares of the given sizes.
         """

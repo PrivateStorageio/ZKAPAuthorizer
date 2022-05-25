@@ -67,6 +67,7 @@ from ..model import (
     Pass,
     Pending,
     Redeemed,
+    UnblindedToken,
     Voucher,
     VoucherStore,
     aware_now,
@@ -88,6 +89,7 @@ from ..replicate import (
     prune_events_to,
     with_replication,
 )
+from .common import from_awaitable
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
@@ -113,7 +115,7 @@ from .strategies import (
 _T = TypeVar("_T")
 
 
-async def fail(cursor):
+async def fail(cursor) -> None:
     raise Exception("Should not be called")
 
 
@@ -122,7 +124,7 @@ class WithCursorAsyncTests(TestCase):
     Tests for ``with_cursor_async``.
     """
 
-    def test_exception(self):
+    def test_exception(self) -> None:
         """
         A function decorated with ``with_cursor_async`` returns a coroutine that
         raises the same exception as the decorated function and the
@@ -136,13 +138,13 @@ class WithCursorAsyncTests(TestCase):
             _connection: Connection = connect(":memory:")
 
             @with_cursor_async
-            async def f(self, cursor):
+            async def f(self, cursor) -> None:
                 cursor.execute("CREATE TABLE [bad] ([a] INT)")
                 cursor.execute("INSERT INTO [bad] VALUES (1)")
                 raise SomeException()
 
         self.assertThat(
-            Deferred.fromCoroutine(Database().f()),
+            from_awaitable(Database().f()),
             failed(AfterPreprocessing(lambda f: f.value, IsInstance(SomeException))),
         )
 
@@ -152,7 +154,7 @@ class WithCursorAsyncTests(TestCase):
             raises(OperationalError),
         )
 
-    def test_success(self):
+    def test_success(self) -> None:
         """
         A function decorated with ``with_cursor_async`` returns a coroutine that
         succeeds with the same result as the decorated function and commits
@@ -170,7 +172,7 @@ class WithCursorAsyncTests(TestCase):
                 return self.expected
 
         self.assertThat(
-            Deferred.fromCoroutine(Database().f()),
+            from_awaitable(Database().f()),
             succeeded(Is(Database.expected)),
         )
         cursor = Database._connection.cursor()
@@ -180,7 +182,7 @@ class WithCursorAsyncTests(TestCase):
             Equals([(1,)]),
         )
 
-    def test_async(self):
+    def test_async(self) -> None:
         """
         The given function can return an ``Awaitable`` and the transaction will
         not be committed until it has a result.
@@ -195,7 +197,7 @@ class WithCursorAsyncTests(TestCase):
         class Database:
             _connection: Connection = conn_a
             expected = object()
-            task = Deferred()
+            task: Deferred[None] = Deferred()
 
             @with_cursor_async
             async def f(self, cursor_a):
@@ -209,7 +211,7 @@ class WithCursorAsyncTests(TestCase):
         # Start the asynchronous task but don't wait on it so that we can
         # assert stuff in parallel.
         db = Database()
-        coro_d = Deferred.fromCoroutine(db.f())
+        coro_d = from_awaitable(db.f())
 
         # Since the asynchronous task hasn't completed, its transaction hasn't
         # committed and there is no foo table to select from.  A query on the
@@ -241,14 +243,14 @@ class VoucherStoreCallIfEmptyTests(TestCase):
     Tests for ``VoucherStore.call_if_empty``.
     """
 
-    def setup_example(self):
+    def setup_example(self) -> None:
         self.store_fixture = self.useFixture(
             TemporaryVoucherStore(
                 get_now=aware_now,
             ),
         )
 
-    def test_empty(self):
+    def test_empty(self) -> None:
         """
         If a ``VoucherStore`` is instantiated and there was no existing database
         then it is empty.
@@ -280,7 +282,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         tokens=lists(random_tokens(), min_size=1, max_size=10, unique=True),
     )
-    def test_not_empty_if_any_vouchers(self, voucher, tokens):
+    def test_not_empty_if_any_vouchers(self, voucher, tokens) -> None:
         """
         If there are any vouchers in the database a ``VoucherStore`` is using then
         it is not empty.
@@ -300,7 +302,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_spendable_tokens(self, voucher, num_passes):
+    def test_not_empty_if_any_spendable_tokens(self, voucher, num_passes) -> None:
         """
         If there are spendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -316,7 +318,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_unspendable_tokens(self, voucher, num_passes):
+    def test_not_empty_if_any_unspendable_tokens(self, voucher, num_passes) -> None:
         """
         If there are unspendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -339,7 +341,7 @@ class VoucherStoreTests(TestCase):
     """
 
     @given(integers(min_value=1))
-    def test_reject_naive_datetime(self, pass_value):
+    def test_reject_naive_datetime(self, pass_value) -> None:
         """
         ``VoucherStore`` raises ``TypeError`` on initialization if given a ``now``
         that returns a datetime without a timezone.
@@ -353,7 +355,7 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
-    def test_get_missing(self, get_config, now, voucher):
+    def test_get_missing(self, get_config, now, voucher) -> None:
         """
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
@@ -370,7 +372,7 @@ class VoucherStoreTests(TestCase):
         lists(random_tokens(), min_size=1, unique=True),
         aware_datetimes(),
     )
-    def test_add(self, get_config, voucher, tokens, now):
+    def test_add(self, get_config, voucher, tokens, now) -> None:
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
@@ -396,7 +398,7 @@ class VoucherStoreTests(TestCase):
     )
     def test_add_with_distinct_counters(
         self, get_config, voucher, counters, tokens, now
-    ):
+    ) -> None:
         """
         ``VoucherStore.add`` adds new tokens to the store when passed the same
         voucher but a different counter value.
@@ -431,7 +433,7 @@ class VoucherStoreTests(TestCase):
         aware_datetimes(),
         lists(random_tokens(), min_size=1, unique=True),
     )
-    def test_add_idempotent(self, get_config, voucher, now, tokens):
+    def test_add_idempotent(self, get_config, voucher, now, tokens) -> None:
         """
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
@@ -473,7 +475,7 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), lists(vouchers(), unique=True), data())
-    def test_list(self, get_config, now, vouchers, data):
+    def test_list(self, get_config, now, vouchers, data) -> None:
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
@@ -519,7 +521,7 @@ class VoucherStoreSnapshotTests(TestCase):
         integers(min_value=1, max_value=2**63 - 1),
         lists(random_tokens(), unique=True),
     )
-    def test_vouchers(self, now, voucher, expected, tokens):
+    def test_vouchers(self, now, voucher, expected, tokens) -> None:
         """
         Vouchers are present in the snapshot.
         """
@@ -554,7 +556,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         redeemed successfully by this machine.
     """
 
-    def __init__(self, case):
+    def __init__(self, case) -> None:
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
         self.configless = TemporaryVoucherStore(
@@ -565,15 +567,15 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
         self.num_vouchers_redeemed: int = 0
         self.available = 0
-        self.using = []
-        self.spent = []
-        self.invalid = []
+        self.using: list[UnblindedToken] = []
+        self.spent: list[UnblindedToken] = []
+        self.invalid: list[UnblindedToken] = []
 
-    def teardown(self):
+    def teardown(self) -> None:
         self.configless.cleanUp()
 
     @rule(voucher=vouchers(), num_passes=pass_counts())
-    def redeem_voucher(self, voucher, num_passes):
+    def redeem_voucher(self, voucher, num_passes) -> None:
         """
         A voucher can be redeemed, adding more unblinded tokens to the store.
         """
@@ -594,7 +596,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.num_vouchers_redeemed += 1
 
     @rule(num_passes=pass_counts())
-    def get_passes(self, num_passes):
+    def get_passes(self, num_passes) -> None:
         """
         Some passes can be requested from the store.  The resulting passes are not
         spent, invalid, or already in-use.
@@ -621,7 +623,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.available -= num_passes
 
     @rule(excess_passes=pass_counts())
-    def not_enough_passes(self, excess_passes):
+    def not_enough_passes(self, excess_passes) -> None:
         """
         If an attempt is made to get more passes than are available,
         ``get_unblinded_tokens`` raises ``NotEnoughTokens``.
@@ -635,7 +637,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def spend_passes(self, random, data):
+    def spend_passes(self, random, data) -> None:
         """
         Some in-use passes can be discarded.
         """
@@ -645,7 +647,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def reset_passes(self, random, data):
+    def reset_passes(self, random, data) -> None:
         """
         Some in-use passes can be returned to not-in-use state.
         """
@@ -656,7 +658,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def invalidate_passes(self, random, data):
+    def invalidate_passes(self, random, data) -> None:
         """
         Some in-use passes are unusable and should be set aside.
         """
@@ -669,7 +671,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.invalid.extend(to_invalidate)
 
     @rule()
-    def discard_ephemeral_state(self):
+    def discard_ephemeral_state(self) -> None:
         """
         Reset all state that cannot outlive a single process, simulating a
         restart.
@@ -687,7 +689,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         del self.using[:]
 
     @invariant()
-    def random_token_count(self):
+    def random_token_count(self) -> None:
         """
         ``VoucherStore.random_token_count`` returns ``0``.
 
@@ -702,7 +704,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
 
     @invariant()
-    def unblinded_token_count(self):
+    def unblinded_token_count(self) -> None:
         """
         ``VoucherStore.count_unblinded_tokens`` returns the number of tokens
         available to be spent.
@@ -713,7 +715,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
 
     @invariant()
-    def check_empty(self):
+    def check_empty(self) -> None:
         """
         ``VoucherStore.call_if_empty`` succeeds until any voucher is redeemed and
         then raises ``NotEmpty``.
@@ -734,7 +736,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
             )
 
     @invariant()
-    def report_state(self):
+    def report_state(self) -> None:
         note(
             "available={} using={} invalid={} spent={}".format(
                 self.available,
@@ -771,7 +773,7 @@ class UnblindedTokenStateTests(TestCase):
     Glue ``UnblindedTokenStateTests`` into our test runner.
     """
 
-    def test_states(self):
+    def test_states(self) -> None:
         run_state_machine_as_test(lambda: UnblindedTokenStateMachine(self))
 
 
@@ -810,7 +812,7 @@ class LeaseMaintenanceTests(TestCase):
             ),
         ),
     )
-    def test_lease_maintenance_activity(self, get_config, now, activity):
+    def test_lease_maintenance_activity(self, get_config, now, activity) -> None:
         """
         ``VoucherStore.get_latest_lease_maintenance_activity`` returns a
         ``LeaseMaintenanceTests`` with fields reflecting the most recently
@@ -934,7 +936,7 @@ class EventStreamTests(TestCase):
             Equals(len(expected_changes)),
         )
 
-    def test_event_stream_invalid_version(self):
+    def test_event_stream_invalid_version(self) -> None:
         """
         An EventStream with an unknown version errors on deserialization
         """
@@ -991,7 +993,7 @@ class VoucherTests(TestCase):
     """
 
     @given(voucher_objects())
-    def test_json_roundtrip(self, reference):
+    def test_json_roundtrip(self, reference) -> None:
         """
         ``Voucher.to_json . Voucher.from_json → id``
         """
@@ -1043,7 +1045,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_unblinded_tokens_without_voucher(
         self, get_config, now, voucher_value, public_key, unblinded_tokens, completed
-    ):
+    ) -> None:
         """
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
         """
@@ -1069,7 +1071,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_unblinded_tokens_round_trip(
         self, get_config, now, voucher_value, public_key, completed, tokens
-    ):
+    ) -> None:
         """
         Unblinded tokens that are added to the store can later be retrieved and counted.
         """
@@ -1107,7 +1109,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_mark_vouchers_redeemed(
         self, get_config, now, voucher_value, public_key, tokens
-    ):
+    ) -> None:
         """
         The voucher for unblinded tokens that are added to the store is marked as
         redeemed.
@@ -1141,7 +1143,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_mark_vouchers_double_spent(
         self, get_config, now, voucher_value, random_tokens
-    ):
+    ) -> None:
         """
         A voucher which is reported as double-spent is marked in the database as
         such.
@@ -1170,7 +1172,7 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_mark_spent_vouchers_double_spent(
         self, get_config, now, voucher_value, public_key, tokens
-    ):
+    ) -> None:
         """
         A voucher which has already been spent cannot be marked as double-spent.
         """
@@ -1190,7 +1192,9 @@ class UnblindedTokenStoreTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_mark_invalid_vouchers_double_spent(self, get_config, now, voucher_value):
+    def test_mark_invalid_vouchers_double_spent(
+        self, get_config, now, voucher_value
+    ) -> None:
         """
         A voucher which is not known cannot be marked as double-spent.
         """
@@ -1220,7 +1224,7 @@ class UnblindedTokenStoreTests(TestCase):
         extra_bits,
         extra_fuzz,
         tokens,
-    ):
+    ) -> None:
         """
         ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
         greater than the number of unblinded tokens in the store.
@@ -1261,7 +1265,7 @@ class PassTests(TestCase):
     """
 
     @given(zkaps())
-    def test_roundtrip(self, pass_):
+    def test_roundtrip(self, pass_) -> None:
         """
         ``Pass`` round-trips through ``Pass.from_bytes`` and ``Pass.pass_bytes``.
         """
@@ -1277,7 +1281,7 @@ class ReplicationTests(TestCase):
     integration of different pieces that go into those processes.
     """
 
-    def test_recover(self):
+    def test_recover(self) -> None:
         """
         Given a snapshot returned by ``snapshot`` can be loaded into an empty
         ``VoucherStore`` using ``VoucherStore.call_if_empty`` with
