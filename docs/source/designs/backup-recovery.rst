@@ -328,7 +328,7 @@ The replication process is as follows:
    #. The read capability is returned to the external caller.
 
 #. If there is not a sufficiently up-to-date snapshot [1]_ on the grid then one is created [7]_.
-   The new snapshot is linked to the name `snapshot.sql` in the *replica directory*, replacing any old (and now obsolete [2]_) snapshot.
+   The new snapshot is linked to the name `snapshot` in the *replica directory*, replacing any old (and now obsolete [2]_) snapshot.
 
 #. As the application runs the event stream is recorded [3]_ locally in the database.
 
