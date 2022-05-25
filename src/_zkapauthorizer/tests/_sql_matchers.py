@@ -2,13 +2,12 @@
 Testtools matchers related to SQL functionality.
 """
 
-from sqlite3 import Connection
 from typing import Iterator, Union
 
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
 
-from ..sql import Insert, Table, escape_identifier
+from ..sql import Connection, Insert, Table, escape_identifier
 from ._float_matchers import matches_float_within_distance
 
 
@@ -56,7 +55,8 @@ def _structured_dump_tables(db: Connection) -> Iterator[tuple[str, str]]:
         FROM [sqlite_master]
         WHERE [sql] NOT NULL and [type] == 'table'
         ORDER BY [name]
-        """
+        """,
+        (),
     )
     yield from curs.fetchall()
 
@@ -67,7 +67,7 @@ def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
     formatting.
     """
     curs = db.cursor()
-    curs.execute(f"PRAGMA table_info({escape_identifier(table_name)})")
+    curs.execute(f"PRAGMA table_info({escape_identifier(table_name)})", ())
 
     columns = list(
         (name, type_) for (cid, name, type_, notnull, dftl_value, pk) in curs.fetchall()
@@ -77,7 +77,8 @@ def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
         f"""
         SELECT {column_names}
         FROM {escape_identifier(table_name)}
-        """
+        """,
+        (),
     )
 
     for rows in iter(lambda: curs.fetchmany(1024), []):

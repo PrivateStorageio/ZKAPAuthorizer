@@ -24,13 +24,30 @@ class AbstractCursor(Protocol):
     A SQLite3 database cursor.
     """
 
+    @property
+    def lastrowid(self) -> Optional[int]:
+        ...
+
+    @property
+    def rowcount(self) -> Optional[int]:
+        ...
+
     def execute(self, statement: str, args: Iterable[Any]) -> AbstractCursor:
+        ...
+
+    def executemany(self, statement, args: Iterable[Iterable[Any]]) -> AbstractCursor:
         ...
 
     def close(self) -> None:
         ...
 
     def fetchall(self) -> list[Any]:
+        ...
+
+    def fetchmany(self, n: int) -> list[Any]:
+        ...
+
+    def fetchone(self) -> Any:
         ...
 
 

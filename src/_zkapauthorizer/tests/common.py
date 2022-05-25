@@ -236,3 +236,14 @@ def proxyForInterface(
     # our dynamically constructed class.
     classImplements(proxy, iface)  # type: ignore[misc]
     return proxy
+
+
+def from_awaitable(a: Awaitable[_A]) -> Deferred[_A]:
+    """
+    Get a ``Deferred`` that fires with the result of an ``Awaitable``.
+    """
+
+    async def adapt() -> _A:
+        return await a
+
+    return Deferred.fromCoroutine(adapt())

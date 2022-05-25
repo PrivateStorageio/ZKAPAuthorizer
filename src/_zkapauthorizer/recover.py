@@ -15,7 +15,6 @@ __all__ = [
 from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
-from sqlite3 import Cursor
 from typing import BinaryIO, Callable, Iterator, Optional
 
 import cbor2
@@ -23,7 +22,7 @@ from attrs import define
 from twisted.python.filepath import FilePath
 
 from .replicate import statements_to_snapshot
-from .sql import escape_identifier
+from .sql import Cursor, escape_identifier
 from .tahoe import Tahoe
 
 
@@ -197,12 +196,12 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     do_not_drop = ("sqlite_sequence",)
 
     # Discard all existing data in the database.
-    cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'")
+    cursor.execute("SELECT [name] FROM [sqlite_master] WHERE [type] = 'table'", ())
     tables = cursor.fetchall()
     for (table_name,) in tables:
         if table_name in do_not_drop:
             continue
-        cursor.execute(f"DROP TABLE {escape_identifier(table_name)}")
+        cursor.execute(f"DROP TABLE {escape_identifier(table_name)}", ())
 
     # The order of statements does not necessarily guarantee that foreign key
     # constraints are satisfied after every statement.  Turn off enforcement
@@ -212,7 +211,7 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     # enforce them when the current transaction is committed and the effect
     # vanishes after the current transaction (whether it commits or rolls
     # back).
-    cursor.execute("PRAGMA defer_foreign_keys = ON")
+    cursor.execute("PRAGMA defer_foreign_keys = ON", ())
 
     # Load everything back in two passes.  The two passes thing sucks.
     # However, if a row is inserted into a table and the table has a foreign
@@ -235,13 +234,13 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
     dml = []
     for sql in statements:
         if sql.startswith("CREATE TABLE"):
-            cursor.execute(sql)
+            cursor.execute(sql, ())
         elif sql not in ("BEGIN TRANSACTION;", "COMMIT;"):
             dml.append(sql)
 
     # Run all the DML
     for sql in dml:
-        cursor.execute(sql)
+        cursor.execute(sql, ())
 
 
 async def tahoe_lafs_downloader(
