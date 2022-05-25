@@ -23,7 +23,7 @@ from attrs import define
 
 from .replicate import SNAPSHOT_NAME, statements_to_snapshot
 from .sql import escape_identifier
-from .tahoe import CapStr, ITahoeClient
+from .tahoe import CapStr, DataProvider, ITahoeClient
 
 
 class SnapshotMissing(Exception):
@@ -82,7 +82,7 @@ class RecoveryState:
 SetState = Callable[[RecoveryState], None]
 
 # An object which can retrieve remote ZKAPAuthorizer state.
-Downloader = Callable[[SetState], Awaitable[Callable[[], BinaryIO]]]
+Downloader = Callable[[SetState], Awaitable[DataProvider]]
 
 
 @define
@@ -149,7 +149,7 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> Callable[[], BinaryIO]:
+    async def fail_downloader(set_state: SetState) -> DataProvider:
         raise reason
 
     return fail_downloader
@@ -161,7 +161,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
     """
     assert isinstance(data, bytes)
 
-    async def canned_downloader(set_state: SetState) -> Callable[[], BinaryIO]:
+    async def canned_downloader(set_state: SetState) -> DataProvider:
         return lambda: BytesIO(data)
 
     return canned_downloader
@@ -171,7 +171,7 @@ def make_canned_downloader(data: bytes) -> Downloader:
 noop_downloader = make_canned_downloader(statements_to_snapshot(iter([])))
 
 
-def statements_from_snapshot(get_snapshot: Callable[[], BinaryIO]) -> Iterator[str]:
+def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
     """
@@ -183,7 +183,7 @@ def statements_from_snapshot(get_snapshot: Callable[[], BinaryIO]) -> Iterator[s
     return snapshot["statements"]
 
 
-def recover(get_snapshot: Callable[[], BinaryIO], cursor: Cursor) -> None:
+def recover(get_snapshot: DataProvider, cursor: Cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
     """
@@ -248,7 +248,7 @@ async def tahoe_lafs_downloader(
     client: ITahoeClient,
     recovery_cap: str,
     set_state: SetState,
-) -> Callable[[], BinaryIO]:
+) -> DataProvider:
     """
     Download replica data from the given replica directory capability into the
     node's private directory.

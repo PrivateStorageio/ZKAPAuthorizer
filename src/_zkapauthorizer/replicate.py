@@ -91,10 +91,10 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import ITahoeClient, attenuate_writecap
+from .tahoe import DataProvider, ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
-Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
+Uploader = Callable[[str, DataProvider], Awaitable[None]]
 
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
@@ -538,7 +538,7 @@ snapshot: Callable[[Connection], bytes] = compose(
 async def tahoe_lafs_uploader(
     client: ITahoeClient,
     recovery_cap: str,
-    get_snapshot_data: Callable[[], BinaryIO],
+    get_snapshot_data: DataProvider,
     entry_name: str,
 ) -> None:
     """
@@ -552,7 +552,7 @@ async def tahoe_lafs_uploader(
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
     directory_mutable_cap: str,
-) -> Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
+) -> Callable[[str, DataProvider], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     upload some data and link it into the mutable directory under the
@@ -563,9 +563,7 @@ def get_tahoe_lafs_direntry_uploader(
         zero-argument callable itself to facilitate retrying.
     """
 
-    async def upload(
-        entry_name: str, get_data_provider: Callable[[], BinaryIO]
-    ) -> None:
+    async def upload(entry_name: str, get_data_provider: DataProvider) -> None:
         await tahoe_lafs_uploader(
             client, directory_mutable_cap, get_data_provider, entry_name
         )

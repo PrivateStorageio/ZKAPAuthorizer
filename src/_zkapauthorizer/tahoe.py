@@ -23,6 +23,9 @@ from zope.interface import Interface, implementer
 from ._types import CapStr
 from .config import Config, read_node_url
 
+# An object which can get a readable byte stream
+DataProvider = Callable[[], BinaryIO]
+
 
 def async_retry(matchers: list[Callable[[Exception], bool]]):
     """
@@ -133,7 +136,7 @@ _common_tahoe_errors = [_not_enough_servers, _connection_refused]
 @async_retry(_common_tahoe_errors)
 async def upload_bytes(
     client: HTTPClient,
-    get_data_provider: Callable[[], BinaryIO],
+    get_data_provider: DataProvider,
     api_root: DecodedURL,
 ) -> Awaitable[str]:
     """
@@ -328,7 +331,7 @@ class ITahoeClient(Interface):
         Download the contents of an object to a given local path.
         """
 
-    async def upload(get_data_provider: Callable[[], BinaryIO]) -> CapStr:
+    async def upload(data_provider: DataProvider) -> CapStr:
         """
         Upload some data, creating a new object, and returning a capability for
         it.
@@ -579,7 +582,7 @@ class _MemoryTahoe:
         else:
             raise ValueError(f"Cannot download non-data capability ({cap[:7]})")
 
-    async def upload(self, get_data_provider: Callable[[], BinaryIO]):
+    async def upload(self, data_provider: DataProvider):
         """
         Send some data to Tahoe-LAFS, returning an immutable capability.
 
@@ -588,7 +591,8 @@ class _MemoryTahoe:
             to re-try the upload, which is also the reason this method
             doesn't just take a `bytes` directly
         """
-        content = get_data_provider().read()
+        with data_provider() as d:
+            content = d.read()
         return self._grid.upload(content)
 
     async def make_directory(self):
