@@ -4,7 +4,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from io import BytesIO
 from sqlite3 import connect
-from typing import Any, Generator, TypeVar
+from typing import TypeVar
 
 import cbor2
 from hypothesis import assume, given, note, settings
@@ -26,7 +26,7 @@ from testtools.matchers import (
     MatchesStructure,
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred
 from zope.interface import Interface
 
 from ..config import REPLICA_RWCAP_BASENAME
@@ -316,8 +316,7 @@ class TahoeLAFSDownloaderTests(TestCase):
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    @inlineCallbacks
-    def test_uploader_and_downloader(self) -> Generator[Deferred[Any], Any, None]:
+    def test_uploader_and_downloader(self) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
@@ -332,16 +331,23 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
         )
         expected = b"snapshot data"
-        yield from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected)))
+        self.assertThat(
+            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected))),
+            succeeded(Always()),
+        )
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
-        downloaded_snapshot_path = yield from_awaitable(download(lambda state: None))
         self.assertThat(
-            downloaded_snapshot_path.getContent(),
-            Equals(expected),
+            from_awaitable(download(lambda state: None)),
+            succeeded(
+                AfterPreprocessing(
+                    lambda data_provider: data_provider().read(),
+                    Equals(expected),
+                ),
+            ),
         )
 
 
