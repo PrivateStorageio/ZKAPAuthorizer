@@ -32,18 +32,20 @@ from zope.interface import Interface
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
+    Replica,
     StatefulRecoverer,
     get_tahoe_lafs_downloader,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
-    recover,
+    recover_snapshot,
     statements_from_snapshot,
 )
 from ..replicate import (
     SNAPSHOT_NAME,
     AlreadySettingUp,
     ReplicationAlreadySetup,
+    event_stream_name,
     get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
     snapshot,
@@ -121,11 +123,13 @@ class SnapshotMachine(RuleBasedStateMachine):
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
         """
-        snapshot_bytes = snapshot(self.connection)
+        snapshot_statements = statements_from_snapshot(
+            lambda: BytesIO(snapshot(self.connection))
+        )
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(lambda: BytesIO(snapshot_bytes), cursor)
+            recover_snapshot(snapshot_statements, cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
@@ -234,7 +238,7 @@ class StatefulRecovererTests(TestCase):
                 ]
             )
         )
-        downloader = make_canned_downloader(snapshot)
+        downloader = make_canned_downloader(snapshot, [])
         recoverer = StatefulRecoverer()
         with connect(":memory:") as conn:
             cursor = conn.cursor()
@@ -273,7 +277,7 @@ class StatefulRecovererTests(TestCase):
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         recovery fails with an exception.
         """
-        downloader = make_canned_downloader(b"non-sql junk to provoke a failure")
+        downloader = make_canned_downloader(b"non-sql junk to provoke a failure", [])
         recoverer = StatefulRecoverer()
         with connect(":memory:") as conn:
             cursor = conn.cursor()
@@ -335,17 +339,37 @@ class TahoeLAFSDownloaderTests(TestCase):
             from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected))),
             succeeded(Always()),
         )
+        expected_event_stream = [
+            b"event stream 1 data",
+            b"event stream 2 data",
+        ]
+        for n, event_stream_data in enumerate(expected_event_stream):
+            self.assertThat(
+                from_awaitable(
+                    upload(
+                        event_stream_name(n),
+                        lambda: BytesIO(event_stream_data),
+                    ),
+                ),
+                succeeded(Always()),
+            )
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
+        def read_replica_data(replica: Replica) -> list[bytes]:
+            snapshot_provider, event_stream_providers = replica
+            return [snapshot_provider().read()] + [
+                e().read() for e in event_stream_providers
+            ]
+
         self.assertThat(
             from_awaitable(download(lambda state: None)),
             succeeded(
                 AfterPreprocessing(
-                    lambda data_provider: data_provider().read(),
-                    Equals(expected),
+                    read_replica_data,
+                    Equals([expected] + expected_event_stream),
                 ),
             ),
         )

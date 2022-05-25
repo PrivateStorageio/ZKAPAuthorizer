@@ -14,13 +14,14 @@ __all__ = [
 
 from collections.abc import Awaitable
 from enum import Enum, auto
+from functools import partial
 from io import BytesIO
-from typing import Callable, Iterator, Optional
+from typing import Callable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define
 
-from .replicate import SNAPSHOT_NAME, statements_to_snapshot
+from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
 from .tahoe import CapStr, DataProvider, ITahoeClient
 
@@ -50,6 +51,7 @@ class RecoveryStages(Enum):
 
     inactive = auto()
     started = auto()
+    inspect_replica = auto()
     downloading = auto()
     importing = auto()
     succeeded = auto()
@@ -80,8 +82,18 @@ class RecoveryState:
 # A function for reporting a change in the state of a recovery attempt.
 SetState = Callable[[RecoveryState], None]
 
+Replica = tuple[
+    # The snapshot
+    DataProvider,
+    # All of the event streams that could possibly -- but do not necessarily
+    # -- apply on top of the snapshot.  In normal operation it is likely that
+    # they will all apply on top of it but no metadata has been checked yet to
+    # verify this.
+    Sequence[DataProvider],
+]
+
 # An object which can retrieve remote ZKAPAuthorizer state.
-Downloader = Callable[[SetState], Awaitable[DataProvider]]
+Downloader = Callable[[SetState], Awaitable[Replica]]
 
 
 @define
@@ -111,7 +123,7 @@ class StatefulRecoverer:
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
         try:
-            downloaded_path = await download(self._set_state)
+            (snapshot, event_streams) = await download(self._set_state)
         except Exception as e:
             self._set_state(
                 RecoveryState(
@@ -121,7 +133,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(downloaded_path, cursor)
+            recover(snapshot, event_streams, cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -148,26 +160,33 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> DataProvider:
+    async def fail_downloader(set_state: SetState) -> NoReturn:
         raise reason
 
     return fail_downloader
 
 
-def make_canned_downloader(data: bytes) -> Downloader:
+def make_canned_downloader(snapshot: bytes, event_streams: list[bytes]) -> Downloader:
     """
-    Make a downloader that always immediately succeeds with the given value.
+    Make a downloader that always immediately succeeds with the given values.
     """
-    assert isinstance(data, bytes)
+    assert isinstance(snapshot, bytes)
+    assert all(isinstance(e, bytes) for e in event_streams)
 
-    async def canned_downloader(set_state: SetState) -> DataProvider:
-        return lambda: BytesIO(data)
+    async def canned_downloader(set_state: SetState) -> Replica:
+        return (
+            partial(BytesIO, snapshot),
+            [partial(BytesIO, e) for e in event_streams],
+        )
 
     return canned_downloader
 
 
 # A downloader that does nothing and then succeeds with an empty snapshot.
-noop_downloader = make_canned_downloader(statements_to_snapshot(iter([])))
+noop_downloader = make_canned_downloader(
+    statements_to_snapshot(iter([])),
+    [],
+)
 
 
 def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
@@ -182,12 +201,44 @@ def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
     return snapshot["statements"]
 
 
-def recover(get_snapshot: DataProvider, cursor: Cursor) -> None:
+def recover(
+    snapshot: DataProvider, event_stream_data: Sequence[DataProvider], cursor: Cursor
+) -> None:
     """
-    Synchronously execute our statement list against the given cursor.
+    Synchronously execute statements from a snapshot and any applicable event
+    streams against the given cursor.
     """
-    statements = statements_from_snapshot(get_snapshot)
+    recover_snapshot(statements_from_snapshot(snapshot), cursor)
+    for event_stream in sorted_event_streams(load_event_streams(event_stream_data)):
+        recover_event_stream(event_stream, cursor)
 
+
+def sorted_event_streams(event_streams: Iterator[EventStream]) -> list[EventStream]:
+    streams_with_changes = (e for e in event_streams if len(e.changes) > 0)
+
+    def event_stream_key(e):
+        seq = e.highest_sequence()
+        assert seq is not None
+        return seq
+
+    return sorted(streams_with_changes, key=event_stream_key)
+
+
+def load_event_streams(
+    event_stream_data: Sequence[DataProvider],
+) -> Iterator[EventStream]:
+    for event_stream_datum in event_stream_data:
+        with event_stream_datum() as f:
+            yield EventStream.from_bytes(f)
+
+
+def recover_event_stream(event_stream: EventStream, cursor: Cursor) -> None:
+    for change in event_stream.changes:
+        if change.statement not in ("BEGIN TRANSACTION;", "COMMIT;"):
+            cursor.execute(change.statement, change.arguments)
+
+
+def recover_snapshot(statements: Iterator[str], cursor: Cursor) -> None:
     # There are certain tables that can't be dropped .. however, we
     # should be refusing to run "recover" at all if there's useful
     # information in the database so these tables should be in the
@@ -229,8 +280,8 @@ def recover(get_snapshot: DataProvider, cursor: Cursor) -> None:
     # late to turn it off here, though, since it cannot be changed inside a
     # transaction.
 
-    # So, pull the DDL apart from the DML.  Do this in one pass in case
-    # iterating statements is destructive.
+    # So, pull the DDL apart from the DML.  Do this in one pass because we
+    # won't be able to iterate statements twice.
     dml = []
     for sql in statements:
         if sql.startswith("CREATE TABLE"):
@@ -247,16 +298,29 @@ async def tahoe_lafs_downloader(
     client: ITahoeClient,
     recovery_cap: str,
     set_state: SetState,
-) -> DataProvider:
+) -> Replica:
     """
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    snapshot_path = client.get_private_path(SNAPSHOT_NAME)
+    set_state(RecoveryState(stage=RecoveryStages.inspect_replica))
+    entries = await client.list_directory(recovery_cap)
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
+    snapshot_path = client.get_private_path(SNAPSHOT_NAME)
     await client.download(snapshot_path, recovery_cap, [SNAPSHOT_NAME])
-    return lambda: snapshot_path.open("rb")
+
+    entry_paths = []
+    for name, (entry_type, entry) in entries.items():
+        if entry_type == "filenode" and name.startswith("event-stream-"):
+            entry_path = client.get_private_path(name)
+            entry_paths.append(entry_path)
+            await client.download(entry_path, entry["ro_uri"], None)
+
+    return (
+        partial(snapshot_path.open, "rb"),
+        [partial(stream_path.open, "rb") for stream_path in entry_paths],
+    )
 
 
 def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloader]:
