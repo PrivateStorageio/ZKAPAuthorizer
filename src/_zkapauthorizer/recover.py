@@ -16,7 +16,7 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
 from sqlite3 import Cursor
-from typing import BinaryIO, Callable, Iterator, Optional, cast
+from typing import Callable, Iterator, Optional
 
 import cbor2
 from attrs import define
@@ -257,9 +257,7 @@ async def tahoe_lafs_downloader(
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
     await client.download(snapshot_path, recovery_cap, [SNAPSHOT_NAME])
-    # FilePath.open returns IO[bytes].  For some reason that's not the same as
-    # BinaryIO?  Of course, in reality it is... So force it.
-    return lambda: cast(BinaryIO, snapshot_path.open("rb"))
+    return lambda: snapshot_path.open("rb")
 
 
 def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloader]:

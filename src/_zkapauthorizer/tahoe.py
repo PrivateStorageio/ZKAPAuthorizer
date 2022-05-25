@@ -7,7 +7,7 @@ from functools import wraps
 from hashlib import sha256
 from json import loads
 from tempfile import mkdtemp
-from typing import Any, BinaryIO, Callable, Iterable, Optional, Union
+from typing import IO, Any, Callable, Iterable, Optional, Union
 
 import treq
 from allmydata.uri import from_string as capability_from_string
@@ -24,7 +24,7 @@ from ._types import CapStr
 from .config import Config, read_node_url
 
 # An object which can get a readable byte stream
-DataProvider = Callable[[], BinaryIO]
+DataProvider = Callable[[], IO[bytes]]
 
 
 def async_retry(matchers: list[Callable[[Exception], bool]]):

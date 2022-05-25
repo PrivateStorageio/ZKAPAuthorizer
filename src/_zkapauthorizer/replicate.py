@@ -66,9 +66,9 @@ from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import (
+    IO,
     Any,
     Awaitable,
-    BinaryIO,
     Callable,
     ClassVar,
     Generator,
@@ -186,7 +186,7 @@ class EventStream:
             return None
         return max(change.sequence for change in self.changes)
 
-    def to_bytes(self) -> BinaryIO:
+    def to_bytes(self) -> IO[bytes]:
         """
         :returns BinaryIO: a producer of bytes representing this EventStream.
         """
@@ -208,7 +208,7 @@ class EventStream:
         )
 
     @classmethod
-    def from_bytes(cls, stream: BinaryIO) -> EventStream:
+    def from_bytes(cls, stream: IO[bytes]) -> EventStream:
         """
         :returns EventStream: an instance of EventStream from the given
             bytes (which should have been produced by a prior call to
