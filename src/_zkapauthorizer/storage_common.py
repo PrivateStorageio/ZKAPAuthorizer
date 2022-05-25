@@ -17,7 +17,7 @@ Functionality shared between the storage client and server.
 """
 
 from base64 import b64encode
-from typing import Callable
+from typing import Callable, Union, ValuesView
 
 import attr
 from pyutil.mathutil import div_ceil
@@ -138,17 +138,19 @@ def get_configured_allowed_public_keys(node_config):
 _dict_values: type = type(dict().values())
 
 
-def required_passes(bytes_per_pass, share_sizes):
+def required_passes(
+    bytes_per_pass: int, share_sizes: Union[ValuesView[int], list[int]]
+) -> int:
     """
     Calculate the number of passes that are required to store shares of the
     given sizes for one lease period.
 
-    :param int bytes_per_pass: The number of bytes the storage of which for
-        one lease period one pass covers.
+    :param bytes_per_pass: The number of bytes the storage of which for one
+        lease period one pass covers.
 
-    :param list[int] share_sizes: The sizes of the shared which will be stored.
+    :param share_sizes: The sizes of the shared which will be stored.
 
-    :return int: The number of passes required to cover the storage cost.
+    :return: The number of passes required to cover the storage cost.
     """
     if not isinstance(share_sizes, (list, _dict_values)):
         raise TypeError(

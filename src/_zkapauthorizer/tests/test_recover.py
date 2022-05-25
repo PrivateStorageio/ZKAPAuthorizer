@@ -4,6 +4,7 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from io import BytesIO
 from sqlite3 import connect
+from typing import TypeVar
 
 import cbor2
 from hypothesis import assume, given, note, settings
@@ -60,6 +61,8 @@ from .strategies import (
     updates,
 )
 
+T = TypeVar("T")
+
 
 class SnapshotEncodingTests(TestCase):
     """
@@ -101,14 +104,14 @@ class SnapshotMachine(RuleBasedStateMachine):
     updates, row deletions, etc.
     """
 
-    def __init__(self, case):
+    def __init__(self, case) -> None:
         super().__init__()
         self.case = case
         self.connection = connect(":memory:")
         self.tables: dict[str, Table] = {}
 
     @invariant()
-    def snapshot_equals_database(self):
+    def snapshot_equals_database(self) -> None:
         """
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
@@ -129,7 +132,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         name=sql_identifiers(),
         table=tables(),
     )
-    def create_table(self, name, table):
+    def create_table(self, name, table) -> None:
         """
         Create a new table in the database.
         """
@@ -145,7 +148,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         random=randoms(),
         data=data(),
     )
-    def modify_rows(self, change_types, random, data):
+    def modify_rows(self, change_types, random, data) -> None:
         """
         Change some rows in some tables.
         """
@@ -167,7 +170,7 @@ class RecoverTests(TestCase):
     Tests for ``recover``.
     """
 
-    def test_stateful(self):
+    def test_stateful(self) -> None:
         """
         Test the snapshot/recovery system using ``SnapshotMachine``.
         """
@@ -192,7 +195,7 @@ class StatefulRecovererTests(TestCase):
     Tests for ``StatefulRecoverer``.
     """
 
-    def test_succeeded_after_recover(self):
+    def test_succeeded_after_recover(self) -> None:
         """
         ``StatefulRecoverer`` automatically progresses to the succeeded stage when
         recovery completes without exception.
@@ -212,17 +215,19 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    def test_state_recovered(self):
+    def test_state_recovered(self) -> None:
         """
         After ``StatefulRecoverer`` reaches the ``succeeded`` state the state
         represented by the downloaded snapshot is present in the database
         itself.
         """
         snapshot = statements_to_snapshot(
-            [
-                "CREATE TABLE [succeeded] ( [a] TEXT );\n",
-                "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
-            ]
+            iter(
+                [
+                    "CREATE TABLE [succeeded] ( [a] TEXT );\n",
+                    "INSERT INTO [succeeded] ([a]) VALUES ('yes');\n",
+                ]
+            )
         )
         downloader = make_canned_downloader(snapshot)
         recoverer = StatefulRecoverer()
@@ -237,7 +242,7 @@ class StatefulRecovererTests(TestCase):
                 Equals([("yes",)]),
             )
 
-    def test_failed_after_download_failed(self):
+    def test_failed_after_download_failed(self) -> None:
         """
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         download fails with an exception.
@@ -258,7 +263,7 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    def test_failed_after_recover_failed(self):
+    def test_failed_after_recover_failed(self) -> None:
         """
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         recovery fails with an exception.
@@ -279,7 +284,7 @@ class StatefulRecovererTests(TestCase):
                 ),
             )
 
-    def test_cannot_recover_twice(self):
+    def test_cannot_recover_twice(self) -> None:
         """
         A second call to ``StatefulRecoverer.recover`` returns ``None`` without
         altering the recovery state.
@@ -345,7 +350,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setup(self, get_config):
+    def test_already_setup(self, get_config) -> None:
         """
         If replication is already set up, ``setup_tahoe_lafs_replication`` signals
         failure with ``ReplicationAlreadySetup``.
@@ -366,7 +371,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setting_up(self, get_config):
+    def test_already_setting_up(self, get_config) -> None:
         """
         If ``setup_tahoe_lafs_replication`` is called a second time before a first
         call has finished then the second call fails with
@@ -387,7 +392,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_setup(self, get_config):
+    def test_setup(self, get_config) -> None:
         """
         If replication was not previously set up then
         ``setup_tahoe_lafs_replication`` signals success with a read-only
@@ -399,7 +404,12 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
         results = []
         d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
-        d.addCallback(lambda x: results.append(x) or x)
+
+        def save_and_passthrough(x):
+            results.append(x)
+            return x
+
+        d.addCallback(save_and_passthrough)
         self.assertThat(
             d,
             succeeded(matches_capability(Equals("DIR2-RO"))),
@@ -423,19 +433,19 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
 
 class IFoo(Interface):
-    async def bar(a):
+    async def bar(a) -> None:
         pass
 
-    def baz(a):
+    def baz(a) -> None:
         pass
 
 
 class Foo:
-    async def bar(self, a):
+    async def bar(self, a: T) -> tuple["Foo", T]:
         return (self, a)
 
-    def baz(self, a):
-        return [self, a]
+    def baz(self, a) -> tuple[T, "Foo"]:
+        return (a, self)
 
 
 class DelayedTests(TestCase):
@@ -443,7 +453,7 @@ class DelayedTests(TestCase):
     Tests for ``delayedProxy``.
     """
 
-    def test_asynchronous(self):
+    def test_asynchronous(self) -> None:
         """
         A coroutine function on the proxied object can have its execution
         arbitrarily delayed using the controller.
@@ -455,16 +465,16 @@ class DelayedTests(TestCase):
         controller.run()
         self.assertThat(d, succeeded(Equals((original, 10))))
 
-    def test_synchronous(self):
+    def test_synchronous(self) -> None:
         """
         A regular function on the proxied object is executed as normal with no
         delay.
         """
         original = Foo()
         controller, delayed = delayedProxy(IFoo, original)
-        self.assertThat(delayed.baz(5), Equals([original, 5]))
+        self.assertThat(delayed.baz(5), Equals((5, original)))
 
-    def test_nothing_waiting(self):
+    def test_nothing_waiting(self) -> None:
         """
         If nothing is waiting then ``controller.run`` raises ``ValueError``.
         """

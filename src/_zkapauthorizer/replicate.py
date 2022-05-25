@@ -430,7 +430,7 @@ class _ReplicationCapableConnection:
             for ob in self._observers:
                 yield ob(cursor, to_signal)
 
-    def cursor(self, factory: Optional[type] = None) -> Cursor:
+    def cursor(self, factory: Optional[type] = None) -> _ReplicationCapableCursor:
         """
         Get a replication-capable cursor for this connection.
         """
