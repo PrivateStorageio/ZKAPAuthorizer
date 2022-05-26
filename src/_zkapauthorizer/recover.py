@@ -15,15 +15,14 @@ __all__ = [
 from collections.abc import Awaitable
 from enum import Enum, auto
 from io import BytesIO
-from typing import BinaryIO, Callable, Iterator, Optional
+from typing import Callable, Iterator, Optional
 
 import cbor2
 from attrs import define
-from twisted.python.filepath import FilePath
 
-from .replicate import statements_to_snapshot
+from .replicate import SNAPSHOT_NAME, statements_to_snapshot
 from .sql import Cursor, escape_identifier
-from .tahoe import Tahoe
+from .tahoe import CapStr, DataProvider, ITahoeClient
 
 
 class SnapshotMissing(Exception):
@@ -82,7 +81,7 @@ class RecoveryState:
 SetState = Callable[[RecoveryState], None]
 
 # An object which can retrieve remote ZKAPAuthorizer state.
-Downloader = Callable[[SetState], Awaitable[BinaryIO]]
+Downloader = Callable[[SetState], Awaitable[DataProvider]]
 
 
 @define
@@ -112,7 +111,7 @@ class StatefulRecoverer:
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
         try:
-            downloaded_data = await download(self._set_state)
+            downloaded_path = await download(self._set_state)
         except Exception as e:
             self._set_state(
                 RecoveryState(
@@ -122,7 +121,7 @@ class StatefulRecoverer:
             return
 
         try:
-            recover(downloaded_data, cursor)
+            recover(downloaded_path, cursor)
         except Exception as e:
             self._set_state(
                 RecoveryState(stage=RecoveryStages.import_failed, failure_reason=str(e))
@@ -149,7 +148,7 @@ def make_fail_downloader(reason: Exception) -> Downloader:
     Make a downloader that always fails with the given exception.
     """
 
-    async def fail_downloader(set_state: SetState) -> BinaryIO:
+    async def fail_downloader(set_state: SetState) -> DataProvider:
         raise reason
 
     return fail_downloader
@@ -161,8 +160,8 @@ def make_canned_downloader(data: bytes) -> Downloader:
     """
     assert isinstance(data, bytes)
 
-    async def canned_downloader(set_state: SetState) -> BinaryIO:
-        return BytesIO(data)
+    async def canned_downloader(set_state: SetState) -> DataProvider:
+        return lambda: BytesIO(data)
 
     return canned_downloader
 
@@ -171,22 +170,23 @@ def make_canned_downloader(data: bytes) -> Downloader:
 noop_downloader = make_canned_downloader(statements_to_snapshot(iter([])))
 
 
-def statements_from_snapshot(data: BinaryIO) -> Iterator[str]:
+def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
     """
     Read the SQL statements which constitute the replica from a byte string.
     """
-    snapshot = cbor2.load(data)
+    with get_snapshot() as fp:
+        snapshot = cbor2.load(fp)
     version = snapshot.get("version", None)
     if version != 1:
         raise ValueError(f"Unknown serialized snapshot version {version}")
     return snapshot["statements"]
 
 
-def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
+def recover(get_snapshot: DataProvider, cursor: Cursor) -> None:
     """
     Synchronously execute our statement list against the given cursor.
     """
-    statements = statements_from_snapshot(snapshot)
+    statements = statements_from_snapshot(get_snapshot)
 
     # There are certain tables that can't be dropped .. however, we
     # should be refusing to run "recover" at all if there's useful
@@ -244,22 +244,22 @@ def recover(snapshot: BinaryIO, cursor: Cursor) -> None:
 
 
 async def tahoe_lafs_downloader(
-    client: Tahoe,
+    client: ITahoeClient,
     recovery_cap: str,
     set_state: SetState,
-) -> FilePath:
+) -> DataProvider:
     """
     Download replica data from the given replica directory capability into the
     node's private directory.
     """
-    snapshot_path = client.get_private_path("snapshot.sql")
+    snapshot_path = client.get_private_path(SNAPSHOT_NAME)
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
-    await client.download(snapshot_path, recovery_cap, ["snapshot.sql"])
-    return snapshot_path
+    await client.download(snapshot_path, recovery_cap, [SNAPSHOT_NAME])
+    return lambda: snapshot_path.open("rb")
 
 
-def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:
+def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloader]:
     """
     Bind some parameters to ``tahoe_lafs_downloader`` in a convenient way.
 
@@ -267,7 +267,7 @@ def get_tahoe_lafs_downloader(client: Tahoe) -> Callable[[str], Downloader]:
         returns a downloader for that capability.
     """
 
-    def get_downloader(cap_str):
+    def get_downloader(cap_str: CapStr):
         def downloader(set_state):
             return tahoe_lafs_downloader(client, cap_str, set_state)
 

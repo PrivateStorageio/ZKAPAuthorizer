@@ -20,7 +20,7 @@ Tahoe-LAFS.
 import random
 from datetime import datetime
 from functools import partial
-from sqlite3 import connect as _connect
+from sqlite3 import connect as _sqlite3_connect
 from typing import Any, Callable
 from weakref import WeakValueDictionary
 
@@ -55,7 +55,7 @@ from .lease_maintenance import (
 )
 from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
-from .recover import make_fail_downloader
+from .recover import get_tahoe_lafs_downloader
 from .replicate import (
     _ReplicationCapableConnection,
     get_replica_rwcap,
@@ -68,6 +68,7 @@ from .replicate import (
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
+from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 from .tahoe import ITahoeClient, attenuate_writecap, get_tahoe_client
 
@@ -117,9 +118,12 @@ class ZKAPAuthorizer(object):
 
     name: str
     reactor: Any
-    _get_tahoe_client: Callable[[Any, Config], ITahoeClient] = field()
+    _get_tahoe_client: Callable[[Any, Config], ITahoeClient]
+    # UnboundConnect doesn't actually unify with sqlite3.connect at the
+    # moment.  Can't be bothered to fix it right now.
+    _connect: UnboundConnect = _sqlite3_connect  # type: ignore
 
-    _stores: WeakValueDictionary = field(default=Factory(WeakValueDictionary))
+    _stores: WeakValueDictionary = Factory(WeakValueDictionary)
     _service: MultiService = field()
 
     @_service.default
@@ -149,7 +153,7 @@ class ZKAPAuthorizer(object):
             store = self._stores[key]
         except KeyError:
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
-            unreplicated_conn = _open_database(partial(_connect, db_path.path))
+            unreplicated_conn = _open_database(partial(self._connect, db_path.path))
             replicated_conn = with_replication(
                 unreplicated_conn, is_replication_setup(node_config)
             )
@@ -253,18 +257,11 @@ class ZKAPAuthorizer(object):
         :param allmydata.node._Config node_config: The configuration object
             for the relevant node.
         """
-        work_in_progress_error = Exception(
-            "The recovery system implementation is a work in progress.",
-        )
-
-        def get_downloader(cap):
-            return make_fail_downloader(work_in_progress_error)
-
         store = self._get_store(node_config)
+        tahoe = self._get_tahoe_client(self.reactor, node_config)
 
         async def setup_replication():
             # Setup replication
-            tahoe = self._get_tahoe_client(self.reactor, node_config)
             await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
@@ -274,7 +271,7 @@ class ZKAPAuthorizer(object):
         return resource_from_configuration(
             node_config,
             store=store,
-            get_downloader=get_downloader,
+            get_downloader=get_tahoe_lafs_downloader(tahoe),
             setup_replication=setup_replication,
             redeemer=self._get_redeemer(node_config, None),
             clock=self.reactor,

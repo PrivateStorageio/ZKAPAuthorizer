@@ -66,9 +66,9 @@ from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import (
+    IO,
     Any,
     Awaitable,
-    BinaryIO,
     Callable,
     ClassVar,
     Generator,
@@ -91,16 +91,18 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import ITahoeClient, attenuate_writecap
+from .tahoe import DataProvider, ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
-Uploader = Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]
+Uploader = Callable[[str, DataProvider], Awaitable[None]]
 
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
 
 # function which can list all entries in ZKAPAuthorizer state
 Lister = Callable[[], Awaitable[list[str]]]
+
+SNAPSHOT_NAME = "snapshot"
 
 
 @frozen
@@ -184,7 +186,7 @@ class EventStream:
             return None
         return max(change.sequence for change in self.changes)
 
-    def to_bytes(self) -> BinaryIO:
+    def to_bytes(self) -> IO[bytes]:
         """
         :returns BinaryIO: a producer of bytes representing this EventStream.
         """
@@ -206,7 +208,7 @@ class EventStream:
         )
 
     @classmethod
-    def from_bytes(cls, stream: BinaryIO) -> EventStream:
+    def from_bytes(cls, stream: IO[bytes]) -> EventStream:
         """
         :returns EventStream: an instance of EventStream from the given
             bytes (which should have been produced by a prior call to
@@ -536,12 +538,12 @@ snapshot: Callable[[Connection], bytes] = compose(
 async def tahoe_lafs_uploader(
     client: ITahoeClient,
     recovery_cap: str,
-    get_snapshot_data: Callable[[], BinaryIO],
+    get_snapshot_data: DataProvider,
     entry_name: str,
 ) -> None:
     """
-    Upload a replica to Tahoe, linking the result into the given
-    recovery mutable capbility under the name 'snapshot.sql'
+    Upload a replica to Tahoe, linking the result into the given recovery
+    mutable capbility under the name given by :py:data:`SNAPSHOT_NAME`.
     """
     snapshot_immutable_cap = await client.upload(get_snapshot_data)
     await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
@@ -550,7 +552,7 @@ async def tahoe_lafs_uploader(
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
     directory_mutable_cap: str,
-) -> Callable[[str, Callable[[], BinaryIO]], Awaitable[None]]:
+) -> Callable[[str, DataProvider], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
     upload some data and link it into the mutable directory under the
@@ -561,9 +563,7 @@ def get_tahoe_lafs_direntry_uploader(
         zero-argument callable itself to facilitate retrying.
     """
 
-    async def upload(
-        entry_name: str, get_data_provider: Callable[[], BinaryIO]
-    ) -> None:
+    async def upload(entry_name: str, get_data_provider: DataProvider) -> None:
         await tahoe_lafs_uploader(
             client, directory_mutable_cap, get_data_provider, entry_name
         )
@@ -1009,7 +1009,7 @@ class _ReplicationService(Service):
         :returns: True if there is no remote snapshot
         """
         entries = await self._replica.list()
-        return "snapshot" not in entries
+        return SNAPSHOT_NAME not in entries
 
     def should_upload_eventstream(self, changes: AccumulatedChanges) -> bool:
         """

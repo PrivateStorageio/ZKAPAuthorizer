@@ -7,7 +7,7 @@ from functools import partial
 from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
-from typing import BinaryIO, Callable, Optional
+from typing import Callable, Optional
 
 from attrs import frozen
 from eliot import log_call, start_action
@@ -47,7 +47,7 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, ITahoeClient, MemoryGrid
+from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid
 from .common import delayedProxy
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, equals_database, returns
@@ -272,7 +272,7 @@ class ReplicationConnectionTests(TestCase):
         conn_b = with_postponed_replication(connect(dbpath_b))
 
         with conn_b:
-            recover(BytesIO(a_snapshot), conn_b.cursor())
+            recover(lambda: BytesIO(a_snapshot), conn_b.cursor())
 
         self.assertThat(
             conn_a,
@@ -307,7 +307,7 @@ class _MatchUpload(Matcher):
     name_matcher: Matcher[str]
     stream_matcher: Matcher[EventStream]
 
-    def match(self, matchee: tuple[str, Callable[[], BinaryIO]]) -> Optional[Mismatch]:
+    def match(self, matchee: tuple[str, DataProvider]) -> Optional[Mismatch]:
         """
         Do the matching.
         """

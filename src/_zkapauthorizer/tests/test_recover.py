@@ -26,7 +26,7 @@ from testtools.matchers import (
     MatchesStructure,
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred
 from zope.interface import Interface
 
 from ..config import REPLICA_RWCAP_BASENAME
@@ -41,6 +41,7 @@ from ..recover import (
     statements_from_snapshot,
 )
 from ..replicate import (
+    SNAPSHOT_NAME,
     AlreadySettingUp,
     ReplicationAlreadySetup,
     get_tahoe_lafs_direntry_uploader,
@@ -50,7 +51,7 @@ from ..replicate import (
 )
 from ..sql import Table, create_table
 from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
-from .common import delayedProxy
+from .common import delayedProxy, from_awaitable
 from .matchers import equals_database, matches_capability, raises
 from .strategies import (
     deletes,
@@ -70,14 +71,16 @@ class SnapshotEncodingTests(TestCase):
     """
 
     @given(lists(text()))
-    def test_roundtrip(self, statements):
+    def test_roundtrip(self, statements) -> None:
         """
         Statements of a snapshot can be encoded to bytes and decoded to the same
         statements again using ``statements_to_snapshot`` and
         ``statements_from_snapshot``.
         """
         loaded = list(
-            statements_from_snapshot(BytesIO(statements_to_snapshot(statements)))
+            statements_from_snapshot(
+                lambda: BytesIO(statements_to_snapshot(statements))
+            )
         )
         self.assertThat(
             # They are allowed to differ by leading and trailing whitespace
@@ -86,13 +89,15 @@ class SnapshotEncodingTests(TestCase):
             Equals(loaded),
         )
 
-    def test_unknown_snapshot_version(self):
+    def test_unknown_snapshot_version(self) -> None:
         """
         ``statements_from_snapshot`` raises ``ValueError`` when called with a
         Snapshot with an unknown version number.
         """
         self.assertThat(
-            lambda: statements_from_snapshot(cbor2.dumps({"version": -1})),
+            lambda: statements_from_snapshot(
+                lambda: BytesIO(cbor2.dumps({"version": -1}))
+            ),
             raises(ValueError),
         )
 
@@ -120,7 +125,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(BytesIO(snapshot_bytes), cursor)
+            recover(lambda: BytesIO(snapshot_bytes), cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
@@ -311,8 +316,7 @@ class TahoeLAFSDownloaderTests(TestCase):
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    @inlineCallbacks
-    def test_uploader_and_downloader(self):
+    def test_uploader_and_downloader(self) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
@@ -327,18 +331,23 @@ class TahoeLAFSDownloaderTests(TestCase):
             replica_dir_cap_str,
         )
         expected = b"snapshot data"
-        yield Deferred.fromCoroutine(upload("snapshot.sql", lambda: BytesIO(expected)))
+        self.assertThat(
+            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected))),
+            succeeded(Always()),
+        )
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
-        downloaded_snapshot_path = yield Deferred.fromCoroutine(
-            download(lambda state: None)
-        )
         self.assertThat(
-            downloaded_snapshot_path.getContent(),
-            Equals(expected),
+            from_awaitable(download(lambda state: None)),
+            succeeded(
+                AfterPreprocessing(
+                    lambda data_provider: data_provider().read(),
+                    Equals(expected),
+                ),
+            ),
         )
 
 
