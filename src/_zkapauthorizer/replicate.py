@@ -953,6 +953,9 @@ class _ReplicationService(Service):
         # then discard the uploaded events from the local database.
         prune_events_to(self._unreplicated_connection, high_seq)
 
+        # XXX Queue a job to check the on-grid size and re-snapshot if it is
+        # much too large
+
     def stopService(self) -> Deferred[None]:
         """
         Cancel the replication operation and then wait for it to complete.
