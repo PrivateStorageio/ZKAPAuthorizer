@@ -19,6 +19,7 @@ from hypothesis.stateful import (
 )
 from hypothesis.strategies import (
     builds,
+    binary,
     data,
     integers,
     just,
@@ -331,12 +332,27 @@ class StatefulRecovererTests(TestCase):
             self.assertThat(recoverer.state().stage, Equals(stage))
 
 
+def confusing_names():
+    """
+    Build names as ``str`` which do not belong in a replica directory.
+    """
+    return text(min_size=1).filter(
+        lambda name: name != SNAPSHOT_NAME and not name.startswith("event-stream-")
+    )
+
+
 class TahoeLAFSDownloaderTests(TestCase):
     """
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    def test_uploader_and_downloader(self) -> None:
+    @given(
+        expected_snapshot=binary(min_size=1),
+        expected_event_streams=lists(binary(min_size=1)),
+        confusing_directories=lists(confusing_names()),
+        confusing_filenodes=lists(confusing_names()),
+    )
+    def test_uploader_and_downloader(self, expected_snapshot, expected_event_streams, confusing_directories, confusing_filenodes) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
@@ -350,42 +366,52 @@ class TahoeLAFSDownloaderTests(TestCase):
             tahoeclient,
             replica_dir_cap_str,
         )
-        expected = b"snapshot data"
         self.assertThat(
-            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected))),
+            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected_snapshot))),
             succeeded(Always()),
         )
-        expected_event_stream = [
-            b"event stream 1 data",
-            b"event stream 2 data",
-        ]
-        for n, event_stream_data in enumerate(expected_event_stream):
+        # Simulate sequence numbers for some event streams in the replica.
+        sequence_counter = 0
+        for event_stream_data in expected_event_streams:
+            sequence_counter += len(event_stream_data)
             self.assertThat(
                 from_awaitable(
                     upload(
-                        event_stream_name(n),
+                        event_stream_name(sequence_counter),
                         lambda: BytesIO(event_stream_data),
                     ),
                 ),
                 succeeded(Always()),
             )
 
+        # Put some confusing junk in the replica.
+        for entry in confusing_directories:
+            grid.link(replica_dir_cap_str, entry, grid.make_directory())
+        for entry in confusing_filenodes:
+            grid.link(replica_dir_cap_str, entry, grid.upload(entry))
+
+
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
-        def read_replica_data(replica: Replica) -> list[bytes]:
+        def read_replica_data(replica: Replica) -> tuple[bytes, list[bytes]]:
+            def read(p):
+                with p() as f:
+                    return f.read()
+
             snapshot_provider, event_stream_providers = replica
-            return [snapshot_provider().read()] + [
-                e().read() for e in event_stream_providers
-            ]
+            return (
+                read(snapshot_provider),
+                [read(e) for e in event_stream_providers],
+            )
 
         self.assertThat(
             from_awaitable(download(lambda state: None)),
             succeeded(
                 AfterPreprocessing(
                     read_replica_data,
-                    Equals([expected] + expected_event_stream),
+                    Equals((expected_snapshot, expected_event_streams)),
                 ),
             ),
         )
