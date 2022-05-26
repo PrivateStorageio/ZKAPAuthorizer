@@ -18,8 +18,8 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
-    builds,
     binary,
+    builds,
     data,
     integers,
     just,
@@ -352,7 +352,13 @@ class TahoeLAFSDownloaderTests(TestCase):
         confusing_directories=lists(text(min_size=1)),
         confusing_filenodes=lists(confusing_names()),
     )
-    def test_uploader_and_downloader(self, expected_snapshot, expected_event_streams, confusing_directories, confusing_filenodes) -> None:
+    def test_uploader_and_downloader(
+        self,
+        expected_snapshot,
+        expected_event_streams,
+        confusing_directories,
+        confusing_filenodes,
+    ) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
@@ -404,7 +410,6 @@ class TahoeLAFSDownloaderTests(TestCase):
             grid.link(replica_dir_cap_str, entry, grid.make_directory())
         for entry in confusing_filenodes:
             grid.link(replica_dir_cap_str, entry, grid.upload(entry))
-
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
