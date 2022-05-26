@@ -7,8 +7,9 @@ from io import BytesIO
 from allmydata.test.strategies import write_capabilities
 from fixtures import TempDir
 from hyperlink import DecodedURL
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
+from pyutil.mathutil import div_ceil
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
@@ -23,12 +24,15 @@ from testtools.matchers import (
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
+from zfec import Encoder
 
+from ..storage_common import required_passes, required_passes_for_data
 from ..tahoe import (
     CapStr,
     MemoryGrid,
     NotADirectoryError,
     NotWriteableError,
+    ShareEncoding,
     Tahoe,
     TahoeAPIError,
     _scrub_cap,
@@ -519,3 +523,31 @@ class AsyncRetryTests(TestCase):
             Deferred.fromCoroutine(decorated()),
             succeeded(Is(result)),
         )
+
+
+class ShareSizeTests(TestCase):
+    """
+    Tests for ``required_passes_for_data``.
+    """
+
+    @given(
+        needed=integers(min_value=1, max_value=255),
+        extra=integers(min_value=0, max_value=254),
+        ciphertext_length=integers(min_value=1, max_value=2**20),
+        bytes_per_pass=integers(min_value=1),
+    )
+    def test_required_passes_for_data(self, needed, extra, ciphertext_length, bytes_per_pass):
+        """
+        ``share_size`` computes the same share size as is actually produced by zfec.
+        """
+        total = needed + extra
+        assume(total <= 255)
+        fec = Encoder(needed, total)
+        inshare_length = div_ceil(ciphertext_length, needed)
+        ciphertext = bytes(inshare_length)
+        outshares = fec.encode([ciphertext] * needed)
+        expected = required_passes(bytes_per_pass, list(map(len, outshares)))
+        actual = required_passes_for_data(
+            bytes_per_pass, ShareEncoding(needed, total), ciphertext_length
+        )
+        self.assertThat(actual, Equals(expected))

@@ -27,6 +27,19 @@ from .config import Config, read_node_url
 DataProvider = Callable[[], IO[bytes]]
 
 
+@frozen
+class ShareEncoding:
+    """
+    :ivar needed: The number of shares required to re-assemble the ciphertext.
+
+    :ivar total: The total number of shares produced the ciphertext has been
+        encoded in to.
+    """
+
+    needed: int
+    total: int
+
+
 def async_retry(matchers: list[Callable[[Exception], bool]]):
     """
     Decorate a function with automatic retry behavior for certain cases.
@@ -432,27 +445,6 @@ class _Directory:
     @children.default
     def _default_children(self):
         return {}
-
-
-@frozen
-class ShareEncoding:
-    """
-    :ivar needed: The number of shares required to re-assemble the ciphertext.
-
-    :ivar total: The total number of shares produced the ciphertext has been
-        encoded in to.
-    """
-
-    needed: int
-    total: int
-
-
-def share_size(encoding: ShareEncoding, ciphertext_size: int) -> int:
-    """
-    Compute the size in bytes of a single share for ciphertext of the given
-    size in bytes under the given encoding parameters.
-    """
-    return int(1 + encoding.total / encoding.needed * ciphertext_size)
 
 
 @define
