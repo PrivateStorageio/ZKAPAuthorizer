@@ -3,9 +3,11 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
 from io import BytesIO
+from itertools import count
 from sqlite3 import connect
 from typing import TypeVar
 
+import attrs
 import cbor2
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
@@ -15,7 +17,17 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from hypothesis.strategies import data, lists, randoms, sampled_from, text
+from hypothesis.strategies import (
+    binary,
+    builds,
+    data,
+    integers,
+    just,
+    lists,
+    randoms,
+    sampled_from,
+    text,
+)
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -32,18 +44,25 @@ from zope.interface import Interface
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
     RecoveryStages,
+    Replica,
     StatefulRecoverer,
     get_tahoe_lafs_downloader,
+    load_event_streams,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
-    recover,
+    recover_event_stream,
+    recover_snapshot,
+    sorted_event_streams,
     statements_from_snapshot,
 )
 from ..replicate import (
     SNAPSHOT_NAME,
     AlreadySettingUp,
+    Change,
+    EventStream,
     ReplicationAlreadySetup,
+    event_stream_name,
     get_tahoe_lafs_direntry_uploader,
     setup_tahoe_lafs_replication,
     snapshot,
@@ -121,11 +140,13 @@ class SnapshotMachine(RuleBasedStateMachine):
         At all points a snapshot of the database can be used to construct a new
         database with the same contents.
         """
-        snapshot_bytes = snapshot(self.connection)
+        snapshot_statements = statements_from_snapshot(
+            lambda: BytesIO(snapshot(self.connection))
+        )
         new = connect(":memory:")
         cursor = new.cursor()
         with new:
-            recover(lambda: BytesIO(snapshot_bytes), cursor)
+            recover_snapshot(snapshot_statements, cursor)
         self.case.assertThat(
             new,
             equals_database(reference=self.connection),
@@ -234,7 +255,7 @@ class StatefulRecovererTests(TestCase):
                 ]
             )
         )
-        downloader = make_canned_downloader(snapshot)
+        downloader = make_canned_downloader(snapshot, [])
         recoverer = StatefulRecoverer()
         with connect(":memory:") as conn:
             cursor = conn.cursor()
@@ -273,7 +294,7 @@ class StatefulRecovererTests(TestCase):
         ``StatefulRecoverer`` automatically progresses to the failed stage when
         recovery fails with an exception.
         """
-        downloader = make_canned_downloader(b"non-sql junk to provoke a failure")
+        downloader = make_canned_downloader(b"non-sql junk to provoke a failure", [])
         recoverer = StatefulRecoverer()
         with connect(":memory:") as conn:
             cursor = conn.cursor()
@@ -311,15 +332,51 @@ class StatefulRecovererTests(TestCase):
             self.assertThat(recoverer.state().stage, Equals(stage))
 
 
+def confusing_names():
+    """
+    Build names as ``str`` which do not belong in a replica directory.
+    """
+    return text(min_size=1).filter(
+        lambda name: name != SNAPSHOT_NAME and not name.startswith("event-stream-")
+    )
+
+
 class TahoeLAFSDownloaderTests(TestCase):
     """
     Tests for ``get_tahoe_lafs_downloader`` and ``tahoe_lafs_downloader``.
     """
 
-    def test_uploader_and_downloader(self) -> None:
+    @given(
+        expected_snapshot=binary(min_size=1),
+        expected_event_streams=lists(binary(min_size=1)),
+        confusing_directories=lists(text(min_size=1)),
+        confusing_filenodes=lists(confusing_names()),
+    )
+    def test_uploader_and_downloader(
+        self,
+        expected_snapshot,
+        expected_event_streams,
+        confusing_directories,
+        confusing_filenodes,
+    ) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
         used to download objects using a Tahoe-LAFS client.
+
+        :param expected_snapshot: Some bytes which will serve as a serialized
+            snapshot.
+
+        :param expected_event_streams: A list of bytes, each of which will
+            serve as one serialized event stream.
+
+        :param confusing_directories: A list of names to use to link
+            extraneous directories into the replica.  These should all be
+            ignored.
+
+        :param confusing_filenodes: A list of names to use to link extra files
+            into the replica.  These will not overlap with the names the
+            replica system actually uses in the replica directory.  These
+            should all be ignored.
         """
         grid = MemoryGrid()
         tahoeclient = grid.client()
@@ -330,22 +387,51 @@ class TahoeLAFSDownloaderTests(TestCase):
             tahoeclient,
             replica_dir_cap_str,
         )
-        expected = b"snapshot data"
         self.assertThat(
-            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected))),
+            from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected_snapshot))),
             succeeded(Always()),
         )
+        # Simulate sequence numbers for some event streams in the replica.
+        sequence_counter = 0
+        for event_stream_data in expected_event_streams:
+            sequence_counter += len(event_stream_data)
+            self.assertThat(
+                from_awaitable(
+                    upload(
+                        event_stream_name(sequence_counter),
+                        lambda: BytesIO(event_stream_data),
+                    ),
+                ),
+                succeeded(Always()),
+            )
+
+        # Put some confusing junk in the replica.
+        for entry in confusing_directories:
+            grid.link(replica_dir_cap_str, entry, grid.make_directory())
+        for entry in confusing_filenodes:
+            grid.link(replica_dir_cap_str, entry, grid.upload(entry))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap_str)
 
+        def read_replica_data(replica: Replica) -> tuple[bytes, list[bytes]]:
+            def read(p):
+                with p() as f:
+                    return f.read()
+
+            snapshot_provider, event_stream_providers = replica
+            return (
+                read(snapshot_provider),
+                [read(e) for e in event_stream_providers],
+            )
+
         self.assertThat(
             from_awaitable(download(lambda state: None)),
             succeeded(
                 AfterPreprocessing(
-                    lambda data_provider: data_provider().read(),
-                    Equals(expected),
+                    read_replica_data,
+                    Equals((expected_snapshot, expected_event_streams)),
                 ),
             ),
         )
@@ -492,3 +578,106 @@ class DelayedTests(TestCase):
             lambda: controller.run(),
             raises(ValueError),
         )
+
+
+class EventStreamRecoveryTests(TestCase):
+    """
+    Tests for functionality related to ``EventStream`` handling in the
+    recovery process.
+    """
+
+    @given(
+        lists(
+            lists(
+                builds(
+                    Change,
+                    sequence=integers(),
+                    statement=text(),
+                    arguments=just(()),
+                    important=just(False),
+                ),
+                min_size=1,
+            ),
+        ),
+        randoms(),
+    )
+    def test_by_highest_sequence(
+        self, change_groups: list[list[Change]], random
+    ) -> None:
+        """
+        ``sorted_event_streams`` returns a list of ``EventStream`` instances in
+        increasing order of their ``highest_sequence`` result with empty ``EventStream`` instances excluded.
+        """
+        # Take the groups of Changes and build EventStreams from them,
+        # renumbering the changes so they're monotonically increasing.  This
+        # gives us the correct sorted order for the result without relying on
+        # the sort implementation.
+        seq = iter(count(1))
+
+        def resequence(c: Change) -> Change:
+            return attrs.evolve(c, sequence=next(seq))
+
+        # Generator has incompatible item type "Change"; expected "_T_co"
+        expected = [
+            EventStream(
+                changes=(resequence(change) for change in change_group),  # type: ignore
+            )
+            for change_group in change_groups
+        ]
+
+        # Create a mixed up ordering including some empty EventStreams
+        shuffled = expected[:]
+        shuffled.append(EventStream(changes=[]))
+        random.shuffle(shuffled)
+
+        actual = sorted_event_streams(iter(shuffled))
+        self.assertThat(actual, Equals(expected))
+
+    @given(
+        lists(
+            builds(
+                EventStream,
+                changes=lists(
+                    builds(
+                        Change,
+                        sequence=integers(),
+                        statement=text(),
+                        arguments=just(()),
+                        important=just(False),
+                    ),
+                ),
+            ),
+        )
+    )
+    def test_load_event_streams(self, expected: list[EventStream]) -> None:
+        """
+        ``load_event_streams`` takes an iterable of data providers and returns an
+        iterator of corresponding ``EventStream`` instances.
+        """
+        loaded = list(load_event_streams((e.to_bytes for e in expected)))
+        self.assertThat(loaded, Equals(expected))
+
+    def test_recover_event_stream(self) -> None:
+        """
+        ``recover_event_stream`` applies the changes in an ``EventStream`` to a
+        database.
+        """
+        expected = "hello, world"
+        create_table = Change(1, "CREATE TABLE [foo] ([a] TEXT)", (), False)
+        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)  # type: ignore
+
+        db = connect(":memory:")
+        cursor = db.cursor()
+        with db:
+            recover_event_stream(
+                EventStream(
+                    changes=iter([create_table, insert_row]),  # type: ignore
+                ),
+                cursor,
+            )
+
+            cursor.execute("SELECT * FROM [foo]")
+            self.assertThat(
+                cursor.fetchall(),
+                Equals([(expected,)]),
+            )

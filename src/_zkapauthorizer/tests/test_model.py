@@ -79,7 +79,8 @@ from ..recover import (
     RecoveryState,
     StatefulRecoverer,
     make_canned_downloader,
-    recover,
+    recover_snapshot,
+    statements_from_snapshot,
 )
 from ..replicate import (
     Change,
@@ -527,11 +528,11 @@ class VoucherStoreSnapshotTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(get_now=lambda: now)).store
         store.add(voucher, expected, 0, lambda: tokens)
-        snapshot = store.snapshot()
+        statements = statements_from_snapshot(lambda: BytesIO(store.snapshot()))
         connection = connect(":memory:")
         cursor = connection.cursor()
         with connection:
-            recover(lambda: BytesIO(snapshot), cursor)
+            recover_snapshot(statements, cursor)
 
         recovered = VoucherStore.from_connection(
             store.pass_value,
@@ -1294,7 +1295,7 @@ class ReplicationTests(TestCase):
             )
         ).store
         snapshot_bytes = store.snapshot()
-        downloader = make_canned_downloader(snapshot_bytes)
+        downloader = make_canned_downloader(snapshot_bytes, [])
         recoverer = StatefulRecoverer()
 
         # StatefulRecoverer.recover should always succeed.  Verify that.

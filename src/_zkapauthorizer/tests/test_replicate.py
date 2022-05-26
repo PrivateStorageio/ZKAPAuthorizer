@@ -33,7 +33,6 @@ from twisted.python.filepath import FilePath
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, VoucherStore, aware_now
-from ..recover import recover
 from ..replicate import (
     EventStream,
     Replica,
@@ -42,7 +41,6 @@ from ..replicate import (
     get_tahoe_lafs_direntry_pruner,
     get_tahoe_lafs_direntry_replica,
     replication_service,
-    snapshot,
     with_replication,
 )
 from ..spending import SpendingController
@@ -50,7 +48,7 @@ from ..sql import Cursor
 from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid
 from .common import delayedProxy
 from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import Always, Matcher, equals_database, returns
+from .matchers import Always, Matcher, returns
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -252,31 +250,6 @@ class ReplicationConnectionTests(TestCase):
         self.assertThat(
             cursor.fetchmany(2),
             Equals([]),
-        )
-
-    def test_snapshot(self) -> None:
-        """
-        The state of the database is available via the connection's ``snapshot``
-        method.
-        """
-        dbpath_a = self.useFixture(TempDir()).join("db.sqlite")
-        conn_a = with_postponed_replication(connect(dbpath_a))
-        with conn_a:
-            cursor = conn_a.cursor()
-            cursor.execute('CREATE TABLE "foo" ("a" INT)', ())
-            cursor.execute('INSERT INTO "foo" VALUES (?)', (1,))
-
-        a_snapshot = snapshot(conn_a)
-
-        dbpath_b = self.useFixture(TempDir()).join("db.sqlite")
-        conn_b = with_postponed_replication(connect(dbpath_b))
-
-        with conn_b:
-            recover(lambda: BytesIO(a_snapshot), conn_b.cursor())
-
-        self.assertThat(
-            conn_a,
-            equals_database(conn_b),
         )
 
 

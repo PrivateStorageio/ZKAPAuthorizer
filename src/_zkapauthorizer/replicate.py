@@ -188,7 +188,7 @@ class EventStream:
 
     def to_bytes(self) -> IO[bytes]:
         """
-        :returns BinaryIO: a producer of bytes representing this EventStream.
+        :returns: a producer of bytes representing this EventStream.
         """
         return BytesIO(
             cbor2.dumps(

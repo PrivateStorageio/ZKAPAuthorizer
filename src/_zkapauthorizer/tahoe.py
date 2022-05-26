@@ -326,7 +326,9 @@ class ITahoeClient(Interface):
         Get the path to a file in the client node's private directory.
         """
 
-    async def download(outpath: FilePath, cap: CapStr, child_path: list[str]) -> None:
+    async def download(
+        outpath: FilePath, cap: CapStr, child_path: Optional[Iterable[str]]
+    ) -> None:
         """
         Download the contents of an object to a given local path.
         """
