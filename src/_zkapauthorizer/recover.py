@@ -250,7 +250,7 @@ def recover_event_stream(event_stream: EventStream, cursor: Cursor) -> None:
 
 def recover_snapshot(statements: Iterator[str], cursor: Cursor) -> None:
     """
-    Replace the changes in a snapshot using the given cursor.
+    Replay the changes in a snapshot using the given cursor.
     """
     # There are certain tables that can't be dropped .. however, we
     # should be refusing to run "recover" at all if there's useful
