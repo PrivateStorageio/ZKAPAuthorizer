@@ -3,9 +3,11 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 """
 
 from io import BytesIO
+from itertools import count
 from sqlite3 import connect
 from typing import TypeVar
 
+import attrs
 import cbor2
 from hypothesis import assume, given, note, settings
 from hypothesis.stateful import (
@@ -15,7 +17,16 @@ from hypothesis.stateful import (
     rule,
     run_state_machine_as_test,
 )
-from hypothesis.strategies import data, lists, randoms, sampled_from, text
+from hypothesis.strategies import (
+    builds,
+    data,
+    integers,
+    just,
+    lists,
+    randoms,
+    sampled_from,
+    text,
+)
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -35,15 +46,20 @@ from ..recover import (
     Replica,
     StatefulRecoverer,
     get_tahoe_lafs_downloader,
+    load_event_streams,
     make_canned_downloader,
     make_fail_downloader,
     noop_downloader,
+    recover_event_stream,
     recover_snapshot,
+    sorted_event_streams,
     statements_from_snapshot,
 )
 from ..replicate import (
     SNAPSHOT_NAME,
     AlreadySettingUp,
+    Change,
+    EventStream,
     ReplicationAlreadySetup,
     event_stream_name,
     get_tahoe_lafs_direntry_uploader,
@@ -516,3 +532,106 @@ class DelayedTests(TestCase):
             lambda: controller.run(),
             raises(ValueError),
         )
+
+
+class EventStreamRecoveryTests(TestCase):
+    """
+    Tests for functionality related to ``EventStream`` handling in the
+    recovery process.
+    """
+
+    @given(
+        lists(
+            lists(
+                builds(
+                    Change,
+                    sequence=integers(),
+                    statement=text(),
+                    arguments=just(()),
+                    important=just(False),
+                ),
+                min_size=1,
+            ),
+        ),
+        randoms(),
+    )
+    def test_by_highest_sequence(
+        self, change_groups: list[list[Change]], random
+    ) -> None:
+        """
+        ``sorted_event_streams`` returns a list of ``EventStream`` instances in
+        increasing order of their ``highest_sequence`` result with empty ``EventStream`` instances excluded.
+        """
+        # Take the groups of Changes and build EventStreams from them,
+        # renumbering the changes so they're monotonically increasing.  This
+        # gives us the correct sorted order for the result without relying on
+        # the sort implementation.
+        seq = iter(count(1))
+
+        def resequence(c: Change) -> Change:
+            return attrs.evolve(c, sequence=next(seq))
+
+        # Generator has incompatible item type "Change"; expected "_T_co"
+        expected = [
+            EventStream(
+                changes=(resequence(change) for change in change_group),  # type: ignore
+            )
+            for change_group in change_groups
+        ]
+
+        # Create a mixed up ordering including some empty EventStreams
+        shuffled = expected[:]
+        shuffled.append(EventStream(changes=[]))
+        random.shuffle(shuffled)
+
+        actual = sorted_event_streams(iter(shuffled))
+        self.assertThat(actual, Equals(expected))
+
+    @given(
+        lists(
+            builds(
+                EventStream,
+                changes=lists(
+                    builds(
+                        Change,
+                        sequence=integers(),
+                        statement=text(),
+                        arguments=just(()),
+                        important=just(False),
+                    ),
+                ),
+            ),
+        )
+    )
+    def test_load_event_streams(self, expected: list[EventStream]) -> None:
+        """
+        ``load_event_streams`` takes an iterable of data providers and returns an
+        iterator of corresponding ``EventStream`` instances.
+        """
+        loaded = list(load_event_streams((e.to_bytes for e in expected)))
+        self.assertThat(loaded, Equals(expected))
+
+    def test_recover_event_stream(self) -> None:
+        """
+        ``recover_event_stream`` applies the changes in an ``EventStream`` to a
+        database.
+        """
+        expected = "hello, world"
+        create_table = Change(1, "CREATE TABLE [foo] ([a] TEXT)", (), False)
+        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)  # type: ignore
+
+        db = connect(":memory:")
+        cursor = db.cursor()
+        with db:
+            recover_event_stream(
+                EventStream(
+                    changes=iter([create_table, insert_row]),  # type: ignore
+                ),
+                cursor,
+            )
+
+            cursor.execute("SELECT * FROM [foo]")
+            self.assertThat(
+                cursor.fetchall(),
+                Equals([(expected,)]),
+            )

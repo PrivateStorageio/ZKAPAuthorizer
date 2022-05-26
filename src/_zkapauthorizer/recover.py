@@ -16,7 +16,7 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from functools import partial
 from io import BytesIO
-from typing import Callable, Iterator, NoReturn, Optional, Sequence
+from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define
@@ -213,7 +213,11 @@ def recover(
         recover_event_stream(event_stream, cursor)
 
 
-def sorted_event_streams(event_streams: Iterator[EventStream]) -> list[EventStream]:
+def sorted_event_streams(event_streams: Iterable[EventStream]) -> list[EventStream]:
+    """
+    Sort some event streams by order of increasing highest change sequence
+    number they contain.
+    """
     streams_with_changes = (e for e in event_streams if len(e.changes) > 0)
 
     def event_stream_key(e):
@@ -225,20 +229,29 @@ def sorted_event_streams(event_streams: Iterator[EventStream]) -> list[EventStre
 
 
 def load_event_streams(
-    event_stream_data: Sequence[DataProvider],
-) -> Iterator[EventStream]:
+    event_stream_data: Iterable[DataProvider],
+) -> Iterable[EventStream]:
+    """
+    Load some number of ``EventStream`` instances from their serialized form.
+    """
     for event_stream_datum in event_stream_data:
         with event_stream_datum() as f:
             yield EventStream.from_bytes(f)
 
 
 def recover_event_stream(event_stream: EventStream, cursor: Cursor) -> None:
+    """
+    Replay the changes in an event stream using the given cursor.
+    """
     for change in event_stream.changes:
         if change.statement not in ("BEGIN TRANSACTION;", "COMMIT;"):
             cursor.execute(change.statement, change.arguments)
 
 
 def recover_snapshot(statements: Iterator[str], cursor: Cursor) -> None:
+    """
+    Replace the changes in a snapshot using the given cursor.
+    """
     # There are certain tables that can't be dropped .. however, we
     # should be refusing to run "recover" at all if there's useful
     # information in the database so these tables should be in the
