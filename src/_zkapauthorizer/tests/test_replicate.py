@@ -64,6 +64,7 @@ class CountBasedPolicy:
     :ivar replica_file_limit: The maximum number of files which will be
         allowed to exist in the replica before a snapshot is indicated.
     """
+
     replica_file_limit: int
 
     def should_snapshot(self, snapshot_size: int, replica_sizes: list[int]) -> bool:
