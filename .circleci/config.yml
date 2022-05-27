@@ -350,10 +350,12 @@ jobs:
       - attach_workspace:
           at: "coverage-workspace"
 
+      - store_artifacts:
+          path: "coverage-workspace"
+
       - run:
           name: "Finish Coverage Report"
           command: |
-            find .
             .circleci/finish-coverage-report ./coverage-workspace
 
 
