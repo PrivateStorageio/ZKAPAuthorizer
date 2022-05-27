@@ -108,7 +108,7 @@ def open_store(
 
 
 @frozen
-class _SizeBasedPolicy:
+class _CostBasedPolicy:
     """
     Encode policy rules about when to take and upload a new snapshot.
 
@@ -215,7 +215,7 @@ class ZKAPAuthorizer(object):
         client = self._get_tahoe_client(self.reactor, node_config)
         mutable = get_replica_rwcap(node_config)
         replica = get_tahoe_lafs_direntry_replica(client, mutable)
-        cost = _SizeBasedPolicy(
+        cost = _CostBasedPolicy(
             get_configured_pass_value(node_config),
             client.get_config().encoding,
             10,
