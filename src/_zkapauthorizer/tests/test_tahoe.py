@@ -566,7 +566,7 @@ class RequiredPassesForDataTests(TestCase):
     )
     def test_required_passes_for_data(
         self, needed, extra, ciphertext_length, bytes_per_pass
-    ):
+    ) -> None:
         """
         ``required_passes_for_data`` computes a price based on the share sizes FEC
         produces for the given encoding parameters.
