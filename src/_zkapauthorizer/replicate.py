@@ -91,7 +91,7 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import DataProvider, ITahoeClient, attenuate_writecap
+from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -99,8 +99,10 @@ Uploader = Callable[[str, DataProvider], Awaitable[None]]
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
 
-# function which can list all entries in ZKAPAuthorizer state
+# functions which can list all entries in ZKAPAuthorizer state
 Lister = Callable[[], Awaitable[list[str]]]
+EntryLister = Callable[[], Awaitable[dict[str, DirectoryEntry]]]
+
 
 SNAPSHOT_NAME = "snapshot"
 
@@ -113,7 +115,10 @@ class Replica:
 
     upload: Uploader
     prune: Pruner
-    list: Lister
+    entry_lister: EntryLister
+
+    async def list(self) -> list[str]:
+        return list(await self.entry_lister())
 
 
 class ReplicationJob(Enum):
@@ -599,15 +604,18 @@ def get_tahoe_lafs_direntry_pruner(
 
 def get_tahoe_lafs_direntry_lister(
     client: ITahoeClient, directory_mutable_cap: str
-) -> Lister:
+) -> EntryLister:
     """
     Bind a Tahoe client to a mutable directory in a callable that will list
     the entries of that directory.
     """
 
-    async def lister() -> list[str]:
+    async def lister() -> dict[str, DirectoryEntry]:
         entries = await client.list_directory(directory_mutable_cap)
-        return sorted(entries.keys())
+        return {
+            name: DirectoryEntry(kind, entry.get("size", 0))
+            for name, (kind, entry) in entries.items()
+        }
 
     return lister
 

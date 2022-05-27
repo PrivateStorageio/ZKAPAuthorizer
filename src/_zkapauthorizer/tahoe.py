@@ -34,6 +34,19 @@ DataProvider = Callable[[], IO[bytes]]
 
 
 @frozen
+class DirectoryEntry:
+    """
+    An entry in a directory.
+
+    :ivar kind: Either ``"filenode"`` or ``"dirnode"``.
+    :ivar size: The size of the entry's data, in bytes.
+    """
+
+    kind: str
+    size: int
+
+
+@frozen
 class ShareEncoding:
     """
     :ivar needed: The number of shares required to re-assemble the ciphertext.

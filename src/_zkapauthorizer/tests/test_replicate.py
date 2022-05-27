@@ -45,8 +45,8 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid
-from .common import delayedProxy
+from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid
+from .common import delayedProxy, from_awaitable
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, returns
 
@@ -309,14 +309,14 @@ async def noop_prune(predicate) -> None:
     pass
 
 
-async def noop_list() -> list[str]:
-    return []
+async def noop_list_entries() -> dict[str, DirectoryEntry]:
+    return {}
 
 
 # A replica that actually does nothing.  Used by tests that don't interact
 # with this part of the replication system but still need a value of the right
 # type.
-noop_replica = Replica(noop_upload, noop_prune, noop_list)
+noop_replica = Replica(noop_upload, noop_prune, noop_list_entries)
 
 
 def has_files(grid: MemoryGrid, dir_cap: CapStr, count: int) -> bool:
@@ -697,22 +697,34 @@ class TahoeDirectoryListerTests(TestCase):
     Tests for ``get_tahoe_lafs_direntry_lister``.
     """
 
-    @given(lists(text(max_size=100), max_size=3, unique=True))
-    def test_list(self, entry_names) -> None:
+    @given(
+        directory_names=lists(text(max_size=100), max_size=3, unique=True),
+        file_names=lists(text(max_size=100), max_size=3, unique=True),
+    )
+    def test_list(self, directory_names, file_names) -> None:
         """
         ``get_tahoe_lafs_direntry_lister`` returns a callable that can read the
-        entries names from a Tahoe-LAFS directory.
+        entries details from a Tahoe-LAFS directory.
         """
+        filedata = b"somedata"
         grid = MemoryGrid()
         dircap = grid.make_directory()
-        for name in entry_names:
+        for name in directory_names:
             grid.link(dircap, name, grid.make_directory())
+        for name in file_names:
+            grid.link(dircap, name, grid.upload(filedata))
 
         client = grid.client()
         lister = get_tahoe_lafs_direntry_lister(client, dircap)
+
+        expected = {name: DirectoryEntry("dirnode", 0) for name in directory_names}
+        expected.update(
+            {name: DirectoryEntry("filenode", len(filedata)) for name in file_names}
+        )
+
         self.assertThat(
-            Deferred.fromCoroutine(lister()),  # type: ignore
-            succeeded(Equals(sorted(entry_names))),
+            from_awaitable(lister()),
+            succeeded(Equals(expected)),
         )
 
 
