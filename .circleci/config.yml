@@ -70,11 +70,11 @@ jobs:
             pip freeze
       - run:
           name: "Run Tests"
-          command: |
-            python -m coverage run \
-              --debug=config \
-              --module twisted.trial \
-                  --rterrors \
+          command: >
+            python -m coverage run
+              --debug=config
+              --module twisted.trial
+                  --rterrors
                   _zkapauthorizer.tests.test_private
 
       - run:
