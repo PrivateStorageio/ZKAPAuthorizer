@@ -9,7 +9,6 @@ from allmydata.test.strategies import write_capabilities
 from fixtures import TempDir
 from hyperlink import DecodedURL
 from hypothesis import assume, given
-from hypothesis.strategies import integers, lists, sampled_from, text, tuples
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
 from testresources import setUpResources, tearDownResources
@@ -26,7 +25,6 @@ from testtools.matchers import (
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
-from zfec import Encoder
 
 from ..storage_common import required_passes
 from ..tahoe import (
