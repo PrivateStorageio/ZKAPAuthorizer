@@ -14,4 +14,10 @@ shift
 python -m coverage --version
 python -m coverage combine --debug=config "$workspace_path"
 python -m coverage report --debug=config
+
+# It is tempting to use lcov as a common format which we can merge other data
+# into (eg slipcover) but codecov fails with an uninformative error ("There is
+# an error processing the coverage reports.", "unknown error") if we submit
+# lcov to it.  At least we don't have other coverage data to merge in right
+# now.
 python -m codecov --required
