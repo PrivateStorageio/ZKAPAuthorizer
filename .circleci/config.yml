@@ -75,7 +75,7 @@ jobs:
               --debug=config `
               --module twisted.trial `
                 --rterrors `
-                _zkapauthorizer.tests.test_private
+                _zkapauthorizer
 
       - run:
           name: "Persist Coverage to Workspace"
@@ -185,7 +185,7 @@ jobs:
                 --module twisted.trial \
                   --jobs 4 \
                   --rterrors \
-                  _zkapauthorizer.tests.test_private
+                  _zkapauthorizer
 
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
@@ -287,7 +287,7 @@ jobs:
               --arg collectCoverage << parameters.coverage >> \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
               --argstr python python<< parameters.py-version >> \
-              --argstr testSuite _zkapauthorizer.tests.test_private
+              --argstr testSuite _zkapauthorizer
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
