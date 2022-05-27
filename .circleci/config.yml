@@ -70,12 +70,8 @@ jobs:
             pip freeze
       - run:
           name: "Run Tests"
-          command: >
-            python -m coverage run
-              --debug=config
-              --module twisted.trial
-                  --rterrors
-                  _zkapauthorizer.tests.test_private
+          command: |
+            python -m coverage run --debug=config --module twisted.trial --rterrors _zkapauthorizer.tests.test_private
 
       - run:
           name: "Persist Coverage to Workspace"
