@@ -144,6 +144,25 @@ _UNBLINDED_TOKEN_LENGTH = 96
 _VERIFICATION_SIGNATURE_LENGTH = 64
 
 
+def encoding_parameters() -> SearchStrategy[tuple[int, int, int]]:
+    """
+    Build three-tuples of integers that can be used as needed, happy, total
+    encoding/share placement parameters for a Tahoe-LAFS client node.
+
+    :return: (n, h, k) such that 1 <= n <= h <= k <= 255
+    """
+
+    def order(xs):
+        xs.sort()
+        return (xs[0], xs[1], xs[2])
+
+    return lists(
+        integers(min_value=1, max_value=255),
+        min_size=3,
+        max_size=3,
+    ).map(order)
+
+
 def tahoe_config_texts(storage_client_plugins, shares):
     """
     Build the text of complete Tahoe-LAFS configurations for a node.

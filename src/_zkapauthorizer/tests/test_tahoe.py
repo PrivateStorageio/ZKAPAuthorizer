@@ -4,11 +4,13 @@ Tests for ``_zkapauthorizer.tahoe``.
 
 from io import BytesIO
 
+from allmydata.client import config_from_string
 from allmydata.test.strategies import write_capabilities
 from fixtures import TempDir
 from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, lists, sampled_from, text, tuples
+from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
@@ -42,6 +44,7 @@ from ..tahoe import (
 )
 from .fixtures import Treq
 from .resources import client_manager
+from .strategies import encoding_parameters, minimal_tahoe_configs
 
 
 class IntegrationMixin:
@@ -456,6 +459,32 @@ class DirectoryMemoryTests(MemoryMixin, DirectoryTestsMixin, TestCase):
     """
 
 
+class ConfigTests(TestCase):
+    """
+    Tests for configuration-related behavior of ``Tahoe``.
+    """
+
+    @given(
+        encoding_parameters().flatmap(
+            lambda encoding: minimal_tahoe_configs(shares=just(encoding)).map(
+                lambda config_text: (encoding, config_text),
+            ),
+        )
+    )
+    def test_get_config(self, params: tuple[tuple[int, int, int], str]) -> None:
+        """
+        ``Tahoe.get_config`` returns a ``TahoeConfig`` with an ``encoding`` that
+        matches the encoding information in the configuration file.
+        """
+        (needed, _, total), config_text = params
+        config = config_from_string("", "", config_text)
+        client = Tahoe(None, config)
+        self.assertThat(
+            client.get_config().encoding,
+            Equals(ShareEncoding(needed, total)),
+        )
+
+
 class AsyncRetryTests(TestCase):
     """
     Tests for ``async_retry``.
@@ -526,7 +555,7 @@ class AsyncRetryTests(TestCase):
         )
 
 
-class ShareSizeTests(TestCase):
+class RequiredPassesForDataTests(TestCase):
     """
     Tests for ``required_passes_for_data``.
     """
@@ -539,18 +568,21 @@ class ShareSizeTests(TestCase):
     )
     def test_required_passes_for_data(
         self, needed, extra, ciphertext_length, bytes_per_pass
-    ):
+    ) -> None:
         """
-        ``share_size`` computes the same share size as is actually produced by zfec.
+        ``required_passes_for_data`` computes a price based on the share sizes FEC
+        produces for the given encoding parameters.
         """
         total = needed + extra
         assume(total <= 255)
-        fec = Encoder(needed, total)
-        inshare_length = div_ceil(ciphertext_length, needed)
-        ciphertext = bytes(inshare_length)
-        outshares = fec.encode([ciphertext] * needed)
-        expected = required_passes(bytes_per_pass, list(map(len, outshares)))
-        actual = required_passes_for_data(
-            bytes_per_pass, ShareEncoding(needed, total), ciphertext_length
-        )
+        encoding = ShareEncoding(needed, total)
+
+        # I wanted to use zfec to compute all of this stuff but it turns out
+        # zfec doesn't actually do this part - Tahoe-LAFS does, and in a way
+        # that we can't re-use without dragging in the whole immutable
+        # publisher.  So, I hope I got this right.
+        inshare_length = div_ceil(ciphertext_length, encoding.needed)
+        expected = required_passes(bytes_per_pass, [inshare_length] * encoding.total)
+
+        actual = required_passes_for_data(bytes_per_pass, encoding, ciphertext_length)
         self.assertThat(actual, Equals(expected))
