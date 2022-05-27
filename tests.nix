@@ -67,11 +67,26 @@ let
 
       ${lib.optionalString collectCoverage
         ''
-          mkdir -p "$out/coverage"
-          cp -v .coverage.* "$out/coverage"
-          ${python}/bin/python -m coverage combine
-          cp -v .coverage "$out/coverage"
-          ${python}/bin/python -m coverage html -d "$out/htmlcov"
+          # Combine straight into the output location, also pointing coverage
+          # at the directory that contains all of the files to be combined
+          # (necessary) and the configuration file (abundance of caution).
+          echo "Combining coverage"
+          ${python}/bin/python -m coverage combine \
+              --rcfile ${zkapauthorizer.src}/.coveragerc \
+              --data-file "$out/.coverage" \
+              ./
+
+          # We're in /build and the coverage data is going to tell `coverage
+          # html` to look in src/... where it won't find it.  So, make it
+          # available beneath that path.
+          ln -s ${zkapauthorizer.src}/src
+
+          # Generate an HTML report too.
+          echo "Generating HTML report"
+          ${python}/bin/python -m coverage html \
+              --rcfile ${zkapauthorizer.src}/.coveragerc \
+              --data-file "$out/.coverage" \
+              --directory "$out/htmlcov"
         ''
       }
     '';
