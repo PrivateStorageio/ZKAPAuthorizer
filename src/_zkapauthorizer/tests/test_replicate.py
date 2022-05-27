@@ -55,6 +55,25 @@ from .matchers import Always, Matcher, returns
 with_postponed_replication = partial(with_replication, enable_replication=False)
 
 
+@frozen
+class CountBasedPolicy:
+    """
+    A snapshot policy that is based only on the number of files in the
+    replica.
+
+    :ivar replica_file_limit: The maximum number of files which will be
+        allowed to exist in the replica before a snapshot is indicated.
+    """
+
+    replica_file_limit: int
+
+    def should_snapshot(self, snapshot_size: int, replica_sizes: list[int]) -> bool:
+        return len(replica_sizes) >= self.replica_file_limit
+
+
+naive_policy = CountBasedPolicy(replica_file_limit=1000)
+
+
 class ReplicationConnectionTests(TestCase):
     """
     Tests for the SQLite3 connection-like object returned by
@@ -388,7 +407,7 @@ class ReplicationServiceTests(TestCase):
         store.start_lease_maintenance().finish()
         self.assertThat(get_events(store._connection).changes, HasLength(0))
 
-        service = replication_service(store._connection, noop_replica)
+        service = replication_service(store._connection, noop_replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
 
@@ -410,7 +429,7 @@ class ReplicationServiceTests(TestCase):
         client = grid.client()
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
 
@@ -446,7 +465,7 @@ class ReplicationServiceTests(TestCase):
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
         # This accomplishes (1).
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
 
         # Demonstrate (2).
@@ -474,7 +493,7 @@ class ReplicationServiceTests(TestCase):
 
         # Now create and start the new replication service, expecting it will
         # upload the changes in the local event stream.
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
 
         self.assertThat(
@@ -513,6 +532,7 @@ class ReplicationServiceTests(TestCase):
         srv = replication_service(
             tvs.store._connection,
             get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            naive_policy,
         )
 
         # run the service and produce some fake voucher etc changes
@@ -613,6 +633,7 @@ class ReplicationServiceTests(TestCase):
         srv = replication_service(
             tvs.store._connection,
             get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            naive_policy,
         )
 
         # run the service and produce some fake voucher etc changes
@@ -675,6 +696,7 @@ class ReplicationServiceTests(TestCase):
         delay_controller.run()
         delay_controller.run()
         delay_controller.run()
+        delay_controller.run()
 
         # now there should be no local changes
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
@@ -689,6 +711,58 @@ class ReplicationServiceTests(TestCase):
                     "snapshot": Always(),
                 }
             ),
+        )
+
+    def test_snapshot_again(self):
+        """
+        A new snapshot is uploaded and existing event streams are pruned if the
+        cost to maintain the current replica snapshot and event streams is
+        more than X times the cost to store a new snapshot of the database.
+        """
+        # The starting state that we want is:
+        #    (1) Replication is enabled
+        #    (2) A snapshot has been uploaded
+        #    (3) An event stream has been uploaded
+        #
+        # Then we can have the snapshot policy decide it is time to upload a
+        # snapshot and observe the consequences.
+        tvs = self.useFixture(TemporaryVoucherStore(aware_now))
+        store = tvs.store
+
+        grid = MemoryGrid()
+        replica_dircap = grid.make_directory()
+        client = grid.client()
+
+        # This policy will decide it is time to upload after 1 snapshot + 2
+        # event streams are uploaded.
+        snapshot_policy = CountBasedPolicy(replica_file_limit=3)
+
+        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        # This accomplishes (1).
+        service = replication_service(store._connection, replica, snapshot_policy)
+        service.startService()
+
+        # Demonstrate (2).
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
+        )
+
+        # Make an important change to get to (3).
+        add_tokens(store)
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot", "event-stream-2"}),
+        )
+
+        # Make another important change to push us over the limit.
+        add_tokens(store)
+
+        # The event streams should have been pruned and the new snapshot
+        # uploaded.
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
         )
 
 

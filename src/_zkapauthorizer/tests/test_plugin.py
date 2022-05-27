@@ -38,7 +38,7 @@ from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import given, settings
-from hypothesis.strategies import just, sampled_from, timedeltas
+from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
 from prometheus_client import Gauge
 from prometheus_client.parser import text_string_to_metric_families
 from testtools import TestCase
@@ -76,7 +76,13 @@ from twisted.web.resource import IResource
 from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
-from .._plugin import ZKAPAuthorizer, get_root_nodes, load_signing_key, open_store
+from .._plugin import (
+    ZKAPAuthorizer,
+    _CostBasedPolicy,
+    get_root_nodes,
+    load_signing_key,
+    open_store,
+)
 from .._storage_client import IncorrectStorageServerReference
 from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
@@ -96,7 +102,7 @@ from ..replicate import (
     with_replication,
 )
 from ..spending import GET_PASSES
-from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -107,6 +113,7 @@ from .strategies import (
     client_dummyredeemer_configurations,
     client_lease_maintenance_configurations,
     dummy_ristretto_keys,
+    encoding_parameters,
     lease_cancel_secrets,
     lease_maintenance_configurations,
     lease_renew_secrets,
@@ -1121,3 +1128,57 @@ class LoadSigningKeyTests(TestCase):
         p.setContent(key_bytes)
         key = load_signing_key(p)
         self.assertThat(key, IsInstance(SigningKey))
+
+
+class CostBasedPolicyTests(TestCase):
+    """
+    Tests for ``_CostBasedPolicy``.
+    """
+
+    @given(
+        bytes_per_pass=integers(min_value=1),
+        factor=floats(min_value=1, max_value=100),
+        snapshot_size=integers(min_value=1),
+        parameters=encoding_parameters(),
+    )
+    def test_should_snapshot(self, bytes_per_pass, factor, snapshot_size, parameters):
+        """ """
+        # Create a replica that has a storage cost that is more than the given
+        # factor greater than the storage cost of the given snapshot.
+        replica_sizes = [snapshot_size] * int(factor + 1)
+
+        needed, happy, total = parameters
+        policy = _CostBasedPolicy(
+            bytes_per_pass=bytes_per_pass,
+            encoding=ShareEncoding(needed, total),
+            factor=factor,
+        )
+        self.assertThat(
+            policy.should_snapshot(snapshot_size, replica_sizes),
+            Equals(True),
+        )
+
+    @given(
+        bytes_per_pass=integers(min_value=1),
+        factor=floats(min_value=1, max_value=100),
+        snapshot_size=integers(min_value=1),
+        parameters=encoding_parameters(),
+    )
+    def test_should_not_snapshot(
+        self, bytes_per_pass, factor, snapshot_size, parameters
+    ):
+        """ """
+        # Create a replica that has a storage cost that is less than the given
+        # factor greater than the storage cost of the given snapshot.
+        replica_sizes = [snapshot_size] * int(factor - 1)
+
+        needed, happy, total = parameters
+        policy = _CostBasedPolicy(
+            bytes_per_pass=bytes_per_pass,
+            encoding=ShareEncoding(needed, total),
+            factor=factor,
+        )
+        self.assertThat(
+            policy.should_snapshot(snapshot_size, replica_sizes),
+            Equals(False),
+        )
