@@ -14,6 +14,10 @@
 
 version: 2.1
 
+orbs:
+  # Get easier access to the Windows machine executor.
+  win: "circleci/windows@4.1.1"
+
 aliases:
   - &PREPARE_VIRTUALENV
     run:
@@ -46,6 +50,45 @@ jobs:
       - store_artifacts:
           path: "docs/build"
           destination: "docs"
+
+  windows-tests:
+    executor:
+      # https://circleci.com/developer/orbs/orb/circleci/windows
+      name: "win/server-2022"
+      # resource class, can be "medium", "large", "xlarge", "2xlarge"
+      size: "medium"
+
+    steps:
+      # Commands are run in a Windows virtual machine environment
+      - "checkout"
+      - run:
+          name: "Setup Environment"
+          command: |
+            python -V
+            python -m pip install -v --upgrade pip wheel
+            python -m pip install -v . -r requirements/test.in
+            pip freeze
+      - run:
+          name: "Run Tests"
+          command: |
+            python -m coverage run \
+              --debug=config \
+              --module twisted.trial \
+                  --rterrors \
+                  _zkapauthorizer.tests.test_private
+
+      - run:
+          name: "Persist Coverage to Workspace"
+          command: |
+            mkdir -p coverage-workspace
+            Copy-Item -Path ".coverage.*" -Destination "coverage-workspace"
+            python -m coverage combine
+            python -m coverage report
+
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   macos-tests:
     parameters:
@@ -287,3 +330,6 @@ workflows:
         name: "macOS tests python 3.9 xcode 12.3.0"
         py-version: "3.9"
         xcode-version: "12.3.0"
+
+    - "windows-tests":
+        name: "Windows tests, python 3.9"
