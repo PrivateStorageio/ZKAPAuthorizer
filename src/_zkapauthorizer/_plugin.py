@@ -131,7 +131,7 @@ class _CostBasedPolicy:
         """
         return required_passes_for_data(self.bytes_per_pass, self.encoding, size)
 
-    def should_snapshot(self, snapshot_size, replica_sizes):
+    def should_snapshot(self, snapshot_size: int, replica_sizes: list[int]) -> bool:
         """
         Decide to take a new snapshot if the cost to maintain the replica is
         greater than the new snapshot's cost by at least a factor of
