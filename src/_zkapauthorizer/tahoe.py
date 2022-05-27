@@ -12,7 +12,7 @@ from typing import IO, Any, Callable, Iterable, Optional, Union
 import treq
 from allmydata.uri import from_string as capability_from_string
 from allmydata.util.base32 import b2a as b32encode
-from attrs import Factory, define, field
+from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
 from treq.client import HTTPClient
 from twisted.internet.error import ConnectionRefusedError
@@ -22,9 +22,28 @@ from zope.interface import Interface, implementer
 
 from ._types import CapStr
 from .config import Config, read_node_url
+from .storage_common import (
+    get_configured_shares_needed,
+    get_configured_shares_total,
+    required_passes,
+    share_size_for_data,
+)
 
 # An object which can get a readable byte stream
 DataProvider = Callable[[], IO[bytes]]
+
+
+@frozen
+class ShareEncoding:
+    """
+    :ivar needed: The number of shares required to re-assemble the ciphertext.
+
+    :ivar total: The total number of shares produced the ciphertext has been
+        encoded in to.
+    """
+
+    needed: int
+    total: int
 
 
 def async_retry(matchers: list[Callable[[Exception], bool]]):
@@ -316,10 +335,26 @@ async def unlink(
     raise TahoeAPIError("delete", uri, resp.code, content)
 
 
+@frozen
+class TahoeConfig:
+    """
+    An abstract interface to the configuration of a Tahoe-LAFS client node.
+
+    :ivar encoding: The node's default erasure encoding parameters.
+    """
+
+    encoding: ShareEncoding
+
+
 class ITahoeClient(Interface):
     """
     A simple Tahoe-LAFS client interface.
     """
+
+    def get_config() -> TahoeConfig:
+        """
+        Get an abstract representation of this client node's configuration.
+        """
 
     def get_private_path(name: str) -> FilePath:
         """
@@ -393,6 +428,17 @@ class Tahoe(object):
         # state.
         return read_node_url(self._node_config)
 
+    def get_config(self) -> TahoeConfig:
+        """
+        Create an abstract configuration from this node's concrete configuration.
+        """
+        return TahoeConfig(
+            ShareEncoding(
+                get_configured_shares_needed(self._node_config),
+                get_configured_shares_total(self._node_config),
+            )
+        )
+
     def get_private_path(self, name: str) -> FilePath:
         """
         Get the path to a file in the node's private directory.
@@ -451,14 +497,18 @@ class MemoryGrid:
     _counter: int = 0
     _objects: dict[CapStr, Union[bytes, _Directory]] = field(default=Factory(dict))
 
-    def client(self, basedir: Optional[FilePath] = None) -> ITahoeClient:
+    def client(
+        self,
+        basedir: Optional[FilePath] = None,
+        share_encoding: ShareEncoding = ShareEncoding(3, 10),
+    ) -> ITahoeClient:
         """
         Create a ``Tahoe``-alike that is backed by this object instead of by a
         real Tahoe-LAFS storage grid.
         """
         if basedir is None:
-            return _MemoryTahoe(self)
-        return _MemoryTahoe(self, basedir)
+            basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))
+        return _MemoryTahoe(self, basedir, share_encoding)
 
     def upload(self, data: bytes) -> CapStr:
         def encode(s: str) -> str:
@@ -552,14 +602,17 @@ class _MemoryTahoe:
     """
 
     _grid: MemoryGrid
-    _nodedir: FilePath = field()
-
-    @_nodedir.default
-    def _nodedir_default(self):
-        return FilePath(mkdtemp(suffix=".memory-tahoe"))
+    _nodedir: FilePath
+    share_encoding: ShareEncoding
 
     def __attrs_post_init__(self):
         self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)
+
+    def get_config(self) -> TahoeConfig:
+        """
+        Get this node's configuration.
+        """
+        return TahoeConfig(self.share_encoding)
 
     def get_private_path(self, name: str) -> FilePath:
         """
@@ -630,3 +683,24 @@ def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:
     agent = Agent(reactor)
     http_client = HTTPClient(agent)
     return Tahoe(http_client, node_config)
+
+
+def required_passes_for_data(
+    bytes_per_pass: int, encoding: ShareEncoding, data_size: int
+) -> int:
+    """
+    Calculate the total storage cost (in passes) for all shares of an object
+    of a certain size under certain encoding parameters and pass value.
+    """
+    return required_passes(
+        bytes_per_pass,
+        share_sizes_for_data(encoding, data_size),
+    )
+
+
+def share_sizes_for_data(encoding: ShareEncoding, data_size: int) -> list[int]:
+    """
+    Get the sizes of all of the shares for data of the given size encoded
+    using the given encoding.
+    """
+    return [share_size_for_data(encoding.needed, data_size)] * encoding.total
