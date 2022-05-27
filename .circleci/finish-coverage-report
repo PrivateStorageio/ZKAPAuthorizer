@@ -14,12 +14,4 @@ shift
 python -m coverage --version
 python -m coverage combine --debug=config "$workspace_path"
 python -m coverage report --debug=config
-
-# What about reporting though?  codecov.io supports lcov.  coveralls.io might
-# through a third-party tool but it's not completely clear.  We can also just
-# locally emit reports using lcov itself.  This gives an okay summary of
-# coverage from this data but is no help in reporting on coverage changes.
-#
-# So maybe we use codecov.io and just send the lcov there.
-python -m coverage lcov -o coverage.lcov
-python -m codecov --required --file coverage.lcov
+python -m codecov --required
