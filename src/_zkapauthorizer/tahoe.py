@@ -22,9 +22,28 @@ from zope.interface import Interface, implementer
 
 from ._types import CapStr
 from .config import Config, read_node_url
+from .storage_common import (
+    get_configured_shares_needed,
+    get_configured_shares_total,
+    required_passes,
+    share_size_for_data,
+)
 
 # An object which can get a readable byte stream
 DataProvider = Callable[[], IO[bytes]]
+
+
+@frozen
+class DirectoryEntry:
+    """
+    An entry in a directory.
+
+    :ivar kind: Either ``"filenode"`` or ``"dirnode"``.
+    :ivar size: The size of the entry's data, in bytes.
+    """
+
+    kind: str
+    size: int
 
 
 @frozen
@@ -329,10 +348,26 @@ async def unlink(
     raise TahoeAPIError("delete", uri, resp.code, content)
 
 
+@frozen
+class TahoeConfig:
+    """
+    An abstract interface to the configuration of a Tahoe-LAFS client node.
+
+    :ivar encoding: The node's default erasure encoding parameters.
+    """
+
+    encoding: ShareEncoding
+
+
 class ITahoeClient(Interface):
     """
     A simple Tahoe-LAFS client interface.
     """
+
+    def get_config() -> TahoeConfig:
+        """
+        Get an abstract representation of this client node's configuration.
+        """
 
     def get_private_path(name: str) -> FilePath:
         """
@@ -405,6 +440,17 @@ class Tahoe(object):
         # requests and also doesn't fully populate the node's filesystem
         # state.
         return read_node_url(self._node_config)
+
+    def get_config(self) -> TahoeConfig:
+        """
+        Create an abstract configuration from this node's concrete configuration.
+        """
+        return TahoeConfig(
+            ShareEncoding(
+                get_configured_shares_needed(self._node_config),
+                get_configured_shares_total(self._node_config),
+            )
+        )
 
     def get_private_path(self, name: str) -> FilePath:
         """
@@ -575,6 +621,12 @@ class _MemoryTahoe:
     def __attrs_post_init__(self):
         self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)
 
+    def get_config(self) -> TahoeConfig:
+        """
+        Get this node's configuration.
+        """
+        return TahoeConfig(self.share_encoding)
+
     def get_private_path(self, name: str) -> FilePath:
         """
         Get the path to a file in a private directory dedicated to this instance
@@ -644,3 +696,24 @@ def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:
     agent = Agent(reactor)
     http_client = HTTPClient(agent)
     return Tahoe(http_client, node_config)
+
+
+def required_passes_for_data(
+    bytes_per_pass: int, encoding: ShareEncoding, data_size: int
+) -> int:
+    """
+    Calculate the total storage cost (in passes) for all shares of an object
+    of a certain size under certain encoding parameters and pass value.
+    """
+    return required_passes(
+        bytes_per_pass,
+        share_sizes_for_data(encoding, data_size),
+    )
+
+
+def share_sizes_for_data(encoding: ShareEncoding, data_size: int) -> list[int]:
+    """
+    Get the sizes of all of the shares for data of the given size encoded
+    using the given encoding.
+    """
+    return [share_size_for_data(encoding.needed, data_size)] * encoding.total

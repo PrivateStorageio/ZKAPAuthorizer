@@ -26,7 +26,7 @@ from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 from zfec import Encoder
 
-from ..storage_common import required_passes, required_passes_for_data
+from ..storage_common import required_passes
 from ..tahoe import (
     CapStr,
     MemoryGrid,
@@ -38,6 +38,7 @@ from ..tahoe import (
     _scrub_cap,
     async_retry,
     attenuate_writecap,
+    required_passes_for_data,
 )
 from .fixtures import Treq
 from .resources import client_manager
@@ -536,7 +537,9 @@ class ShareSizeTests(TestCase):
         ciphertext_length=integers(min_value=1, max_value=2**20),
         bytes_per_pass=integers(min_value=1),
     )
-    def test_required_passes_for_data(self, needed, extra, ciphertext_length, bytes_per_pass):
+    def test_required_passes_for_data(
+        self, needed, extra, ciphertext_length, bytes_per_pass
+    ):
         """
         ``share_size`` computes the same share size as is actually produced by zfec.
         """

@@ -31,7 +31,7 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
 )
 from allmydata.node import MissingConfigEntry
-from attrs import Factory, define, field
+from attrs import Factory, define, field, frozen
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
@@ -70,7 +70,13 @@ from .server.spending import get_spender
 from .spending import SpendingController
 from .sql import UnboundConnect
 from .storage_common import BYTES_PER_PASS, get_configured_pass_value
-from .tahoe import ITahoeClient, attenuate_writecap, get_tahoe_client
+from .tahoe import (
+    ITahoeClient,
+    ShareEncoding,
+    attenuate_writecap,
+    get_tahoe_client,
+    required_passes_for_data,
+)
 
 _log = Logger()
 
@@ -99,6 +105,41 @@ def open_store(
     """
     pass_value = get_configured_pass_value(node_config)
     return VoucherStore.from_connection(pass_value, now, conn)
+
+
+@frozen
+class _SizeBasedPolicy:
+    """
+    Encode policy rules about when to take and upload a new snapshot.
+
+    :ivar bytes_per_pass: The price of on-grid storage.
+    :ivar encoding: The erasure encoding configuration used for all uploads.
+
+    :ivar factor: A multiplier for how much more expensive must be to maintain
+        the on-grid replica than it would be to maintain a replica based on a
+        new snapshot before a new snapshot will be taken.
+    """
+
+    bytes_per_pass: int
+    encoding: ShareEncoding
+    factor: float
+
+    def _required_passes(self, size: int) -> int:
+        """
+        Calculate the number of passes required to store an object of the given
+        size, in bytes.
+        """
+        return required_passes_for_data(self.bytes_per_pass, self.encoding, size)
+
+    def should_snapshot(self, snapshot_size, replica_sizes):
+        """
+        Decide to take a new snapshot if the cost to maintain the replica is
+        greater than the new snapshot's cost by at least a factor of
+        ``self.factor``.
+        """
+        snapshot_cost = self._required_passes(snapshot_size)
+        replica_cost = sum(map(self._required_passes, replica_sizes))
+        return snapshot_cost * self.factor < replica_cost
 
 
 @implementer(IFoolscapStoragePlugin)
@@ -174,7 +215,14 @@ class ZKAPAuthorizer(object):
         client = self._get_tahoe_client(self.reactor, node_config)
         mutable = get_replica_rwcap(node_config)
         replica = get_tahoe_lafs_direntry_replica(client, mutable)
-        replication_service(replicated_conn, replica).setServiceParent(self._service)
+        cost = _SizeBasedPolicy(
+            get_configured_pass_value(node_config),
+            client.get_config().encoding,
+            10,
+        )
+        replication_service(replicated_conn, replica, cost).setServiceParent(
+            self._service
+        )
         return mutable
 
     def _get_redeemer(self, node_config, announcement):

@@ -75,6 +75,7 @@ from typing import (
     Iterable,
     Iterator,
     Optional,
+    Protocol,
     Sequence,
 )
 
@@ -91,7 +92,7 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import DataProvider, ITahoeClient, attenuate_writecap
+from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, attenuate_writecap
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -99,8 +100,23 @@ Uploader = Callable[[str, DataProvider], Awaitable[None]]
 # function which can remove entries from ZKAPAuthorizer state.
 Pruner = Callable[[Callable[[str], bool]], Awaitable[None]]
 
-# function which can list all entries in ZKAPAuthorizer state
+# functions which can list all entries in ZKAPAuthorizer state
 Lister = Callable[[], Awaitable[list[str]]]
+EntryLister = Callable[[], Awaitable[dict[str, DirectoryEntry]]]
+
+
+class SnapshotPolicy(Protocol):
+    """
+    Encode policy rules about when to take and upload a new snapshot.
+    """
+
+    def should_snapshot(self, snapshot_size: int, replica_sizes: list[int]) -> bool:
+        """
+        Given the size of a new snapshot and the size of an existing replica
+        (snapshot and event streams), is now a good time to take a new
+        snapshot?
+        """
+
 
 SNAPSHOT_NAME = "snapshot"
 
@@ -113,7 +129,10 @@ class Replica:
 
     upload: Uploader
     prune: Pruner
-    list: Lister
+    entry_lister: EntryLister
+
+    async def list(self) -> list[str]:
+        return list(await self.entry_lister())
 
 
 class ReplicationJob(Enum):
@@ -604,15 +623,18 @@ def get_tahoe_lafs_direntry_pruner(
 
 def get_tahoe_lafs_direntry_lister(
     client: ITahoeClient, directory_mutable_cap: str
-) -> Lister:
+) -> EntryLister:
     """
     Bind a Tahoe client to a mutable directory in a callable that will list
     the entries of that directory.
     """
 
-    async def lister() -> list[str]:
+    async def lister() -> dict[str, DirectoryEntry]:
         entries = await client.list_directory(directory_mutable_cap)
-        return sorted(entries.keys())
+        return {
+            name: DirectoryEntry(kind, entry.get("size", 0))
+            for name, (kind, entry) in entries.items()
+        }
 
     return lister
 
@@ -777,6 +799,7 @@ class _ReplicationService(Service):
 
     _connection: _ReplicationCapableConnection = field()
     _replica: Replica
+    _snapshot_policy: SnapshotPolicy
     _replicating: Optional[Deferred] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
@@ -862,6 +885,8 @@ class _ReplicationService(Service):
                 await self._do_one_event_upload()
             elif job == ReplicationJob.snapshot:
                 await self._do_one_snapshot_upload()
+            elif job == ReplicationJob.consider_snapshot:
+                await self._do_consider_snapshot()
             elif job == ReplicationJob.startup:
                 await self._do_startup()
             else:
@@ -913,11 +938,7 @@ class _ReplicationService(Service):
         # snapshot upload. The extra event-stream objects will be
         # ignored by the recovery code.
 
-        # possible to _not_ have a snapshot? -> make sure we do one when replication is turned on.
-        # https://github.com/PrivateStorageio/ZKAPAuthorizer/issues/379
-
         # prune old events from the replica
-
         def is_old_eventstream(fname: str) -> bool:
             """
             :returns: True if the `fname` is an event-stream object and the
@@ -927,7 +948,7 @@ class _ReplicationService(Service):
             m = re.match("event-stream-([0-9]*)", fname)
             if m:
                 seq = int(m.group(1))
-                if seq < seqnum:
+                if seq <= seqnum:
                     return True
             return False
 
@@ -953,8 +974,39 @@ class _ReplicationService(Service):
         # then discard the uploaded events from the local database.
         prune_events_to(self._unreplicated_connection, high_seq)
 
-        # XXX Queue a job to check the on-grid size and re-snapshot if it is
-        # much too large
+        # Arrange to examine replica state soon to determine whether taking a
+        # new snapshot and pruning existing event streams is useful.
+        self.queue_job(ReplicationJob.consider_snapshot)
+
+    async def _do_consider_snapshot(self) -> None:
+        """
+        Inspect local and remote state to decide if the cost of taking and
+        uploading a new snapshot is worth the resulting savings in storage.
+        """
+        local_size = await self._new_snapshot_size()
+        replica_size = await self._replica_size()
+        if self._snapshot_policy.should_snapshot(local_size, replica_size):
+            self.queue_snapshot_upload()
+
+    async def _new_snapshot_size(self) -> int:
+        """
+        Measure the size of snapshot of the current database state, in bytes.
+        """
+        return len(snapshot(self._connection))
+
+    async def _replica_size(self) -> list[int]:
+        """
+        Retrieve the size of all the files that are part of the current on-grid
+        replica.
+        """
+        entries = await self._replica.entry_lister()
+        return [
+            entry.size
+            for (name, entry) in entries.items()
+            if entry.kind == "filenode"
+            and name == "snapshot"
+            or name.startswith("event-stream-")
+        ]
 
     def stopService(self) -> Deferred[None]:
         """
@@ -1030,6 +1082,7 @@ class _ReplicationService(Service):
 def replication_service(
     replicated_connection: _ReplicationCapableConnection,
     replica: Replica,
+    snapshot_policy: SnapshotPolicy,
 ) -> IService:
     """
     Return a service which implements the replication process documented in
@@ -1038,4 +1091,5 @@ def replication_service(
     return _ReplicationService(
         connection=replicated_connection,
         replica=replica,
+        snapshot_policy=snapshot_policy,
     )

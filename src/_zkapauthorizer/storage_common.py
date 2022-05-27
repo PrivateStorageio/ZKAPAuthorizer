@@ -24,7 +24,6 @@ from pyutil.mathutil import div_ceil
 
 from . import NAME
 from .eliot import MUTABLE_PASSES_REQUIRED
-from .tahoe import ShareEncoding
 from .validators import greater_than
 
 
@@ -165,23 +164,6 @@ def required_passes(
 
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
     return result
-
-
-def required_passes_for_data(
-    bytes_per_pass: int, encoding: ShareEncoding, data_size: int
-) -> int:
-    """
-    Calculate the total storage cost (in passes) for all shares of an object
-    of a certain size under certain encoding parameters and pass value.
-    """
-    return required_passes(
-        bytes_per_pass,
-        share_sizes_for_data(encoding, data_size),
-    )
-
-
-def share_sizes_for_data(encoding: ShareEncoding, data_size: int) -> list[int]:
-    return [share_size_for_data(encoding.needed, data_size)] * encoding.total
 
 
 def share_size_for_data(shares_needed, datasize):

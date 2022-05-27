@@ -45,14 +45,32 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, ITahoeClient, MemoryGrid, ShareEncoding
-from .common import delayedProxy
+from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid
+from .common import delayedProxy, from_awaitable
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, returns
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
 with_postponed_replication = partial(with_replication, enable_replication=False)
+
+
+@frozen
+class CountBasedPolicy:
+    """
+    A snapshot policy that is based only on the number of files in the
+    replica.
+
+    :ivar replica_file_limit: The maximum number of files which will be
+        allowed to exist in the replica before a snapshot is indicated.
+    """
+    replica_file_limit: int
+
+    def should_snapshot(self, snapshot_size: int, replica_sizes: list[int]) -> bool:
+        return len(replica_sizes) >= self.replica_file_limit
+
+
+naive_policy = CountBasedPolicy(replica_file_limit=1000)
 
 
 class ReplicationConnectionTests(TestCase):
@@ -309,14 +327,14 @@ async def noop_prune(predicate) -> None:
     pass
 
 
-async def noop_list() -> list[str]:
-    return []
+async def noop_list_entries() -> dict[str, DirectoryEntry]:
+    return {}
 
 
 # A replica that actually does nothing.  Used by tests that don't interact
 # with this part of the replication system but still need a value of the right
 # type.
-noop_replica = Replica(noop_upload, noop_prune, noop_list)
+noop_replica = Replica(noop_upload, noop_prune, noop_list_entries)
 
 
 def has_files(grid: MemoryGrid, dir_cap: CapStr, count: int) -> bool:
@@ -388,7 +406,7 @@ class ReplicationServiceTests(TestCase):
         store.start_lease_maintenance().finish()
         self.assertThat(get_events(store._connection).changes, HasLength(0))
 
-        service = replication_service(store._connection, noop_replica)
+        service = replication_service(store._connection, noop_replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
 
@@ -410,7 +428,7 @@ class ReplicationServiceTests(TestCase):
         client = grid.client()
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
 
@@ -446,7 +464,7 @@ class ReplicationServiceTests(TestCase):
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
         # This accomplishes (1).
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
 
         # Demonstrate (2).
@@ -474,7 +492,7 @@ class ReplicationServiceTests(TestCase):
 
         # Now create and start the new replication service, expecting it will
         # upload the changes in the local event stream.
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, naive_policy)
         service.startService()
 
         self.assertThat(
@@ -513,6 +531,7 @@ class ReplicationServiceTests(TestCase):
         srv = replication_service(
             tvs.store._connection,
             get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            naive_policy,
         )
 
         # run the service and produce some fake voucher etc changes
@@ -613,6 +632,7 @@ class ReplicationServiceTests(TestCase):
         srv = replication_service(
             tvs.store._connection,
             get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            naive_policy,
         )
 
         # run the service and produce some fake voucher etc changes
@@ -675,6 +695,7 @@ class ReplicationServiceTests(TestCase):
         delay_controller.run()
         delay_controller.run()
         delay_controller.run()
+        delay_controller.run()
 
         # now there should be no local changes
         self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
@@ -694,30 +715,30 @@ class ReplicationServiceTests(TestCase):
     def test_snapshot_again(self):
         """
         A new snapshot is uploaded and existing event streams are pruned if the
-        cost to store a new snapshot of the database is %X (or less) of the
-        cost to maintain the current replica snapshot and event streams.
+        cost to maintain the current replica snapshot and event streams is
+        more than X times the cost to store a new snapshot of the database.
         """
         # The starting state that we want is:
         #    (1) Replication is enabled
-        #    (2) A snapshot with storage cost S has been uploaded
-        #    (3) N event streams with storage cost E each have been uploaded
+        #    (2) A snapshot has been uploaded
+        #    (3) An event stream has been uploaded
         #
-        # Then we can make some changes in the local database which trigger an
-        # event stream upload and causes S × X <= N × E.
+        # Then we can have the snapshot policy decide it is time to upload a
+        # snapshot and observe the consequences.
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
         store = tvs.store
 
         grid = MemoryGrid()
         replica_dircap = grid.make_directory()
-        share_encoding = ShareEncoding(
-            needed=1,
-            total=2,
-        )
-        client = grid.client(share_encoding=share_encoding)
+        client = grid.client()
+
+        # This policy will decide it is time to upload after 1 snapshot + 2
+        # event streams are uploaded.
+        snapshot_policy = CountBasedPolicy(replica_file_limit=3)
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
         # This accomplishes (1).
-        service = replication_service(store._connection, replica)
+        service = replication_service(store._connection, replica, snapshot_policy)
         service.startService()
 
         # Demonstrate (2).
@@ -726,21 +747,22 @@ class ReplicationServiceTests(TestCase):
             Equals({"snapshot"}),
         )
 
-        # For our encoding parameters each object we upload will have 2 shares
-        # and each share will be the same size as the original ciphertext.
-        # The objects are all small so they're all going to have a cost of 2.
-        #
-        # So the initial snapshot has a cost of 2.  Each event stream we
-        # upload has a cost of 2.  The cost of storing the replica is 2 + (2 *
-        # E) where E is the number of uploaded event streams.
-        #
-        # Meanwhile the cost to store a new snapshot of the local database is
-        # not going to meaningfully increase.  It remains 2.  This means for X
-        # = 0.50 we'll upload a new snapshot after every event stream upload.
-        #
-        # That behavior seems like it sucks a bit.  I don't want to implement
-        # this.  Think about it some more.
+        # Make an important change to get to (3).
         add_tokens(store)
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot", "event-stream-2"}),
+        )
+
+        # Make another important change to push us over the limit.
+        add_tokens(store)
+
+        # The event streams should have been pruned and the new snapshot
+        # uploaded.
+        self.assertThat(
+            set(grid.list_directory(replica_dircap)),
+            Equals({"snapshot"}),
+        )
 
 
 class TahoeDirectoryListerTests(TestCase):
@@ -748,22 +770,34 @@ class TahoeDirectoryListerTests(TestCase):
     Tests for ``get_tahoe_lafs_direntry_lister``.
     """
 
-    @given(lists(text(max_size=100), max_size=3, unique=True))
-    def test_list(self, entry_names) -> None:
+    @given(
+        directory_names=lists(text(max_size=100), max_size=3, unique=True),
+        file_names=lists(text(max_size=100), max_size=3, unique=True),
+    )
+    def test_list(self, directory_names, file_names) -> None:
         """
         ``get_tahoe_lafs_direntry_lister`` returns a callable that can read the
-        entries names from a Tahoe-LAFS directory.
+        entries details from a Tahoe-LAFS directory.
         """
+        filedata = b"somedata"
         grid = MemoryGrid()
         dircap = grid.make_directory()
-        for name in entry_names:
+        for name in directory_names:
             grid.link(dircap, name, grid.make_directory())
+        for name in file_names:
+            grid.link(dircap, name, grid.upload(filedata))
 
         client = grid.client()
         lister = get_tahoe_lafs_direntry_lister(client, dircap)
+
+        expected = {name: DirectoryEntry("dirnode", 0) for name in directory_names}
+        expected.update(
+            {name: DirectoryEntry("filenode", len(filedata)) for name in file_names}
+        )
+
         self.assertThat(
-            Deferred.fromCoroutine(lister()),  # type: ignore
-            succeeded(Equals(sorted(entry_names))),
+            from_awaitable(lister()),
+            succeeded(Equals(expected)),
         )
 
 
