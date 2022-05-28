@@ -1,0 +1,23 @@
+#! /usr/bin/env nix-shell
+#! nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/ba34f8c09f10624b009b2999c4390ac2e88dafb9.tar.gz -i bash -p "lcov" "coreutils" "python3.withPackages (ps: [ ps.coverage ps.codecov ])"
+
+set -xueo pipefail
+
+# The workspace contains some number of coverage.py data files and some number
+# of slipcover json-format files.  Our job will be to merge all of that
+# information and then present the results.
+workspace_path="$1"
+shift
+
+# We can very easily merge all of the coverage.py data using the coverage.py
+# tool.
+python -m coverage --version
+python -m coverage combine --debug=config "$workspace_path"
+python -m coverage report --debug=config
+
+# It is tempting to use lcov as a common format which we can merge other data
+# into (eg slipcover) but codecov fails with an uninformative error ("There is
+# an error processing the coverage reports.", "unknown error") if we submit
+# lcov to it.  At least we don't have other coverage data to merge in right
+# now.
+python -m codecov --required

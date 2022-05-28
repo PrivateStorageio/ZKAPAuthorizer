@@ -170,17 +170,44 @@ jobs:
             # The test suite might leak file descriptors.  macOS defaults to a
             # limit of 256.  This should be fixed, but not now ...
             ulimit -Sn 1024
+
+            # Tell coverage in the worker processes where it can find our
+            # configuration file.
+            export COVERAGE_PROCESS_START=${PWD}/.coveragerc
+
             # And finally we can run the tests.  We'll run them with 4 jobs
             # because the resource class documented at
             # https://support.circleci.com/hc/en-us/articles/360009144794-macOS-resources
             # says "Medium: 4 vCPUs, 8GB RAM".
-            venv/bin/python -m twisted.trial --jobs 4 --rterrors _zkapauthorizer
+            venv/bin/python -m coverage run \
+                --debug=config \
+                --rcfile=${PWD}/.coveragerc \
+                --module twisted.trial \
+                  --jobs 4 \
+                  --rterrors \
+                  _zkapauthorizer
+
           environment:
             ZKAPAUTHORIZER_HYPOTHESIS_PROFILE: "ci"
+
+      - run:
+          name: "Persist Coverage to Workspace"
+          command: |
+            mkdir -p coverage-workspace
+            cp -v .coverage.* coverage-workspace
+            venv/bin/python -m coverage combine
+            venv/bin/python -m coverage report
+
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   linux-tests: &LINUX_TESTS
     parameters:
       py-version:
+        type: "string"
+      coverage:
         type: "string"
       tahoe-lafs-source:
         # The name of a niv source in nix/sources.json which corresponds to
@@ -257,9 +284,10 @@ jobs:
             # our build.
             nix-build --cores 5 tests.nix \
               --argstr hypothesisProfile ci \
-              --arg collectCoverage true \
+              --arg collectCoverage << parameters.coverage >> \
               --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
-              --argstr python python<< parameters.py-version >>
+              --argstr python python<< parameters.py-version >> \
+              --argstr testSuite _zkapauthorizer
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
@@ -280,10 +308,20 @@ jobs:
               bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
             fi
 
-      - run:
-          name: "Report Coverage"
-          command: |
-            ./.circleci/report-coverage.sh
+      - when:
+          condition:
+            equal: [ "true", << parameters.coverage >> ]
+          steps:
+            - run:
+                name: "Persist Coverage to Workspace"
+                command: |
+                  mkdir -p coverage-workspace
+                  cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs-source >>
+
+            - persist_to_workspace:
+                root: "coverage-workspace"
+                paths:
+                  - "*"
 
   typecheck:
     <<: *LINUX_TESTS
@@ -302,6 +340,25 @@ jobs:
           <<: *PUSH_TO_CACHIX
 
 
+  # A job that merges all of the coverage data and generates a report.
+  finish-coverage:
+    docker:
+      - image: "nixos/nix:2.8.1"
+
+    steps:
+      - "checkout"
+      - attach_workspace:
+          at: "coverage-workspace"
+
+      - store_artifacts:
+          path: "coverage-workspace"
+
+      - run:
+          name: "Finish Coverage Report"
+          command: |
+            .circleci/finish-coverage-report ./coverage-workspace
+
+
 workflows:
   version: 2
   everything:
@@ -310,13 +367,16 @@ workflows:
     - "typecheck":
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
+        # factoring mistake makes this necessary
+        coverage: "false"
     - "linux-tests":
-        name: "Linux tests python 3.9"
+        name: "Linux tests, python 3.9"
         py-version: "39"
         tahoe-lafs-source: "tahoe-lafs"
+        coverage: "true"
 
     - "linux-tests":
-        name: "Linux tests python 3.9, Tahoe-LAFS master"
+        name: "Linux tests, python 3.9, Tahoe-LAFS master"
         py-version: "39"
         # This is usually not master@HEAD because it is still pinned to a
         # certain revision.  The intent is to update it frequently and
@@ -324,12 +384,21 @@ workflows:
         # incompatibilities early enough to prevent them from going into a
         # release.
         tahoe-lafs-source: "tahoe-lafs-master"
+        coverage: "false"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
-        name: "macOS tests python 3.9 xcode 12.3.0"
+        name: "macOS tests, python 3.9 xcode 12.3.0"
         py-version: "3.9"
         xcode-version: "12.3.0"
 
     - "windows-tests":
         name: "Windows tests, python 3.9"
+
+    - "finish-coverage":
+        # Make sure it depends on all coverage-collecting jobs!
+        requires:
+          - "Linux tests, python 3.9"
+          - "Linux tests, python 3.9, Tahoe-LAFS master"
+          - "macOS tests, python 3.9 xcode 12.3.0"
+          - "Windows tests, python 3.9"
