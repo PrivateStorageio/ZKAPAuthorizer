@@ -235,9 +235,6 @@ class RecoverProtocol(WebSocketServerProtocol):
     When the recovery is finished, and final message is sent
     (indicating overall success or failure) and the WebSocket is
     closed.
-
-    TODO:
-    - if the client disconnects (prematurely) should that mean "cancel"? (does that even make sense?)
     """
 
     def onClose(self, wasClean, code, reason):
@@ -302,10 +299,15 @@ class RecoverFactory(WebSocketServerFactory):
 
     def initiate_recovery(self, cap: CapStr, client):
         """
-        A new WebSocket client has asked for recovery. If there is no
-        recovery, begin one and send updates to this client. If one is
-        already started _and_ the capability is the same, send updates
-        to this client too. Otherwise, error.
+        A new WebSocket client has asked for recovery.
+
+        If there is no recovery, begin one and send updates to this
+        client.
+
+        If a recovery is already started _and_ the capability is the
+        same, send updates to this client too.
+
+        Otherwise, error.
         """
         self.clients.append(client)
         if self.recovering_d is None:
@@ -315,8 +317,10 @@ class RecoverFactory(WebSocketServerFactory):
             def err(f):
                 print(f"Error doing recovery: {f}")
                 # XXX feels like the below belongs in recoverer
-                # itself, but it doesn't get that far (becaose of
-                # "call_when_empty")
+                # itself, but it doesn't get that far (because of
+                # "call_when_empty"). That is, one likely reason to
+                # get here is the ValueError we raise about existing
+                # local state.
                 self.recoverer._set_state(
                     RecoveryState(
                         RecoveryStages.import_failed,
