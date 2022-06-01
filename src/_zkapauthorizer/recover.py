@@ -153,7 +153,6 @@ class StatefulRecoverer:
         """
         Change the recovery state.
         """
-        print("SETSTATE", state)
         self._state = state
         for listener in self._listeners:
             listener(state)

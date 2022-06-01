@@ -238,22 +238,7 @@ class RecoverProtocol(WebSocketServerProtocol):
 
     TODO:
     - if the client disconnects (prematurely) should that mean "cancel"? (does that even make sense?)
-    - if another client comes along, what do we do?
-      - reject
-      - receive status updates for the already-ongoing recovery (but
-        if they send a different capability than we're using: reject)
-      - essentially: idempotency?
     """
-
-    _log = Logger()
-
-    # don't really need on-open, because the client should send us a
-    # message right away
-    def onOpen(self):
-        """
-        WebSocket API: successful handshake
-        """
-        # note, new clients added via initiate_recovery()
 
     def onClose(self, wasClean, code, reason):
         """
@@ -262,11 +247,14 @@ class RecoverProtocol(WebSocketServerProtocol):
         try:
             self.factory.clients.remove(self)
         except ValueError:
-            pass  # may not have initiated recovery
+            # may not have initiated recovery yet so it might not be
+            # in the clients list
+            pass
 
     def onMessage(self, payload, isBinary):
         """
-        WebSocket API: a message has been received from the client.
+        WebSocket API: a message has been received from the client (the
+        only thing they can send is a request to initiate recovery).
         """
         try:
             body = loads(payload)
@@ -284,6 +272,10 @@ class RecoverProtocol(WebSocketServerProtocol):
 @define
 class RecoverFactory(WebSocketServerFactory):
     """
+    Track state of recovery. In the factory because we want at most
+    one active recovery attempt not matter how many clients there are
+    and because it needs to link to other resources that are also
+    constructed once.
     """
     store: VoucherStore = field()
     get_downloader: Callable[[str], Downloader] = field()
