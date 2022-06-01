@@ -252,7 +252,6 @@ class RecoverProtocol(WebSocketServerProtocol):
             body = loads(payload)
             recovery_capability = body["recovery-capability"]
         except Exception:
-            request.setResponseCode(BAD_REQUEST)
             self.sendClose(
                 code=4000,
                 reason="Failed to parse recovery request",
