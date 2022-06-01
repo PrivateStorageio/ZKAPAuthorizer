@@ -23,11 +23,13 @@ In the future it should also allow users to read statistics about token usage.
 
 from collections.abc import Awaitable
 from functools import partial
-from json import loads, dumps
-from typing import Callable, Any
+from json import dumps, loads
+from typing import Any, Callable
 
 from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
+from autobahn.twisted.resource import WebSocketResource
+from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
 from twisted.web.http import (
@@ -36,13 +38,6 @@ from twisted.web.http import (
     CONFLICT,
     CREATED,
     INTERNAL_SERVER_ERROR,
-)
-from autobahn.twisted.resource import (
-    WebSocketResource,
-)
-from autobahn.twisted.websocket import (
-    WebSocketServerFactory,
-    WebSocketServerProtocol,
 )
 from twisted.web.iweb import IRequest
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
@@ -59,7 +54,7 @@ from .lease_maintenance import LeaseMaintenanceConfig
 from .model import NotEmpty, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import Downloader, StatefulRecoverer, RecoveryState, RecoveryStages
+from .recover import Downloader, RecoveryStages, RecoveryState, StatefulRecoverer
 from .replicate import ReplicationAlreadySetup
 from .storage_common import (
     get_configured_allowed_public_keys,
@@ -274,6 +269,7 @@ class RecoverFactory(WebSocketServerFactory):
     and because it needs to link to other resources that are also
     constructed once.
     """
+
     store: VoucherStore = field()
     get_downloader: Callable[[str], Downloader] = field()
     recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
@@ -295,6 +291,7 @@ class RecoverFactory(WebSocketServerFactory):
             self.sent_updates.append(update_msg)
             for client in self.clients:
                 client.sendMessage(update_msg, False)
+
         self.recoverer.on_state_change(state_change)
 
     def initiate_recovery(self, cap: CapStr, client):
@@ -329,12 +326,12 @@ class RecoverFactory(WebSocketServerFactory):
                 )
                 for client in self.clients:
                     client.sendClose()
+
             self.recovering_d.addErrback(err)
 
         elif self.recovering_cap != cap:
             self.sendClose(
-                code=4000,
-                reason="Ongoing recovery with different capability"
+                code=4000, reason="Ongoing recovery with different capability"
             )
 
         else:
@@ -363,7 +360,9 @@ class RecoverFactory(WebSocketServerFactory):
             # generated a response to the request.
             downloader = self.get_downloader(cap)
             await store.call_if_empty(
-                partial(self.recoverer.recover, downloader)  # cursor added by call_if_empty
+                partial(
+                    self.recoverer.recover, downloader
+                )  # cursor added by call_if_empty
             )
         except NotEmpty:
             # If the database had anything in it, though, recovery will not be
