@@ -310,6 +310,10 @@ class RecoverFactory(WebSocketServerFactory):
             self.recovering_cap = cap
             self.recovering_d = Deferred.fromCoroutine(self._recover(self.store, cap))
 
+            def disconnect_clients():
+                for client in self.clients:
+                    client.sendClose()
+
             def err(f):
                 print(f"Error doing recovery: {f}")
                 # XXX feels like the below belongs in recoverer
@@ -323,10 +327,12 @@ class RecoverFactory(WebSocketServerFactory):
                         f.getErrorMessage(),
                     )
                 )
-                for client in self.clients:
-                    client.sendClose()
+                disconnect_clients()
 
-            self.recovering_d.addErrback(err)
+            def happy(_):
+                disconnect_clients()
+
+            self.recovering_d.addCallbacks(happy, err)
 
         elif self.recovering_cap != cap:
             self.sendClose(
