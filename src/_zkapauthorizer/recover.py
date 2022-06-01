@@ -126,8 +126,6 @@ class StatefulRecoverer:
         try:
             (snapshot, event_streams) = await download(self._set_state)
         except Exception as e:
-            print(e)
-            print("calling set_state on", id(self), self._set_state)
             self._set_state(
                 RecoveryState(
                     stage=RecoveryStages.download_failed, failure_reason=str(e)
