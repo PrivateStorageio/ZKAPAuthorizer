@@ -24,7 +24,7 @@ In the future it should also allow users to read statistics about token usage.
 from collections.abc import Awaitable
 from functools import partial
 from json import dumps, loads
-from typing import Any, Callable
+from typing import Callable
 
 from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field

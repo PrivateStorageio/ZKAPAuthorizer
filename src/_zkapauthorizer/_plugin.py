@@ -39,7 +39,6 @@ from twisted.application.service import IService, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
-from twisted.python.failure import Failure
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
