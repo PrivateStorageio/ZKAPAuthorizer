@@ -24,7 +24,7 @@ In the future it should also allow users to read statistics about token usage.
 from collections.abc import Awaitable
 from functools import partial
 from json import loads
-from typing import Callable
+from typing import Callable, Any
 
 from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
@@ -37,6 +37,13 @@ from twisted.web.http import (
     CREATED,
     INTERNAL_SERVER_ERROR,
 )
+from autobahn.twisted.resource import (
+    WebSocketResource,
+)
+from autobahn.twisted.websocket import (
+    WebSocketServerFactory,
+    WebSocketServerProtocol,
+)
 from twisted.web.iweb import IRequest
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
@@ -46,6 +53,7 @@ from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
+from ._types import CapStr
 from .controller import PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
 from .model import NotEmpty, VoucherStore
@@ -214,6 +222,186 @@ class ReplicateResource(Resource):
         request.finish()
 
 
+class RecoverProtocol(WebSocketServerProtocol):
+    """
+    Speaks the server side of the WebSocket /recover protocol.
+
+    A client connects to this to start recovery, sending an opening
+    message with the rquired capability.
+
+    As recovery is ongoing, the server sends status updates as they
+    become available.
+
+    When the recovery is finished, and final message is sent
+    (indicating overall success or failure) and the WebSocket is
+    closed.
+
+    TODO:
+    - if the client disconnects (prematurely) should that mean "cancel"? (does that even make sense?)
+    - if another client comes along, what do we do?
+      - reject
+      - receive status updates for the already-ongoing recovery (but
+        if they send a different capability than we're using: reject)
+      - essentially: idempotency?
+    """
+
+    _log = Logger()
+
+    # don't really need on-open, because the client should send us a
+    # message right away
+    def onOpen(self):
+        """
+        WebSocket API: successful handshake
+        """
+        # note, new clients added via initiate_recovery()
+
+    def onClose(self, wasClean, code, reason):
+        """
+        WebSocket API: we've lost our connection for some reason
+        """
+        try:
+            self.factory.clients.remove(self)
+        except ValueError:
+            pass  # may not have initiated recovery
+
+    def onMessage(self, payload, isBinary):
+        """
+        WebSocket API: a message has been received from the client.
+        """
+        try:
+            body = loads(payload)
+            recovery_capability = body["recovery-capability"]
+        except Exception:
+            request.setResponseCode(BAD_REQUEST)
+            self.sendClose(
+                code=4000,
+                reason="Failed to parse recovery request",
+            )
+        # we have a valid request, tell our factory to start recovery
+        self.factory.initiate_recovery(recovery_capability, self)
+
+
+@define
+class RecoverFactory(WebSocketServerFactory):
+    """
+    """
+    store: VoucherStore = field()
+    get_downloader: Callable[[str], Downloader] = field()
+    recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
+    recovering_d: Deferred = field(default=None)
+    recovering_cap: CapStr = field(default=None)
+    clients: list = field(default=Factory(list))
+    sent_updates: list = field(default=Factory(list))
+
+    def __attrs_post_init__(self):
+        self.protocol = RecoverProtocol
+        WebSocketServerFactory.__init__(self, server="ZKAPAuthorizer")
+
+        print("XXXX", id(self.recoverer))
+        # XXX wtf, why is _set_state read-only
+        @changes_on(self.recoverer, "_set_state")
+        def state_change(state, *args, **kw):
+            print("state change", state, len(self.clients))
+            update_msg = json.dumps({
+                "state": state.name,
+            })
+            print(update_msg)
+            self.sent_updates.append(update_msg)
+            for client in self.clients:
+                client.sendMessage(update_msg.encode("utf8"), False)
+
+    def initiate_recovery(self, cap: CapStr, client):
+        """
+        Begin the recovery proces and notify this client
+        """
+        self.clients.append(client)
+        print("initiate recovery", cap)
+        if self.recovering_d is None:
+            self.recovering_cap = cap
+            self.recovering_d = Deferred.fromCoroutine(self._recover(self.store, cap))
+            print("DING", self.recovering_d)
+        elif self.recovering_cap != cap:
+            self.sendClose(
+                code=4000,
+                reason="Ongoing recovery with different capability"
+            )
+
+        def err(f):
+            print("bad", f)
+            for client in self.clients:
+                client.sendClose()
+        self.recovering_d.addErrback(err)
+        print("DONG")
+
+        # we got another client, and they sent the same recovery
+        # capability, so be idempotent by acting the same as if this
+        # was the first client. That means sending this client all the
+        # status updates we have.
+        for update in self.sent_updates:
+            print("UPUP", update)
+            client.sendMessage(update)
+
+    def buildProtocol(self, addr):
+        """
+        IFactory API
+        """
+        protocol = self.protocol()
+        protocol.factory = self
+        return protocol
+
+    async def _recover(
+        self,
+        store: VoucherStore,
+        cap: ReadonlyDirectoryURI,
+    ):
+        print("RECOVER")
+        try:
+            # If these things succeed then we will have started recovery and
+            # generated a response to the request.
+            downloader = self.get_downloader(cap)
+            print(downloader)
+            print(id(self.recoverer))
+            print(self.recoverer._set_state)
+            await store.call_if_empty(
+                partial(self.recoverer.recover, downloader)  # cursor added by call_if_empty
+            )
+        except NotEmpty:
+            # If the database had anything in it, though, recovery will not be
+            # attempted - and it will even fail quickly enough to be a
+            # reasonable way to detect and report the conflict case.
+            raise ValueError("there is existing local state")
+        except Exception as e:
+            print("BADBAD", e)
+        # let other exceptions out
+
+
+# XXX what does this return? Callable certainly, but how to declare "with any args, kwargs"?
+def changes_on(object: Any, method_name: str):
+    """
+    Return a decorator that invokes the decorated function whenever
+    ``object.<method_name>`` is invoked with different arguments than
+    the last time it was invoked. On the first call, the decorated
+    function will always be invoked.
+    """
+    method = getattr(object, method_name)
+    last_invoke = None
+
+    def decorate(callback):
+        print(f"subscribing {callback} to {method}")
+        def wrapper(*args, **kw):
+            print("INV", args, kw)
+            nonlocal last_invoke
+            rtn = method(*args, **kw)
+            if last_invoke != (args, kw):
+                last_invoke = (args, kw)
+                print("do callback", callback)
+                callback(*args, **kw)
+            return rtn
+        setattr(object, method_name, wrapper)
+        return wrapper
+    return decorate
+
+
 @define
 class RecoverResource(Resource):
     """
@@ -345,7 +533,7 @@ def authorizationless_resource_tree(
 
     root.putChild(
         b"recover",
-        RecoverResource(store, get_downloader),
+        WebSocketResource(RecoverFactory(store, get_downloader)),
     )
     root.putChild(
         b"replicate",

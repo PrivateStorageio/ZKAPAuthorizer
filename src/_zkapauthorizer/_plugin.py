@@ -40,6 +40,7 @@ from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from twisted.python.failure import Failure
 from zope.interface import implementer
 
 from . import NAME
@@ -316,14 +317,19 @@ class ZKAPAuthorizer(object):
             mutable = self._add_replication_service(store._connection, node_config)
             return attenuate_writecap(mutable)
 
-        return resource_from_configuration(
-            node_config,
-            store=store,
-            get_downloader=get_tahoe_lafs_downloader(tahoe),
-            setup_replication=setup_replication,
-            redeemer=self._get_redeemer(node_config, None),
-            clock=self.reactor,
-        )
+        try:
+            return resource_from_configuration(
+                node_config,
+                store=store,
+                get_downloader=get_tahoe_lafs_downloader(tahoe),
+                setup_replication=setup_replication,
+                redeemer=self._get_redeemer(node_config, None),
+                clock=self.reactor,
+            )
+        except Exception as e:
+            print("BADBAD", e)
+            
+            raise
 
 
 def make_safe_writer(

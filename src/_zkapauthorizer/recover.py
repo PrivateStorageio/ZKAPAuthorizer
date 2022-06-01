@@ -19,7 +19,7 @@ from io import BytesIO
 from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
-from attrs import define
+from attrs import define, field
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
@@ -104,6 +104,7 @@ class StatefulRecoverer:
     """
 
     _state: RecoveryState = RecoveryState(stage=RecoveryStages.inactive)
+    _listeners: set = field(factory=set)
 
     async def recover(
         self,
@@ -125,6 +126,8 @@ class StatefulRecoverer:
         try:
             (snapshot, event_streams) = await download(self._set_state)
         except Exception as e:
+            print(e)
+            print("calling set_state on", id(self), self._set_state)
             self._set_state(
                 RecoveryState(
                     stage=RecoveryStages.download_failed, failure_reason=str(e)
@@ -142,11 +145,20 @@ class StatefulRecoverer:
 
         self._set_state(RecoveryState(stage=RecoveryStages.succeeded))
 
+    def on_state_change(self, callback: Callable[[RecoveryState], None]) -> None:
+        """
+        Add a listener which will be invoked whenever our state changes
+        """
+        self._listeners.add(callback)
+
     def _set_state(self, state: RecoveryState) -> None:
         """
         Change the recovery state.
         """
+        print("SETSTATE", state)
         self._state = state
+        for listener in self._listeners:
+            listener(state)
 
     def state(self) -> RecoveryState:
         """
