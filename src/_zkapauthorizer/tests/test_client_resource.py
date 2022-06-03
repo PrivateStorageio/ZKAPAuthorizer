@@ -894,59 +894,94 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_get_status(self, get_config, api_auth_token):
+    def test_status(self, get_config, api_auth_token):
         """
-        The endpoint responds to a **GET** request with OK and a body containing
-        status information about the recovery.
+        A first websocket that initiates a recovery sees the same messages
+        as a second client (that uses the same dircap)
+
+
+        If a second websocket client connects with the same capability
+        then we give that one all the same update messages as the
+        first.
         """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        reason = "some interesting information"
-        fail_downloader = make_fail_downloader(Exception(reason))
-        get_fail_downloader = lambda cap: fail_downloader
-        root = root_from_config(config, aware_now, get_fail_downloader)
-        agent = RequestTraversalAgent(root)
+        downloads = []
+        downloading_d = Deferred()
 
-        # Kick off the recovery attempt.
-        self.assertThat(
-            authorized_request(
-                api_auth_token,
-                agent,
-                b"POST",
-                b"http://127.0.0.1/recover",
-                headers=self.GOOD_REQUEST_HEADER,
-                data=BytesIO(self.GOOD_REQUEST_BODY),
-            ),
-            succeeded(Always()),
-        )
-
-        # Now inspect the recoverer's reported state.
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"GET",
-            b"http://127.0.0.1/recover",
-        )
-        self.assertThat(
-            requesting,
-            succeeded(
-                matches_response(
-                    code_matcher=Equals(OK),
-                    headers_matcher=application_json(),
-                    body_matcher=matches_json(
-                        Equals(
-                            {
-                                "stage": "download_failed",
-                                "failure-reason": reason,
-                            }
-                        ),
-                    ),
+        def get_success_downloader(cap):
+            async def do_download(set_state):
+                nonlocal downloads
+                await downloading_d
+                downloads.append(set_state)
+                return (
+                    # this data is CBOR for []
+                    lambda: BytesIO(b'\xa2gversion\x01jstatements\x80'),
+                    [],  # event-streams
                 )
-            ),
-        )
+            return do_download
+
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        recoverer = StatefulRecoverer()
+        factory = RecoverFactory(store, get_success_downloader, recoverer)
+        pumper = create_pumper()
+
+        def create_proto():
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        async def recover():
+            proto = await agent.open(
+                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
+                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
+            )
+            updates = []
+            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
+            await proto.is_open
+            proto.sendMessage(
+                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
+            )
+            await proto.is_closed
+            return updates
+
+        # do two recoveries; they should both get the same status messages
+        d0 = Deferred.fromCoroutine(recover())
+        d1 = Deferred.fromCoroutine(recover())
+        pumper._flush()
+
+        # now let the download succeed
+        downloading_d.callback(None)
+        pumper._flush()
+
+        expected_messages = [
+            {
+                "stage": "started",
+                "failure-reason": None,
+            },
+            # "our" downloader (above) doesn't set any downloading etc
+            # state-updates
+            {
+                "stage": "succeeded",
+                "failure-reason": None,
+            },
+        ]
+
+        # both clients should see the same sequence of update events
+        for recover_d in [d0, d1]:
+            self.assertThat(
+                recover_d,
+                succeeded(
+                    AfterPreprocessing(
+                        lambda messages: list(
+                            loads(args[0]) for (args, kwargs) in messages
+                        ),
+                        Equals(expected_messages),
+                    )
+                ),
+            )
 
 
 def maybe_extra_tokens():
