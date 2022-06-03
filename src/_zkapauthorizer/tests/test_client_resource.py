@@ -738,8 +738,8 @@ class RecoverTests(TestCase):
     )
     def test_conflict(self, get_config, api_auth_token, existing_state):
         """
-        If there is state in the local database the endpoint returns a 409
-        response.
+        If there is state in the local database the websocket streams an
+        error and disconnects.
         """
 
         def create(store, state):
@@ -752,26 +752,58 @@ class RecoverTests(TestCase):
             # double spent voucher
             # invalid unblinded tokens
 
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, aware_now)
-        create(root.store, existing_state)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=self.GOOD_REQUEST_HEADER,
-            data=BytesIO(self.GOOD_REQUEST_BODY),
-        )
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        # put some existing state in the store
+        create(store, existing_state)
+        recoverer = StatefulRecoverer()
+        pumper = create_pumper()
+
+        def create_proto():
+            factory = RecoverFactory(store, get_fail_downloader, recoverer)
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        async def recover():
+            proto = await agent.open(
+                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
+                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
+            )
+            updates = []
+            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
+            await proto.is_open
+            proto.sendMessage(
+                json.dumps({"recovery-capability": "whatever"}).encode("utf8")
+            )
+            pumper._flush()
+            await proto.is_closed
+            return updates
 
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(409))),
+            Deferred.fromCoroutine(recover()),
+            succeeded(
+                AfterPreprocessing(
+                    lambda messages: list(
+                        loads(args[0]) for (args, kwargs) in messages
+                    ),
+                    Equals(
+                        [
+                            {
+                                "stage": "import_failed",
+                                "failure-reason": "there is existing local state",
+                            }
+                        ]
+                    ),
+                )
+            ),
+        )
+        self.assertThat(
+            flushErrors(ValueError),
+            HasLength(1),
         )
 
     def test_bad_content_type(self):
