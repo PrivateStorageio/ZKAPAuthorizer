@@ -110,12 +110,7 @@ from ..replicate import (
     fail_setup_replication,
     with_replication,
 )
-from ..resource import (
-    NUM_TOKENS,
-    RecoverFactory,
-    from_configuration,
-    get_token_count,
-)
+from ..resource import NUM_TOKENS, RecoverFactory, from_configuration, get_token_count
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
