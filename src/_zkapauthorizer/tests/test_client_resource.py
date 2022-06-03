@@ -62,8 +62,8 @@ from testtools.matchers import (
     Is,
     IsInstance,
     MatchesAll,
-    MatchesListwise,
     MatchesAny,
+    MatchesListwise,
     MatchesStructure,
     Not,
 )
@@ -111,7 +111,13 @@ from ..replicate import (
     fail_setup_replication,
     with_replication,
 )
-from ..resource import NUM_TOKENS, RecoverFactory, from_configuration, get_token_count, RecoverProtocol
+from ..resource import (
+    NUM_TOKENS,
+    RecoverFactory,
+    RecoverProtocol,
+    from_configuration,
+    get_token_count,
+)
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -858,8 +864,10 @@ class RecoverTests(TestCase):
         Generic test of the server protocol's error-handling for incoming
         WebSocket messages.
         """
+
         class DummyFactory:
             recovery_attempts = []
+
             def initiate_recovery(self, cap, proto):
                 self.recovery_attempts.append(cap)
 
@@ -878,15 +886,19 @@ class RecoverTests(TestCase):
         # all errors should result in a close message
         self.assertThat(
             closes,
-            MatchesListwise([
-                AfterPreprocessing(
-                    lambda args_kwargs: args_kwargs[1],
-                    Equals({
-                        "code": 4000,
-                        "reason": "Failed to parse recovery request",
-                    })
-                ),
-            ])
+            MatchesListwise(
+                [
+                    AfterPreprocessing(
+                        lambda args_kwargs: args_kwargs[1],
+                        Equals(
+                            {
+                                "code": 4000,
+                                "reason": "Failed to parse recovery request",
+                            }
+                        ),
+                    ),
+                ]
+            ),
         )
         return messages
 
@@ -914,9 +926,10 @@ class RecoverTests(TestCase):
                 downloads.append(set_state)
                 return (
                     # this data is CBOR for []
-                    lambda: BytesIO(b'\xa2gversion\x01jstatements\x80'),
+                    lambda: BytesIO(b"\xa2gversion\x01jstatements\x80"),
                     [],  # event-streams
                 )
+
             return do_download
 
         clock = MemoryReactorClockResolver()
