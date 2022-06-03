@@ -248,7 +248,6 @@ class RecoverProtocol(WebSocketServerProtocol):
         WebSocket API: a message has been received from the client (the
         only thing they can send is a request to initiate recovery).
         """
-        print(f"onMessage: {payload}")
         try:
             body = loads(payload)
             recovery_capability = body["recovery-capability"]

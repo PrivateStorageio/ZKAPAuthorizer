@@ -676,18 +676,12 @@ class RecoverTests(TestCase):
     )
     def test_internal_server_error(self, get_config, api_auth_token):
         """
-        If recovery fails for some unrecognized reason the endpoint returns a 500
-        response.
+        If recovery fails for some unrecognized reason we receive an error
+        update over the WebSocket.
         """
 
         class DownloaderBroken(Exception):
             pass
-
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
 
         def broken_get_downloader(cap):
             raise DownloaderBroken("Downloader is broken")
@@ -708,7 +702,7 @@ class RecoverTests(TestCase):
 
         async def recover():
             proto = await agent.open(
-                "ws://127.0.0.1:8888/storage-plugins/privatestorageio-zkapauthz-v2/recover",
+                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
                 {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
             )
             updates = []
