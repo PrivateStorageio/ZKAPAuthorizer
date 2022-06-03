@@ -17,15 +17,21 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
+import json
 from base64 import b32encode
 from io import BytesIO
 from typing import Container
 from urllib.parse import quote
-import json
 
 import attr
 from allmydata.client import config_from_string
 from aniso8601 import parse_datetime
+from autobahn.twisted.testing import (
+    MemoryReactorClockResolver,
+    create_memory_agent,
+    create_pumper,
+)
+from autobahn.twisted.websocket import create_client_agent
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
@@ -63,8 +69,9 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
-from twisted.internet.task import Clock, Cooperator
 from twisted.internet.address import IPv4Address
+from twisted.internet.defer import Deferred
+from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
 from twisted.web.http import (
@@ -78,11 +85,6 @@ from twisted.web.http import (
     UNAUTHORIZED,
 )
 from twisted.web.http_headers import Headers
-from twisted.internet.defer import Deferred
-from autobahn.twisted.websocket import (
-    create_client_agent,
-)
-from autobahn.twisted.testing import create_pumper, create_memory_agent, MemoryReactorClockResolver
 
 from .. import NAME
 from .. import __file__ as package_init_file
@@ -103,13 +105,19 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import make_fail_downloader, noop_downloader, StatefulRecoverer
+from ..recover import StatefulRecoverer, make_fail_downloader, noop_downloader
 from ..replicate import (
     ReplicationAlreadySetup,
     fail_setup_replication,
     with_replication,
 )
-from ..resource import NUM_TOKENS, from_configuration, get_token_count, RecoverFactory, RecoverProtocol
+from ..resource import (
+    NUM_TOKENS,
+    RecoverFactory,
+    RecoverProtocol,
+    from_configuration,
+    get_token_count,
+)
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -706,7 +714,9 @@ class RecoverTests(TestCase):
             updates = []
             proto.on("message", lambda *args, **kw: updates.append((args, kw)))
             await proto.is_open
-            proto.sendMessage(json.dumps({"recovery-capability": "whatever"}).encode("utf8"))
+            proto.sendMessage(
+                json.dumps({"recovery-capability": "whatever"}).encode("utf8")
+            )
             pumper._flush()
             await proto.is_closed
             return updates
@@ -715,10 +725,19 @@ class RecoverTests(TestCase):
             Deferred.fromCoroutine(recover()),
             succeeded(
                 AfterPreprocessing(
-                    lambda messages: list(loads(args[0]) for (args, kwargs) in messages),
-                    Equals([{"stage": "import_failed", "failure-reason": "Downloader is broken"}]),
+                    lambda messages: list(
+                        loads(args[0]) for (args, kwargs) in messages
+                    ),
+                    Equals(
+                        [
+                            {
+                                "stage": "import_failed",
+                                "failure-reason": "Downloader is broken",
+                            }
+                        ]
+                    ),
                 )
-            )
+            ),
         )
         self.assertThat(
             flushErrors(DownloaderBroken),
