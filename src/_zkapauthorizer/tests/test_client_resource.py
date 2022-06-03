@@ -31,7 +31,6 @@ from autobahn.twisted.testing import (
     create_memory_agent,
     create_pumper,
 )
-from autobahn.twisted.websocket import create_client_agent
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
@@ -114,7 +113,6 @@ from ..replicate import (
 from ..resource import (
     NUM_TOKENS,
     RecoverFactory,
-    RecoverProtocol,
     from_configuration,
     get_token_count,
 )
