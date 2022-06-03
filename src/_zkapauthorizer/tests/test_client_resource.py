@@ -703,7 +703,7 @@ class RecoverTests(TestCase):
             proto.on("message", lambda *args, **kw: updates.append((args, kw)))
             await proto.is_open
             proto.sendMessage(
-                json.dumps({"recovery-capability": "whatever"}).encode("utf8")
+                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
             )
             pumper._flush()
             await proto.is_closed
@@ -778,7 +778,7 @@ class RecoverTests(TestCase):
             proto.on("message", lambda *args, **kw: updates.append((args, kw)))
             await proto.is_open
             proto.sendMessage(
-                json.dumps({"recovery-capability": "whatever"}).encode("utf8")
+                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
             )
             pumper._flush()
             await proto.is_closed
