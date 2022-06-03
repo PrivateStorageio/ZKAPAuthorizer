@@ -277,6 +277,7 @@ class RecoverFactory(WebSocketServerFactory):
     # manage WebSocket client(s)
     clients: list = field(default=Factory(list))
     sent_updates: list = field(default=Factory(list))
+    _log = Logger()
 
     def __attrs_post_init__(self):
         self.protocol = RecoverProtocol
@@ -315,12 +316,11 @@ class RecoverFactory(WebSocketServerFactory):
                     client.sendClose()
 
             def err(f):
-                print(f"Error doing recovery: {f}")
-                # XXX feels like the below belongs in recoverer
-                # itself, but it doesn't get that far (because of
-                # "call_when_empty"). That is, one likely reason to
-                # get here is the ValueError we raise about existing
-                # local state.
+                self._log.failure("Error during restore", f)
+                # One likely reason to get here is the ValueError we
+                # raise about existing local state .. and the
+                # "recoverer" itself can't really handle this (or
+                # other) errors happening before it is called.
                 self.recoverer._set_state(
                     RecoveryState(
                         RecoveryStages.import_failed,

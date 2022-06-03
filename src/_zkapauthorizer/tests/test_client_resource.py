@@ -21,6 +21,7 @@ from base64 import b32encode
 from io import BytesIO
 from typing import Container
 from urllib.parse import quote
+import json
 
 import attr
 from allmydata.client import config_from_string
@@ -63,6 +64,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
 from twisted.internet.task import Clock, Cooperator
+from twisted.internet.address import IPv4Address
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
 from twisted.web.http import (
@@ -76,6 +78,11 @@ from twisted.web.http import (
     UNAUTHORIZED,
 )
 from twisted.web.http_headers import Headers
+from twisted.internet.defer import Deferred
+from autobahn.twisted.websocket import (
+    create_client_agent,
+)
+from autobahn.twisted.testing import create_pumper, create_memory_agent, MemoryReactorClockResolver
 
 from .. import NAME
 from .. import __file__ as package_init_file
@@ -96,19 +103,20 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import make_fail_downloader, noop_downloader
+from ..recover import make_fail_downloader, noop_downloader, StatefulRecoverer
 from ..replicate import (
     ReplicationAlreadySetup,
     fail_setup_replication,
     with_replication,
 )
-from ..resource import NUM_TOKENS, from_configuration, get_token_count
+from ..resource import NUM_TOKENS, from_configuration, get_token_count, RecoverFactory, RecoverProtocol
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
     required_passes,
 )
 from .common import flushErrors
+from .fixtures import TemporaryVoucherStore
 from .json import loads
 from .matchers import between, matches_json, matches_response
 from .strategies import (
@@ -651,7 +659,6 @@ class RecoverTests(TestCase):
     readkey = b32encode(b"x" * 16).decode("ascii").strip("=").lower()
     fingerprint = b32encode(b"y" * 32).decode("ascii").strip("=").lower()
 
-    GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
     GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
     GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
 
@@ -675,24 +682,44 @@ class RecoverTests(TestCase):
         )
 
         def broken_get_downloader(cap):
-            raise DownloaderBroken()
+            raise DownloaderBroken("Downloader is broken")
 
-        root = root_from_config(config, aware_now, broken_get_downloader)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=self.GOOD_REQUEST_HEADER,
-            data=BytesIO(self.GOOD_REQUEST_BODY),
-        )
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        recoverer = StatefulRecoverer()
+        pumper = create_pumper()
+
+        def create_proto():
+            factory = RecoverFactory(store, broken_get_downloader, recoverer)
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        async def recover():
+            proto = await agent.open(
+                "ws://127.0.0.1:8888/storage-plugins/privatestorageio-zkapauthz-v2/recover",
+                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
+            )
+            updates = []
+            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
+            await proto.is_open
+            proto.sendMessage(json.dumps({"recovery-capability": "whatever"}).encode("utf8"))
+            pumper._flush()
+            await proto.is_closed
+            return updates
 
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(500))),
+            Deferred.fromCoroutine(recover()),
+            succeeded(
+                AfterPreprocessing(
+                    lambda messages: list(loads(args[0]) for (args, kwargs) in messages),
+                    Equals([{"stage": "import_failed", "failure-reason": "Downloader is broken"}]),
+                )
+            )
         )
-
         self.assertThat(
             flushErrors(DownloaderBroken),
             HasLength(1),
