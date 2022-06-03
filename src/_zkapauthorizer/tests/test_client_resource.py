@@ -814,21 +814,16 @@ class RecoverTests(TestCase):
         """
         self._request_error_test(
             b"some bytes that are not json",
-            get_fail_downloader,
-            400,
         )
 
     def test_wrong_properties(self):
         """
         If the JSON object represented by the request body doesn't match the
-        expected structure then the endpoint returns a 400 response.
+        expected structure then the websocket errors
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             # This is almost right but has an extra property.
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
-            get_fail_downloader,
-            400,
         )
 
     def test_recovery_capability_not_a_string(self):
@@ -836,11 +831,8 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a string then the
         endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": []}),
-            get_fail_downloader,
-            400,
         )
 
     def test_not_a_capability(self):
@@ -848,11 +840,8 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a capability string
         then the endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": "hello world"}),
-            get_fail_downloader,
-            400,
         )
 
     def test_not_a_readonly_dircap(self):
@@ -860,11 +849,8 @@ class RecoverTests(TestCase):
         If the ``recovery-capability`` property value is not a read-only directory
         capability string then the endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
-            get_fail_downloader,
-            400,
         )
 
     def _request_error_test(self, message):

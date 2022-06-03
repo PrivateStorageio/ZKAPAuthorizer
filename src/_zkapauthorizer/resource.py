@@ -250,7 +250,11 @@ class RecoverProtocol(WebSocketServerProtocol):
         """
         try:
             body = loads(payload)
-            recovery_capability = body["recovery-capability"]
+            if set(body.keys()) != {"recovery-capability"}:
+                raise ValueError("Unknown keys present in request")
+            recovery_capability = from_string(body["recovery-capability"])
+            if not isinstance(recovery_capability, ReadonlyDirectoryURI):
+                raise ValueError("Not a readonly-dircap")
         except Exception:
             self.sendClose(
                 code=4000,
@@ -295,7 +299,7 @@ class RecoverFactory(WebSocketServerFactory):
 
         self.recoverer.on_state_change(state_change)
 
-    def initiate_recovery(self, cap: CapStr, client):
+    def initiate_recovery(self, cap: ReadonlyDirectoryURI, client):
         """
         A new WebSocket client has asked for recovery.
 
