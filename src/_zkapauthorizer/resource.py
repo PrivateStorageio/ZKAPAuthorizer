@@ -256,6 +256,7 @@ class RecoverProtocol(WebSocketServerProtocol):
                 code=4000,
                 reason="Failed to parse recovery request",
             )
+            return
         # we have a valid request, tell our factory to start recovery
         self.factory.initiate_recovery(recovery_capability, self)
 

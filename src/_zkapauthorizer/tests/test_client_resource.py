@@ -62,6 +62,7 @@ from testtools.matchers import (
     Is,
     IsInstance,
     MatchesAll,
+    MatchesListwise,
     MatchesAny,
     MatchesStructure,
     Not,
@@ -110,7 +111,7 @@ from ..replicate import (
     fail_setup_replication,
     with_replication,
 )
-from ..resource import NUM_TOKENS, RecoverFactory, from_configuration, get_token_count
+from ..resource import NUM_TOKENS, RecoverFactory, from_configuration, get_token_count, RecoverProtocol
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -806,26 +807,12 @@ class RecoverTests(TestCase):
             HasLength(1),
         )
 
-    def test_bad_content_type(self):
-        """
-        If the request Content-Type is not ``application/json`` then the endpoint
-        returns a 400 response.
-        """
-
-        self._request_test(
-            {b"content-type": [b"application/cbor"]},
-            self.GOOD_REQUEST_BODY,
-            get_fail_downloader,
-            400,
-        )
-
     def test_undecodeable_body(self):
         """
-        If the request body cannot be decoded as JSON then the endpoint returns a
-        400 response.
+        If the first message request cannot be decoded as JSON then the
+        websocket produces an error.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             b"some bytes that are not json",
             get_fail_downloader,
             400,
@@ -880,51 +867,42 @@ class RecoverTests(TestCase):
             400,
         )
 
-    def test_accepted(self):
+    def _request_error_test(self, message):
         """
-        If the ``recovery-capability`` property value is a string then the
-        endpoint returns a 202 response.
+        Generic test of the server protocol's error-handling for incoming
+        WebSocket messages.
         """
-        expected_status = 202
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
-            self.GOOD_REQUEST_BODY,
-            get_noop_downloader,
-            expected_status,
-        )
+        class DummyFactory:
+            recovery_attempts = []
+            def initiate_recovery(self, cap, proto):
+                self.recovery_attempts.append(cap)
 
-    @given(
-        get_config=tahoe_configs(),
-        api_auth_token=api_auth_tokens(),
-    )
-    def _request_test(
-        self,
-        get_config,
-        api_auth_token,
-        headers,
-        body,
-        make_downloader,
-        expected_status,
-    ):
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, aware_now, make_downloader)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=headers,
-            data=BytesIO(body),
-        )
+        proto = RecoverProtocol()
+        proto.factory = DummyFactory()
+
+        # hook into the protocol's error-handling methods
+        messages = []
+        closes = []
+        proto.sendClose = lambda *args, **kw: closes.append((args, kw))
+        proto.sendMessage = lambda *args, **kw: messages.append((args, kw))
+
+        # run test by sending the initial message
+        proto.onMessage(message, False)
+
+        # all errors should result in a close message
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(expected_status))),
+            closes,
+            MatchesListwise([
+                AfterPreprocessing(
+                    lambda args_kwargs: args_kwargs[1],
+                    Equals({
+                        "code": 4000,
+                        "reason": "Failed to parse recovery request",
+                    })
+                ),
+            ])
         )
+        return messages
 
     @given(
         tahoe_configs(),
