@@ -867,14 +867,7 @@ class RecoverTests(TestCase):
         WebSocket messages.
         """
 
-        class DummyFactory:
-            recovery_attempts = []
-
-            def initiate_recovery(self, cap, proto):
-                self.recovery_attempts.append(cap)
-
         proto = RecoverProtocol()
-        proto.factory = DummyFactory()
 
         # hook into the protocol's error-handling methods
         messages = []
