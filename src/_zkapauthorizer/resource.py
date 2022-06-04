@@ -32,12 +32,7 @@ from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
-from twisted.web.http import (
-    BAD_REQUEST,
-    CONFLICT,
-    CREATED,
-    INTERNAL_SERVER_ERROR,
-)
+from twisted.web.http import BAD_REQUEST, CONFLICT, CREATED, INTERNAL_SERVER_ERROR
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
