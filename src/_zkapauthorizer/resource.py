@@ -368,7 +368,7 @@ class RecoverFactory(WebSocketServerFactory):
         try:
             # If these things succeed then we will have started recovery and
             # generated a response to the request.
-            downloader = self.get_downloader(cap)
+            downloader = self.get_downloader(cap.to_string().decode("ascii"))
             await store.call_if_empty(
                 partial(
                     self.recoverer.recover, downloader

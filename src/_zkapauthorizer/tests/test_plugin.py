@@ -23,6 +23,13 @@ from json import dumps
 from os import mkdir
 from sqlite3 import connect
 
+import json
+from twisted.internet.address import IPv4Address
+from autobahn.twisted.testing import (
+    MemoryReactorClockResolver,
+    create_memory_agent,
+    create_pumper,
+)
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
@@ -840,43 +847,54 @@ class ClientResourceTests(TestCase):
         )
 
         root = self.plugin.get_client_resource(config)
-        agent = RequestTraversalAgent(root)
-        self.assertThat(
-            authorized_request(
-                token.encode("ascii"),
-                agent,
-                b"POST",
-                b"http://127.0.0.1/recover",
-                headers={b"content-type": [b"application/json"]},
-                data=BytesIO(
-                    dumps(
-                        {"recovery-capability": attenuate_writecap(replica_dircap)}
-                    ).encode("utf-8")
-                ),
-            ),
-            succeeded(
-                matches_response(
-                    code_matcher=Equals(202),
-                    body_matcher=Equals(b""),
-                )
-            ),
-        )
+
+        # normally, we'd use Treq's machinery to do in-memory
+        # requests, but this is a WebSocket, so we want to use
+        # Autobahn's testing machinery. Maybe there's a clever way to
+        # hook those together, but for now we reach in "directly" to
+        # grab the WebSocketResource and set up Autobahn's test agent
+        # that way (requiring the factory from the real resource)...
+        wsr = root._portal.realm._root.children[b'recover']
+        clock = MemoryReactorClockResolver()
+        pumper = create_pumper()
+
+        def create_proto():
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            # use the _actual_ WebSocketResource's factory
+            proto = wsr._factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        async def recover():
+            proto = await agent.open(
+                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
+                {"headers": {"Authorization": f"tahoe-lafs {token}"}},
+            )
+            updates = []
+            proto.on("message", lambda *args, **kw: updates.append(args[0]))
+            await proto.is_open
+            proto.sendMessage(
+                json.dumps({"recovery-capability": attenuate_writecap(replica_dircap)}).encode("utf8")
+            )
+            pumper._flush()
+            await proto.is_closed
+            return updates
 
         self.assertThat(
-            authorized_request(
-                token.encode("ascii"),
-                agent,
-                b"GET",
-                b"http://127.0.0.1/recover",
-            ),
+            Deferred.fromCoroutine(recover()),
             succeeded(
-                matches_response(
-                    code_matcher=Equals(200),
-                    body_matcher=matches_json(
-                        Equals({"stage": "succeeded", "failure-reason": None}),
-                    ),
+                AfterPreprocessing(
+                    lambda messages: [json.loads(msg) for msg in messages],
+                    Equals([
+                        {"stage": "started", "failure-reason": None},
+                        {"stage": "inspect_replica", "failure-reason": None},
+                        {"stage": "downloading", "failure-reason": None},
+                        {"stage": "succeeded", "failure-reason": None},
+                    ])
                 )
-            ),
+            )
         )
 
 
