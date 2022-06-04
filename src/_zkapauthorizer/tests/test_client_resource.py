@@ -904,12 +904,7 @@ class RecoverTests(TestCase):
     def test_status(self, get_config, api_auth_token):
         """
         A first websocket that initiates a recovery sees the same messages
-        as a second client (that uses the same dircap)
-
-
-        If a second websocket client connects with the same capability
-        then we give that one all the same update messages as the
-        first.
+        as a second client (that uses the same dircap).
         """
         downloads = []
         downloading_d = Deferred()
