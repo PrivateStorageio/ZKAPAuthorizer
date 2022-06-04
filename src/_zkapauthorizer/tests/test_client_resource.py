@@ -690,6 +690,7 @@ class RecoverTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
         recoverer = StatefulRecoverer()
         pumper = create_pumper()
+        self.addCleanup(pumper.stop)
 
         def create_proto():
             factory = RecoverFactory(store, broken_get_downloader, recoverer)
@@ -765,6 +766,7 @@ class RecoverTests(TestCase):
         create(store, existing_state)
         recoverer = StatefulRecoverer()
         pumper = create_pumper()
+        self.addCleanup(pumper.stop)
 
         def create_proto():
             factory = RecoverFactory(store, get_fail_downloader, recoverer)
@@ -937,6 +939,7 @@ class RecoverTests(TestCase):
         recoverer = StatefulRecoverer()
         factory = RecoverFactory(store, get_success_downloader, recoverer)
         pumper = create_pumper()
+        self.addCleanup(pumper.stop)
 
         def create_proto():
             addr = IPv4Address("TCP", "127.0.0.1", "0")

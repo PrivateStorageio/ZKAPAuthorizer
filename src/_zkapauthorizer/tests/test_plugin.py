@@ -866,6 +866,7 @@ class ClientResourceTests(TestCase):
 
         agent = create_memory_agent(clock, pumper, create_proto)
         pumper.start()
+        self.addCleanup(pumper.stop)
 
         async def recover():
             proto = await agent.open(
