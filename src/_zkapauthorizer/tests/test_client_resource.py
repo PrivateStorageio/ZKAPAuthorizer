@@ -915,9 +915,9 @@ class RecoverTests(TestCase):
                 await downloading_d
                 downloads.append(set_state)
                 return (
-                    # this data is CBOR for []
+                    # this data is CBOR for {"version": 1, "statements": []}
                     lambda: BytesIO(b"\xa2gversion\x01jstatements\x80"),
-                    [],  # event-streams
+                    [],  # no event-streams
                 )
 
             return do_download
