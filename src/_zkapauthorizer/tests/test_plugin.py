@@ -16,6 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+import json
 from datetime import timedelta
 from functools import partial
 from io import BytesIO, StringIO
@@ -23,13 +24,6 @@ from json import dumps
 from os import mkdir
 from sqlite3 import connect
 
-import json
-from twisted.internet.address import IPv4Address
-from autobahn.twisted.testing import (
-    MemoryReactorClockResolver,
-    create_memory_agent,
-    create_pumper,
-)
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
@@ -37,6 +31,11 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
     IStorageServer,
     RIStorageServer,
+)
+from autobahn.twisted.testing import (
+    MemoryReactorClockResolver,
+    create_memory_agent,
+    create_pumper,
 )
 from challenge_bypass_ristretto import SigningKey
 from eliot.testing import LoggedMessage, capture_logging
@@ -71,6 +70,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import RequestTraversalAgent
+from twisted.internet.address import IPv4Address
 from twisted.internet.defer import Deferred
 from twisted.internet.testing import MemoryReactorClock
 from twisted.plugin import getPlugins
@@ -854,7 +854,7 @@ class ClientResourceTests(TestCase):
         # hook those together, but for now we reach in "directly" to
         # grab the WebSocketResource and set up Autobahn's test agent
         # that way (requiring the factory from the real resource)...
-        wsr = root._portal.realm._root.children[b'recover']
+        wsr = root._portal.realm._root.children[b"recover"]
         clock = MemoryReactorClockResolver()
         pumper = create_pumper()
 
@@ -877,7 +877,9 @@ class ClientResourceTests(TestCase):
             proto.on("message", lambda *args, **kw: updates.append(args[0]))
             await proto.is_open
             proto.sendMessage(
-                json.dumps({"recovery-capability": attenuate_writecap(replica_dircap)}).encode("utf8")
+                json.dumps(
+                    {"recovery-capability": attenuate_writecap(replica_dircap)}
+                ).encode("utf8")
             )
             pumper._flush()
             await proto.is_closed
@@ -888,14 +890,16 @@ class ClientResourceTests(TestCase):
             succeeded(
                 AfterPreprocessing(
                     lambda messages: [json.loads(msg) for msg in messages],
-                    Equals([
-                        {"stage": "started", "failure-reason": None},
-                        {"stage": "inspect_replica", "failure-reason": None},
-                        {"stage": "downloading", "failure-reason": None},
-                        {"stage": "succeeded", "failure-reason": None},
-                    ])
+                    Equals(
+                        [
+                            {"stage": "started", "failure-reason": None},
+                            {"stage": "inspect_replica", "failure-reason": None},
+                            {"stage": "downloading", "failure-reason": None},
+                            {"stage": "succeeded", "failure-reason": None},
+                        ]
+                    ),
                 )
-            )
+            ),
         )
 
 
