@@ -1030,18 +1030,20 @@ class RecoverTests(TestCase):
                     lambda messages: list(
                         loads(args[0]) for (args, kwargs) in messages
                     ),
-                    Equals([
-                        {
-                            "stage": "started",
-                            "failure-reason": None,
-                        },
-                        # "our" downloader (above) doesn't set any downloading etc
-                        # state-updates
-                        {
-                            "stage": "download_failed",
-                            "failure-reason": "downloader fails",
-                        },
-                    ]),
+                    Equals(
+                        [
+                            {
+                                "stage": "started",
+                                "failure-reason": None,
+                            },
+                            # "our" downloader (above) doesn't set any downloading etc
+                            # state-updates
+                            {
+                                "stage": "download_failed",
+                                "failure-reason": "downloader fails",
+                            },
+                        ]
+                    ),
                 )
             ),
         )
@@ -1053,18 +1055,20 @@ class RecoverTests(TestCase):
                     lambda messages: list(
                         loads(args[0]) for (args, kwargs) in messages
                     ),
-                    Equals([
-                        {
-                            "stage": "started",
-                            "failure-reason": None,
-                        },
-                        # "our" downloader (above) doesn't set any downloading etc
-                        # state-updates
-                        {
-                            "stage": "succeeded",
-                            "failure-reason": None,
-                        },
-                    ]),
+                    Equals(
+                        [
+                            {
+                                "stage": "started",
+                                "failure-reason": None,
+                            },
+                            # "our" downloader (above) doesn't set any downloading etc
+                            # state-updates
+                            {
+                                "stage": "succeeded",
+                                "failure-reason": None,
+                            },
+                        ]
+                    ),
                 )
             ),
         )
