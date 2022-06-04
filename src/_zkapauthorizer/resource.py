@@ -268,10 +268,11 @@ class RecoverProtocol(WebSocketServerProtocol):
 @define
 class RecoverFactory(WebSocketServerFactory):
     """
-    Track state of recovery. In the factory because we want at most
-    one active recovery attempt not matter how many clients there are
-    and because it needs to link to other resources that are also
-    constructed once.
+    Track state of recovery.
+
+    In the factory because we want at most one active recovery attempt
+    no matter how many clients there are and because something needs
+    to link to other resources that are also constructed once.
     """
 
     store: VoucherStore = field()
