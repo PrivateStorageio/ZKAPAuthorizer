@@ -119,7 +119,7 @@ class StatefulRecoverer:
         :param cursor: A database cursor which can be used to populate the
             database with recovered state.
         """
-        if self._state.stage != RecoveryStages.inactive:
+        if self._state.stage not in {RecoveryStages.inactive, RecoveryStages.download_failed, RecoveryStages.import_failed}:
             return
 
         self._set_state(RecoveryState(stage=RecoveryStages.started))
