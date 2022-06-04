@@ -19,8 +19,7 @@ Tests for the Tahoe-LAFS plugin.
 import json
 from datetime import timedelta
 from functools import partial
-from io import BytesIO, StringIO
-from json import dumps
+from io import StringIO
 from os import mkdir
 from sqlite3 import connect
 
@@ -113,7 +112,7 @@ from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
-from .matchers import Provides, matches_json, matches_response, raises
+from .matchers import Provides, matches_response, raises
 from .strategies import (
     announcements,
     aware_datetimes,
@@ -135,7 +134,6 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
-from .test_client_resource import authorized_request
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
