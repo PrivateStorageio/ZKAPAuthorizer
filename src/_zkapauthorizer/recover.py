@@ -104,7 +104,7 @@ class StatefulRecoverer:
     """
 
     _state: RecoveryState = RecoveryState(stage=RecoveryStages.inactive)
-    _listeners: set = field(factory=set)
+    _listeners: Iterable = field(default=set(), converter=frozenset)
 
     async def recover(
         self,
@@ -142,12 +142,6 @@ class StatefulRecoverer:
             return
 
         self._set_state(RecoveryState(stage=RecoveryStages.succeeded))
-
-    def on_state_change(self, callback: Callable[[RecoveryState], None]) -> None:
-        """
-        Add a listener which will be invoked whenever our state changes
-        """
-        self._listeners.add(callback)
 
     def _set_state(self, state: RecoveryState) -> None:
         """

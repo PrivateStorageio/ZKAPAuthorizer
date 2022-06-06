@@ -105,7 +105,7 @@ from ..model import (
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import StatefulRecoverer, make_fail_downloader, noop_downloader
+from ..recover import make_fail_downloader, noop_downloader
 from ..replicate import (
     ReplicationAlreadySetup,
     fail_setup_replication,
@@ -688,12 +688,11 @@ class RecoverTests(TestCase):
 
         clock = MemoryReactorClockResolver()
         store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
-        recoverer = StatefulRecoverer()
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 
         def create_proto():
-            factory = RecoverFactory(store, broken_get_downloader, recoverer)
+            factory = RecoverFactory(store, broken_get_downloader)
             addr = IPv4Address("TCP", "127.0.0.1", "0")
             proto = factory.buildProtocol(addr)
             return proto
@@ -764,12 +763,11 @@ class RecoverTests(TestCase):
         store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
         # put some existing state in the store
         create(store, existing_state)
-        recoverer = StatefulRecoverer()
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 
         def create_proto():
-            factory = RecoverFactory(store, get_fail_downloader, recoverer)
+            factory = RecoverFactory(store, get_fail_downloader)
             addr = IPv4Address("TCP", "127.0.0.1", "0")
             proto = factory.buildProtocol(addr)
             return proto
@@ -924,8 +922,7 @@ class RecoverTests(TestCase):
 
         clock = MemoryReactorClockResolver()
         store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
-        recoverer = StatefulRecoverer()
-        factory = RecoverFactory(store, get_success_downloader, recoverer)
+        factory = RecoverFactory(store, get_success_downloader)
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 

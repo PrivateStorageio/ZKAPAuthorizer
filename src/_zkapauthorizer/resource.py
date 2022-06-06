@@ -270,7 +270,7 @@ class RecoverFactory(WebSocketServerFactory):
 
     store: VoucherStore = field()
     get_downloader: Callable[[str], Downloader] = field()
-    recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
+    recoverer: StatefulRecoverer = field()
     recovering_d: Deferred = field(default=None)
     recovering_cap: CapStr = field(default=None)
     # manage WebSocket client(s)
@@ -278,20 +278,22 @@ class RecoverFactory(WebSocketServerFactory):
     sent_updates: list = field(default=Factory(list))
     _log = Logger()
 
+    @recoverer.default
+    def _default_recoverer(self):
+        return StatefulRecoverer(listeners={self._on_state_change})
+
     def __attrs_post_init__(self):
         self.protocol = RecoverProtocol
         WebSocketServerFactory.__init__(self, server="ZKAPAuthorizer")
 
-        def state_change(state):
-            """
-            Whenever the state of recovery changes, update all our clients
-            """
-            update_msg = dumps(state.marshal()).encode("utf8")
-            self.sent_updates.append(update_msg)
-            for client in self.clients:
-                client.sendMessage(update_msg, False)
-
-        self.recoverer.on_state_change(state_change)
+    def _on_state_change(self, state):
+        """
+        Whenever the state of recovery changes, update all our clients
+        """
+        update_msg = dumps(state.marshal()).encode("utf8")
+        self.sent_updates.append(update_msg)
+        for client in self.clients:
+            client.sendMessage(update_msg, False)
 
     def initiate_recovery(self, cap: ReadonlyDirectoryURI, client):
         """
