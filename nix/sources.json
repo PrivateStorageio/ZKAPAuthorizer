@@ -29,8 +29,8 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "3e6c4e328bdae5c9f1e8131833275cce26df47f0",
-        "sha256": "01rjxxv2chjjz5l55vplj76d616fld7226ai6lw6rhv93ypzfc13",
+        "rev": "a366e352aa50196275074b80f04af632520b4685",
+        "sha256": "1nfvc53a92fi2rhmgz4zklz69dmancmjhqk0bsaf092rnls2iq23",
         "type": "tarball",
         "url": "https://github.com/DavHau/pypi-deps-db/archive/a366e352aa50196275074b80f04af632520b4685.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
