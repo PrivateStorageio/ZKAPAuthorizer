@@ -55,6 +55,7 @@ from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
     Always,
+    AllMatch,
     ContainsDict,
     Equals,
     GreaterThan,
@@ -909,7 +910,6 @@ class RecoverTests(TestCase):
 
         def get_success_downloader(cap):
             async def do_download(set_state):
-                nonlocal downloads
                 await downloading_d
                 downloads.append(set_state)
                 return (
@@ -971,18 +971,19 @@ class RecoverTests(TestCase):
         ]
 
         # both clients should see the same sequence of update events
-        for recover_d in [d0, d1]:
-            self.assertThat(
-                recover_d,
+        self.assertThat(
+            [d0, d1],
+            AllMatch(
                 succeeded(
                     AfterPreprocessing(
                         lambda messages: list(
                             loads(args[0]) for (args, kwargs) in messages
                         ),
                         Equals(expected_messages),
-                    )
+                    ),
                 ),
-            )
+            ),
+        )
 
 
 def maybe_extra_tokens():
