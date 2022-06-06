@@ -676,7 +676,7 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config, api_auth_token):
+    def test_internal_server_error(self, get_config, api_auth_token) -> None:
         """
         If recovery fails for some unrecognized reason we receive an error
         update over the WebSocket.
@@ -735,7 +735,7 @@ class RecoverTests(TestCase):
         api_auth_tokens(),
         existing_states(min_vouchers=1),
     )
-    def test_conflict(self, get_config, api_auth_token, existing_state):
+    def test_conflict(self, get_config, api_auth_token, existing_state) -> None:
         """
         If there is state in the local database the websocket streams an
         error and disconnects.
@@ -795,7 +795,7 @@ class RecoverTests(TestCase):
             HasLength(1),
         )
 
-    def test_undecodeable_body(self):
+    def test_undecodeable_body(self) -> None:
         """
         If the first message request cannot be decoded as JSON then the
         websocket produces an error.
@@ -804,7 +804,7 @@ class RecoverTests(TestCase):
             b"some bytes that are not json",
         )
 
-    def test_wrong_properties(self):
+    def test_wrong_properties(self) -> None:
         """
         If the JSON object represented by the request body doesn't match the
         expected structure then the websocket errors
@@ -814,7 +814,7 @@ class RecoverTests(TestCase):
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
         )
 
-    def test_recovery_capability_not_a_string(self):
+    def test_recovery_capability_not_a_string(self) -> None:
         """
         If the ``recovery-capability`` property value is not a string then the
         endpoint returns a 400 response.
@@ -823,7 +823,7 @@ class RecoverTests(TestCase):
             dumps_utf8({"recovery-capability": []}),
         )
 
-    def test_not_a_capability(self):
+    def test_not_a_capability(self) -> None:
         """
         If the ``recovery-capability`` property value is not a capability string
         then the endpoint returns a 400 response.
@@ -832,7 +832,7 @@ class RecoverTests(TestCase):
             dumps_utf8({"recovery-capability": "hello world"}),
         )
 
-    def test_not_a_readonly_dircap(self):
+    def test_not_a_readonly_dircap(self) -> None:
         """
         If the ``recovery-capability`` property value is not a read-only directory
         capability string then the endpoint returns a 400 response.
@@ -841,7 +841,7 @@ class RecoverTests(TestCase):
             dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
         )
 
-    def _request_error_test(self, message):
+    def _request_error_test(self, message) -> list[tuple[tuple, dict]]:
         """
         Generic test of the server protocol's error-handling for incoming
         WebSocket messages.
@@ -881,13 +881,13 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_status(self, get_config, api_auth_token):
+    def test_status(self, get_config, api_auth_token) -> None:
         """
         A first websocket that initiates a recovery sees the same messages
         as a second client (that uses the same dircap).
         """
         downloads = []
-        downloading_d = Deferred()
+        downloading_d: Deferred[None] = Deferred()
 
         def get_success_downloader(cap):
             async def do_download(set_state):

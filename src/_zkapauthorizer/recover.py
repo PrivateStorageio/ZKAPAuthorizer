@@ -104,7 +104,7 @@ class StatefulRecoverer:
     """
 
     _state: RecoveryState = RecoveryState(stage=RecoveryStages.inactive)
-    _listeners: Iterable = field(default=set(), converter=frozenset)
+    _listeners: Iterable[Callable[[RecoveryState], object]] = field(default=())
 
     async def recover(
         self,

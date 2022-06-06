@@ -228,7 +228,7 @@ class RecoverProtocol(WebSocketServerProtocol):
     closed.
     """
 
-    def onClose(self, wasClean, code, reason):
+    def onClose(self, wasClean, code, reason) -> None:
         """
         WebSocket API: we've lost our connection for some reason
         """
@@ -239,7 +239,7 @@ class RecoverProtocol(WebSocketServerProtocol):
             # in the clients list
             pass
 
-    def onMessage(self, payload, isBinary):
+    def onMessage(self, payload, isBinary) -> None:
         """
         WebSocket API: a message has been received from the client (the
         only thing they can send is a request to initiate recovery).
@@ -282,14 +282,14 @@ class RecoverFactory(WebSocketServerFactory):
     _log = Logger()
 
     @recoverer.default
-    def _default_recoverer(self):
+    def _default_recoverer(self) -> StatefulRecoverer:
         return StatefulRecoverer(listeners={self._on_state_change})
 
-    def __attrs_post_init__(self):
+    def __attrs_post_init__(self) -> None:
         self.protocol = RecoverProtocol
         WebSocketServerFactory.__init__(self, server="ZKAPAuthorizer")
 
-    def _on_state_change(self, state):
+    def _on_state_change(self, state: RecoveryState) -> None:
         """
         Whenever the state of recovery changes, update all our clients
         """
@@ -298,7 +298,9 @@ class RecoverFactory(WebSocketServerFactory):
         for client in self.clients:
             client.sendMessage(update_msg, False)
 
-    def initiate_recovery(self, cap: ReadonlyDirectoryURI, client):
+    def initiate_recovery(
+        self, cap: ReadonlyDirectoryURI, client: WebSocketServerProtocol
+    ) -> None:
         """
         A new WebSocket client has asked for recovery.
 
@@ -351,7 +353,7 @@ class RecoverFactory(WebSocketServerFactory):
             for update in self.sent_updates:
                 client.sendMessage(update)
 
-    def buildProtocol(self, addr):
+    def buildProtocol(self, addr) -> RecoverProtocol:
         """
         IFactory API
         """
@@ -363,7 +365,7 @@ class RecoverFactory(WebSocketServerFactory):
         self,
         store: VoucherStore,
         cap: ReadonlyDirectoryURI,
-    ):
+    ) -> None:
         try:
             # If these things succeed then we will have started recovery and
             # generated a response to the request.
