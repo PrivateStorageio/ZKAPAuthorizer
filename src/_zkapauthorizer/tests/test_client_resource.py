@@ -17,7 +17,6 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-import json
 from base64 import b32encode
 from io import BytesIO
 from typing import Container
@@ -32,6 +31,7 @@ from autobahn.twisted.testing import (
     create_pumper,
 )
 from fixtures import TempDir
+from hyperlink import DecodedURL
 from hypothesis import given, note
 from hypothesis.strategies import (
     SearchStrategy,
@@ -54,8 +54,8 @@ from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
-    Always,
     AllMatch,
+    Always,
     ContainsDict,
     Equals,
     GreaterThan,
@@ -118,6 +118,7 @@ from ..resource import (
     RecoverProtocol,
     from_configuration,
     get_token_count,
+    recover,
 )
 from ..storage_common import (
     get_configured_allowed_public_keys,
@@ -701,37 +702,27 @@ class RecoverTests(TestCase):
         agent = create_memory_agent(clock, pumper, create_proto)
         pumper.start()
 
-        async def recover():
-            proto = await agent.open(
-                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
-                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
             )
-            updates = []
-            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
-            await proto.is_open
-            proto.sendMessage(
-                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
-            )
-            pumper._flush()
-            await proto.is_closed
-            return updates
+        )
+        pumper._flush()
 
         self.assertThat(
-            Deferred.fromCoroutine(recover()),
+            recovering,
             succeeded(
-                AfterPreprocessing(
-                    lambda messages: list(
-                        loads(args[0]) for (args, kwargs) in messages
-                    ),
-                    Equals(
-                        [
-                            {
-                                "stage": "import_failed",
-                                "failure-reason": "Downloader is broken",
-                            }
-                        ]
-                    ),
-                )
+                Equals(
+                    [
+                        {
+                            "stage": "import_failed",
+                            "failure-reason": "Downloader is broken",
+                        }
+                    ]
+                ),
             ),
         )
         self.assertThat(
@@ -776,37 +767,27 @@ class RecoverTests(TestCase):
         agent = create_memory_agent(clock, pumper, create_proto)
         pumper.start()
 
-        async def recover():
-            proto = await agent.open(
-                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
-                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
             )
-            updates = []
-            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
-            await proto.is_open
-            proto.sendMessage(
-                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
-            )
-            pumper._flush()
-            await proto.is_closed
-            return updates
+        )
+        pumper._flush()
 
         self.assertThat(
-            Deferred.fromCoroutine(recover()),
+            recovering,
             succeeded(
-                AfterPreprocessing(
-                    lambda messages: list(
-                        loads(args[0]) for (args, kwargs) in messages
-                    ),
-                    Equals(
-                        [
-                            {
-                                "stage": "import_failed",
-                                "failure-reason": "there is existing local state",
-                            }
-                        ]
-                    ),
-                )
+                Equals(
+                    [
+                        {
+                            "stage": "import_failed",
+                            "failure-reason": "there is existing local state",
+                        }
+                    ],
+                ),
             ),
         )
         self.assertThat(
@@ -934,23 +915,18 @@ class RecoverTests(TestCase):
         agent = create_memory_agent(clock, pumper, create_proto)
         pumper.start()
 
-        async def recover():
-            proto = await agent.open(
-                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
-                {"headers": {"Authorization": f"tahoe-lafs {api_auth_token}"}},
-            )
-            updates = []
-            proto.on("message", lambda *args, **kw: updates.append((args, kw)))
-            await proto.is_open
-            proto.sendMessage(
-                json.dumps({"recovery-capability": self.GOOD_CAPABILITY}).encode("utf8")
-            )
-            await proto.is_closed
-            return updates
-
         # do two recoveries; they should both get the same status messages
-        d0 = Deferred.fromCoroutine(recover())
-        d1 = Deferred.fromCoroutine(recover())
+        recovering = [
+            Deferred.fromCoroutine(
+                recover(
+                    agent,
+                    DecodedURL.from_text("ws://127.0.0.1:1/"),
+                    api_auth_token,
+                    self.GOOD_CAPABILITY,
+                )
+            )
+            for i in range(2)
+        ]
         pumper._flush()
 
         # now let the download succeed
@@ -972,15 +948,10 @@ class RecoverTests(TestCase):
 
         # both clients should see the same sequence of update events
         self.assertThat(
-            [d0, d1],
+            recovering,
             AllMatch(
                 succeeded(
-                    AfterPreprocessing(
-                        lambda messages: list(
-                            loads(args[0]) for (args, kwargs) in messages
-                        ),
-                        Equals(expected_messages),
-                    ),
+                    Equals(expected_messages),
                 ),
             ),
         )

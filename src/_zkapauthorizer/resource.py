@@ -30,6 +30,8 @@ from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
 from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
+from autobahn.websocket.interfaces import IWebSocketClientAgent
+from hyperlink import DecodedURL
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
 from twisted.web.http import BAD_REQUEST, CONFLICT, CREATED, INTERNAL_SERVER_ERROR
@@ -55,6 +57,7 @@ from .storage_common import (
     get_configured_shares_needed,
     get_configured_shares_total,
 )
+from .tahoe import attenuate_writecap
 
 # The number of tokens to submit with a voucher redemption.
 NUM_TOKENS = 2**15
@@ -706,3 +709,33 @@ def bad_request(reason="Bad Request"):
         b"Bad Request",
         reason.encode("utf-8"),
     )
+
+
+async def recover(
+    agent: IWebSocketClientAgent,
+    api_root: DecodedURL,
+    auth_token: str,
+    replica_dircap: str,
+) -> list[dict]:
+    """
+    Initiate recovery from a replica.
+
+    :return: The status updates received while recovery was progressing.
+    """
+    endpoint_url = api_root.child(
+        "storage-plugins", "privatestorageio-zkapauthz-v2", "recover"
+    ).to_text()
+    proto = await agent.open(
+        endpoint_url,
+        {"headers": {"Authorization": f"tahoe-lafs {auth_token}"}},
+    )
+    updates = []
+    proto.on("message", lambda msg, is_binary: updates.append(loads(msg)))
+    await proto.is_open
+    proto.sendMessage(
+        dumps({"recovery-capability": attenuate_writecap(replica_dircap)}).encode(
+            "utf8"
+        )
+    )
+    await proto.is_closed
+    return updates

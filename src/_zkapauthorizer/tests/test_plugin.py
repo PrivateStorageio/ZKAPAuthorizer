@@ -16,7 +16,6 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-import json
 from datetime import timedelta
 from functools import partial
 from io import StringIO
@@ -42,6 +41,7 @@ from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
+from hyperlink import DecodedURL
 from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
 from prometheus_client import Gauge
@@ -107,8 +107,9 @@ from ..replicate import (
     statements_to_snapshot,
     with_replication,
 )
+from ..resource import recover
 from ..spending import GET_PASSES
-from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -866,37 +867,24 @@ class ClientResourceTests(TestCase):
         pumper.start()
         self.addCleanup(pumper.stop)
 
-        async def recover():
-            proto = await agent.open(
-                "ws://127.0.0.1:1/storage-plugins/privatestorageio-zkapauthz-v2/recover",
-                {"headers": {"Authorization": f"tahoe-lafs {token}"}},
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent, DecodedURL.from_text("ws://127.0.0.1:1/"), token, replica_dircap
             )
-            updates = []
-            proto.on("message", lambda *args, **kw: updates.append(args[0]))
-            await proto.is_open
-            proto.sendMessage(
-                json.dumps(
-                    {"recovery-capability": attenuate_writecap(replica_dircap)}
-                ).encode("utf8")
-            )
-            pumper._flush()
-            await proto.is_closed
-            return updates
+        )
+        pumper._flush()
 
         self.assertThat(
-            Deferred.fromCoroutine(recover()),
+            recovering,
             succeeded(
-                AfterPreprocessing(
-                    lambda messages: [json.loads(msg) for msg in messages],
-                    Equals(
-                        [
-                            {"stage": "started", "failure-reason": None},
-                            {"stage": "inspect_replica", "failure-reason": None},
-                            {"stage": "downloading", "failure-reason": None},
-                            {"stage": "succeeded", "failure-reason": None},
-                        ]
-                    ),
-                )
+                Equals(
+                    [
+                        {"stage": "started", "failure-reason": None},
+                        {"stage": "inspect_replica", "failure-reason": None},
+                        {"stage": "downloading", "failure-reason": None},
+                        {"stage": "succeeded", "failure-reason": None},
+                    ],
+                ),
             ),
         )
 
