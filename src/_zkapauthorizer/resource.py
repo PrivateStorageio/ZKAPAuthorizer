@@ -43,7 +43,6 @@ from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from ._types import CapStr
 from .controller import PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
 from .model import VoucherStore

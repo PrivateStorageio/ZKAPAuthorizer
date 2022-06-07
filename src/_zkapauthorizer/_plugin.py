@@ -42,7 +42,6 @@ from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.web.guard import HTTPAuthSessionWrapper
-from twisted.web.resource import Resource
 from zope.interface import implementer
 
 from . import NAME
