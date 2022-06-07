@@ -25,7 +25,13 @@ from urllib.parse import quote
 import attr
 from allmydata.client import config_from_string
 from aniso8601 import parse_datetime
+from autobahn.twisted.testing import (
+    MemoryReactorClockResolver,
+    create_memory_agent,
+    create_pumper,
+)
 from fixtures import TempDir
+from hyperlink import DecodedURL
 from hypothesis import given, note
 from hypothesis.strategies import (
     SearchStrategy,
@@ -48,6 +54,7 @@ from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
     AfterPreprocessing,
+    AllMatch,
     Always,
     ContainsDict,
     Equals,
@@ -57,11 +64,16 @@ from testtools.matchers import (
     IsInstance,
     MatchesAll,
     MatchesAny,
+    MatchesDict,
+    MatchesListwise,
     MatchesStructure,
     Not,
+    StartsWith,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
+from twisted.internet.address import IPv4Address
+from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
 from twisted.web.client import FileBodyProducer, readBody
@@ -102,13 +114,21 @@ from ..replicate import (
     fail_setup_replication,
     with_replication,
 )
-from ..resource import NUM_TOKENS, from_configuration, get_token_count
+from ..resource import (
+    NUM_TOKENS,
+    RecoverFactory,
+    RecoverProtocol,
+    from_configuration,
+    get_token_count,
+    recover,
+)
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
     required_passes,
 )
 from .common import flushErrors
+from .fixtures import TemporaryVoucherStore
 from .json import loads
 from .matchers import between, matches_json, matches_response
 from .strategies import (
@@ -651,7 +671,6 @@ class RecoverTests(TestCase):
     readkey = b32encode(b"x" * 16).decode("ascii").strip("=").lower()
     fingerprint = b32encode(b"y" * 32).decode("ascii").strip("=").lower()
 
-    GOOD_REQUEST_HEADER = {b"content-type": [b"application/json"]}
     GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
     GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
 
@@ -659,40 +678,55 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config, api_auth_token):
+    def test_internal_server_error(self, get_config, api_auth_token) -> None:
         """
-        If recovery fails for some unrecognized reason the endpoint returns a 500
-        response.
+        If recovery fails for some unrecognized reason we receive an error
+        update over the WebSocket.
         """
 
         class DownloaderBroken(Exception):
             pass
 
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-
         def broken_get_downloader(cap):
-            raise DownloaderBroken()
+            raise DownloaderBroken("Downloader is broken")
 
-        root = root_from_config(config, aware_now, broken_get_downloader)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=self.GOOD_REQUEST_HEADER,
-            data=BytesIO(self.GOOD_REQUEST_BODY),
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        pumper = create_pumper()
+        self.addCleanup(pumper.stop)
+
+        def create_proto():
+            factory = RecoverFactory(store, broken_get_downloader)
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
         )
+        pumper._flush()
 
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(500))),
+            recovering,
+            succeeded(
+                Equals(
+                    [
+                        {
+                            "stage": "import_failed",
+                            "failure-reason": "Downloader is broken",
+                        }
+                    ]
+                ),
+            ),
         )
-
         self.assertThat(
             flushErrors(DownloaderBroken),
             HasLength(1),
@@ -703,10 +737,10 @@ class RecoverTests(TestCase):
         api_auth_tokens(),
         existing_states(min_vouchers=1),
     )
-    def test_conflict(self, get_config, api_auth_token, existing_state):
+    def test_conflict(self, get_config, api_auth_token, existing_state) -> None:
         """
-        If there is state in the local database the endpoint returns a 409
-        response.
+        If there is state in the local database the websocket streams an
+        error and disconnects.
         """
 
         def create(store, state):
@@ -719,203 +753,211 @@ class RecoverTests(TestCase):
             # double spent voucher
             # invalid unblinded tokens
 
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        # put some existing state in the store
+        create(store, existing_state)
+        pumper = create_pumper()
+        self.addCleanup(pumper.stop)
+
+        def create_proto():
+            factory = RecoverFactory(store, get_fail_downloader)
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
         )
-        root = root_from_config(config, aware_now)
-        create(root.store, existing_state)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=self.GOOD_REQUEST_HEADER,
-            data=BytesIO(self.GOOD_REQUEST_BODY),
-        )
+        pumper._flush()
 
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(409))),
+            recovering,
+            succeeded(
+                Equals(
+                    [
+                        {
+                            "stage": "import_failed",
+                            "failure-reason": "there is existing local state",
+                        }
+                    ],
+                ),
+            ),
+        )
+        self.assertThat(
+            flushErrors(Exception),
+            HasLength(1),
         )
 
-    def test_bad_content_type(self):
+    def test_undecodeable_body(self) -> None:
         """
-        If the request Content-Type is not ``application/json`` then the endpoint
-        returns a 400 response.
+        If the first message request cannot be decoded as JSON then the
+        websocket produces an error.
         """
-
-        self._request_test(
-            {b"content-type": [b"application/cbor"]},
-            self.GOOD_REQUEST_BODY,
-            get_fail_downloader,
-            400,
-        )
-
-    def test_undecodeable_body(self):
-        """
-        If the request body cannot be decoded as JSON then the endpoint returns a
-        400 response.
-        """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             b"some bytes that are not json",
-            get_fail_downloader,
-            400,
         )
 
-    def test_wrong_properties(self):
+    def test_wrong_properties(self) -> None:
         """
         If the JSON object represented by the request body doesn't match the
-        expected structure then the endpoint returns a 400 response.
+        expected structure then the websocket errors
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             # This is almost right but has an extra property.
             dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
-            get_fail_downloader,
-            400,
         )
 
-    def test_recovery_capability_not_a_string(self):
+    def test_recovery_capability_not_a_string(self) -> None:
         """
         If the ``recovery-capability`` property value is not a string then the
         endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": []}),
-            get_fail_downloader,
-            400,
         )
 
-    def test_not_a_capability(self):
+    def test_not_a_capability(self) -> None:
         """
         If the ``recovery-capability`` property value is not a capability string
         then the endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": "hello world"}),
-            get_fail_downloader,
-            400,
         )
 
-    def test_not_a_readonly_dircap(self):
+    def test_not_a_readonly_dircap(self) -> None:
         """
         If the ``recovery-capability`` property value is not a read-only directory
         capability string then the endpoint returns a 400 response.
         """
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
+        self._request_error_test(
             dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
-            get_fail_downloader,
-            400,
         )
 
-    def test_accepted(self):
+    def _request_error_test(self, message) -> list[tuple[tuple, dict]]:
         """
-        If the ``recovery-capability`` property value is a string then the
-        endpoint returns a 202 response.
+        Generic test of the server protocol's error-handling for incoming
+        WebSocket messages.
         """
-        expected_status = 202
-        self._request_test(
-            self.GOOD_REQUEST_HEADER,
-            self.GOOD_REQUEST_BODY,
-            get_noop_downloader,
-            expected_status,
-        )
 
-    @given(
-        get_config=tahoe_configs(),
-        api_auth_token=api_auth_tokens(),
-    )
-    def _request_test(
-        self,
-        get_config,
-        api_auth_token,
-        headers,
-        body,
-        make_downloader,
-        expected_status,
-    ):
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        root = root_from_config(config, aware_now, make_downloader)
-        agent = RequestTraversalAgent(root)
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"POST",
-            b"http://127.0.0.1/recover",
-            headers=headers,
-            data=BytesIO(body),
-        )
+        proto = RecoverProtocol()
+
+        # hook into the protocol's error-handling methods
+        messages = []
+        closes = []
+        proto.sendClose = lambda *args, **kw: closes.append((args, kw))
+        proto.sendMessage = lambda *args, **kw: messages.append((args, kw))
+
+        # run test by sending the initial message
+        proto.onMessage(message, False)
+
+        # all errors should result in a close message
         self.assertThat(
-            requesting,
-            succeeded(matches_response(code_matcher=Equals(expected_status))),
+            closes,
+            MatchesListwise(
+                [
+                    AfterPreprocessing(
+                        lambda args_kwargs: args_kwargs[1],
+                        MatchesDict(
+                            {
+                                "code": Equals(4000),
+                                "reason": StartsWith(
+                                    "Failed to parse recovery request: "
+                                ),
+                            }
+                        ),
+                    ),
+                ]
+            ),
         )
+        flushErrors(Exception),
+        return messages
 
     @given(
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_get_status(self, get_config, api_auth_token):
+    def test_status(self, get_config, api_auth_token) -> None:
         """
-        The endpoint responds to a **GET** request with OK and a body containing
-        status information about the recovery.
+        A first websocket that initiates a recovery sees the same messages
+        as a second client (that uses the same dircap).
         """
-        config = get_config_with_api_token(
-            self.useFixture(TempDir()),
-            get_config,
-            api_auth_token,
-        )
-        reason = "some interesting information"
-        fail_downloader = make_fail_downloader(Exception(reason))
-        get_fail_downloader = lambda cap: fail_downloader
-        root = root_from_config(config, aware_now, get_fail_downloader)
-        agent = RequestTraversalAgent(root)
+        downloads = []
+        downloading_d: Deferred[None] = Deferred()
 
-        # Kick off the recovery attempt.
-        self.assertThat(
-            authorized_request(
-                api_auth_token,
-                agent,
-                b"POST",
-                b"http://127.0.0.1/recover",
-                headers=self.GOOD_REQUEST_HEADER,
-                data=BytesIO(self.GOOD_REQUEST_BODY),
-            ),
-            succeeded(Always()),
-        )
-
-        # Now inspect the recoverer's reported state.
-        requesting = authorized_request(
-            api_auth_token,
-            agent,
-            b"GET",
-            b"http://127.0.0.1/recover",
-        )
-        self.assertThat(
-            requesting,
-            succeeded(
-                matches_response(
-                    code_matcher=Equals(OK),
-                    headers_matcher=application_json(),
-                    body_matcher=matches_json(
-                        Equals(
-                            {
-                                "stage": "download_failed",
-                                "failure-reason": reason,
-                            }
-                        ),
-                    ),
+        def get_success_downloader(cap):
+            async def do_download(set_state):
+                await downloading_d
+                downloads.append(set_state)
+                return (
+                    # this data is CBOR for {"version": 1, "statements": []}
+                    lambda: BytesIO(b"\xa2gversion\x01jstatements\x80"),
+                    [],  # no event-streams
                 )
+
+            return do_download
+
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        factory = RecoverFactory(store, get_success_downloader)
+        pumper = create_pumper()
+        self.addCleanup(pumper.stop)
+
+        def create_proto():
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        # do two recoveries; they should both get the same status messages
+        recovering = [
+            Deferred.fromCoroutine(
+                recover(
+                    agent,
+                    DecodedURL.from_text("ws://127.0.0.1:1/"),
+                    api_auth_token,
+                    self.GOOD_CAPABILITY,
+                )
+            )
+            for i in range(2)
+        ]
+        pumper._flush()
+
+        # now let the download succeed
+        downloading_d.callback(None)
+        pumper._flush()
+
+        expected_messages = [
+            {
+                "stage": "started",
+                "failure-reason": None,
+            },
+            # "our" downloader (above) doesn't set any downloading etc
+            # state-updates
+            {
+                "stage": "succeeded",
+                "failure-reason": None,
+            },
+        ]
+
+        # both clients should see the same sequence of update events
+        self.assertThat(
+            recovering,
+            AllMatch(
+                succeeded(
+                    Equals(expected_messages),
+                ),
             ),
         )
 

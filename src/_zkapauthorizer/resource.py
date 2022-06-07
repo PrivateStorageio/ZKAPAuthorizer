@@ -23,21 +23,18 @@ In the future it should also allow users to read statistics about token usage.
 
 from collections.abc import Awaitable
 from functools import partial
-from json import loads
-from typing import Callable
+from json import dumps, loads
+from typing import Callable, Optional
 
 from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
+from autobahn.twisted.resource import WebSocketResource
+from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
+from autobahn.websocket.interfaces import IWebSocketClientAgent
+from hyperlink import DecodedURL
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.logger import Logger
-from twisted.web.http import (
-    ACCEPTED,
-    BAD_REQUEST,
-    CONFLICT,
-    CREATED,
-    INTERNAL_SERVER_ERROR,
-)
-from twisted.web.iweb import IRequest
+from twisted.web.http import BAD_REQUEST, CONFLICT, CREATED, INTERNAL_SERVER_ERROR
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
@@ -48,10 +45,10 @@ from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from .controller import PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
-from .model import NotEmpty, VoucherStore
+from .model import VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
-from .recover import Downloader, StatefulRecoverer
+from .recover import Downloader, RecoveryStages, RecoveryState, StatefulRecoverer
 from .replicate import ReplicationAlreadySetup
 from .storage_common import (
     get_configured_allowed_public_keys,
@@ -59,6 +56,7 @@ from .storage_common import (
     get_configured_shares_needed,
     get_configured_shares_total,
 )
+from .tahoe import attenuate_writecap
 
 # The number of tokens to submit with a voucher redemption.
 NUM_TOKENS = 2**15
@@ -214,110 +212,172 @@ class ReplicateResource(Resource):
         request.finish()
 
 
-@define
-class RecoverResource(Resource):
+class RecoverProtocol(WebSocketServerProtocol):
     """
-    Implement the endpoint for triggering local state recovery from a remote
-    replica.
+    Speaks the server side of the WebSocket /recover protocol.
+
+    A client connects to this to start recovery, sending an opening
+    message with the rquired capability.
+
+    As recovery is ongoing, the server sends status updates as they
+    become available.
+
+    When the recovery is finished, and final message is sent
+    (indicating overall success or failure) and the WebSocket is
+    closed.
     """
 
     _log = Logger()
 
+    def onClose(self, wasClean, code, reason) -> None:
+        """
+        WebSocket API: we've lost our connection for some reason
+        """
+        try:
+            self.factory.clients.remove(self)
+        except ValueError:
+            # may not have initiated recovery yet so it might not be
+            # in the clients list
+            pass
+
+    def onMessage(self, payload, isBinary) -> None:
+        """
+        WebSocket API: a message has been received from the client (the
+        only thing they can send is a request to initiate recovery).
+        """
+        try:
+            body = loads(payload)
+            if set(body.keys()) != {"recovery-capability"}:
+                raise ValueError("Unknown keys present in request")
+            recovery_capability = from_string(body["recovery-capability"])
+            if not isinstance(recovery_capability, ReadonlyDirectoryURI):
+                raise ValueError("Not a readonly-dircap")
+        except Exception as e:
+            self._log.failure("Failed to initiate recovery")
+            self.sendClose(
+                code=4000,
+                reason=f"Failed to parse recovery request: {e}",
+            )
+            return
+        # we have a valid request, tell our factory to start recovery
+        self.factory.initiate_recovery(recovery_capability, self)
+
+
+@define
+class RecoverFactory(WebSocketServerFactory):
+    """
+    Track state of recovery.
+
+    In the factory because we want at most one active recovery attempt
+    no matter how many clients there are and because something needs
+    to link to other resources that are also constructed once.
+    """
+
     store: VoucherStore = field()
     get_downloader: Callable[[str], Downloader] = field()
-    recoverer: StatefulRecoverer = field(default=Factory(StatefulRecoverer))
+    recoverer: StatefulRecoverer = field()
+    recovering_d: Optional[Deferred] = field(default=None)
+    recovering_cap: Optional[ReadonlyDirectoryURI] = field(default=None)
+    # manage WebSocket client(s)
+    clients: list = field(default=Factory(list))
+    sent_updates: list = field(default=Factory(list))
+    _log = Logger()
 
-    def __attrs_post_init__(self):
-        Resource.__init__(self)
+    @recoverer.default
+    def _default_recoverer(self) -> StatefulRecoverer:
+        return StatefulRecoverer(listeners={self._on_state_change})
 
-    def render_GET(self, request):
-        application_json(request)
-        return dumps_utf8(self.recoverer.state().marshal())
+    def __attrs_post_init__(self) -> None:
+        self.protocol = RecoverProtocol
+        WebSocketServerFactory.__init__(self, server="ZKAPAuthorizer")
 
-    def render_POST(self, request):
-        if wrong_content_type(request, "application/json"):
-            return NOT_DONE_YET
+    def _on_state_change(self, state: RecoveryState) -> None:
+        """
+        Whenever the state of recovery changes, update all our clients
+        """
+        update_msg = dumps(state.marshal()).encode("utf8")
+        self.sent_updates.append(update_msg)
+        for client in self.clients:
+            client.sendMessage(update_msg, False)
 
-        try:
-            body = loads(request.content.read())
-        except:
-            request.setResponseCode(BAD_REQUEST)
-            return b"could not parse json"
+    def initiate_recovery(
+        self, cap: ReadonlyDirectoryURI, client: WebSocketServerProtocol
+    ) -> None:
+        """
+        A new WebSocket client has asked for recovery.
 
-        if body.keys() != {"recovery-capability"}:
-            request.setResponseCode(BAD_REQUEST)
-            return b"json did not have expected properties"
+        If there is no recovery, begin one and send updates to this
+        client.
 
-        cap_str = body["recovery-capability"]
-        if not isinstance(cap_str, str):
-            request.setResponseCode(BAD_REQUEST)
-            return b"recovery-capability must be a read-only dircap string"
+        If a recovery is already started _and_ the capability is the
+        same, send updates to this client too.
 
-        cap = from_string(cap_str)
-        if not isinstance(cap, ReadonlyDirectoryURI):
-            request.setResponseCode(BAD_REQUEST)
-            return b"recovery-capability must be a read-only dircap string"
+        Otherwise, error.
+        """
+        self.clients.append(client)
+        if self.recovering_d is None:
+            self.recovering_cap = cap
+            self.recovering_d = Deferred.fromCoroutine(self._recover(self.store, cap))
 
-        # The response to this request does not wait for recovery to complete.
-        # Instead, a separate endpoint exposes the progress of the recovery
-        # attempt.  So we're not going to wait for `recovering` to complete.
-        # However, we do have to schedule it in the event loop or it will
-        # never even start.
-        recovering = self._recover(request, self.store, cap_str)
-        d = Deferred.fromCoroutine(recovering)
+            def disconnect_clients():
+                for client in self.clients:
+                    client.sendClose()
 
-        # The recovery code is meant to be /pretty/ unlikely to raise an
-        # exception - it directs all errors into the status information
-        # exposed by StatefulRecoverer instead of letting them get raised.
-        # Still, it's not _impossible_ that an exception could come out.  If
-        # it does, make sure it shows up in the log at least.
-        d.addErrback(partial(self._log.failure, "unhandled recovery failure"))
+            def err(f):
+                self._log.failure("Error during restore", f)
+                # One likely reason to get here is the ValueError we
+                # raise about existing local state .. and the
+                # "recoverer" itself can't really handle this (or
+                # other) errors happening before it is called.
+                self.recoverer._set_state(
+                    RecoveryState(
+                        RecoveryStages.import_failed,
+                        f.getErrorMessage(),
+                    )
+                )
+                disconnect_clients()
 
-        # _recover is responsible for generating the response.
-        return NOT_DONE_YET
+            def happy(_):
+                disconnect_clients()
+
+            self.recovering_d.addCallbacks(happy, err)
+
+        elif self.recovering_cap != cap:
+            self.sendClose(
+                code=4000, reason="Ongoing recovery with different capability"
+            )
+
+        else:
+            # we got another client, and they sent the same recovery
+            # capability, so be idempotent by acting the same as if this
+            # was the first client. That means sending this client all the
+            # status updates we've sent so far.
+            for update in self.sent_updates:
+                client.sendMessage(update)
+
+    def buildProtocol(self, addr) -> RecoverProtocol:
+        """
+        IFactory API
+        """
+        protocol = self.protocol()
+        protocol.factory = self
+        return protocol
 
     async def _recover(
         self,
-        request: IRequest,
         store: VoucherStore,
         cap: ReadonlyDirectoryURI,
-    ):
-        async def initiate(request, recoverer, downloader, cursor):
-            recovering = recoverer.recover(downloader, cursor)
-            recovering_d = Deferred.fromCoroutine(recovering)
-
-            # The only way to get to this point is if the store is empty and
-            # the recoverer appears to at least be willing to try to start.
-            # This is no guarantee that recovery will succeed but it is a
-            # guarantee that the *try* has begun.  Generate a response that
-            # reflects this.
-            request.setResponseCode(ACCEPTED)
-            request.finish()
-
-            # Really start the recovery attempt.
-            await recovering_d
-
-        try:
-            # If these things succeed then we will have started recovery and
-            # generated a response to the request.
-            downloader = self.get_downloader(cap)
-            await store.call_if_empty(
-                partial(initiate, request, self.recoverer, downloader)
-            )
-        except NotEmpty:
-            # If the database had anything in it, though, recovery will not be
-            # attempted - and it will even fail quickly enough to be a
-            # reasonable way to detect and report the conflict case.
-            request.setResponseCode(CONFLICT)
-            request.write(b"there is existing local state")
-            request.finish()
-        except:
-            # And if something else is broken, then who knows...  At least try
-            # to generate an error response.
-            self._log.failure("recovery setup failed")
-            request.setResponseCode(INTERNAL_SERVER_ERROR)
-            request.write(b"recovery setup failed")
-            request.finish()
+    ) -> None:
+        """
+        :raises: NotEmpty if there is existing local state
+        """
+        # If these things succeed then we will have started recovery and
+        # generated a response to the request.
+        downloader = self.get_downloader(cap.to_string().decode("ascii"))
+        await store.call_if_empty(
+            partial(self.recoverer.recover, downloader)  # cursor added by call_if_empty
+        )
+        # let all exceptions (including NotEmpty) out
 
 
 def authorizationless_resource_tree(
@@ -345,7 +405,7 @@ def authorizationless_resource_tree(
 
     root.putChild(
         b"recover",
-        RecoverResource(store, get_downloader),
+        WebSocketResource(RecoverFactory(store, get_downloader)),
     )
     root.putChild(
         b"replicate",
@@ -648,3 +708,33 @@ def bad_request(reason="Bad Request"):
         b"Bad Request",
         reason.encode("utf-8"),
     )
+
+
+async def recover(
+    agent: IWebSocketClientAgent,
+    api_root: DecodedURL,
+    auth_token: str,
+    replica_dircap: str,
+) -> list[dict]:
+    """
+    Initiate recovery from a replica.
+
+    :return: The status updates received while recovery was progressing.
+    """
+    endpoint_url = api_root.child(
+        "storage-plugins", "privatestorageio-zkapauthz-v2", "recover"
+    ).to_text()
+    proto = await agent.open(
+        endpoint_url,
+        {"headers": {"Authorization": f"tahoe-lafs {auth_token}"}},
+    )
+    updates = []
+    proto.on("message", lambda msg, is_binary: updates.append(loads(msg)))
+    await proto.is_open
+    proto.sendMessage(
+        dumps({"recovery-capability": attenuate_writecap(replica_dircap)}).encode(
+            "utf8"
+        )
+    )
+    await proto.is_closed
+    return updates

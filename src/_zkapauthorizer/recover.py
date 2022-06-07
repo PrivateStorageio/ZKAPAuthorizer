@@ -19,7 +19,7 @@ from io import BytesIO
 from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
-from attrs import define
+from attrs import define, field
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
@@ -104,6 +104,7 @@ class StatefulRecoverer:
     """
 
     _state: RecoveryState = RecoveryState(stage=RecoveryStages.inactive)
+    _listeners: Iterable[Callable[[RecoveryState], object]] = field(default=())
 
     async def recover(
         self,
@@ -147,6 +148,8 @@ class StatefulRecoverer:
         Change the recovery state.
         """
         self._state = state
+        for listener in self._listeners:
+            listener(state)
 
     def state(self) -> RecoveryState:
         """

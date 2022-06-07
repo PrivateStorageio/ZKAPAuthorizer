@@ -32,6 +32,7 @@ from allmydata.interfaces import (
 )
 from allmydata.node import MissingConfigEntry
 from attrs import Factory, define, field, frozen
+from autobahn.twisted.resource import WebSocketResource
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
@@ -40,6 +41,7 @@ from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from twisted.web.guard import HTTPAuthSessionWrapper
 from zope.interface import implementer
 
 from . import NAME
@@ -140,6 +142,13 @@ class _CostBasedPolicy:
         snapshot_cost = self._required_passes(snapshot_size)
         replica_cost = sum(map(self._required_passes, replica_sizes))
         return snapshot_cost * self.factor < replica_cost
+
+
+def get_recovery_websocket_resource(root: HTTPAuthSessionWrapper) -> WebSocketResource:
+    """
+    :returns: the resource that speaks the WebSocket recovery protocol
+    """
+    return root._portal.realm._root.children[b"recover"]
 
 
 @implementer(IFoolscapStoragePlugin)

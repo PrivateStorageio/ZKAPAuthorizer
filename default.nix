@@ -33,6 +33,8 @@ in
       # This is kind of round-about but it seems to be the best way to
       # convince mach-nix to use a specific package for a specific dependency.
       tahoe-lafs = "nixpkgs";
+
+      cryptography = "nixpkgs";
     };
 
     # Define some fixes to the packaging / build process of some of the

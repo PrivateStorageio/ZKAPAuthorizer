@@ -18,8 +18,7 @@ Tests for the Tahoe-LAFS plugin.
 
 from datetime import timedelta
 from functools import partial
-from io import BytesIO, StringIO
-from json import dumps
+from io import StringIO
 from os import mkdir
 from sqlite3 import connect
 
@@ -31,12 +30,18 @@ from allmydata.interfaces import (
     IStorageServer,
     RIStorageServer,
 )
+from autobahn.twisted.testing import (
+    MemoryReactorClockResolver,
+    create_memory_agent,
+    create_pumper,
+)
 from challenge_bypass_ristretto import SigningKey
 from eliot.testing import LoggedMessage, capture_logging
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable
 from foolscap.referenceable import LocalReferenceable
+from hyperlink import DecodedURL
 from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
 from prometheus_client import Gauge
@@ -64,6 +69,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import RequestTraversalAgent
+from twisted.internet.address import IPv4Address
 from twisted.internet.defer import Deferred
 from twisted.internet.testing import MemoryReactorClock
 from twisted.plugin import getPlugins
@@ -79,6 +85,7 @@ from .. import NAME
 from .._plugin import (
     ZKAPAuthorizer,
     _CostBasedPolicy,
+    get_recovery_websocket_resource,
     get_root_nodes,
     load_signing_key,
     open_store,
@@ -101,12 +108,13 @@ from ..replicate import (
     statements_to_snapshot,
     with_replication,
 )
+from ..resource import recover
 from ..spending import GET_PASSES
-from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
-from .matchers import Provides, matches_json, matches_response, raises
+from .matchers import Provides, matches_response, raises
 from .strategies import (
     announcements,
     aware_datetimes,
@@ -128,7 +136,6 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
-from .test_client_resource import authorized_request
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
@@ -840,42 +847,45 @@ class ClientResourceTests(TestCase):
         )
 
         root = self.plugin.get_client_resource(config)
-        agent = RequestTraversalAgent(root)
-        self.assertThat(
-            authorized_request(
-                token.encode("ascii"),
-                agent,
-                b"POST",
-                b"http://127.0.0.1/recover",
-                headers={b"content-type": [b"application/json"]},
-                data=BytesIO(
-                    dumps(
-                        {"recovery-capability": attenuate_writecap(replica_dircap)}
-                    ).encode("utf-8")
-                ),
-            ),
-            succeeded(
-                matches_response(
-                    code_matcher=Equals(202),
-                    body_matcher=Equals(b""),
-                )
-            ),
+
+        # normally, we'd use Treq's machinery to do in-memory
+        # requests, but this is a WebSocket, so we want to use
+        # Autobahn's testing machinery. Maybe there's a clever way to
+        # hook those together, but for now we reach in "directly" to
+        # grab the WebSocketResource and set up Autobahn's test agent
+        # that way (requiring the factory from the real resource)...
+        wsr = get_recovery_websocket_resource(root)
+        clock = MemoryReactorClockResolver()
+        pumper = create_pumper()
+
+        def create_proto():
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            # use the _actual_ WebSocketResource's factory
+            proto = wsr._factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+        self.addCleanup(pumper.stop)
+
+        recovering = Deferred.fromCoroutine(
+            recover(
+                agent, DecodedURL.from_text("ws://127.0.0.1:1/"), token, replica_dircap
+            )
         )
+        pumper._flush()
 
         self.assertThat(
-            authorized_request(
-                token.encode("ascii"),
-                agent,
-                b"GET",
-                b"http://127.0.0.1/recover",
-            ),
+            recovering,
             succeeded(
-                matches_response(
-                    code_matcher=Equals(200),
-                    body_matcher=matches_json(
-                        Equals({"stage": "succeeded", "failure-reason": None}),
-                    ),
-                )
+                Equals(
+                    [
+                        {"stage": "started", "failure-reason": None},
+                        {"stage": "inspect_replica", "failure-reason": None},
+                        {"stage": "downloading", "failure-reason": None},
+                        {"stage": "succeeded", "failure-reason": None},
+                    ],
+                ),
             ),
         )
 
