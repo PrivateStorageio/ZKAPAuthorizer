@@ -251,10 +251,10 @@ class RecoverProtocol(WebSocketServerProtocol):
             recovery_capability = from_string(body["recovery-capability"])
             if not isinstance(recovery_capability, ReadonlyDirectoryURI):
                 raise ValueError("Not a readonly-dircap")
-        except Exception:
+        except Exception as e:
             self.sendClose(
                 code=4000,
-                reason="Failed to parse recovery request",
+                reason=f"Failed to parse recovery request: {e}",
             )
             return
         # we have a valid request, tell our factory to start recovery
