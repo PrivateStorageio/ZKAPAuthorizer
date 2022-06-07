@@ -346,7 +346,7 @@ class VoucherStore(object):
         if wrapped(self, cursor) == []:
             return await f(cursor)
         else:
-            raise NotEmpty()
+            raise NotEmpty("there is existing local state")
 
     @with_cursor
     def get(self, cursor: Cursor, voucher: bytes) -> Voucher:

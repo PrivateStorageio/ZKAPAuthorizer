@@ -791,7 +791,7 @@ class RecoverTests(TestCase):
             ),
         )
         self.assertThat(
-            flushErrors(ValueError),
+            flushErrors(Exception),
             HasLength(1),
         )
 

@@ -227,6 +227,7 @@ class RecoverProtocol(WebSocketServerProtocol):
     (indicating overall success or failure) and the WebSocket is
     closed.
     """
+    _log = Logger()
 
     def onClose(self, wasClean, code, reason) -> None:
         """
@@ -252,6 +253,7 @@ class RecoverProtocol(WebSocketServerProtocol):
             if not isinstance(recovery_capability, ReadonlyDirectoryURI):
                 raise ValueError("Not a readonly-dircap")
         except Exception as e:
+            self._log.failure("Failed to initiate recovery")
             self.sendClose(
                 code=4000,
                 reason=f"Failed to parse recovery request: {e}",
