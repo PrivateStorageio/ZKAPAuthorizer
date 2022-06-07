@@ -66,6 +66,8 @@ from testtools.matchers import (
     MatchesAny,
     MatchesListwise,
     MatchesStructure,
+    MatchesDict,
+    StartsWith,
     Not,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
@@ -865,16 +867,15 @@ class RecoverTests(TestCase):
                 [
                     AfterPreprocessing(
                         lambda args_kwargs: args_kwargs[1],
-                        Equals(
-                            {
-                                "code": 4000,
-                                "reason": "Failed to parse recovery request",
-                            }
-                        ),
+                        MatchesDict({
+                            "code": Equals(4000),
+                            "reason": StartsWith("Failed to parse recovery request: "),
+                        }),
                     ),
                 ]
             ),
         )
+        flushErrors(Exception),
         return messages
 
     @given(
