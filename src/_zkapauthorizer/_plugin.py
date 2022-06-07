@@ -41,6 +41,7 @@ from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from twisted.web.guard import HTTPAuthSessionWrapper
 from twisted.web.resource import Resource
 from zope.interface import implementer
 
@@ -144,7 +145,7 @@ class _CostBasedPolicy:
         return snapshot_cost * self.factor < replica_cost
 
 
-def get_recovery_websocket_resource(root: Resource) -> WebSocketResource:
+def get_recovery_websocket_resource(root: HTTPAuthSessionWrapper) -> WebSocketResource:
     """
     :returns: the resource that speaks the WebSocket recovery protocol
     """
