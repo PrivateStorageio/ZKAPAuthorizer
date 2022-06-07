@@ -373,9 +373,7 @@ class RecoverFactory(WebSocketServerFactory):
         # generated a response to the request.
         downloader = self.get_downloader(cap.to_string().decode("ascii"))
         await store.call_if_empty(
-            partial(
-                self.recoverer.recover, downloader
-            )  # cursor added by call_if_empty
+            partial(self.recoverer.recover, downloader)  # cursor added by call_if_empty
         )
         # let all exceptions (including NotEmpty) out
 
