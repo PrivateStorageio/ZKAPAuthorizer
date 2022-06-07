@@ -32,6 +32,7 @@ from allmydata.interfaces import (
 )
 from allmydata.node import MissingConfigEntry
 from attrs import Factory, define, field, frozen
+from autobahn.twisted.resource import WebSocketResource
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
@@ -40,6 +41,7 @@ from twisted.internet import task
 from twisted.internet.defer import succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from twisted.web.resource import Resource
 from zope.interface import implementer
 
 from . import NAME
@@ -53,8 +55,6 @@ from .lease_maintenance import (
     lease_maintenance_service,
     maintain_leases_from_root,
 )
-from autobahn.twisted.resource import WebSocketResource
-from twisted.web.resource import Resource
 from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
 from .recover import get_tahoe_lafs_downloader
