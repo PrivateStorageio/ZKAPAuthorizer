@@ -24,7 +24,7 @@ In the future it should also allow users to read statistics about token usage.
 from collections.abc import Awaitable
 from functools import partial
 from json import dumps, loads
-from typing import Callable
+from typing import Callable, Optional
 
 from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
@@ -277,8 +277,8 @@ class RecoverFactory(WebSocketServerFactory):
     store: VoucherStore = field()
     get_downloader: Callable[[str], Downloader] = field()
     recoverer: StatefulRecoverer = field()
-    recovering_d: Deferred = field(default=None)
-    recovering_cap: CapStr = field(default=None)
+    recovering_d: Optional[Deferred] = field(default=None)
+    recovering_cap: Optional[ReadonlyDirectoryURI] = field(default=None)
     # manage WebSocket client(s)
     clients: list = field(default=Factory(list))
     sent_updates: list = field(default=Factory(list))
