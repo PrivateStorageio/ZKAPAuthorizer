@@ -366,21 +366,18 @@ class RecoverFactory(WebSocketServerFactory):
         store: VoucherStore,
         cap: ReadonlyDirectoryURI,
     ) -> None:
-        try:
-            # If these things succeed then we will have started recovery and
-            # generated a response to the request.
-            downloader = self.get_downloader(cap.to_string().decode("ascii"))
-            await store.call_if_empty(
-                partial(
-                    self.recoverer.recover, downloader
-                )  # cursor added by call_if_empty
-            )
-        except NotEmpty:
-            # If the database had anything in it, though, recovery will not be
-            # attempted - and it will even fail quickly enough to be a
-            # reasonable way to detect and report the conflict case.
-            raise ValueError("there is existing local state")
-        # let other exceptions out
+        """
+        :raises: NotEmpty if there is existing local state
+        """
+        # If these things succeed then we will have started recovery and
+        # generated a response to the request.
+        downloader = self.get_downloader(cap.to_string().decode("ascii"))
+        await store.call_if_empty(
+            partial(
+                self.recoverer.recover, downloader
+            )  # cursor added by call_if_empty
+        )
+        # let all exceptions (including NotEmpty) out
 
 
 def authorizationless_resource_tree(
