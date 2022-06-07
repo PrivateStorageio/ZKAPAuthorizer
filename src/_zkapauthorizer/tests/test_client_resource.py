@@ -64,11 +64,11 @@ from testtools.matchers import (
     IsInstance,
     MatchesAll,
     MatchesAny,
+    MatchesDict,
     MatchesListwise,
     MatchesStructure,
-    MatchesDict,
-    StartsWith,
     Not,
+    StartsWith,
 )
 from testtools.twistedsupport import CaptureTwistedLogs, succeeded
 from treq.testing import RequestTraversalAgent
@@ -867,10 +867,14 @@ class RecoverTests(TestCase):
                 [
                     AfterPreprocessing(
                         lambda args_kwargs: args_kwargs[1],
-                        MatchesDict({
-                            "code": Equals(4000),
-                            "reason": StartsWith("Failed to parse recovery request: "),
-                        }),
+                        MatchesDict(
+                            {
+                                "code": Equals(4000),
+                                "reason": StartsWith(
+                                    "Failed to parse recovery request: "
+                                ),
+                            }
+                        ),
                     ),
                 ]
             ),

@@ -46,7 +46,7 @@ from ._json import dumps_utf8
 from ._types import CapStr
 from .controller import PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
-from .model import NotEmpty, VoucherStore
+from .model import VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
 from .recover import Downloader, RecoveryStages, RecoveryState, StatefulRecoverer
@@ -227,6 +227,7 @@ class RecoverProtocol(WebSocketServerProtocol):
     (indicating overall success or failure) and the WebSocket is
     closed.
     """
+
     _log = Logger()
 
     def onClose(self, wasClean, code, reason) -> None:
