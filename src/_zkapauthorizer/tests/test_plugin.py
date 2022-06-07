@@ -88,6 +88,7 @@ from .._plugin import (
     get_root_nodes,
     load_signing_key,
     open_store,
+    get_recovery_websocket_resource,
 )
 from .._storage_client import IncorrectStorageServerReference
 from ..config import CONFIG_DB_NAME
@@ -853,7 +854,7 @@ class ClientResourceTests(TestCase):
         # hook those together, but for now we reach in "directly" to
         # grab the WebSocketResource and set up Autobahn's test agent
         # that way (requiring the factory from the real resource)...
-        wsr = root._portal.realm._root.children[b"recover"]
+        wsr = get_recovery_websocket_resource(root)
         clock = MemoryReactorClockResolver()
         pumper = create_pumper()
 

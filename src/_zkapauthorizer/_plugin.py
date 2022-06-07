@@ -53,6 +53,8 @@ from .lease_maintenance import (
     lease_maintenance_service,
     maintain_leases_from_root,
 )
+from autobahn.twisted.resource import WebSocketResource
+from twisted.web.resource import Resource
 from .model import VoucherStore, aware_now
 from .model import open_database as _open_database
 from .recover import get_tahoe_lafs_downloader
@@ -140,6 +142,13 @@ class _CostBasedPolicy:
         snapshot_cost = self._required_passes(snapshot_size)
         replica_cost = sum(map(self._required_passes, replica_sizes))
         return snapshot_cost * self.factor < replica_cost
+
+
+def get_recovery_websocket_resource(root: Resource) -> WebSocketResource:
+    """
+    :returns: the resource that speaks the WebSocket recovery protocol
+    """
+    return root._portal.realm._root.children[b"recover"]
 
 
 @implementer(IFoolscapStoragePlugin)
