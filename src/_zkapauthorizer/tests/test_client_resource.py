@@ -1000,22 +1000,26 @@ class RecoverTests(TestCase):
         pumper.start()
 
         # first recovery will fail
-        d0 = Deferred.fromCoroutine(recover(
-            agent,
-            DecodedURL.from_text("ws://127.0.0.1:1/"),
-            api_auth_token,
-            self.GOOD_CAPABILITY,
-        ))
+        d0 = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
+        )
         pumper._flush()
 
         # try to recover again (this one should work, as we only fail
         # once in the test-provided downloader)
-        d1 = Deferred.fromCoroutine(recover(
-            agent,
-            DecodedURL.from_text("ws://127.0.0.1:1/"),
-            api_auth_token,
-            self.GOOD_CAPABILITY,
-        ))
+        d1 = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
+        )
         pumper._flush()
 
         self.assertThat(
@@ -1035,7 +1039,7 @@ class RecoverTests(TestCase):
                         },
                     ]
                 )
-            )
+            ),
         )
         # second attempt should succeed
         self.assertThat(
@@ -1055,7 +1059,7 @@ class RecoverTests(TestCase):
                         },
                     ]
                 )
-            )
+            ),
         )
 
 
