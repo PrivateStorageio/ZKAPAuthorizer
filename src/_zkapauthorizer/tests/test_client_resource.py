@@ -112,6 +112,7 @@ from ..recover import make_fail_downloader, noop_downloader
 from ..replicate import (
     ReplicationAlreadySetup,
     fail_setup_replication,
+    statements_to_snapshot,
     with_replication,
 )
 from ..resource import (
@@ -899,8 +900,7 @@ class RecoverTests(TestCase):
                 await downloading_d
                 downloads.append(set_state)
                 return (
-                    # this data is CBOR for {"version": 1, "statements": []}
-                    lambda: BytesIO(b"\xa2gversion\x01jstatements\x80"),
+                    lambda: BytesIO(statements_to_snapshot([])),
                     [],  # no event-streams
                 )
 
