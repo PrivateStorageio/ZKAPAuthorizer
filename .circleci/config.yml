@@ -469,10 +469,10 @@ workflows:
   version: 2
   release:
     when:
-      - matches:
-          # Run the release job for any tag that looks like vXXX.
-          pattern: "^v.+$"
-          value: "<< pipeline.git.tag >>"
+      matches:
+        # Run the release job for any tag that looks like vXXX.
+        pattern: "^v.+$"
+        value: "<< pipeline.git.tag >>"
     jobs:
       - "build-wheel"
       - "pypi-upload":
