@@ -1,2 +1,0 @@
-include versioneer.py
-include src/_zkapauthorizer/_version.py
