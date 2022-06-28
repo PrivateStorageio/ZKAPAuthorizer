@@ -610,9 +610,11 @@ class ReplicateTests(TestCase):
                 matches_response(
                     code_matcher=Equals(INTERNAL_SERVER_ERROR),
                     body_matcher=matches_json(
-                        MatchesDict({
-                            "reason": IsInstance(str),
-                        }),
+                        MatchesDict(
+                            {
+                                "reason": IsInstance(str),
+                            }
+                        ),
                     ),
                 ),
             ),
