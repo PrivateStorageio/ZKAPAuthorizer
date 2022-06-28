@@ -229,6 +229,11 @@ jobs:
       NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
+      # The only reason we need the source for this step is to get
+      # nix/twine.nix that defines the shell environment we can use to upload
+      # the wheel.
+      - "checkout"
+
       - attach_workspace:
           at: "release-workspace"
 
