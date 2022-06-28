@@ -239,8 +239,13 @@ jobs:
           name: "Build Wheel"
           command: |
             nix build -f wheel.nix
+            # Put the wheel in a regular directory so CircleCI doesn't get
+            # confused by symlinks when it comes time to upload the wheel as
+            # an artifact.
+            mkdir wheels
+            cp ./result/* wheels/
       - store_artifacts:
-          path: "./result/"
+          path: "./wheels/"
 
   linux-tests: &LINUX_TESTS
     parameters:
