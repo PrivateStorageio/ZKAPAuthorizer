@@ -32,9 +32,11 @@ from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
 from autobahn.websocket.interfaces import IWebSocketClientAgent
 from hyperlink import DecodedURL
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred
 from twisted.logger import Logger
+from twisted.python.failure import Failure
 from twisted.web.http import BAD_REQUEST, CONFLICT, CREATED, INTERNAL_SERVER_ERROR
+from twisted.web.iweb import IRequest
 from twisted.web.resource import ErrorPage, IResource, NoResource, Resource
 from twisted.web.server import NOT_DONE_YET
 from zope.interface import Attribute
@@ -170,6 +172,20 @@ def from_configuration(
     return root
 
 
+def internal_server_error(err: Failure, logger: Logger, request: IRequest) -> None:
+    """
+    Log a failure and return it as an internal server error for the given
+    request.
+
+    This is suitable for use as a last-resort errback while handling a
+    request.
+    """
+    logger.failure("replication setup failed", err)
+    request.setResponseCode(INTERNAL_SERVER_ERROR)
+    request.write(dumps_utf8({"reason": err.getErrorMessage()}))
+    request.finish()
+
+
 @define
 class ReplicateResource(Resource):
     """
@@ -188,27 +204,26 @@ class ReplicateResource(Resource):
         Resource.__init__(self)
 
     def render_POST(self, request):
-        self._setup_replication(request)
+        d = Deferred.fromCoroutine(self._setup_replication(request))
+        d.addErrback(internal_server_error, self._log, request)
         return NOT_DONE_YET
 
-    @inlineCallbacks
-    def _setup_replication(self, request):
+    async def _setup_replication(self, request) -> None:
         """
         Call the replication setup function and asynchronously deliver its result
         as a response to the given request.
         """
         try:
-            cap_str = yield Deferred.fromCoroutine(self._setup())
-        except ReplicationAlreadySetup:
-            request.setResponseCode(CONFLICT)
-        except:
-            self._log.failure("replication setup failed")
-            request.setResponseCode(INTERNAL_SERVER_ERROR)
+            cap_str = await self._setup()
+        except ReplicationAlreadySetup as e:
+            status = CONFLICT
+            cap_str = e.cap_str
         else:
-            application_json(request)
-            request.setResponseCode(CREATED)
-            request.write(dumps_utf8({"recovery-capability": cap_str}))
+            status = CREATED
 
+        application_json(request)
+        request.setResponseCode(status)
+        request.write(dumps_utf8({"recovery-capability": cap_str}))
         request.finish()
 
 

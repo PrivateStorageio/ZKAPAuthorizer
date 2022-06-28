@@ -92,7 +92,13 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, attenuate_writecap
+from .tahoe import (
+    DataProvider,
+    DirectoryEntry,
+    ITahoeClient,
+    attenuate_writecap,
+    capability_from_string,
+)
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -260,10 +266,16 @@ class AlreadySettingUp(Exception):
     """
 
 
+@define(auto_exc=False)
 class ReplicationAlreadySetup(Exception):
     """
     An attempt was made to setup of replication but it is already set up.
+
+    :ivar cap_str: The read-only capability of the replica that was already
+        set up.
     """
+
+    cap_str: str
 
 
 async def fail_setup_replication():
@@ -292,7 +304,9 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
 
         # Check to see if there is already configuration.
         if config_path.exists():
-            raise ReplicationAlreadySetup()
+            rwcap_obj = capability_from_string(config_path.getContent())
+            rocap_str = rwcap_obj.get_readonly().to_string().decode("ascii")
+            raise ReplicationAlreadySetup(rocap_str)
 
         # Create a directory with it
         rw_cap = await client.make_directory()

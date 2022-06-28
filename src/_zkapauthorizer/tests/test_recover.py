@@ -29,14 +29,7 @@ from hypothesis.strategies import (
     text,
 )
 from testtools import TestCase
-from testtools.matchers import (
-    AfterPreprocessing,
-    Always,
-    Equals,
-    Is,
-    IsInstance,
-    MatchesStructure,
-)
+from testtools.matchers import AfterPreprocessing, Always, Equals, Is, MatchesStructure
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred
 from zope.interface import Interface
@@ -69,7 +62,7 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap, capability_from_string
 from .common import delayedProxy, from_awaitable
 from .matchers import equals_database, matches_capability, raises
 from .strategies import (
@@ -452,13 +445,19 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         """
         grid = MemoryGrid()
         client = grid.client()
-        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(b"URI:DIR2:stuff")
+
+        rwcap_bytes = grid.make_directory().encode("ascii")
+        rocap_obj = capability_from_string(rwcap_bytes).get_readonly()
+        rocap_bytes = rocap_obj.to_string()
+
+        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(rwcap_bytes)
+
         self.assertThat(
             Deferred.fromCoroutine(setup_tahoe_lafs_replication(client)),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
-                    IsInstance(ReplicationAlreadySetup),
+                    Equals(ReplicationAlreadySetup(rocap_bytes.decode("ascii"))),
                 ),
             ),
         )

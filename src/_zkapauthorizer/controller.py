@@ -26,6 +26,7 @@ from operator import delitem, setitem
 
 import attr
 import challenge_bypass_ristretto
+from attrs import define
 from treq import content
 from treq.client import HTTPClient
 from twisted.internet.defer import Deferred, fail, inlineCallbacks, returnValue, succeed
@@ -55,14 +56,14 @@ RETRY_INTERVAL = timedelta(milliseconds=1000)
 # interacts poorly with these.
 # https://twistedmatrix.com/trac/ticket/9641
 # https://twistedmatrix.com/trac/ticket/9771
-@attr.s(auto_attribs=True)
+@define(auto_exc=False)
 class UnexpectedResponse(Exception):
     """
     The issuer responded in an unexpected and unhandled way.
     """
 
-    code: int = attr.ib()
-    body: bytes = attr.ib()
+    code: int
+    body: bytes
 
 
 class AlreadySpent(Exception):

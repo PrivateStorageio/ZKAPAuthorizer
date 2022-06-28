@@ -559,7 +559,7 @@ class ReplicateTests(TestCase):
         )
 
         async def setup_replication():
-            raise ReplicationAlreadySetup()
+            raise ReplicationAlreadySetup("URI:DIR2-RO:foo:bar")
 
         root = root_from_config(config, aware_now, setup_replication=setup_replication)
         agent = RequestTraversalAgent(root)
@@ -609,6 +609,11 @@ class ReplicateTests(TestCase):
             succeeded(
                 matches_response(
                     code_matcher=Equals(INTERNAL_SERVER_ERROR),
+                    body_matcher=matches_json(
+                        MatchesDict({
+                            "reason": IsInstance(str),
+                        }),
+                    ),
                 ),
             ),
         )
