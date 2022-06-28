@@ -206,11 +206,7 @@ jobs:
   build-wheel:
     docker:
       # Run in a highly Nix-capable environment.
-      image: "nixos/nix:2.5.1"
-
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
+      - image: "nixos/nix:2.5.1"
 
     environment:
       # Let us use features marked "experimental".  For example, most/all of
