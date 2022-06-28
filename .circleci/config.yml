@@ -235,9 +235,10 @@ jobs:
             mkdir -p /etc/ssl/certs/
             ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
       - "checkout"
-      - run: "Build Wheel"
-        command: |
-          nix build -f wheel.nix
+      - run:
+          name: "Build Wheel"
+          command: |
+            nix build -f wheel.nix
       - store_artifacts:
           path: "./result/"
 
