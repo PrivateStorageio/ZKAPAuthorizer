@@ -14,7 +14,6 @@
 
 __all__ = [
     "__version__",
-    "__revision__",
     "NAME",
 ]
 
@@ -28,4 +27,4 @@ stats.eventually = lambda f: f()
 # client plugin exposes, configuration files, etc.
 NAME = "privatestorageio-zkapauthz-v2"
 
-from ._version import __revision__, __version__
+__version__ = "2022.6.28.1"
