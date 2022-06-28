@@ -251,7 +251,7 @@ jobs:
               exit 1
             fi
 
-            nix shell -f nix/twine.nix twine --command 'twine upload --non-interactive release-workspace/*.whl'
+            nix shell -f nix/twine.nix twine --command twine upload --non-interactive release-workspace/*.whl
 
   build-wheel:
     docker:
