@@ -229,19 +229,6 @@ jobs:
       NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
-      - run: &FIX_CA_CERTS
-          # Work around a bug in the 2.5.1 Docker image that prevents it from
-          # having any CA certificates to use to validate any certificates it
-          # encounters (and thus makes it incapable of talking to our binary
-          # caches).
-          #
-          # The work-around is from a comment on the issue
-          # https://github.com/NixOS/nix/issues/5797
-          name: "Fix CA Certificates"
-          command: |
-            mkdir -p /etc/ssl/certs/
-            ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
-
       - attach_workspace:
           at: "release-workspace"
 
