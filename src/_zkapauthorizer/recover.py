@@ -223,7 +223,7 @@ def sorted_event_streams(event_streams: Iterable[EventStream]) -> list[EventStre
     """
     streams_with_changes = (e for e in event_streams if len(e.changes) > 0)
 
-    def event_stream_key(e):
+    def event_stream_key(e: EventStream) -> int:
         seq = e.highest_sequence()
         assert seq is not None
         return seq
@@ -347,9 +347,9 @@ def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloade
         returns a downloader for that capability.
     """
 
-    def get_downloader(cap_str: CapStr):
-        def downloader(set_state):
-            return tahoe_lafs_downloader(client, cap_str, set_state)
+    def get_downloader(cap_str: CapStr) -> Downloader:
+        async def downloader(set_state: SetState) -> Replica:
+            return await tahoe_lafs_downloader(client, cap_str, set_state)
 
         return downloader
 

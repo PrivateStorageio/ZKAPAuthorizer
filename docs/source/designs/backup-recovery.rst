@@ -390,31 +390,20 @@ The expected interaction pattern involves API calls to three endpoints.
    including redeeming vouchers and spending ZKAPs.
 
 #. After losing the Tahoe-LAFS client node,
-   create a new Tahoe-LAFS client node and recover from the replica:
+   create a new Tahoe-LAFS client node and recover from the replica.
 
-   .. code-block:: html
-
-      POST /storage-plugins/privatestorageio-zkapauthz-v1/recover
-      Content-Type: application/json
-      Content-Length: ...
+   The recovery endpoint uses a websocket protocol.
+   Send a message like::
 
       {"recovery-capability": "URI:DIR-RO:xxxx"}
 
-      202 Accepted
-      Content-Type: application/json
+   And then receive messages like::
 
-      {}
+     {"stage": <string>, "failure-reason": <string or null>}
 
-#. The recovery status can now be polled:
-
-   .. code-block:: html
-
-      GET /storage-plugins/privatestorageio-zkapauthz-v1/recover
-
-      200 OK
-      Content-Type: application/json
-
-      {"stage": "succeeded"}
+   When recovery succeeds the ``stage`` will be ``"succeeded"``.
+   When recovery fails ``"failure-reason"`` will be non-null.
+   While progress is being made towards one of these states other values are possible.
 
 #. The new Tahoe-LAFS client node now has the same ZKAPAuthorizer state as it did prior to lose of the original instance.
 
