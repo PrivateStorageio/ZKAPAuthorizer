@@ -113,7 +113,7 @@ jobs:
       - run:
           name: "Install Python"
           command: |
-            brew install python@<< parameters.py-version >>
+            type -p python<< parameters.py-version >> || brew install python@<< parameters.py-version >>
 
       - restore_cache:
           keys:
