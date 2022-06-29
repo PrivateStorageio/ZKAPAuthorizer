@@ -104,9 +104,6 @@ jobs:
     macos:
       xcode: << parameters.xcode-version >>
 
-    environment:
-      HOMEBREW_NO_AUTO_UPDATE: 1
-
     steps:
       - "checkout"
 
