@@ -472,7 +472,11 @@ workflows:
           # upload is happening.
           filters:
             tags:
+              # Limit the wheel job to running only for release tags.
               only: "/^v.*/"
+            branches:
+              # And make sure it runs for no other branch pushes.
+              ignore: "/.*/"
       - "pypi-upload":
           filters:
             tags:
