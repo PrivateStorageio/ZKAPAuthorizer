@@ -68,14 +68,14 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
-            python<< parameters.py-version >> -V
-            python<< parameters.py-version >> -m pip install -v --upgrade pip wheel
-            python<< parameters.py-version >> -m pip install -v . -r requirements/test.in
-            python<< parameters.py-version >> -m pip freeze
+            py -<< parameters.py-version >> -V
+            py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
+            py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
+            py -<< parameters.py-version >> -m pip freeze
       - run:
           name: "Run Tests"
           command: |
-            python<< parameters.py-version >> -m coverage run `
+            py -<< parameters.py-version >> -m coverage run `
               --debug=config `
               --module twisted.trial `
                 --rterrors `
@@ -86,8 +86,8 @@ jobs:
           command: |
             mkdir -p coverage-workspace
             Copy-Item -Path ".coverage.*" -Destination "coverage-workspace"
-            python<< parameters.py-version >> -m coverage combine
-            python<< parameters.py-version >> -m coverage report
+            py -<< parameters.py-version >> -m coverage combine
+            py -<< parameters.py-version >> -m coverage report
 
       - persist_to_workspace:
           root: "coverage-workspace"
