@@ -467,11 +467,12 @@ workflows:
     jobs:
       - "build-wheel":
           # Documentation states there is a requirement to have a tag filter
-          # on a job is required by another job with a tag filter.  This
-          # filter matches all tags, of course.
+          # on a job is required by another job with a tag filter.  Just
+          # duplicate the pypi-upload job's tag filter so we don't run if no
+          # upload is happening.
           filters:
             tags:
-              only: "/.*/"
+              only: "/^v.*/"
       - "pypi-upload":
           filters:
             tags:
