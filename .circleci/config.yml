@@ -342,18 +342,8 @@ jobs:
       NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
-      - run: &FIX_CA_CERTS
-          # Work around a bug in the 2.5.1 Docker image that prevents it from
-          # having any CA certificates to use to validate any certificates it
-          # encounters (and thus makes it incapable of talking to our binary
-          # caches).
-          #
-          # The work-around is from a comment on the issue
-          # https://github.com/NixOS/nix/issues/5797
-          name: "Fix CA Certificates"
-          command: |
-            mkdir -p /etc/ssl/certs/
-            ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
+      - run:
+          <<: *FIX_CA_CERTS
 
       - run: &SETUP_CACHIX
           name: "Set up Cachix"
@@ -459,16 +449,55 @@ jobs:
 
 workflows:
   version: 2
+
+  # Define a workflow for publishing a release.  Triggering workflows on tags
+  # is complex.  For a lot of hints see
+  # https://circleci.com/docs/2.0/workflows#executing-workflows-for-a-git-tag
   release:
-    when:
-      matches:
-        # Run the release job for any tag that looks like vXXX.
-        pattern: "^v.+$"
-        value: "<< pipeline.git.tag >>"
     jobs:
-      - "build-wheel"
+      - "build-wheel":
+          # Documentation states there is a requirement to have a tag filter
+          # on a job is required by another job with a tag filter.  Just
+          # duplicate the pypi-upload job's tag filter so we don't run if no
+          # upload is happening.
+          filters:
+            tags:
+              # Limit the wheel job to running only for release tags -
+              # excluding release candidates.  We try to match things like
+              # "v1.2.3" and not things like "v1.2.3a5".
+              only: "/^v\\d+\\.\\d+\\.\\d+$/"
+            branches:
+              # And make sure it runs for no other branch pushes.
+              ignore: "/.*/"
       - "pypi-upload":
-          repository: "pypi"
+          filters:
+            tags:
+              # Limit the upload job to running only for release tags.
+              only: "/^v\\d+\\.\\d+\\.\\d+$/"
+            branches:
+              # And make sure it runs for no other branch pushes.
+              ignore: "/.*/"
+          repository: "testpypi"
+          requires:
+            - "build-wheel"
+
+  # Like the `release` workflow but only run on release candidate tags and
+  # upload to Test PyPI.  See `release` workflow for commentary.
+  release-candidate:
+    jobs:
+      - "build-wheel":
+          filters:
+            tags:
+              only: "/^v\\d+\\.\\d+\\.\\d+a\\d+$/"
+            branches:
+              ignore: "/.*/"
+      - "pypi-upload":
+          filters:
+            tags:
+              only: "/^v\\d+\\.\\d+\\.\\d+a\\d+$/"
+            branches:
+              ignore: "/.*/"
+          repository: "testpypi"
           requires:
             - "build-wheel"
 
@@ -514,8 +543,3 @@ workflows:
           - "Linux tests, python 3.9, Tahoe-LAFS master"
           - "macOS tests, python 3.9 xcode 12.3.0"
           - "Windows tests, python 3.9"
-
-    - "pypi-upload":
-        repository: "testpypi"
-        requires:
-          - "build-wheel"
