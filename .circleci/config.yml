@@ -498,15 +498,14 @@ workflows:
       - "build-wheel":
           filters:
             tags:
-              # Invert the `release` workflow filter by using `ignore`
-              # instead.
-              ignore: "/^v[^a]+$/"
+              # Try to invert the `release` workflow condition.
+              only: "/^v.+a.+$/"
             branches:
               ignore: "/.*/"
       - "pypi-upload":
           filters:
             tags:
-              ignore: "/^v[^a]+$/"
+              only: "/^v.+a.+$/"
             branches:
               ignore: "/.*/"
           repository: "testpypi"
