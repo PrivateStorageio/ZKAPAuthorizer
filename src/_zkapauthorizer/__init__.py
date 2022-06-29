@@ -27,4 +27,4 @@ stats.eventually = lambda f: f()
 # client plugin exposes, configuration files, etc.
 NAME = "privatestorageio-zkapauthz-v2"
 
-__version__ = "2022.6.29a3"
+__version__ = "2022.6.29"
