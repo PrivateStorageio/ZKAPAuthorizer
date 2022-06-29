@@ -111,6 +111,7 @@ jobs:
           name: "Install Python"
           command: |
             type -p python<< parameters.py-version >> || brew install python@<< parameters.py-version >>
+            echo 'export PATH="/usr/local/opt/python@<< parameters.py-version >>/bin:$PATH"' >> "$BASH_ENV"
 
       - restore_cache:
           keys:
