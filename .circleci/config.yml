@@ -474,8 +474,8 @@ workflows:
             tags:
               # Limit the wheel job to running only for release tags -
               # excluding release candidates.  We try to match things like
-              # "1.2.3" and not things like "1.2.3a5".
-              only: "/^v[^a]+$/"
+              # "v1.2.3" and not things like "v1.2.3a5".
+              only: "/^v\d+\.\d+\.\d+$/"
             branches:
               # And make sure it runs for no other branch pushes.
               ignore: "/.*/"
@@ -483,7 +483,7 @@ workflows:
           filters:
             tags:
               # Limit the upload job to running only for release tags.
-              only: "/^v[^a]+$/"
+              only: "/^v\d+\.\d+\.\d+$/"
             branches:
               # And make sure it runs for no other branch pushes.
               ignore: "/.*/"
@@ -498,14 +498,13 @@ workflows:
       - "build-wheel":
           filters:
             tags:
-              # Try to invert the `release` workflow condition.
-              only: "/^v.+a.+$/"
+              only: "/^v\d+\.\d+\.\d+a\d+$/"
             branches:
               ignore: "/.*/"
       - "pypi-upload":
           filters:
             tags:
-              only: "/^v.+a.+$/"
+              only: "/^v\d+\.\d+\.\d+a\d+$/"
             branches:
               ignore: "/.*/"
           repository: "testpypi"
