@@ -28,8 +28,25 @@ from hypothesis.strategies import (
     sampled_from,
     text,
 )
+from tahoe_capabilities import (
+    danger_real_capability_string,
+    digested_capability_string,
+    is_directory,
+    is_mutable,
+    is_read,
+    writeable_directory_from_string,
+    writeable_from_string,
+)
 from testtools import TestCase
-from testtools.matchers import AfterPreprocessing, Always, Equals, Is, MatchesStructure
+from testtools.matchers import (
+    AfterPreprocessing,
+    Always,
+    Equals,
+    Is,
+    MatchesAll,
+    MatchesPredicate,
+    MatchesStructure,
+)
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred
 from zope.interface import Interface
@@ -62,9 +79,9 @@ from ..replicate import (
     statements_to_snapshot,
 )
 from ..sql import Table, create_table
-from ..tahoe import ITahoeClient, MemoryGrid, attenuate_writecap, capability_from_string
+from ..tahoe import ITahoeClient, MemoryGrid
 from .common import delayedProxy, from_awaitable
-from .matchers import equals_database, matches_capability, raises
+from .matchers import equals_database, raises
 from .strategies import (
     deletes,
     inserts,
@@ -374,6 +391,7 @@ class TahoeLAFSDownloaderTests(TestCase):
         grid = MemoryGrid()
         tahoeclient = grid.client()
         replica_dir_cap_str = grid.make_directory()
+        replica_dir_cap = writeable_directory_from_string(replica_dir_cap_str)
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
@@ -406,7 +424,7 @@ class TahoeLAFSDownloaderTests(TestCase):
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
-        download = get_downloader(replica_dir_cap_str)
+        download = get_downloader(replica_dir_cap.reader)
 
         def read_replica_data(replica: Replica) -> tuple[bytes, list[bytes]]:
             def read(p):
@@ -446,18 +464,21 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        rwcap_bytes = grid.make_directory().encode("ascii")
-        rocap_obj = capability_from_string(rwcap_bytes).get_readonly()
-        rocap_bytes = rocap_obj.to_string()
+        rwcap_str = grid.make_directory()
+        rwcap_obj = writeable_from_string(rwcap_str)
 
-        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(rwcap_bytes)
+        client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(
+            rwcap_str.encode("ascii")
+        )
 
         self.assertThat(
             Deferred.fromCoroutine(setup_tahoe_lafs_replication(client)),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
-                    Equals(ReplicationAlreadySetup(rocap_bytes.decode("ascii"))),
+                    Equals(
+                        ReplicationAlreadySetup(digested_capability_string(rwcap_obj))
+                    ),
                 ),
             ),
         )
@@ -506,21 +527,31 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         d.addCallback(save_and_passthrough)
         self.assertThat(
             d,
-            succeeded(matches_capability(Equals("DIR2-RO"))),
+            succeeded(
+                MatchesAll(
+                    MatchesPredicate(is_read, "is not readable"),
+                    MatchesPredicate(is_directory, "is not a directory"),
+                    MatchesPredicate(is_mutable, "is not mutable"),
+                )
+            ),
         )
         ro_cap = results[0]
 
         self.assertThat(
-            Deferred.fromCoroutine(client.list_directory(ro_cap)),
+            Deferred.fromCoroutine(
+                client.list_directory(danger_real_capability_string(ro_cap))
+            ),
             succeeded(Equals({})),
         )
 
         # Peek inside the node private state to make sure the capability was
         # written.
         self.assertThat(
-            client.get_private_path(REPLICA_RWCAP_BASENAME).getContent(),
+            client.get_private_path(REPLICA_RWCAP_BASENAME)
+            .getContent()
+            .decode("ascii"),
             AfterPreprocessing(
-                attenuate_writecap,
+                lambda s: writeable_directory_from_string(s).reader,
                 Equals(ro_cap),
             ),
         )

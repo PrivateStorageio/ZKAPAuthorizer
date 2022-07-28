@@ -20,10 +20,15 @@ from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define, field
+from tahoe_capabilities import (
+    DirectoryReadCapability,
+    danger_real_capability_string,
+    readable_from_string,
+)
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
-from .tahoe import CapStr, DataProvider, ITahoeClient
+from .tahoe import DataProvider, ITahoeClient, download_child
 
 
 class SnapshotMissing(Exception):
@@ -312,7 +317,7 @@ def recover_snapshot(statements: Iterator[str], cursor: Cursor) -> None:
 
 async def tahoe_lafs_downloader(
     client: ITahoeClient,
-    recovery_cap: str,
+    recovery_cap: DirectoryReadCapability,
     set_state: SetState,
 ) -> Replica:
     """
@@ -320,18 +325,18 @@ async def tahoe_lafs_downloader(
     node's private directory.
     """
     set_state(RecoveryState(stage=RecoveryStages.inspect_replica))
-    entries = await client.list_directory(recovery_cap)
+    entries = await client.list_directory(danger_real_capability_string(recovery_cap))
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
     snapshot_path = client.get_private_path(SNAPSHOT_NAME)
-    await client.download(snapshot_path, recovery_cap, [SNAPSHOT_NAME])
+    await download_child(snapshot_path, client, recovery_cap, [SNAPSHOT_NAME])
 
     entry_paths = []
     for name, (entry_type, entry) in entries.items():
         if entry_type == "filenode" and name.startswith("event-stream-"):
             entry_path = client.get_private_path(name)
             entry_paths.append(entry_path)
-            await client.download(entry_path, entry["ro_uri"], None)
+            await client.download(entry_path, readable_from_string(entry["ro_uri"]))
 
     return (
         partial(snapshot_path.open, "rb"),
@@ -339,7 +344,9 @@ async def tahoe_lafs_downloader(
     )
 
 
-def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloader]:
+def get_tahoe_lafs_downloader(
+    client: ITahoeClient,
+) -> Callable[[DirectoryReadCapability], Downloader]:
     """
     Bind some parameters to ``tahoe_lafs_downloader`` in a convenient way.
 
@@ -347,9 +354,11 @@ def get_tahoe_lafs_downloader(client: ITahoeClient) -> Callable[[str], Downloade
         returns a downloader for that capability.
     """
 
-    def get_downloader(cap_str: CapStr) -> Downloader:
+    def get_downloader(cap: DirectoryReadCapability) -> Downloader:
+        assert not isinstance(cap, str)
+
         async def downloader(set_state: SetState) -> Replica:
-            return await tahoe_lafs_downloader(client, cap_str, set_state)
+            return await tahoe_lafs_downloader(client, cap, set_state)
 
         return downloader
 

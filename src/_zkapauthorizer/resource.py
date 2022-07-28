@@ -26,13 +26,18 @@ from functools import partial
 from json import dumps, loads
 from typing import Callable, Optional
 
-from allmydata.uri import ReadonlyDirectoryURI, from_string
 from attr import Factory, define, field
 from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import WebSocketServerFactory, WebSocketServerProtocol
 from autobahn.websocket.interfaces import IWebSocketClientAgent
 from hyperlink import DecodedURL
+from tahoe_capabilities import (
+    DirectoryReadCapability,
+    danger_real_capability_string,
+    readonly_directory_from_string,
+)
 from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IReactorTime
 from twisted.logger import Logger
 from twisted.python.failure import Failure
 from twisted.web.http import BAD_REQUEST, CONFLICT, CREATED, INTERNAL_SERVER_ERROR
@@ -45,7 +50,8 @@ from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
-from .controller import PaymentController, get_redeemer
+from .config import Config
+from .controller import IRedeemer, PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
 from .model import VoucherStore
 from .pricecalculator import PriceCalculator
@@ -58,7 +64,6 @@ from .storage_common import (
     get_configured_shares_needed,
     get_configured_shares_total,
 )
-from .tahoe import attenuate_writecap
 
 # The number of tokens to submit with a voucher redemption.
 NUM_TOKENS = 2**15
@@ -74,19 +79,19 @@ class IZKAPRoot(IResource):
 
 
 def get_token_count(
-    plugin_name,
-    node_config,
-):
+    plugin_name: str,
+    node_config: Config,
+) -> int:
     """
     Retrieve the configured voucher value, in number of tokens, from the given
     configuration.
 
-    :param str plugin_name: The plugin name to use to choose a
-        configuration section.
+    :param plugin_name: The plugin name to use to choose a configuration
+        section.
 
-    :param _Config node_config: See ``from_configuration``.
+    :param node_config: See ``from_configuration``.
 
-    :param int default: The value to return if none is configured.
+    :return: The number of tokens from the configuration or a default.
     """
     section_name = "storageclient.plugins.{}".format(plugin_name)
     return int(
@@ -99,33 +104,33 @@ def get_token_count(
 
 
 def from_configuration(
-    node_config,
-    store,
-    get_downloader,
-    setup_replication,
-    redeemer=None,
-    clock=None,
-):
+    node_config: Config,
+    store: VoucherStore,
+    get_downloader: Callable[[DirectoryReadCapability], Downloader],
+    setup_replication: Callable[[], Awaitable[DirectoryReadCapability]],
+    redeemer: Optional[IRedeemer] = None,
+    clock: Optional[IReactorTime] = None,
+) -> IZKAPRoot:
     """
     Instantiate the plugin root resource using data from its configuration
     section, **storageclient.plugins.privatestorageio-zkapauthz-v2**, in the
     Tahoe-LAFS configuration file.  See the configuration documentation for
     details of the configuration section.
 
-    :param _Config node_config: An object representing the overall node
-        configuration.  The plugin configuration can be extracted from this.
-        This is also used to read and write files in the private storage area
-        of the node's persistent state location.
+    :param node_config: An object representing the overall node configuration.
+        The plugin configuration can be extracted from this.  This is also
+        used to read and write files in the private storage area of the node's
+        persistent state location.
 
-    :param VoucherStore store: The store to use.
+    :param store: The store to use.
 
-    :param IRedeemer redeemer: The voucher redeemer to use.  If ``None`` a
-        sensible one is constructed.
+    :param redeemer: The voucher redeemer to use.  If ``None`` a sensible one
+        is constructed.
 
     :param clock: See ``PaymentController._clock``.
 
-    :return IZKAPRoot: The root of the resource hierarchy presented by the
-        client side of the plugin.
+    :return: The root of the resource hierarchy presented by the client side
+        of the plugin.
     """
     if redeemer is None:
         redeemer = get_redeemer(
@@ -196,34 +201,40 @@ class ReplicateResource(Resource):
         work.
     """
 
-    _setup: Callable[[], Awaitable[str]]
+    _setup: Callable[[], Awaitable[DirectoryReadCapability]]
 
-    _log = Logger()
+    _log: Logger = Logger()
 
-    def __attrs_post_init__(self):
+    def __attrs_post_init__(self) -> None:
         Resource.__init__(self)
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> int:
         d = Deferred.fromCoroutine(self._setup_replication(request))
         d.addErrback(internal_server_error, self._log, request)
         return NOT_DONE_YET
 
-    async def _setup_replication(self, request) -> None:
+    async def _setup_replication(self, request: IRequest) -> None:
         """
         Call the replication setup function and asynchronously deliver its result
         as a response to the given request.
         """
         try:
-            cap_str = await self._setup()
+            cap_obj = await self._setup()
         except ReplicationAlreadySetup as e:
             status = CONFLICT
-            cap_str = e.cap_str
+            cap_obj = readonly_directory_from_string(e.cap_str)
         else:
             status = CREATED
 
         application_json(request)
         request.setResponseCode(status)
-        request.write(dumps_utf8({"recovery-capability": cap_str}))
+        request.write(
+            dumps_utf8(
+                {
+                    "recovery-capability": danger_real_capability_string(cap_obj),
+                }
+            )
+        )
         request.finish()
 
 
@@ -264,9 +275,8 @@ class RecoverProtocol(WebSocketServerProtocol):
             body = loads(payload)
             if set(body.keys()) != {"recovery-capability"}:
                 raise ValueError("Unknown keys present in request")
-            recovery_capability = from_string(body["recovery-capability"])
-            if not isinstance(recovery_capability, ReadonlyDirectoryURI):
-                raise ValueError("Not a readonly-dircap")
+            cap_str = body["recovery-capability"]
+            recovery_capability = readonly_directory_from_string(cap_str)
         except Exception as e:
             self._log.failure("Failed to initiate recovery")
             self.sendClose(
@@ -289,10 +299,10 @@ class RecoverFactory(WebSocketServerFactory):
     """
 
     store: VoucherStore = field()
-    get_downloader: Callable[[str], Downloader] = field()
+    get_downloader: Callable[[DirectoryReadCapability], Downloader] = field()
     recoverer: StatefulRecoverer = field()
     recovering_d: Optional[Deferred] = field(default=None)
-    recovering_cap: Optional[ReadonlyDirectoryURI] = field(default=None)
+    recovering_cap: Optional[DirectoryReadCapability] = field(default=None)
     # manage WebSocket client(s)
     clients: list = field(default=Factory(list))
     sent_updates: list = field(default=Factory(list))
@@ -316,7 +326,7 @@ class RecoverFactory(WebSocketServerFactory):
             client.sendMessage(update_msg, False)
 
     def initiate_recovery(
-        self, cap: ReadonlyDirectoryURI, client: WebSocketServerProtocol
+        self, cap: DirectoryReadCapability, client: WebSocketServerProtocol
     ) -> None:
         """
         A new WebSocket client has asked for recovery.
@@ -381,14 +391,14 @@ class RecoverFactory(WebSocketServerFactory):
     async def _recover(
         self,
         store: VoucherStore,
-        cap: ReadonlyDirectoryURI,
+        cap: DirectoryReadCapability,
     ) -> None:
         """
         :raises: NotEmpty if there is existing local state
         """
         # If these things succeed then we will have started recovery and
         # generated a response to the request.
-        downloader = self.get_downloader(cap.to_string().decode("ascii"))
+        downloader = self.get_downloader(cap)
         await store.call_if_empty(
             partial(self.recoverer.recover, downloader)  # cursor added by call_if_empty
         )
@@ -396,23 +406,23 @@ class RecoverFactory(WebSocketServerFactory):
 
 
 def authorizationless_resource_tree(
-    store,
-    controller,
-    get_downloader: Callable[[str], Downloader],
-    setup_replication: Callable[[], Awaitable[str]],
-    calculate_price,
-):
+    store: VoucherStore,
+    controller: PaymentController,
+    get_downloader: Callable[[DirectoryReadCapability], Downloader],
+    setup_replication: Callable[[], Awaitable[DirectoryReadCapability]],
+    calculate_price: IResource,
+) -> Resource:
     """
     Create the full ZKAPAuthorizer client plugin resource hierarchy with no
     authorization applied.
 
-    :param VoucherStore store: The store to use.
-    :param PaymentController controller: The payment controller to use.
+    :param store: The store to use.
+    :param controller: The payment controller to use.
 
     :param get_downloader: A callable which accepts a replica identifier and
         can download the replica data.
 
-    :param IResource calculate_price: The resource for the price calculation endpoint.
+    :param calculate_price: The resource for the price calculation endpoint.
 
     :return IResource: The root of the resource hierarchy.
     """
@@ -729,13 +739,14 @@ async def recover(
     agent: IWebSocketClientAgent,
     api_root: DecodedURL,
     auth_token: str,
-    replica_dircap: str,
+    replica_dircap_str: str,
 ) -> list[dict]:
     """
     Initiate recovery from a replica.
 
     :return: The status updates received while recovery was progressing.
     """
+    replica_dircap = readonly_directory_from_string(replica_dircap_str)
     endpoint_url = api_root.child(
         "storage-plugins", "privatestorageio-zkapauthz-v2", "recover"
     ).to_text()
@@ -747,9 +758,11 @@ async def recover(
     proto.on("message", lambda msg, is_binary: updates.append(loads(msg)))
     await proto.is_open
     proto.sendMessage(
-        dumps({"recovery-capability": attenuate_writecap(replica_dircap)}).encode(
-            "utf8"
-        )
+        dumps_utf8(
+            {
+                "recovery-capability": danger_real_capability_string(replica_dircap),
+            }
+        ),
     )
     await proto.is_closed
     return updates

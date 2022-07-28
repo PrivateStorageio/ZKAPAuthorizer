@@ -110,7 +110,7 @@ from ..replicate import (
 )
 from ..resource import recover
 from ..spending import GET_PASSES
-from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
 from .common import skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -826,12 +826,14 @@ class ClientResourceTests(TestCase):
         )
 
     @given(tahoe_configs())
-    def test_downloader(self, get_config):
+    def test_downloader(self, get_config) -> None:
         """
         The recovery resource is configured with a downloader that retrieves
         objects using the plugin's Tahoe-LAFS client.
         """
-        # This test is too complicated.  The implementation should be factored so we can test what we want to test here without involving a Tahoe client, the plugin, and the client resource.
+        # This test is too complicated.  The implementation should be factored
+        # so we can test what we want to test here without involving a Tahoe
+        # client, the plugin, and the client resource.
         nodedir = FilePath(self.useFixture(TempDir()).join("node"))
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
@@ -839,11 +841,11 @@ class ClientResourceTests(TestCase):
         with open(config.get_private_path("api_auth_token"), "w") as f:
             f.write(token)
 
-        replica_dircap = self.grid.make_directory()
+        replica_dircap_rw = self.grid.make_directory()
         self.grid.link(
-            replica_dircap,
+            replica_dircap_rw,
             "snapshot",
-            self.grid.upload(statements_to_snapshot([])),
+            self.grid.upload(statements_to_snapshot(iter([]))),
         )
 
         root = self.plugin.get_client_resource(config)
@@ -868,9 +870,13 @@ class ClientResourceTests(TestCase):
         pumper.start()
         self.addCleanup(pumper.stop)
 
+        replica_dircap_ro = attenuate_writecap(replica_dircap_rw)
         recovering = Deferred.fromCoroutine(
             recover(
-                agent, DecodedURL.from_text("ws://127.0.0.1:1/"), token, replica_dircap
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                token,
+                replica_dircap_ro,
             )
         )
         pumper._flush()

@@ -13,6 +13,7 @@ from attrs import frozen
 from eliot import log_call, start_action
 from hypothesis import given
 from hypothesis.strategies import lists, text
+from tahoe_capabilities import readable_from_string
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -363,11 +364,11 @@ def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, d
     structure matched by the given keyword arguments.
     """
 
-    def is_filenode():
+    def is_filenode() -> Matcher[object]:
         return AfterPreprocessing(lambda item: item[0], Equals("filenode"))
 
-    def download_event_stream(cap):
-        return EventStream.from_bytes(BytesIO(grid.download(cap)))
+    def download_event_stream(cap: str) -> EventStream:
+        return EventStream.from_bytes(BytesIO(grid.download(readable_from_string(cap))))
 
     return MatchesAll(
         is_filenode(),
