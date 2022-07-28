@@ -35,6 +35,9 @@ in
       tahoe-lafs = "nixpkgs";
 
       cryptography = "nixpkgs";
+
+      # not released yet, use our local package
+      tahoe-capabilities = "nixpkgs";
     };
 
     # Define some fixes to the packaging / build process of some of the
@@ -90,6 +93,13 @@ in
         '';
         src = tahoe-lafs-repo;
       };
+
+      tahoe-capabilities = mach-nix.buildPythonPackage {
+        src = /home/exarkun/Work/python/tahoe-capabilities;
+        pname = "tahoe-capabilities";
+        version = "2022.7.27";
+      };
+
       zkapauthorizer = mach-nix.buildPythonApplication rec {
         inherit python providers;
         inherit (dependency-fixes) _;
@@ -105,6 +115,7 @@ in
           (
             self: super: {
               inherit tahoe-lafs;
+              inherit tahoe-capabilities;
             }
           )
         ];

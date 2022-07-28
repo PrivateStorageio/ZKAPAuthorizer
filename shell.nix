@@ -4,7 +4,7 @@
 let
   tests = import ./tests.nix args;
   inherit (tests) privatestorage lint-python;
-  inherit (privatestorage) pkgs mach-nix tahoe-lafs zkapauthorizer;
+  inherit (privatestorage) pkgs mach-nix tahoe-lafs tahoe-capabilities zkapauthorizer;
   inherit (zkapauthorizer.meta.mach-nix) python providers;
   pythonPkg = pkgs.${python};
 
@@ -14,6 +14,7 @@ let
       (
         self: super: {
           inherit tahoe-lafs;
+          inherit tahoe-capabilities;
         }
       )
     ];
