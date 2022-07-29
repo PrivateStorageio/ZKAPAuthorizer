@@ -19,10 +19,10 @@ This module implements validators for ``attrs``-defined attributes.
 from typing import Callable, Protocol, TypeVar, Sequence
 from base64 import b64decode
 from datetime import datetime
-from attrs import Attribute
+
+from ._types import Attribute
 
 _T = TypeVar("_T")
-
 
 ValidatorType = Callable[[object, Attribute[_T], _T], None]
 
@@ -112,3 +112,19 @@ def greater_than(expected: Ordered) -> ValidatorType[Ordered]:
         )
 
     return validate_relation
+
+def pass_value(inst: object, attr: Attribute[int], value: int) -> None:
+    """
+    An attrs validator which checks an integer value to make sure it makes
+    sense as a pass value.
+    """
+    if not isinstance(value, int):
+        raise ValueError(
+            f"{attr.name} must be an integer, instead it was {type(value)}",
+        )
+    if not (value > 0):
+        raise ValueError(
+            f"{attr.name} must be greater than 0, instead it was {value}",
+        )
+
+    return None

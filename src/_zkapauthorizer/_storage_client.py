@@ -24,6 +24,7 @@ from functools import partial, wraps
 from typing import Any, Generator, Optional
 
 import attr
+from attrs import field
 from allmydata.interfaces import IStorageServer
 from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
@@ -34,13 +35,13 @@ from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
 from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED
+from .validators import pass_value
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
     get_write_sharenums,
-    pass_value_attribute,
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
@@ -261,7 +262,7 @@ class ZKAPAuthorizerStorageClient(object):
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
-    _pass_value = pass_value_attribute()
+    _pass_value: int = field(validator=pass_value)
     _get_rref = attr.ib()
     _get_passes = attr.ib()
     _clock = attr.ib(

@@ -18,6 +18,7 @@ Helpers for reading values from the Tahoe-LAFS configuration.
 
 __all__ = [
     "REPLICA_RWCAP_BASENAME",
+    "Config",
     "EmptyConfig",
     "empty_config",
     "read_duration",
@@ -25,7 +26,7 @@ __all__ = [
 ]
 
 from datetime import timedelta
-from typing import Protocol, TypeVar, Union
+from typing import Protocol, TypeVar, Union, cast
 
 from allmydata.node import _Config as Config
 from attrs import define
@@ -81,13 +82,16 @@ class EmptyConfig:
     configuration.
     """
 
-    _basedir: FilePath = FilePath(".")
+    _basedir: FilePath = FilePath(".") # type: ignore[no-untyped-call]
 
-    def get_config(self, section, option, default=object(), boolean=False):
+    def get_config(self, section: str, option: str, default: object = object(), boolean: bool = False) -> object:
         return default
 
-    def get_private_path(self, name):
-        return self._basedir.child("private").child(name).path
+    def get_private_path(self, name: str) -> str:
+        private = self._basedir.child("private") # type: ignore[no-untyped-call]
+        child = private.child(name)
+        child_str = cast(str, child.path)
+        return child_str
 
 
 empty_config = EmptyConfig()
@@ -98,7 +102,7 @@ def read_node_url(config: Config) -> DecodedURL:
     Get the root of the node's HTTP API.
     """
     return DecodedURL.from_text(
-        FilePath(config.get_config_path("node.url"))
+        FilePath(config.get_config_path("node.url")) # type: ignore[no-untyped-call]
         .getContent()
         .decode("ascii")
         .strip()

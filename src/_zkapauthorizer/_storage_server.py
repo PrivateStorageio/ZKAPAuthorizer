@@ -44,7 +44,7 @@ from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
-from attrs import frozen
+from attrs import frozen, field
 from challenge_bypass_ristretto import (
     PublicKey,
     SigningKey,
@@ -64,13 +64,13 @@ from zope.interface import implementer
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
 from .server.spending import ISpender
+from .validators import pass_value
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
     get_write_sharenums,
-    pass_value_attribute,
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
@@ -202,7 +202,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     # the test suite.
     _original = attr.ib()
 
-    _pass_value = pass_value_attribute()
+    _pass_value: int = field(validator=pass_value)
     _signing_key = attr.ib(validator=instance_of(SigningKey))
     _spender = attr.ib(validator=provides(ISpender))
     _registry = attr.ib(

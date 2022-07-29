@@ -18,8 +18,18 @@ Re-usable type definitions for ZKAPAuthorizer.
 
 from datetime import datetime
 from typing import Callable
+from attrs import Attribute as _Attribute
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 # A Tahoe-LAFS capability string
 CapStr = str
 
 GetTime = Callable[[], datetime]
+
+_T = TypeVar("_T")
+
+if TYPE_CHECKING:
+    Attribute = _Attribute
+else:
+    class Attribute(_Attribute, Generic[_T]):
+        pass
