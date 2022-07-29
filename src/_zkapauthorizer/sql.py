@@ -5,12 +5,11 @@ This is focused on SQLite3 and no doubt nevertheless incomplete.  The goal is
 to support testing the replication/recovery system.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
+from typing import Any, Iterable, Optional, Protocol, Union
+from contextlib import AbstractContextManager
 
 from attrs import frozen
 from sqlparse import parse
@@ -32,10 +31,10 @@ class AbstractCursor(Protocol):
     def rowcount(self) -> Optional[int]:
         ...
 
-    def execute(self, statement: str, args: Iterable[Any]) -> AbstractCursor:
+    def execute(self, statement: str, args: Iterable[Any]) -> "AbstractCursor":
         ...
 
-    def executemany(self, statement, args: Iterable[Iterable[Any]]) -> AbstractCursor:
+    def executemany(self, statement: str, args: Iterable[Iterable[Any]]) -> "AbstractCursor":
         ...
 
     def close(self) -> None:
@@ -62,7 +61,7 @@ class AbstractConnection(Protocol):
     def cursor(self, cursorClass: Optional[type] = None) -> AbstractCursor:
         ...
 
-    def __enter__(self) -> ContextManager:
+    def __enter__(self) -> AbstractContextManager["AbstractConnection"]:
         ...
 
     def __exit__(
@@ -86,9 +85,9 @@ class UnboundConnect(Protocol):
     def __call__(
         self,
         path: str,
-        timeout: int = None,
-        detect_types: bool = None,
-        isolation_level: str = None,
+        timeout: Optional[int] = None,
+        detect_types: Optional[bool] = None,
+        isolation_level: Optional[str] = None,
         check_same_thread: bool = False,
         factory: Any = None,
         cached_statements: Any = None,
@@ -105,9 +104,9 @@ class BoundConnect(Protocol):
 
     def __call__(
         self,
-        timeout: int = None,
-        detect_types: bool = None,
-        isolation_level: str = None,
+        timeout: Optional[int] = None,
+        detect_types: Optional[bool] = None,
+        isolation_level: Optional[str] = None,
         check_same_thread: bool = False,
         factory: Any = None,
         cached_statements: Any = None,
@@ -169,7 +168,7 @@ class Insert:
     table: Table
     fields: tuple[SQLType, ...]
 
-    def statement(self):
+    def statement(self) -> str:
         names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
         placeholders = ", ".join("?" * len(self.table.columns))
         return (
@@ -218,7 +217,7 @@ class Update:
     table: Table
     fields: tuple[SQLType, ...]
 
-    def statement(self):
+    def statement(self) -> str:
         field_names = list(name for (name, _) in self.table.columns)
         assignments = ", ".join(
             f"{escape_identifier(name)} = ?" for name in field_names
@@ -239,7 +238,7 @@ class Select:
 
     table_name: str
 
-    def statement(self):
+    def statement(self) -> str:
         return f"SELECT * FROM {escape_identifier(self.table_name)}"
 
     def arguments(self) -> tuple[()]:
@@ -258,7 +257,7 @@ class Delete:
 
     table_name: str
 
-    def statement(self):
+    def statement(self) -> str:
         return f"DELETE FROM {escape_identifier(self.table_name)}"
 
     def arguments(self) -> tuple[()]:
