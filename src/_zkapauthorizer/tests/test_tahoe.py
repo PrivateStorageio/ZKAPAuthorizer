@@ -29,6 +29,8 @@ from twisted.python.filepath import FilePath
 
 from ..storage_common import required_passes
 from ..tahoe import (
+    FileNode,
+    DirectoryNode,
     CapStr,
     ITahoeClient,
     MemoryGrid,
@@ -251,14 +253,14 @@ class DirectoryTestsMixin:
         """
         raise NotImplementedError()
 
-    @inlineCallbacks
-    def test_list_directory(self):
+    @async_test
+    async def test_list_directory(self) -> None:
         """
         ``make_directory`` creates a directory the children of which can be listed
         using ``list_directory``.
         """
         tahoe = self.get_client()
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         entry_names = list(map(str, range(5)))
 
         def file_content(name: str) -> bytes:
@@ -272,44 +274,33 @@ class DirectoryTestsMixin:
         # Populate it a little
         expected_entry_caps = dict(
             (
-                yield gatherResults(
+                await gatherResults(
                     [Deferred.fromCoroutine(upload(n)) for n in entry_names]
                 )
             )
         )
         # Put another directory in it too.
-        inner_dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
-        yield Deferred.fromCoroutine(tahoe.link(dir_cap, "directory", inner_dir_cap))
+        inner_dir_cap = await tahoe.make_directory()
+        await tahoe.link(dir_cap, "directory", inner_dir_cap)
 
         # Read it back
-        children = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        children = await tahoe.list_directory(dir_cap)
 
-        self.expectThat(set(children), Equals({"directory"} | set(entry_names)))
+        self.assertThat(set(children), Equals({"directory"} | set(entry_names)))
         for name in entry_names:
-            kind, details = children[name]
-            self.expectThat(
-                kind,
-                Equals("filenode"),
-            )
-            self.expectThat(
-                details["size"],
-                Equals(len(file_content(name))),
-                f"child {name} has unexpected size",
-            )
-            self.expectThat(
-                details["ro_uri"],
-                Equals(expected_entry_caps[name]),
+            details = children[name]
+            self.assertThat(
+                details,
+                Equals(FileNode(
+                    size=len(file_content(name)),
+                    ro_uri=readable_from_string(expected_entry_caps[name]),
+                )),
             )
 
-        kind, details = children["directory"]
-        self.expectThat(kind, Equals("dirnode"))
-        self.expectThat(
+        details = children["directory"]
+        self.assertThat(
             details,
-            ContainsDict(
-                {
-                    "rw_uri": Equals(inner_dir_cap),
-                }
-            ),
+            Equals(DirectoryNode(ro_uri=writeable_directory_from_string(inner_dir_cap).reader)),
         )
 
     @inlineCallbacks
