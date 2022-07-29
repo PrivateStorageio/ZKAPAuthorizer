@@ -95,9 +95,12 @@ in
       };
 
       tahoe-capabilities = mach-nix.buildPythonPackage {
-        src = /home/exarkun/Work/python/tahoe-capabilities;
-        pname = "tahoe-capabilities";
-        version = "2022.7.27";
+        src = pkgs.fetchFromGitHub {
+          owner = "tahoe-lafs";
+          repo = "tahoe-capabilities";
+          rev = "a49cba4ce84e6cec2d615bda284562f37b8df74e";
+          sha256 = "sha256-yv3detzTGX4yBbUaa89napv7ckAA7IuaEOXAhClp5G8=";
+        };
       };
 
       zkapauthorizer = mach-nix.buildPythonApplication rec {
