@@ -113,18 +113,23 @@ def greater_than(expected: Ordered) -> ValidatorType[Ordered]:
 
     return validate_relation
 
-def pass_value(inst: object, attr: Attribute[int], value: int) -> None:
-    """
-    An attrs validator which checks an integer value to make sure it makes
-    sense as a pass value.
-    """
-    if not isinstance(value, int):
-        raise ValueError(
-            f"{attr.name} must be an integer, instead it was {type(value)}",
-        )
-    if not (value > 0):
-        raise ValueError(
-            f"{attr.name} must be greater than 0, instead it was {value}",
-        )
+def bounded_integer(min_bound: int) -> ValidatorType[int]:
+    def validator(inst: object, attr: Attribute[int], value: int) -> None:
+        """
+        An attrs validator which checks an integer value to make sure it
+        greater than some minimum bound.
+        """
+        if not isinstance(value, int):
+            raise ValueError(
+                f"{attr.name} must be an integer, instead it was {type(value)}",
+            )
+        if not (value > min_bound):
+            raise ValueError(
+                f"{attr.name} must be greater than {min_bound}, instead it was {value}",
+            )
 
-    return None
+        return None
+    return validator
+
+positive_integer = bounded_integer(0)
+non_negative_integer = bounded_integer(-1)
