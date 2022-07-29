@@ -16,7 +16,11 @@
 Eliot field, message, and action definitions for ZKAPAuthorizer.
 """
 
+from typing import Optional, Callable, TypeVar, cast
+from typing_extensions import ParamSpec
+
 from eliot import ActionType, Field, MessageType
+from eliot import log_call as _log_call
 
 PRIVACYPASS_MESSAGE = Field(
     "message",
@@ -102,3 +106,20 @@ MUTABLE_PASSES_REQUIRED = MessageType(
     [CURRENT_SIZES, TW_VECTORS_SUMMARY, NEW_SIZES, NEW_PASSES],
     "Some number of passes has been computed as the cost of updating a mutable.",
 )
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+def log_call(
+    action_type:Optional[str]=None,
+    include_args:Optional[list[str]]=None,
+    include_result:bool=True,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    return cast(
+        Callable[[Callable[P, T]], Callable[P, T]],
+        _log_call(
+            action_type=action_type,
+            include_args=include_args,
+            include_result=include_result,
+        )
+    )
