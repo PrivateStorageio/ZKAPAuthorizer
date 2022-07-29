@@ -66,6 +66,8 @@ from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import (
+    cast,
+    NoReturn,
     IO,
     Any,
     Awaitable,
@@ -80,9 +82,9 @@ from typing import (
 )
 
 import cbor2
-from attrs import Factory, define, field, frozen
+from attrs import Attribute, Factory, define, field, frozen
 from compose import compose
-from eliot import log_call
+from .eliot import log_call
 from tahoe_capabilities import (
     DirectoryReadCapability,
     digested_capability_string,
@@ -97,7 +99,7 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import DataProvider, DirectoryEntry, ITahoeClient
+from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, FileNode
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -182,7 +184,7 @@ class Change:
     important: bool
 
     @arguments.validator
-    def _validate_arguments(self, attribute, value) -> None:
+    def _validate_arguments(self, attribute: "Attribute[Sequence[SQLType]]", value: Sequence[SQLType]) -> None:
         """
         Require that the value has as elements only values are legal SQL values.
 
@@ -277,7 +279,7 @@ class ReplicationAlreadySetup(Exception):
     cap_str: str
 
 
-async def fail_setup_replication():
+async def fail_setup_replication() -> NoReturn:
     """
     A replication setup function that always fails.
     """
@@ -295,16 +297,16 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
 
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
-    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")
+    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock") # type: ignore[no-untyped-call]
 
-    if not config_lock.lock():
+    if not config_lock.lock(): # type: ignore[no-untyped-call]
         raise AlreadySettingUp()
     try:
 
         # Check to see if there is already configuration.
-        if config_path.exists():
+        if config_path.exists(): # type: ignore[no-untyped-call]
             rwcap_obj = writeable_directory_from_string(
-                config_path.getContent().decode("ascii")
+                config_path.getContent().decode("ascii") # type: ignore[no-untyped-call]
             )
             raise ReplicationAlreadySetup(digested_capability_string(rwcap_obj))
 
@@ -312,12 +314,12 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
         rw_cap = await client.make_directory()
 
         # Store the resulting write-cap in the node's private directory
-        config_path.setContent(rw_cap.encode("ascii"))
+        config_path.setContent(rw_cap.encode("ascii")) # type: ignore[no-untyped-call]
 
     finally:
         # On success and failure, release the lock since we're done with the
         # file for now.
-        config_lock.unlock()
+        config_lock.unlock() # type: ignore[no-untyped-call]
 
     # Return the corresponding read-cap.
     return writeable_directory_from_string(rw_cap).reader
@@ -329,7 +331,9 @@ def is_replication_setup(config: Config) -> bool:
         the Tahoe-LAFS node associated with the given configuration.
     """
     # Find the configuration path for this node's replica.
-    return FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists()
+    if FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists(): # type: ignore[no-untyped-call]
+        return True
+    return False
 
 
 def get_replica_rwcap(config: Config) -> CapStr:
@@ -337,8 +341,9 @@ def get_replica_rwcap(config: Config) -> CapStr:
     :return: a mutable directory capability for our replica.
     :raises: Exception if replication is not setup
     """
-    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))
-    return rwcap_file.getContent().decode("ascii")
+    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)) # type: ignore[no-untyped-call]
+    rwcap_bytes: bytes = rwcap_file.getContent() # type: ignore[no-untyped-call]
+    return rwcap_bytes.decode("ascii")
 
 
 @define
@@ -353,7 +358,7 @@ class _Important:
     def __enter__(self) -> None:
         self._replication_cursor._important = True
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, exc_type: type, exc_val: Exception, exc_tb: Any) -> None:
         self._replication_cursor._important = False
         return None
 
@@ -453,7 +458,7 @@ class _ReplicationCapableConnection:
         return propagate
 
     def _maybe_signal_observers(
-        self, cursor
+        self, cursor: _SQLite3Cursor
     ) -> Generator[Callable[[], None], None, None]:
         """
         If there are recorded mutations, deliver them to each of the observers and
@@ -498,14 +503,16 @@ class _ReplicationCapableCursor:
     _important: bool = field(init=False, default=False)
 
     @property
-    def lastrowid(self):
-        return self._cursor.lastrowid
+    def lastrowid(self) -> Optional[int]:
+        result = self._cursor.lastrowid
+        assert isinstance(result, int) or result is None
+        return result
 
     @property
-    def rowcount(self):
+    def rowcount(self) -> Optional[int]:
         return self._cursor.rowcount
 
-    def close(self):
+    def close(self) -> None:
         return self._cursor.close()
 
     def execute(self, statement: str, row: Iterable[SQLType] = ()) -> Cursor:
@@ -522,14 +529,14 @@ class _ReplicationCapableCursor:
             self._connection._mutations.append((self._important, statement, (row,)))
         return self
 
-    def fetchall(self):
+    def fetchall(self) -> list[tuple[SQLType]]:
         return self._cursor.fetchall()
 
-    def fetchmany(self, n):
+    def fetchmany(self, n: int) -> list[tuple[SQLType]]:
         return self._cursor.fetchmany(n)
 
-    def fetchone(self):
-        return self._cursor.fetchone()
+    def fetchone(self) -> tuple[SQLType]:
+        return cast(tuple[SQLType], self._cursor.fetchone())
 
     def executemany(self, statement: str, rows: Iterable[Any]) -> Cursor:
         self._cursor.executemany(statement, rows)
@@ -552,7 +559,9 @@ def statements_to_snapshot(statements: Iterator[str]) -> bytes:
     The snapshot is consistent and write transactions on the given connection
     are blocked until it has been completed.
     """
-    return cbor2.dumps({"version": 1, "statements": [x for x in statements]})
+    result = cbor2.dumps({"version": 1, "statements": [x for x in statements]})
+    assert isinstance(result, bytes)
+    return result
 
 
 def connection_to_statements(connection: Connection) -> Iterator[str]:
@@ -643,8 +652,8 @@ def get_tahoe_lafs_direntry_lister(
     async def lister() -> dict[str, DirectoryEntry]:
         entries = await client.list_directory(directory_mutable_cap)
         return {
-            name: DirectoryEntry(kind, entry.get("size", 0))
-            for name, (kind, entry) in entries.items()
+            name: DirectoryEntry("filenode" if isinstance(entry, FileNode) else "dirnode", getattr(entry, "size", 0))
+            for name, entry in entries.items()
         }
 
     return lister
@@ -805,19 +814,19 @@ class _ReplicationService(Service):
         expected to complete but it will be cancelled when the service stops.
     """
 
-    name = "replication-service"  # type: ignore # Service assigns None, screws up type inference
+    name = "replication-service"
     _logger = Logger()
 
     _connection: _ReplicationCapableConnection = field()
     _replica: Replica
     _snapshot_policy: SnapshotPolicy
-    _replicating: Optional[Deferred] = field(init=False, default=None)
+    _replicating: Optional[Deferred[None]] = field(init=False, default=None)
 
     _changes: AccumulatedChanges = AccumulatedChanges.no_changes()
-    _jobs: DeferredQueue = field(factory=DeferredQueue)
+    _jobs: DeferredQueue[ReplicationJob] = field(factory=DeferredQueue)
 
     @property
-    def _unreplicated_connection(self):
+    def _unreplicated_connection(self) -> _SQLite3Connection:
         """
         A normal SQLite3 connection object, changes made via which will not be
         replicated.
@@ -825,7 +834,7 @@ class _ReplicationService(Service):
         return self._connection._conn
 
     def startService(self) -> None:
-        super().startService()
+        super().startService() # type: ignore[no-untyped-call]
 
         # Register ourselves as a change observer (first! we don't want to
         # miss anything) and then put the database into replication mode so
@@ -1023,7 +1032,7 @@ class _ReplicationService(Service):
         """
         Cancel the replication operation and then wait for it to complete.
         """
-        super().stopService()
+        super().stopService() # type: ignore[no-untyped-call]
 
         replicating = self._replicating
         if replicating is None:

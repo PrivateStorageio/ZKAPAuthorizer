@@ -13,10 +13,11 @@ from attrs import frozen
 from eliot import log_call, start_action
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import readable_from_string
+from tahoe_capabilities import readable_from_string, ReadCapability
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
+    IsInstance,
     Contains,
     Equals,
     HasLength,
@@ -46,7 +47,7 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid
+from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid, FileNode
 from .common import delayedProxy, from_awaitable
 from .fixtures import TempDir, TemporaryVoucherStore
 from .matchers import Always, Matcher, returns
@@ -364,16 +365,16 @@ def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, d
     structure matched by the given keyword arguments.
     """
 
-    def is_filenode() -> Matcher[object]:
-        return AfterPreprocessing(lambda item: item[0], Equals("filenode"))
+    def is_filenode() -> Matcher[FileNode]:
+        return IsInstance(FileNode)
 
-    def download_event_stream(cap: str) -> EventStream:
-        return EventStream.from_bytes(BytesIO(grid.download(readable_from_string(cap))))
+    def download_event_stream(cap: ReadCapability) -> EventStream:
+        return EventStream.from_bytes(BytesIO(grid.download(cap)))
 
     return MatchesAll(
         is_filenode(),
         AfterPreprocessing(
-            lambda item: download_event_stream(item[1]["ro_uri"]),
+            lambda item: download_event_stream(item.ro_uri),
             MatchesStructure(**kwargs),
         ),
     )
