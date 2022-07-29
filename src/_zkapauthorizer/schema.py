@@ -15,23 +15,28 @@
 This module defines the database schema used by the model interface.
 """
 
+from typing import Iterator, cast
 
-def get_schema_version(cursor):
+from .sql import AbstractCursor
+
+def get_schema_version(cursor: AbstractCursor) -> int:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS [version] AS SELECT 0 AS [version]
-        """
+        """,
+        (),
     )
     cursor.execute(
         """
         SELECT [version] FROM [version]
-        """
+        """,
+        (),
     )
     [(actual_version,)] = cursor.fetchall()
-    return actual_version
+    return cast(int, actual_version)
 
 
-def get_schema_upgrades(from_version):
+def get_schema_upgrades(from_version: int) -> Iterator[str]:
     """
     Generate unicode strings containing SQL expressions to alter a schema from
     ``from_version`` to the latest version.
@@ -46,7 +51,7 @@ def get_schema_upgrades(from_version):
         from_version += 1
 
 
-def run_schema_upgrades(upgrades, cursor):
+def run_schema_upgrades(upgrades: Iterator[str], cursor: AbstractCursor) -> None:
     """
     Apply the given upgrades using the given cursor.
 
@@ -56,7 +61,7 @@ def run_schema_upgrades(upgrades, cursor):
     :param cursor: A DB-API cursor to use to run the SQL.
     """
     for upgrade in upgrades:
-        cursor.execute(upgrade)
+        cursor.execute(upgrade, ())
 
 
 _INCREMENT_VERSION = """
