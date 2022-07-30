@@ -28,7 +28,7 @@ from tahoe_capabilities import (
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
-from .tahoe import DataProvider, ITahoeClient, download_child
+from .tahoe import DataProvider, ITahoeClient, download_child, FileNode
 
 
 class SnapshotMissing(Exception):
@@ -332,11 +332,11 @@ async def tahoe_lafs_downloader(
     await download_child(snapshot_path, client, recovery_cap, [SNAPSHOT_NAME])
 
     entry_paths = []
-    for name, (entry_type, entry) in entries.items():
-        if entry_type == "filenode" and name.startswith("event-stream-"):
+    for name, entry in entries.items():
+        if isinstance(entry, FileNode) and name.startswith("event-stream-"):
             entry_path = client.get_private_path(name)
             entry_paths.append(entry_path)
-            await client.download(entry_path, readable_from_string(entry["ro_uri"]))
+            await client.download(entry_path, entry.ro_uri)
 
     return (
         partial(snapshot_path.open, "rb"),

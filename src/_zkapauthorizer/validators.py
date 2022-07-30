@@ -21,6 +21,7 @@ from base64 import b64decode
 from datetime import datetime
 
 from ._types import Attribute
+from ._base64 import urlsafe_b64decode
 
 _T = TypeVar("_T")
 
@@ -133,3 +134,22 @@ def bounded_integer(min_bound: int) -> ValidatorType[int]:
 
 positive_integer = bounded_integer(0)
 non_negative_integer = bounded_integer(-1)
+
+def base64_bytes(length: int) -> ValidatorType[bytes]:
+    def validator(inst: object, attr: Attribute[bytes], value: bytes) -> None:
+        if not isinstance(value, bytes):
+            raise ValueError(
+                f"{attr.name} must be bytes, instead it was {type(value)}",
+            )
+        if not is_base64_encoded(urlsafe_b64decode):
+            raise ValueError(
+                f"{attr.name} must be base64 encoded data",
+            )
+
+        if len(value) != length:
+            raise ValueError(
+                f"{attr.name} value must have length {length}, not {len(value)}",
+            )
+
+        return None
+    return validator

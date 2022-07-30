@@ -18,6 +18,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
     data,
@@ -342,7 +343,7 @@ class StatefulRecovererTests(TestCase):
             self.assertThat(recoverer.state().stage, Equals(stage))
 
 
-def confusing_names():
+def confusing_names() -> SearchStrategy[str]:
     """
     Build names as ``str`` which do not belong in a replica directory.
     """
@@ -364,10 +365,10 @@ class TahoeLAFSDownloaderTests(TestCase):
     )
     def test_uploader_and_downloader(
         self,
-        expected_snapshot,
-        expected_event_streams,
-        confusing_directories,
-        confusing_filenodes,
+        expected_snapshot: bytes,
+        expected_event_streams: list[bytes],
+        confusing_directories: list[str],
+        confusing_filenodes: list[str],
     ) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
@@ -420,7 +421,7 @@ class TahoeLAFSDownloaderTests(TestCase):
         for entry in confusing_directories:
             grid.link(replica_dir_cap_str, entry, grid.make_directory())
         for entry in confusing_filenodes:
-            grid.link(replica_dir_cap_str, entry, grid.upload(entry))
+            grid.link(replica_dir_cap_str, entry, grid.upload(entry.encode("utf-8")))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)

@@ -34,7 +34,7 @@ from testtools.matchers import (
     MatchesStructure,
 )
 from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import fail, succeed
+from twisted.internet.defer import fail, succeed, Deferred
 
 from .. import NAME
 from .._storage_client import call_with_passes
@@ -182,14 +182,14 @@ class CallWithPassesTests(TestCase):
         """
         result = object()
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 lambda group: succeed(result),
                 num_passes,
                 partial(
                     pass_factory(privacypass_passes(self.signing_key, num_passes)).get,
                     b"message",
                 ),
-            ),
+            )),
             succeeded(Is(result)),
         )
 
@@ -202,14 +202,14 @@ class CallWithPassesTests(TestCase):
         """
         result = Exception()
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 lambda group: fail(result),
                 num_passes,
                 partial(
                     pass_factory(privacypass_passes(self.signing_key, num_passes)).get,
                     b"message",
                 ),
-            ),
+            )),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -228,11 +228,11 @@ class CallWithPassesTests(TestCase):
         passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 lambda group: succeed(group.passes),
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             succeeded(
                 AfterPreprocessing(
                     set,
@@ -252,11 +252,11 @@ class CallWithPassesTests(TestCase):
         passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
-            call_with_passes(
-                lambda group: None,
+            Deferred.fromCoroutine(call_with_passes(
+                lambda group: succeed(None),
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             succeeded(Always()),
         )
         self.assertThat(
@@ -272,11 +272,11 @@ class CallWithPassesTests(TestCase):
         passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 lambda group: fail(Exception("Anything")),
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             failed(Always()),
         )
         self.assertThat(
@@ -302,7 +302,7 @@ class CallWithPassesTests(TestCase):
             privacypass_passes(self.signing_key, num_passes + reject_count)
         )
 
-        def maybe_reject_passes(group: PassGroup) -> None:
+        async def maybe_reject_passes(group: PassGroup) -> None:
             if len(rejected_passes) < reject_count:
                 # Reject the first pass
                 rejected_passes.add(group.passes[0])
@@ -320,11 +320,11 @@ class CallWithPassesTests(TestCase):
         # have to try (reject_count + 1) times and replace one rejected token
         # with a fresh one on each call after the first.
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 maybe_reject_passes,
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             succeeded(Always()),
         )
         self.assertThat(
@@ -360,11 +360,11 @@ class CallWithPassesTests(TestCase):
             ).raise_for(len(passes) + 1)
 
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 reject_passes,
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -422,13 +422,13 @@ class CallWithPassesTests(TestCase):
             ).raise_for(num)
 
         self.assertThat(
-            call_with_passes(
+            Deferred.fromCoroutine(call_with_passes(
                 # Since half of every group is rejected, we'll eventually run
                 # out of passes no matter how many we start with.
                 reject_half_passes,
                 num_passes,
                 partial(passes.get, b"message"),
-            ),
+            )),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
