@@ -16,15 +16,19 @@
 Basic utilities related to the Tahoe configuration file.
 """
 
+from typing import Iterable, TypeVar
 
-def _merge_dictionaries(dictionaries):
+_K = TypeVar("_K")
+_V = TypeVar("_V")
+
+def _merge_dictionaries(dictionaries: Iterable[dict[_K, _V]]) -> dict[_K, _V]:
     """
     Collapse a sequence of dictionaries into one, with collisions resolved by
     taking the value from later dictionaries in the sequence.
 
-    :param [dict] dictionaries: The dictionaries to collapse.
+    :param dictionaries: The dictionaries to collapse.
 
-    :return dict: The collapsed dictionary.
+    :return: The collapsed dictionary.
     """
     result = {}
     for d in dictionaries:
@@ -32,18 +36,18 @@ def _merge_dictionaries(dictionaries):
     return result
 
 
-def _tahoe_config_quote(text):
+def _tahoe_config_quote(text: str) -> str:
     """
     Quote **%** in a unicode string.
 
-    :param unicode text: The string on which to perform quoting.
+    :param text: The string on which to perform quoting.
 
-    :return unicode: The string with ``%%`` replacing ``%``.
+    :return: The string with ``%%`` replacing ``%``.
     """
     return text.replace("%", "%%")
 
 
-def config_string_from_sections(divided_sections):
+def config_string_from_sections(divided_sections: Iterable[dict[str, dict[str, str]]]) -> str:
     """
     Get the .ini-syntax unicode string representing the given configuration
     values.
