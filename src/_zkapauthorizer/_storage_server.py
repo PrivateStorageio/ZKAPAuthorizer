@@ -64,7 +64,7 @@ from zope.interface import implementer
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
 from .server.spending import ISpender
-from .validators import pass_value
+from .validators import positive_integer
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
@@ -202,7 +202,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
     # the test suite.
     _original = attr.ib()
 
-    _pass_value: int = field(validator=pass_value)
+    _pass_value: int = field(validator=positive_integer)
     _signing_key = attr.ib(validator=instance_of(SigningKey))
     _spender = attr.ib(validator=provides(ISpender))
     _registry = attr.ib(

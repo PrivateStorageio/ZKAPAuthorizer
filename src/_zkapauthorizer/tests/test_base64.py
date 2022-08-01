@@ -26,13 +26,13 @@ from testtools.matchers import Equals
 from .._base64 import urlsafe_b64decode
 
 
-class Base64Tests(TestCase):
+class Base64Tests(TestCase): # type: ignore[misc]
     """
     Tests for ``urlsafe_b64decode``.
     """
 
     @given(binary())
-    def test_roundtrip(self, bytestring):
+    def test_roundtrip(self, bytestring: bytes) -> None:
         """
         Byte strings round-trip through ``base64.urlsafe_b64encode`` and
         ``urlsafe_b64decode``.

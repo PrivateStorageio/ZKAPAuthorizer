@@ -21,10 +21,10 @@ implemented in ``_storage_server.py``.
 """
 
 from functools import partial, wraps
-from typing import Any, Generator, Optional
+from typing import Any, Generator, Optional, TypeVar, Callable, Awaitable
 
 import attr
-from attrs import field
+from attrs import define, field
 from allmydata.interfaces import IStorageServer
 from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
@@ -34,8 +34,9 @@ from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
+from .spending import IPassGroup
 from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED
-from .validators import pass_value
+from .validators import positive_integer
 from .storage_common import (
     MorePassesRequired,
     add_lease_message,
@@ -46,7 +47,10 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 
+_T = TypeVar("_T")
+
 Secrets = tuple[bytes, bytes, bytes]
+
 TestWriteVectors = dict[
     int,
     tuple[
@@ -62,27 +66,19 @@ TestWriteVectors = dict[
 ReadVector = list[tuple[int, int]]
 
 
+@define(auto_exc=False, str=True)
 class IncorrectStorageServerReference(Exception):
     """
     A Foolscap remote object which should reference a ZKAPAuthorizer storage
     server instead references some other kind of object.  This makes the
     connection, and thus the configured storage server, unusable.
     """
-
-    def __init__(self, furl, actual_name, expected_name):
-        self.furl = furl
-        self.actual_name = actual_name
-        self.expected_name = expected_name
-
-    def __str__(self):
-        return "RemoteReference via {} provides {} instead of {}".format(
-            self.furl,
-            self.actual_name,
-            self.expected_name,
-        )
+    furl: str
+    actual_name: str
+    expected_name: str
 
 
-def invalidate_rejected_passes(passes, more_passes_required):
+def invalidate_rejected_passes(passes: IPassGroup, more_passes_required: MorePassesRequired) -> Optional[IPassGroup]:
     """
     Return a new ``IPassGroup`` with all rejected passes removed from it.
 
@@ -124,38 +120,40 @@ def invalidate_rejected_passes(passes, more_passes_required):
     return okay_passes
 
 
-@inline_callbacks
-def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_success):
+async def call_with_passes_with_manual_spend(
+        method: Callable[[IPassGroup], Awaitable[_T]],
+        num_passes: int,
+        get_passes: Callable[[int], IPassGroup],
+        on_success: Callable[[_T, IPassGroup], None],
+) -> _T:
     """
     Call a method, passing the requested number of passes as the first
     argument, and try again if the call fails with an error related to some of
     the passes being rejected.
 
-    :param (IPassGroup -> Deferred) method: An operation to call with some passes.
-        If the returned ``Deferred`` fires with ``MorePassesRequired`` then
-        the invalid passes will be discarded and replacement passes will be
-        requested for a new call of ``method``.  This will repeat until no
-        passes remain, the method succeeds, or the methods fails in a
-        different way.
+    :param method: An operation to call with some passes.  If the returned
+        awaitable raises ``MorePassesRequired`` then the invalid passes will
+        be discarded and replacement passes will be requested for a new call
+        of ``method``.  This will repeat until no passes remain, the method
+        succeeds, or the methods fails in a different way.
 
-    :param int num_passes: The number of passes to pass to the call.
+    :param num_passes: The number of passes to pass to the call.
 
-    :param (int -> IPassGroup) get_passes: A function for getting
-        passes.
+    :param get_passes: A function for getting passes.
 
-    :param (object -> IPassGroup -> None) on_success: A function to call when
-        ``method`` succeeds.  The first argument is the result of ``method``.
-        The second argument is the ``IPassGroup`` used with the successful
-        call.  The intended purpose of this hook is to mark as spent passes in
-        the group which the method has spent.  This is useful if the result of
-        ``method`` can be used to determine the operation had a lower cost
-        than the worst-case expected from its inputs.
+    :param on_success: A function to call when ``method`` succeeds.  The first
+        argument is the result of ``method``.  The second argument is the
+        ``IPassGroup`` used with the successful call.  The intended purpose of
+        this hook is to mark as spent passes in the group which the method has
+        spent.  This is useful if the result of ``method`` can be used to
+        determine the operation had a lower cost than the worst-case expected
+        from its inputs.
 
         Spent passes should be marked as spent.  All others should be reset.
 
-    :return: A ``Deferred`` that fires with whatever the ``Deferred`` returned
-        by ``method`` fires with (apart from ``MorePassesRequired`` failures
-        that trigger a retry).
+    :return: The result of ``method`` call.
+
+    :raise: Anything raised by ``method`` except for ``MorePassesRequired``.
     """
     with CALL_WITH_PASSES(count=num_passes):
         pass_group = get_passes(num_passes)
@@ -163,7 +161,7 @@ def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_succes
             # Try and repeat as necessary.
             while True:
                 try:
-                    result = yield method(pass_group)
+                    result = await method(pass_group)
                 except MorePassesRequired as e:
                     okay_pass_group = invalidate_rejected_passes(
                         pass_group,
@@ -189,7 +187,7 @@ def call_with_passes_with_manual_spend(method, num_passes, get_passes, on_succes
             raise
 
     # Give the operation's result to the caller.
-    returnValue(result)
+    return result
 
 
 def call_with_passes(method, num_passes, get_passes):
@@ -262,7 +260,7 @@ class ZKAPAuthorizerStorageClient(object):
     _expected_remote_interface_name = (
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
-    _pass_value: int = field(validator=pass_value)
+    _pass_value: int = field(validator=positive_integer)
     _get_rref = attr.ib()
     _get_passes = attr.ib()
     _clock = attr.ib(
@@ -342,7 +340,7 @@ class ZKAPAuthorizerStorageClient(object):
         num_passes = required_passes(
             self._pass_value, [allocated_size] * len(sharenums)
         )
-        return call_with_passes_with_manual_spend(
+        return Deferred.fromCoroutine(call_with_passes_with_manual_spend(
             lambda passes: rref.callRemote(
                 "allocate_buckets",
                 _encode_passes(passes),
@@ -359,7 +357,7 @@ class ZKAPAuthorizerStorageClient(object):
                 allocate_buckets_message(storage_index),
             ),
             partial(self._spend_for_allocate_buckets, allocated_size),
-        )
+        ))
 
     @with_rref
     def get_buckets(
@@ -390,7 +388,7 @@ class ZKAPAuthorizerStorageClient(object):
         ).values()
         num_passes = required_passes(self._pass_value, share_sizes)
 
-        result = yield call_with_passes(
+        result = yield Deferred.fromCoroutine(call_with_passes(
             lambda passes: rref.callRemote(
                 "add_lease",
                 _encode_passes(passes),
@@ -400,7 +398,7 @@ class ZKAPAuthorizerStorageClient(object):
             ),
             num_passes,
             partial(self._get_passes, add_lease_message(storage_index)),
-        )
+        ))
         returnValue(result)
 
     @with_rref
@@ -492,7 +490,7 @@ class ZKAPAuthorizerStorageClient(object):
                 old_tw_vectors,
             )
 
-        result = yield call_with_passes(
+        result = yield Deferred.fromCoroutine(call_with_passes(
             lambda passes: rref.callRemote(
                 "slot_testv_and_readv_and_writev",
                 _encode_passes(passes),
@@ -506,7 +504,7 @@ class ZKAPAuthorizerStorageClient(object):
                 self._get_passes,
                 slot_testv_and_readv_and_writev_message(storage_index),
             ),
-        )
+        ))
         returnValue(result)
 
     @with_rref

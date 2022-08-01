@@ -151,6 +151,15 @@ class Table:
 
     columns: list[tuple[str, Column]]
 
+class Statement(Protocol):
+    @property
+    def table_name(self) -> str:
+        ...
+    def statement(self) -> str:
+        ...
+    def arguments(self) -> tuple[SQLType, ...]:
+        ...
+
 
 @frozen
 class Insert:

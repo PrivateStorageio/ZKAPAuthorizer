@@ -16,16 +16,19 @@
 A better JSON module.
 """
 
+from typing import cast
+
 from json import loads as _loads
 
+from .._types import JSON
 
-def loads(data):
+def loads(data: bytes) -> JSON:
     """
     Load a JSON object from a byte string.
 
     Raise an exception including ``data`` if the parse fails.
     """
     try:
-        return _loads(data)
+        return cast(JSON, _loads(data))
     except ValueError as e:
         raise ValueError("{!r}: {!r}".format(e, data))

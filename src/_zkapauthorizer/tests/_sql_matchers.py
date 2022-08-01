@@ -2,16 +2,17 @@
 Testtools matchers related to SQL functionality.
 """
 
-from typing import Iterator, Union
+from typing import Iterator, Union, Optional
 
 from attrs import define, field
 from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
+from testtools.matchers import Matcher as _Matcher
 
-from ..sql import Connection, Insert, Table, escape_identifier
+from ..sql import Connection, Statement, Insert, Table, escape_identifier
 from ._float_matchers import matches_float_within_distance
 
 
-def equals_database(reference: Connection):
+def equals_database(reference: Connection) -> _Matcher:
     """
     :return: A matcher for a SQLite3 connection to a database with the same
         state as the reference connection's database.
@@ -89,14 +90,14 @@ def _structured_dump_table(db: Connection, table_name: str) -> Iterator[Insert]:
             yield Insert(table_name, Table([]), row)
 
 
-def _get_matcher(reference, actual):
+def _get_matcher(reference: object, actual: object) -> _Matcher:
     """
     Return a matcher suitable for comparing the two values for equality.
 
     All this does is use ``matches_float_within_distance`` if either value is a
     float.  Otherwise, it uses ``Equals``.
     """
-    if isinstance(reference, float) or isinstance(actual, float):
+    if isinstance(reference, float) and isinstance(actual, float):
         # We can't compare floats for exact equality, not for the usual reason
         # but because of limitations of SQLite3's support for floats.  This is
         # particularly bad on Windows.
@@ -119,9 +120,9 @@ class _MatchStatement:
     that ``equals_db`` deals with, not actual SQL strings.
     """
 
-    reference = field()
+    reference: Union[str, Statement]
 
-    def match(self, actual):
+    def match(self, actual: Statement) -> Optional[Mismatch]:
         if isinstance(actual, Insert) and isinstance(self.reference, Insert):
             # Match an insert-type statement.
             if actual.table_name != self.reference.table_name:
@@ -142,6 +143,7 @@ class _MatchStatement:
         else:
             # Match something else by equality.
             return Equals(self.reference).match(actual)
+        return None
 
 
 @define
@@ -150,9 +152,9 @@ class _MatchesDump:
     Match a complete database dump's worth of structured SQL statements.
     """
 
-    reference = field()
+    reference: list[Union[str, Statement]]
 
-    def match(self, actual):
+    def match(self, actual: list[Union[str, Statement]]) -> Optional[Mismatch]:
         for n, (a, r) in enumerate(zip(actual, self.reference)):
             mismatch = Annotate(f"row #{n}", _MatchStatement(r)).match(a)
             if mismatch is not None:
