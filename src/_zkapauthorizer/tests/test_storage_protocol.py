@@ -280,7 +280,7 @@ class ShareTests(TestCase):
                         MorePassesRequired(
                             valid_count=num_passes - len(bad_pass_indexes),
                             required_count=num_passes,
-                            signature_check_failed=bad_pass_indexes,
+                            signature_check_failed=frozenset(bad_pass_indexes),
                         ),
                     ),
                 ),

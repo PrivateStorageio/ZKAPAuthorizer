@@ -39,6 +39,8 @@ from .spending import IPassGroup
 from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED, log_call_coroutine
 from .validators import positive_integer
 from .storage_common import (
+    ReadVector,
+    Secrets,
     MorePassesRequired,
     add_lease_message,
     allocate_buckets_message,
@@ -50,8 +52,6 @@ from .storage_common import (
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
-
-Secrets = tuple[bytes, bytes, bytes]
 
 OldTestWriteVectors = dict[
     int,
@@ -77,7 +77,6 @@ TestWriteVectors = dict[
         Optional[int],
     ],
 ]
-ReadVector = list[tuple[int, int]]
 
 
 @define(auto_exc=False, str=True)

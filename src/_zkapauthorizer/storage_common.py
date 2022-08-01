@@ -45,7 +45,7 @@ class MorePassesRequired(Exception):
 
     valid_count: int
     required_count: int
-    signature_check_failed: frozenset[int] = field(converter=frozenset)
+    signature_check_failed: frozenset[int]
 
 
 def _message_maker(label: str) -> Callable[[bytes], bytes]:
@@ -166,9 +166,11 @@ def required_passes(
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
     return result
 
+Secrets = tuple[bytes, bytes, bytes]
 TestVector = List[Tuple[int, int, bytes, bytes]]
 DataVector = List[Tuple[int, bytes]]
 TestWriteVectors = Tuple[TestVector, DataVector, Union[None, int]]
+ReadVector = list[tuple[int, int]]
 
 _div_ceil = cast(Callable[[int, int], int], div_ceil)
 

@@ -372,7 +372,7 @@ class CallWithPassesTests(TestCase):
                         MorePassesRequired(
                             valid_count=num_passes,
                             required_count=num_passes + 1,
-                            signature_check_failed=[],
+                            signature_check_failed=frozenset(),
                         ),
                     ),
                 ),

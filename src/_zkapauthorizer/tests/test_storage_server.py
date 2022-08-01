@@ -310,7 +310,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=0,
                         required_count=1,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
@@ -407,7 +407,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=0,
                         required_count=1,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
@@ -573,7 +573,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=len(passes),
                         required_count=required_count,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
