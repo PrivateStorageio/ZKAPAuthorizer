@@ -18,6 +18,7 @@ A module for logic controlling the manner in which ZKAPs are spent.
 
 from __future__ import annotations
 
+from collections.abc import Container
 from typing import Callable
 
 import attr
@@ -32,50 +33,47 @@ class IPassGroup(Interface):
     A group of passed meant to be spent together.
     """
 
-    passes = Attribute(":ivar list[Pass] passes: The passes themselves.")
+    passes: list[Pass] = Attribute("The passes themselves.")
 
-    def split(select_indices):
+    def split(select_indices: Container[int]) -> tuple[IPassGroup, IPassGroup]:
         """
-        Create two new ``IPassGroup`` providers.  The first contains all passes in
-        this group at the given indices.  The second contains all the others.
+        Create two new ``IPassGroup`` providers.  The first contains all
+        passes in this group at the given indices.  The second contains all
+        the others.
 
-        :param list[int] select_indices: The indices of the passes to include
-            in the first resulting group.
+        :param select_indices: The indices of the passes to include in the
+            first resulting group.
 
-        :return (IPassGroup, IPassGroup): The two new groups.
-        """
-
-    def expand(by_amount):
-        """
-        Create a new ``IPassGroup`` provider which contains all of this group's
-        passes and some more.
-
-        :param int by_amount: The number of additional passes the resulting
-            group should contain.
-
-        :return IPassGroup: The new group.
+        :return: The two new groups.
         """
 
-    def mark_spent():
+    def expand(by_amount: int) -> IPassGroup:
+        """
+        Create a new ``IPassGroup`` provider which contains all of this
+        group's passes and some more.
+
+        :param by_amount: The number of additional passes the resulting group
+            should contain.
+
+        :return: The new group.
+        """
+
+    def mark_spent() -> None:
         """
         The passes have been spent successfully.  Ensure none of them appear in
         any ``IPassGroup`` provider created in the future.
-
-        :return: ``None``
         """
 
-    def mark_invalid(reason):
+    def mark_invalid(reason: str) -> None:
         """
         The passes could not be spent.  Ensure none of them appear in any
         ``IPassGroup`` provider created in the future.
 
-        :param unicode reason: A short description of the reason the passes
-            could not be spent.
-
-        :return: ``None``
+        :param reason: A short description of the reason the passes could not
+            be spent.
         """
 
-    def reset():
+    def reset() -> None:
         """
         The passes have not been spent.  Return them to for use in a future
         ``IPassGroup`` provider.
@@ -143,7 +141,7 @@ class PassGroup(object):
     def unblinded_tokens(self) -> list[UnblindedToken]:
         return list(unblinded_token for (unblinded_token, pass_) in self._tokens)
 
-    def split(self, select_indices: list[int]) -> tuple[PassGroup, PassGroup]:
+    def split(self, select_indices: Container[int]) -> tuple[PassGroup, PassGroup]:
         selected = []
         unselected = []
         for idx, t in enumerate(self._tokens):

@@ -16,11 +16,13 @@
 Eliot field, message, and action definitions for ZKAPAuthorizer.
 """
 
-from typing import Optional, Callable, TypeVar, cast
+from functools import wraps
+from typing import Optional, Callable, TypeVar, cast, Awaitable
 from typing_extensions import ParamSpec
 
-from eliot import ActionType, Field, MessageType
+from eliot import ActionType, Field, MessageType, start_action
 from eliot import log_call as _log_call
+from allmydata.util.eliotutil import log_call_deferred as _log_call_deferred
 
 PRIVACYPASS_MESSAGE = Field(
     "message",
@@ -123,3 +125,22 @@ def log_call(
             include_result=include_result,
         )
     )
+
+def log_call_deferred(
+        action_type:Optional[str]=None,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    return cast(
+        Callable[[Callable[P, T]], Callable[P, T]],
+        _log_call_deferred(action_type),
+    )
+
+def log_call_coroutine(
+        action_type:str,
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+    def decorate_log_call_coroutine(f: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @wraps(f)
+        async def logged_f(*a: P.args, **kw: P.kwargs) -> T:
+            with start_action(action_type=action_type):
+                return await f(*a, **kw)
+        return logged_f
+    return decorate_log_call_coroutine

@@ -40,6 +40,7 @@ from testtools.twistedsupport import failed, succeeded
 # there appear to have stalled.
 from testtools.twistedsupport._deferred import extract_result
 from twisted.internet.task import Clock
+from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 
@@ -199,7 +200,7 @@ class ShareTests(TestCase):
         *get_version*.
         """
         self.assertThat(
-            self.client.get_version(),
+            Deferred.fromCoroutine(self.client.get_version()),
             succeeded(matches_version_dictionary()),
         )
 
@@ -302,7 +303,7 @@ class ShareTests(TestCase):
         those resulting buckets.
         """
         alreadygot, allocated = extract_result(
-            self.client.allocate_buckets(
+            Deferred.fromCoroutine(self.client.allocate_buckets(
                 storage_index,
                 renew_secret,
                 cancel_secret,
@@ -310,7 +311,7 @@ class ShareTests(TestCase):
                 size,
                 canary=self.canary,
             ),
-        )
+        ))
         self.expectThat(
             alreadygot,
             Equals(set()),
@@ -330,7 +331,7 @@ class ShareTests(TestCase):
             bucket.remote_write(0, bytes_for_share(sharenum, size))
             bucket.remote_close()
 
-        readers = extract_result(self.client.get_buckets(storage_index))
+        readers = extract_result(Deferred.fromCoroutine(self.client.get_buckets(storage_index)))
 
         self.expectThat(
             set(readers.keys()),
@@ -389,16 +390,14 @@ class ShareTests(TestCase):
         already exist, passes are not spent for those shares.
         """
         # A helper that only varies on sharenums.
-        def allocate_buckets(sharenums):
-            alreadygot, writers = extract_result(
-                self.client.allocate_buckets(
-                    storage_index,
-                    renew_secret,
-                    cancel_secret,
-                    sharenums,
-                    size,
-                    canary=self.canary,
-                ),
+        async def allocate_buckets(sharenums):
+            alreadygot, writers = await self.client.allocate_buckets(
+                storage_index,
+                renew_secret,
+                cancel_secret,
+                sharenums,
+                size,
+                canary=self.canary,
             )
             for sharenum, writer in writers.items():
                 writer.remote_write(0, bytes_for_share(sharenum, size))
@@ -426,7 +425,7 @@ class ShareTests(TestCase):
         # the shares in some random-ish way.  If there is partial overlap
         # there should be partial spending.
         all_sharenums = existing_sharenums | additional_sharenums
-        allocate_buckets(all_sharenums)
+        extract_result(Deferred.fromCoroutine(allocate_buckets(all_sharenums)))
 
         # This is what the client should try to spend.  This should also match
         # the total number of passes issued during the test.
@@ -512,11 +511,11 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            self.client.add_lease(
+            Deferred.fromCoroutine(self.client.add_lease(
                 storage_index,
                 renew_lease_secret,
                 cancel_secret,
-            ),
+            )),
             succeeded(Always()),
         )
 
@@ -563,7 +562,7 @@ class ShareTests(TestCase):
             }
         ]
         self.assertThat(
-            self.client.stat_shares([storage_index]),
+            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
             succeeded(Equals(expected)),
         )
 
@@ -632,7 +631,7 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            self.client.stat_shares([storage_index]),
+            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -678,7 +677,7 @@ class ShareTests(TestCase):
             fobj.truncate(position)
 
         self.assertThat(
-            self.client.stat_shares([storage_index]),
+            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -758,7 +757,7 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         wrote, read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
+            Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -767,7 +766,7 @@ class ShareTests(TestCase):
                 },
                 r_vector=[],
             ),
-        )
+        ))
         self.assertThat(
             wrote,
             Equals(True),
@@ -793,7 +792,7 @@ class ShareTests(TestCase):
             }
         ]
         self.assertThat(
-            self.client.stat_shares([storage_index]),
+            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
             succeeded(Equals(expected)),
         )
 
@@ -825,12 +824,12 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            self.client.advise_corrupt_share(
+            Deferred.fromCoroutine(self.client.advise_corrupt_share(
                 b"immutable",
                 storage_index,
                 sharenum,
                 b"the bits look bad",
-            ),
+            )),
             succeeded(Always()),
         )
         self.assertThat(
@@ -856,12 +855,12 @@ class ShareTests(TestCase):
         self.clock.advance(now)
 
         def write(vector):
-            return self.client.slot_testv_and_readv_and_writev(
+            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={k: v.for_call() for (k, v) in vector.items()},
                 r_vector=[],
-            )
+            ))
 
         grant_times = {}
         for n, vector in enumerate(share_vectors):
@@ -958,7 +957,7 @@ class ShareTests(TestCase):
             )
 
         def write():
-            return self.client.slot_testv_and_readv_and_writev(
+            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -966,7 +965,7 @@ class ShareTests(TestCase):
                     for (k, v) in test_and_write_vectors_for_shares.items()
                 },
                 r_vector=[],
-            )
+            ))
 
         # Perform an initial write so there is something to rewrite.
         self.assertThat(
@@ -1021,7 +1020,7 @@ class ShareTests(TestCase):
         secrets = (write_enabler, renew_secret, cancel_secret)
 
         def write():
-            return self.client.slot_testv_and_readv_and_writev(
+            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -1029,7 +1028,7 @@ class ShareTests(TestCase):
                     for (k, v) in test_and_write_vectors_for_shares.items()
                 },
                 r_vector=[],
-            )
+            ))
 
         # Create a share we can toy with.
         self.assertThat(write(), is_successful_write())
@@ -1090,17 +1089,12 @@ class ShareTests(TestCase):
         empty_test_vector = []
 
         def write(tw_vectors):
-            return self.client.slot_testv_and_readv_and_writev(
+            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors=tw_vectors,
                 r_vector=[],
-            )
-
-        def read(sharenum, readv):
-            d = self.client.slot_readv(storage_index, [sharenum], readv)
-            d.addCallback(lambda data: data[sharenum])
-            return d
+            ))
 
         def equal_test_vector(data_vector):
             return list((offset, len(data), data) for (offset, data) in data_vector)
@@ -1169,13 +1163,13 @@ def assert_read_back_data(
         )
 
         _, single_read = extract_result(
-            self.client.slot_testv_and_readv_and_writev(
+            Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={},
                 r_vector=list(map(write_vector_to_read_vector, vectors.write_vector)),
             ),
-        )
+        ))
 
         self.assertThat(
             single_read[sharenum],

@@ -21,21 +21,22 @@ implemented in ``_storage_server.py``.
 """
 
 from functools import partial, wraps
-from typing import Any, Generator, Optional, TypeVar, Callable, Awaitable
+from typing import Any, Generator, Optional, TypeVar, Callable, Awaitable, Protocol, cast
+from typing_extensions import ParamSpec, Concatenate
 
 import attr
-from attrs import define, field
+from foolscap.referenceable import RemoteReference
+from attrs import define, field, Factory
 from allmydata.interfaces import IStorageServer
-from allmydata.util.eliotutil import log_call_deferred
 from attr.validators import provides
-from eliot.twisted import inline_callbacks
 from twisted.internet.defer import Deferred, returnValue
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
+from .foolscap import ShareStat
 from .spending import IPassGroup
-from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED
+from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED, log_call_coroutine
 from .validators import positive_integer
 from .storage_common import (
     MorePassesRequired,
@@ -48,9 +49,22 @@ from .storage_common import (
 )
 
 _T = TypeVar("_T")
+_P = ParamSpec("_P")
 
 Secrets = tuple[bytes, bytes, bytes]
 
+OldTestWriteVectors = dict[
+    int,
+    tuple[
+        list[
+            tuple[int, int, bytes, bytes],
+        ],
+        list[
+            tuple[int, bytes],
+        ],
+        Optional[int],
+    ],
+]
 TestWriteVectors = dict[
     int,
     tuple[
@@ -190,14 +204,18 @@ async def call_with_passes_with_manual_spend(
     return result
 
 
-def call_with_passes(method, num_passes, get_passes):
+async def call_with_passes(
+        method: Callable[[IPassGroup], Awaitable[_T]],
+        num_passes: int,
+        get_passes: Callable[[int], IPassGroup],
+) -> _T:
     """
     Similar to ``call_with_passes_with_manual_spend`` but automatically spend
     all passes associated with a successful call of ``method``.
 
     For parameter documentation, see ``call_with_passes_with_manual_spend``.
     """
-    return call_with_passes_with_manual_spend(
+    return await call_with_passes_with_manual_spend(
         method,
         num_passes,
         get_passes,
@@ -206,7 +224,15 @@ def call_with_passes(method, num_passes, get_passes):
     )
 
 
-def with_rref(f):
+class RRefHaver(Protocol):
+    def _rref(self) -> RemoteReference:
+        ...
+
+_S = TypeVar("_S", bound=RRefHaver)
+
+def with_rref(
+        f: Callable[Concatenate[_S, RemoteReference, _P], _T],
+) -> Callable[Concatenate[_S, _P], _T]:
     """
     Decorate a function so that it automatically receives a
     ``RemoteReference`` as its first argument when called.
@@ -216,23 +242,103 @@ def with_rref(f):
     """
 
     @wraps(f)
-    def g(self, *args, **kwargs):
+    def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
         return f(self, self._rref(), *args, **kwargs)
 
     return g
 
 
-def _encode_passes(group):
+def _encode_passes(group: IPassGroup) -> list[bytes]:
     """
-    :param IPassGroup group: A group of passes to encode.
+    :param group: A group of passes to encode.
 
-    :return list[bytes]: The encoded form of the passes in the given group.
+    :return: The encoded form of the passes in the given group.
     """
     return list(t.pass_bytes for t in group.passes)
 
 
+async def stat_shares(rref: RemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
+    unknown = await rref.callRemote( # type: ignore[no-untyped-call]
+        "stat_shares",
+        storage_indexes,
+    )
+    if not isinstance(unknown, list):
+        raise ValueError(f"expected stat_share to return list, got {type(unknown)}")
+
+    known: list[dict[int, ShareStat]] = []
+    for stats in unknown:
+        if not isinstance(stats, dict):
+            raise ValueError(f"expected stat_share to return list of dict, instead got element of {type(stats)}")
+
+        known_stats: dict[int, ShareStat] = {}
+        for (shnum, stat) in stats.items():
+            if not isinstance(shnum, int) or not isinstance(stat, ShareStat):
+                raise ValueError(f"expected stat_share to return list of dict of int:ShareStat, instead got item of {type(shnum)}:{type(stat)}")
+
+            known_stats[shnum] = stat
+        known.append(known_stats)
+    return known
+
+async def get_share_sizes(rref: RemoteReference, storage_index: bytes) -> dict[int, int]:
+    unknown_sizes = await rref.callRemote( # type: ignore[no-untyped-call]
+        "share_sizes",
+        storage_index,
+        None,
+    )
+    if isinstance(unknown_sizes, dict):
+        known_sizes: dict[int, int] = {}
+        for shnum, size in unknown_sizes.items():
+            if isinstance(shnum, int) and isinstance(size, int):
+                known_sizes[shnum] = size
+            else:
+                raise ValueError(f"expected share_sizes to return dict of ints, instead got item {type(shnum)}:{type(size)}")
+        return known_sizes
+    raise ValueError(f"expected share_sizes to return dict, instead got {type(unknown_sizes)}")
+
+
+async def slot_testv_and_readv_and_writev(
+        rref: RemoteReference,
+        passes: IPassGroup,
+        storage_index: bytes,
+        secrets: Secrets,
+        old_tw_vectors: OldTestWriteVectors,
+        r_vector: ReadVector,
+) -> tuple[bool, dict[int, list[bytes]]]:
+    unknown = await rref.callRemote( # type: ignore[no-untyped-call]
+        "slot_testv_and_readv_and_writev",
+        _encode_passes(passes),
+        storage_index,
+        secrets,
+        old_tw_vectors,
+        r_vector,
+    )
+
+    if not isinstance(unknown, tuple):
+        raise ValueError(f"expected tuple from slot_testv_and_readv_and_writev, instead got {type(unknown)}")
+
+    ok, data_v = unknown
+    if not isinstance(ok, bool):
+        raise ValueError(f"expected bool from slot_testv_and_readv_and_writev, instead got {type(ok)}")
+
+    if not isinstance(data_v, dict):
+        raise ValueError(f"expected dict from slot_testv_and_readv_and_writev, instead got {type(data_v)}")
+
+    known_data_v: dict[int, list[bytes]] = {}
+    for k, v in data_v.items():
+        if not isinstance(k, int) or not isinstance(v, list):
+            raise ValueError(f"expected int:list element from slot_testv_and_readv_and_writev, instead got {type(k)}:{type(v)}")
+
+        read_v: list[bytes] = []
+        for unknown_data in v:
+            if not isinstance(unknown_data, bytes):
+                raise ValueError(f"expected bytes element from slot_testv_and_readv_and_writev, instead got {type(unknown_data)}")
+            read_v.append(unknown_data)
+        known_data_v[k] = read_v
+    return ok, known_data_v
+
+
 @implementer(IStorageServer)
-@attr.s
+@define
 class ZKAPAuthorizerStorageClient(object):
     """
     An implementation of the client portion of an access-pass-based
@@ -261,14 +367,14 @@ class ZKAPAuthorizerStorageClient(object):
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
     _pass_value: int = field(validator=positive_integer)
-    _get_rref = attr.ib()
-    _get_passes = attr.ib()
-    _clock = attr.ib(
+    _get_rref: Callable[[], RemoteReference]
+    _get_passes: Callable[[int], IPassGroup]
+    _clock: IReactorTime = field(
         validator=provides(IReactorTime),
-        default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
+        default=Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
-    def _rref(self):
+    def _rref(self) -> RemoteReference:
         rref = self._get_rref()
         # rref provides foolscap.ipb.IRemoteReference but in practice it is a
         # foolscap.referenceable.RemoteReference instance.  The interface
@@ -288,17 +394,26 @@ class ZKAPAuthorizerStorageClient(object):
         return rref
 
     @with_rref
-    def get_version(self, rref):
-        return rref.callRemote(
+    async def get_version(self, rref: RemoteReference) -> dict[bytes, Any]:
+        unknown_version = await rref.callRemote( # type: ignore[no-untyped-call]
             "get_version",
         )
+        if isinstance(unknown_version, dict):
+            known_version: dict[bytes, Any] = {}
+            for k, v in unknown_version.items():
+                if isinstance(k, bytes):
+                    known_version[k] = v
+                else:
+                    raise ValueError(f"expected get_Version to return dict with bytes keys, instead got {type(k)}")
+            return known_version
+        raise ValueError(f"expected get_version to return dict, instead got {type(unknown_version)}")
 
     def _spend_for_allocate_buckets(
         self,
-        allocated_size,
-        result,
-        pass_group,
-    ):
+        allocated_size: int,
+        result: tuple[set[int], dict[int, Any]],
+        pass_group: IPassGroup,
+    ) -> None:
         """
         Spend some subset of a pass group based on the results of an
         *allocate_buckets* call.
@@ -327,21 +442,21 @@ class ZKAPAuthorizerStorageClient(object):
         to_reset.reset()
 
     @with_rref
-    def allocate_buckets(
+    async def allocate_buckets(
         self,
-        rref,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        allocated_size,
-        canary,
-    ):
+        rref: RemoteReference,
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+        sharenums: set[int],
+        allocated_size: int,
+        canary: RemoteReference,
+    ) -> tuple[set[int], dict[int, Any]]:
         num_passes = required_passes(
             self._pass_value, [allocated_size] * len(sharenums)
         )
-        return Deferred.fromCoroutine(call_with_passes_with_manual_spend(
-            lambda passes: rref.callRemote(
+        async def call(passes: IPassGroup) -> tuple[set[int], dict[int, Any]]:
+            alreadygot, buckets = await rref.callRemote( # type: ignore[no-untyped-call]
                 "allocate_buckets",
                 _encode_passes(passes),
                 storage_index,
@@ -350,92 +465,99 @@ class ZKAPAuthorizerStorageClient(object):
                 sharenums,
                 allocated_size,
                 canary,
-            ),
+            )
+            return alreadygot, buckets
+
+        return await call_with_passes_with_manual_spend(
+            call,
             num_passes,
             partial(
                 self._get_passes,
                 allocate_buckets_message(storage_index),
             ),
             partial(self._spend_for_allocate_buckets, allocated_size),
-        ))
+        )
 
     @with_rref
-    def get_buckets(
+    async def get_buckets(
         self,
-        rref,
-        storage_index,
-    ):
-        return rref.callRemote(
+        rref: RemoteReference,
+        storage_index: bytes,
+    ) -> dict[int, Any]:
+        unknown_buckets = await rref.callRemote( # type: ignore[no-untyped-call]
             "get_buckets",
             storage_index,
         )
+        if isinstance(unknown_buckets, dict):
+            known_buckets: dict[int, Any] = {}
+            for k, v in unknown_buckets.items():
+                if isinstance(k, int):
+                    known_buckets[k] = v
+                else:
+                    raise ValueError(f"expected get_buckets to return dict with int keys, instead got {type(k)}")
+            return known_buckets
+        raise ValueError(f"expected get_buckets to return dict, instead got {type(unknown_buckets)}")
 
-    @inline_callbacks
     @with_rref
-    def add_lease(
+    async def add_lease(
         self,
-        rref,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-    ):
-        share_sizes = (
-            yield rref.callRemote(
-                "share_sizes",
-                storage_index,
-                None,
-            )
-        ).values()
+        rref: RemoteReference,
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+    ) -> None:
+        share_sizes = (await get_share_sizes(rref, storage_index)).values()
         num_passes = required_passes(self._pass_value, share_sizes)
 
-        result = yield Deferred.fromCoroutine(call_with_passes(
-            lambda passes: rref.callRemote(
+        async def call(passes: IPassGroup) -> None:
+            await rref.callRemote( # type: ignore[no-untyped-call]
                 "add_lease",
                 _encode_passes(passes),
                 storage_index,
                 renew_secret,
                 cancel_secret,
-            ),
+            )
+            return None
+
+        await call_with_passes(
+            call,
             num_passes,
             partial(self._get_passes, add_lease_message(storage_index)),
-        ))
-        returnValue(result)
-
-    @with_rref
-    def stat_shares(self, rref, storage_indexes):
-        return rref.callRemote(
-            "stat_shares",
-            storage_indexes,
         )
+        return None
 
     @with_rref
-    def advise_corrupt_share(
+    async def stat_shares(self, rref: RemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
+        return await stat_shares(rref, storage_indexes)
+
+    @with_rref
+    async def advise_corrupt_share(
         self,
-        rref,
-        share_type,
-        storage_index,
-        shnum,
-        reason,
-    ):
-        return rref.callRemote(
+        rref: RemoteReference,
+        share_type: str,
+        storage_index: bytes,
+        shnum: int,
+        reason: bytes,
+    ) -> None:
+        await rref.callRemote( # type: ignore[no-untyped-call]
             "advise_corrupt_share",
             share_type,
             storage_index,
             shnum,
             reason,
         )
+        return None
 
-    @log_call_deferred("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
-    @inline_callbacks
+    @log_call_coroutine("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     @with_rref
-    def slot_testv_and_readv_and_writev(
+    async def slot_testv_and_readv_and_writev(
         self,
-        rref: Any,
+        rref: RemoteReference,
         storage_index: bytes,
         secrets: Secrets,
         tw_vectors: TestWriteVectors,
         r_vector: ReadVector,
-    ) -> Generator[Deferred[Any], Any, None]:
+    ) -> tuple[bool, dict[int, list[bytes]]]:
         # Read operations are free.
         num_passes = 0
 
@@ -467,10 +589,7 @@ class ZKAPAuthorizerStorageClient(object):
             # on the storage server that will give us a really good estimate
             # of the current size of all of the specified shares (keys of
             # tw_vectors).
-            [stats] = yield rref.callRemote(
-                "stat_shares",
-                [storage_index],
-            )
+            [stats] = await stat_shares(rref, [storage_index])
             # Filter down to only the shares that have an active lease.  If
             # we're going to write to any other shares we will have to pay to
             # renew their leases.
@@ -490,34 +609,38 @@ class ZKAPAuthorizerStorageClient(object):
                 old_tw_vectors,
             )
 
-        result = yield Deferred.fromCoroutine(call_with_passes(
-            lambda passes: rref.callRemote(
-                "slot_testv_and_readv_and_writev",
-                _encode_passes(passes),
+        async def call(passes: IPassGroup) -> tuple[bool, dict[int, list[bytes]]]:
+            return await slot_testv_and_readv_and_writev(
+                rref,
+                passes,
                 storage_index,
                 secrets,
                 old_tw_vectors,
                 r_vector,
-            ),
+            )
+        return await call_with_passes(
+            call,
             num_passes,
             partial(
                 self._get_passes,
                 slot_testv_and_readv_and_writev_message(storage_index),
             ),
-        ))
-        returnValue(result)
+        )
 
     @with_rref
-    def slot_readv(
+    async def slot_readv(
         self,
-        rref,
-        storage_index,
-        shares,
-        r_vector,
-    ):
-        return rref.callRemote(
+        rref: RemoteReference,
+        storage_index: bytes,
+        shares: list[int],
+        r_vector: ReadVector,
+    ) -> bytes:
+        result = await rref.callRemote( # type: ignore[no-untyped-call]
             "slot_readv",
             storage_index,
             shares,
             r_vector,
         )
+        if isinstance(result, bytes):
+            return result
+        raise ValueError(f"expected bytes from slot_readv, got {type(result)}")
