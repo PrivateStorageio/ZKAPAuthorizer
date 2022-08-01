@@ -118,13 +118,13 @@ class TemporaryVoucherStore(Fixture):
         """
         self.store = None
 
-    def redeem(self, voucher, num_passes):
+    async def redeem(self, voucher, num_passes):
         """
         Redeem a voucher for some passes.
 
         :return: A ``Deferred`` that fires with the redemption result.
         """
-        return PaymentController(
+        return await PaymentController(
             self.store,
             self.redeemer,
             # Have to pass it here or to redeem, doesn't matter which.

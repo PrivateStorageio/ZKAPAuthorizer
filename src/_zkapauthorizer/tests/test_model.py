@@ -309,7 +309,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         then it is not empty.
         """
         d = self.store_fixture.redeem(voucher, num_passes)
-        self.assertThat(d, succeeded(Always()))
+        self.assertThat(Deferred.fromCoroutine(d), succeeded(Always()))
         self.assertThat(
             Deferred.fromCoroutine(self.store_fixture.store.call_if_empty(fail)),
             failed(AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty))),
@@ -325,7 +325,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         then it is not empty.
         """
         d = self.store_fixture.redeem(voucher, num_passes)
-        self.assertThat(d, succeeded(Always()))
+        self.assertThat(Deferred.fromCoroutine(d), succeeded(Always()))
 
         tokens = self.store_fixture.store.get_unblinded_tokens(num_passes)
         self.store_fixture.store.invalidate_unblinded_tokens("anything", tokens)
@@ -590,7 +590,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
             assume(False)
 
         self.case.assertThat(
-            self.configless.redeem(voucher, num_passes),
+            Deferred.fromCoroutine(self.configless.redeem(voucher, num_passes)),
             succeeded(Always()),
         )
         self.available += num_passes

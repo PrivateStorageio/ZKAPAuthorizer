@@ -662,7 +662,7 @@ class _VoucherCollection(Resource):
         self._log.info(
             "Accepting a voucher ({voucher}) for redemption.", voucher=voucher
         )
-        self._controller.redeem(voucher.encode("ascii"))
+        Deferred.fromCoroutine(self._controller.redeem(voucher.encode("ascii")))
         return b""
 
     def render_GET(self, request):

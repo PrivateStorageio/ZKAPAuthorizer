@@ -48,7 +48,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from treq.testing import StubTreq
-from twisted.internet.defer import fail, succeed
+from twisted.internet.defer import fail, succeed, Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import Clock
 from twisted.python.url import URL
@@ -198,7 +198,7 @@ class PaymentControllerTests(TestCase):
         )
 
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -210,7 +210,7 @@ class PaymentControllerTests(TestCase):
         )
 
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             failed(
                 AfterPreprocessing(
                     lambda f: f.type,
@@ -234,7 +234,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             has_no_result(),
         )
 
@@ -278,7 +278,7 @@ class PaymentControllerTests(TestCase):
         )
 
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             has_no_result(),
         )
 
@@ -338,7 +338,7 @@ class PaymentControllerTests(TestCase):
                 clock=Clock(),
             )
             self.assertThat(
-                controller.redeem(voucher),
+                Deferred.fromCoroutine(controller.redeem(voucher)),
                 has_no_result(),
             )
 
@@ -408,7 +408,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
         self.assertThat(
@@ -433,7 +433,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -468,7 +468,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -500,7 +500,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -533,7 +533,7 @@ class PaymentControllerTests(TestCase):
             clock=Clock(),
         )
         self.assertThat(
-            unpaid_controller.redeem(voucher),
+            Deferred.fromCoroutine(unpaid_controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -585,7 +585,7 @@ class PaymentControllerTests(TestCase):
             clock=clock,
         )
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
         # It fails this time.
@@ -692,7 +692,7 @@ class PaymentControllerTests(TestCase):
         # Even with disallowed public keys, the *redemption* is considered
         # successful.
         self.assertThat(
-            controller.redeem(voucher),
+            Deferred.fromCoroutine(controller.redeem(voucher)),
             succeeded(Always()),
         )
 
@@ -744,7 +744,7 @@ class PaymentControllerTests(TestCase):
             unblinded_token
             for counter, redeemer in enumerate(redeemers)
             if redeemer._public_key in allowed_public_keys
-            for unblinded_token in redeemer.redeemWithCounter(
+            for unblinded_token in Deferred.fromCoroutine(redeemer.redeemWithCounter(
                 voucher_obj,
                 counter,
                 redeemer.random_tokens_for_voucher(
@@ -756,7 +756,7 @@ class PaymentControllerTests(TestCase):
                         counter,
                     ),
                 ),
-            ).result.unblinded_tokens
+            )).result.unblinded_tokens
         )
         self.expectThat(
             store.get_unblinded_tokens(store.count_unblinded_tokens()),
@@ -800,7 +800,7 @@ class RistrettoRedeemerTests(TestCase):
             random_tokens,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(
                 MatchesStructure(
                     unblinded_tokens=MatchesAll(
@@ -837,7 +837,7 @@ class RistrettoRedeemerTests(TestCase):
         )
 
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -870,7 +870,7 @@ class RistrettoRedeemerTests(TestCase):
             random_tokens,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -898,7 +898,7 @@ class RistrettoRedeemerTests(TestCase):
             random_tokens,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -926,7 +926,7 @@ class RistrettoRedeemerTests(TestCase):
             random_tokens,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -968,7 +968,7 @@ class RistrettoRedeemerTests(TestCase):
         )
         self.addDetail("redeem Deferred", text_content(str(d)))
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -991,11 +991,11 @@ class RistrettoRedeemerTests(TestCase):
         redeemer = RistrettoRedeemer(treq, NOWHERE)
 
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
-        d = redeemer.redeemWithCounter(
+        d = Deferred.fromCoroutine(redeemer.redeemWithCounter(
             voucher,
             counter,
             random_tokens,
-        )
+        ))
 
         def unblinded_tokens_to_passes(result):
             passes = redeemer.tokens_to_passes(message, result.unblinded_tokens)
@@ -1337,7 +1337,7 @@ class _BracketTestMixin:
 
         last = partial(actions.append, "last")
         self.assertThat(
-            bracket(first, last, between),
+            Deferred.fromCoroutine(bracket(first, last, between)),
             succeeded(
                 Is(result),
             ),
@@ -1347,7 +1347,7 @@ class _BracketTestMixin:
             Equals(["first", "between", "last"]),
         )
 
-    def test_failure(self):
+    def test_failure(self) -> None:
         """
         ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
         ``Deferred`` that fires with the failure result of ``between``.
@@ -1365,7 +1365,7 @@ class _BracketTestMixin:
 
         last = partial(actions.append, "last")
         self.assertThat(
-            bracket(first, last, between),
+            Deferred.fromCoroutine(bracket(first, last, between)),
             failed(
                 AfterPreprocessing(
                     lambda failure: failure.value,
@@ -1399,7 +1399,7 @@ class _BracketTestMixin:
             return self.wrap_failure(SomeException())
 
         self.assertThat(
-            bracket(first, last, between),
+            Deferred.fromCoroutine(bracket(first, last, between)),
             failed(
                 AfterPreprocessing(
                     lambda failure: failure.value,
@@ -1436,7 +1436,7 @@ class _BracketTestMixin:
             return self.wrap_failure(AnotherException())
 
         self.assertThat(
-            bracket(first, last, between),
+            Deferred.fromCoroutine(bracket(first, last, between)),
             failed(
                 AfterPreprocessing(
                     lambda failure: failure.value,
@@ -1468,7 +1468,7 @@ class _BracketTestMixin:
         last = partial(actions.append, "last")
 
         self.assertThat(
-            bracket(first, last, between),
+            Deferred.fromCoroutine(bracket(first, last, between)),
             failed(
                 AfterPreprocessing(
                     lambda failure: failure.value,
@@ -1483,16 +1483,8 @@ class _BracketTestMixin:
 
 
 class BracketTests(_BracketTestMixin, TestCase):
-    def wrap_success(self, result):
+    async def wrap_success(self, result):
         return result
 
-    def wrap_failure(self, exception):
+    async def wrap_failure(self, exception):
         raise exception
-
-
-class SynchronousDeferredBracketTests(_BracketTestMixin, TestCase):
-    def wrap_success(self, result):
-        return succeed(result)
-
-    def wrap_failure(self, exception):
-        return fail(exception)

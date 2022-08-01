@@ -693,7 +693,7 @@ class ClientPluginTests(TestCase):
         node_config = get_config(nodedir.path, "tub.port")
 
         # Populate the database with unspent tokens.
-        def redeem():
+        async def redeem():
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
             store = open_store(
                 lambda: now, with_replication(connect(db_path.path), False), node_config
@@ -708,9 +708,9 @@ class ClientPluginTests(TestCase):
                 clock=reactor,
             )
             # Get a token inserted into the store.
-            return controller.redeem(voucher)
+            return await controller.redeem(voucher)
 
-        self.assertThat(redeem(), succeeded(Always()))
+        self.assertThat(Deferred.fromCoroutine(redeem()), succeeded(Always()))
 
         # Try to spend a pass via the storage client plugin.
         storage_client = plugin.get_storage_client(

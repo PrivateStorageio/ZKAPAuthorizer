@@ -107,7 +107,7 @@ from .. import NAME
 from .. import __file__ as package_init_file
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
-from .._json import dumps_utf8
+from .._json import dumps_utf8, loads
 from .._plugin import open_store
 from ..config import CONFIG_DB_NAME
 from ..configutil import config_string_from_sections
@@ -145,7 +145,6 @@ from ..storage_common import (
 )
 from .common import flushErrors
 from .fixtures import TemporaryVoucherStore
-from .json import loads
 from .matchers import between, matches_json, matches_response
 from .strategies import (
     api_auth_tokens,

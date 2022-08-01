@@ -14,6 +14,9 @@
 
 from json import dumps as _dumps
 from typing import Any
+from typing import cast
+from json import loads as _loads
+from ._types import JSON
 
 
 def dumps_utf8(o: Any) -> bytes:
@@ -21,3 +24,15 @@ def dumps_utf8(o: Any) -> bytes:
     Serialize an object to a UTF-8-encoded JSON byte string.
     """
     return _dumps(o).encode("utf-8")
+
+
+def loads(data: bytes) -> JSON:
+    """
+    Load a JSON object from a byte string.
+
+    Raise an exception including ``data`` if the parse fails.
+    """
+    try:
+        return cast(JSON, _loads(data))
+    except ValueError as e:
+        raise ValueError("{!r}: {!r}".format(e, data))

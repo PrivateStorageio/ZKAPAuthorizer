@@ -388,13 +388,13 @@ class LeaseMaintenanceServiceTests(TestCase):
         randoms(),
         clocks(),
     )
-    def test_nodes_visited(self, random, clock):
+    def test_nodes_visited(self, random, clock) -> None:
         """
         When the service runs, it calls the ``maintain_leases`` object.
         """
         leases_maintained_at = []
 
-        def maintain_leases():
+        async def maintain_leases():
             leases_maintained_at.append(datetime.utcfromtimestamp(clock.seconds()))
 
         service = lease_maintenance_service(

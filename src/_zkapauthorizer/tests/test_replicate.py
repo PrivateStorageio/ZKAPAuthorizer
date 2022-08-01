@@ -655,7 +655,10 @@ class ReplicationServiceTests(TestCase):
 
         # Add some tokens, which are considered important.
         voucher0 = urlsafe_b64encode(urandom(32))
-        tvs.redeem(voucher0, 20)
+        self.assertThat(
+            Deferred.fromCoroutine(tvs.redeem(voucher0, 20)),
+            succeeded(Always()),
+        )
 
         # Allow the resulting event-stream upload to complete.
         with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):

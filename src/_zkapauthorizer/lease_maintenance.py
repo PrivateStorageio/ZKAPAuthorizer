@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Awaitable
 
 import attr
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
@@ -34,7 +34,7 @@ from allmydata.util.hashutil import (
 )
 from aniso8601 import parse_datetime
 from twisted.application.service import Service, IService
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from twisted.internet.defer import inlineCallbacks, maybeDeferred, Deferred
 from twisted.python.log import err
 from zope.interface import implementer
 
@@ -420,14 +420,14 @@ def lease_maintenance_service(
 
     return _FuzzyTimerService(
         SERVICE_NAME,
-        lambda: bracket(
+        lambda: Deferred.fromCoroutine(bracket(
             lambda: None,
             lambda: write_time_to_path(
                 last_run_path,
                 datetime.utcfromtimestamp(reactor.seconds()),
             ),
             maintain_leases,
-        ),
+        )),
         initial_interval,
         sample_interval_distribution,
         get_lease_maint_config,

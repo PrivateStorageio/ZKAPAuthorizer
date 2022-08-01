@@ -22,11 +22,11 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from functools import wraps
-from json import loads
+from ._json import loads
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast
+from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast, NoReturn
 from typing_extensions import TypeAlias, ParamSpec, Concatenate
 from mypy_extensions import Arg
 
@@ -408,10 +408,10 @@ class VoucherStore(ConnectionHaver):
         existing) to the database.  If the (voucher, counter) pair is already
         present, do nothing.
 
-        :param bytes voucher: The text value of a voucher with which to
-            associate the tokens.
+        :param voucher: The text value of a voucher with which to associate
+            the tokens.
 
-        :param int expected_tokens: The total number of tokens for which this
+        :param expected_tokens: The total number of tokens for which this
             voucher is expected to be redeemed.  This is only respected the
             first time a voucher is added.  Subsequent calls with the same
             voucher but a different count ignore the value because it is
@@ -421,10 +421,11 @@ class VoucherStore(ConnectionHaver):
             This probably means ``add`` is a broken interface for doing these
             two things.  Maybe it should be fixed someday.
 
-        :param int counter: The redemption counter for the given voucher with
+        :param counter: The redemption counter for the given voucher with
             which to associate the tokens.
 
-        :param list[RandomToken]: The tokens to add alongside the voucher.
+        :param get_tokens: A function to get the tokens to add alongside the
+            voucher.
         """
         voucher_text = voucher.decode("ascii")
         cursor.execute(
@@ -1039,6 +1040,9 @@ class Pending(object):
     def should_start_redemption(self) -> Literal[True]:
         return True
 
+    def start_at_counter(self) -> int:
+        return self.counter
+
     def to_json_v1(self) -> JSON:
         return {
             "name": "pending",
@@ -1059,6 +1063,9 @@ class Redeeming(object):
 
     def should_start_redemption(self) -> Literal[False]:
         return False
+
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already redeeming")
 
     def to_json_v1(self) -> JSON:
         return {
@@ -1085,6 +1092,9 @@ class Redeemed(object):
     def should_start_redemption(self) -> Literal[False]:
         return False
 
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already redeemed")
+
     def to_json_v1(self) -> JSON:
         return {
             "name": "redeemed",
@@ -1099,6 +1109,9 @@ class DoubleSpend(object):
 
     def should_start_redemption(self) -> Literal[False]:
         return False
+
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already spent")
 
     def to_json_v1(self) -> JSON:
         return {
@@ -1120,6 +1133,9 @@ class Unpaid(object):
     def should_start_redemption(self) -> Literal[True]:
         return True
 
+    def start_at_counter(self) -> Literal[0]:
+        return 0
+
     def to_json_v1(self) -> JSON:
         return {
             "name": "unpaid",
@@ -1140,6 +1156,9 @@ class Error(object):
 
     def should_start_redemption(self) -> Literal[True]:
         return True
+
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Not sure where to start redeeming error-state voucher")
 
     def to_json_v1(self) -> JSON:
         return {
@@ -1176,7 +1195,7 @@ class Voucher(object):
 
     number: bytes = field(validator=base64_bytes(44))
 
-    expected_tokens: Optional[int] = field(validator=attr.validators.optional(positive_integer))
+    expected_tokens: int = field(validator=positive_integer)
 
     created: Optional[datetime] = field(
         default=None,
@@ -1240,6 +1259,8 @@ class Voucher(object):
     @classmethod
     def from_json(cls, json: bytes) -> "Voucher":
         values = loads(json)
+        if not isinstance(values, dict):
+            raise ValueError(f"expected dict, not {type(values)}")
         version = values.pop("version")
         voucher = getattr(cls, "from_json_v{}".format(version))(values)
         assert isinstance(voucher, Voucher)
