@@ -17,6 +17,7 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
+from typing import Optional, Any
 from base64 import b64decode, b64encode
 from datetime import timedelta
 from functools import partial
@@ -37,6 +38,7 @@ from twisted.python.url import URL
 from twisted.web.client import Agent
 from zope.interface import Interface, implementer
 
+from .config import Config
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._stack import less_limited_stack
@@ -1003,7 +1005,7 @@ class PaymentController(object):
         return voucher
 
 
-def get_redeemer(plugin_name, node_config, announcement, reactor):
+def get_redeemer(plugin_name: str, node_config: Config, announcement: Optional[dict[str, Any]], reactor: Any) -> IRedeemer:
     section_name = "storageclient.plugins.{}".format(plugin_name)
     redeemer_kind = node_config.get_config(
         section=section_name,

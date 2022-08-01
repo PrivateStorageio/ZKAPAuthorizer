@@ -33,7 +33,7 @@ from allmydata.util.hashutil import (
     file_renewal_secret_hash,
 )
 from aniso8601 import parse_datetime
-from twisted.application.service import Service
+from twisted.application.service import Service, IService
 from twisted.internet.defer import inlineCallbacks, maybeDeferred
 from twisted.python.log import err
 from zope.interface import implementer
@@ -355,27 +355,24 @@ class _FuzzyTimerService(Service):
             self._iterate,
         )
 
-
 def lease_maintenance_service(
-    maintain_leases,
-    reactor,
-    last_run_path,
-    random,
-    lease_maint_config,
-):
+    maintain_leases: Callable[[], Awaitable[None]],
+    reactor: IReactorClock,
+    last_run_path: FilePath,
+    random: Random,
+    lease_maint_config: LeaseMaintenanceConfig,
+) -> IService:
     """
     Get an ``IService`` which will maintain leases on ``root_node`` and any
     nodes directly or transitively reachable from it.
 
-    :param IReactorClock reactor: A Twisted reactor for scheduling renewal
-        activity.
+    :param reactor: A Twisted reactor for scheduling renewal activity.
 
-    :param FilePath last_run_path: A path containing the time (as an ISO8601
-        datetime string) at which lease maintenance last ran to inform an
-        adjustment to the first interval before running it again.  If no file
-        exists at the path it is treated as though there has been no previous
-        run.  The path will also be rewritten on each run to update this
-        value.
+    :param last_run_path: A path containing the time (as an ISO8601 datetime
+        string) at which lease maintenance last ran to inform an adjustment to
+        the first interval before running it again.  If no file exists at the
+        path it is treated as though there has been no previous run.  The path
+        will also be rewritten on each run to update this value.
 
     :param random: An object like ``random.Random`` which can be used as a
         source of scheduling delay.
@@ -653,7 +650,7 @@ def maintain_leases_from_root(
     min_lease_remaining,
     progress,
     get_now,
-):
+) -> Callable[[], Awaitable[None]]:
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
     and all its children and renews their leases if they have

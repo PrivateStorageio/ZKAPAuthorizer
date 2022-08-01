@@ -355,11 +355,10 @@ class ZKAPAuthorizerStorageClient(object):
         valid ``RemoteReference`` corresponding to the server-side object for
         this scheme.
 
-    :ivar (bytes -> int -> IPassGroup) _get_passes: A callable to use to
-        retrieve passes which can be used to authorize an operation.  The
-        first argument is utf-8 encoded message binding the passes to the
-        request for which they will be used.  The second gives the number of
-        passes to request.
+    :ivar _get_passes: A callable to use to retrieve passes which can be used
+        to authorize an operation.  The first argument is utf-8 encoded
+        message binding the passes to the request for which they will be used.
+        The second gives the number of passes to request.
     """
 
     _expected_remote_interface_name = (
@@ -367,7 +366,7 @@ class ZKAPAuthorizerStorageClient(object):
     )
     _pass_value: int = field(validator=positive_integer)
     _get_rref: Callable[[], RemoteReference]
-    _get_passes: Callable[[int], IPassGroup]
+    _get_passes: Callable[[bytes, int], IPassGroup]
     _clock: IReactorTime = field(
         validator=provides(IReactorTime),
         default=Factory(partial(namedAny, "twisted.internet.reactor")),
@@ -467,14 +466,12 @@ class ZKAPAuthorizerStorageClient(object):
             )
             return alreadygot, buckets
 
+        msg = allocate_buckets_message(storage_index)
         return await call_with_passes_with_manual_spend(
             call,
             num_passes,
-            partial(
-                self._get_passes,
-                allocate_buckets_message(storage_index),
-            ),
-            partial(self._spend_for_allocate_buckets, allocated_size),
+            lambda passes: self._get_passes(msg, passes),
+            lambda result, passes: self._spend_for_allocate_buckets(allocated_size, result, passes),
         )
 
     @with_rref

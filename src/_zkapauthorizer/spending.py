@@ -25,7 +25,7 @@ import attr
 from zope.interface import Attribute, Interface, implementer
 
 from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
-from .model import Pass, UnblindedToken
+from .model import Pass, UnblindedToken, VoucherStore
 
 
 class IPassGroup(Interface):
@@ -186,7 +186,7 @@ class SpendingController(object):
     tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]] = attr.ib()
 
     @classmethod
-    def for_store(cls, tokens_to_passes, store):
+    def for_store(cls, tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]], store: VoucherStore) -> "SpendingController":
         return cls(
             get_unblinded_tokens=store.get_unblinded_tokens,
             discard_unblinded_tokens=store.discard_unblinded_tokens,
@@ -195,7 +195,7 @@ class SpendingController(object):
             tokens_to_passes=tokens_to_passes,
         )
 
-    def get(self, message, num_passes):
+    def get(self, message: bytes, num_passes: int) -> PassGroup:
         unblinded_tokens = self.get_unblinded_tokens(num_passes)
         passes = self.tokens_to_passes(message, unblinded_tokens)
         GET_PASSES.log(
