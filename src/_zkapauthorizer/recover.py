@@ -16,7 +16,7 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from functools import partial
 from io import BytesIO
-from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
+from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence, Any
 
 import cbor2
 from attrs import define, field
@@ -206,7 +206,18 @@ def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
     version = snapshot.get("version", None)
     if version != 1:
         raise ValueError(f"Unknown serialized snapshot version {version}")
-    return snapshot["statements"]
+    statements = snapshot["statements"]
+    if not isinstance(statements, list):
+        raise ValueError(f"Unknown serialized statements type {type(statements)}")
+    return _str_statements(iter(statements))
+
+
+def _str_statements(statements: Iterator[object]) -> Iterator[str]:
+    for statement in statements:
+        if isinstance(statement, str):
+            yield statement
+        else:
+            raise ValueError(f"Unknown serialized statement type {type(statement)}")
 
 
 def recover(
