@@ -717,18 +717,14 @@ class PaymentController(object):
 
     _log = Logger()
 
+    _clock: IReactorTime
+
     store: VoucherStore
     redeemer: IRedeemer
     default_token_count: int
 
     allowed_public_keys: set[str] = field(validator=attr.validators.instance_of(set))
-
     num_redemption_groups: int = 16
-
-    _clock: IReactorTime = Factory(lambda: cast(
-        IReactorTime,
-        namedAny("twisted.internet.reactor"), # type: ignore[no-untyped-call]
-    ))
 
     _error: dict[bytes, model_Error] = Factory(dict)
     _unpaid: dict[bytes, datetime] = Factory(dict)

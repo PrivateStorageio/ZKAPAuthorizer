@@ -10,6 +10,8 @@ Support code for applying token-based HTTP authorization rules to a
 Twisted Web resource hierarchy.
 """
 
+from typing import Callable
+
 # https://github.com/twisted/nevow/issues/106 may affect this code but if so
 # then the hotfix Tahoe-LAFS applies should deal with it.
 #
@@ -100,16 +102,16 @@ def _create_private_tree(get_auth_token, vulnerable):
     return HTTPAuthSessionWrapper(portal, [TokenCredentialFactory()])
 
 
-def create_private_tree(get_auth_token, vulnerable_tree):
+def create_private_tree(get_auth_token: Callable[[], bytes], vulnerable_tree: IResource) -> HTTPAuthSessionWrapper:
     """
     Create a new resource tree that only allows requests if they include a
     correct `Authorization: tahoe-lafs <api_auth_token>` header (where
     `api_auth_token` matches the private configuration value).
 
-    :param (IO -> bytes) get_auth_token: Get the valid authorization token.
+    :param get_auth_token: Get the valid authorization token.
 
-    :param IResource vulnerable_tree: Create the resource
-        hierarchy which will be protected by the authorization mechanism.
+    :param vulnerable_tree: Create the resource hierarchy which will be
+        protected by the authorization mechanism.
     """
     return _create_private_tree(
         get_auth_token,

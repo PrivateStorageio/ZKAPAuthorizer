@@ -125,6 +125,7 @@ class TemporaryVoucherStore(Fixture):
         :return: A ``Deferred`` that fires with the redemption result.
         """
         return await PaymentController(
+            Clock(),
             self.store,
             self.redeemer,
             # Have to pass it here or to redeem, doesn't matter which.
@@ -135,7 +136,6 @@ class TemporaryVoucherStore(Fixture):
             # than groups).
             num_redemption_groups=1,
             allowed_public_keys={self._public_key},
-            clock=Clock(),
         ).redeem(
             voucher,
         )

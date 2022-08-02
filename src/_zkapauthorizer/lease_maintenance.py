@@ -494,7 +494,7 @@ class LeaseMaintenanceConfig(object):
             ),
         )
 
-    def get_lease_duration(self):
+    def get_lease_duration(self) -> int:
         """
         Return the minimum amount of time for which a newly granted lease will
         ensure data is stored.
@@ -590,7 +590,10 @@ def read_time_from_path(path):
         return parse_datetime(when.decode("ascii"))
 
 
-def visit_storage_indexes_from_root(visitor, get_root_nodes):
+def visit_storage_indexes_from_root(
+        visitor: Callable[[VisitStorageIndex], Awaitable[None]],
+        get_root_nodes: Callable[[], list[IFilesystemNode]],
+) -> Callable[[], Awaitable]:
     """
     An operation for ``lease_maintenance_service`` which applies the given
     visitor to ``root_node`` and all its children.
@@ -693,7 +696,7 @@ def maintain_leases_from_root(
     )
 
 
-def calculate_initial_interval(sample_interval_distribution, last_run, now):
+def calculate_initial_interval(sample_interval_distribution: Callable[[], timedelta], last_run: datetime, now: datetime) -> timedelta:
     """
     Determine how long to wait before performing an initial (for this process)
     scan for aging leases.

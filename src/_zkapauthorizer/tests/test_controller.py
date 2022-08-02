@@ -190,11 +190,11 @@ class PaymentControllerTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
             allowed_public_keys={public_key},
-            clock=Clock(),
         )
 
         self.assertThat(
@@ -227,11 +227,11 @@ class PaymentControllerTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             NonRedeemer(),
             default_token_count=100,
             allowed_public_keys=set(),
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -266,6 +266,7 @@ class PaymentControllerTests(TestCase):
         )
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             redeemer,
             # This will give us one ZKAP per attempt.
@@ -274,7 +275,6 @@ class PaymentControllerTests(TestCase):
             # finish.
             num_redemption_groups=counter,
             allowed_public_keys={public_key},
-            clock=Clock(),
         )
 
         self.assertThat(
@@ -326,6 +326,7 @@ class PaymentControllerTests(TestCase):
 
         def first_try():
             controller = PaymentController(
+                Clock(),
                 store,
                 # It will let `before_restart` attempts succeed before hanging.
                 IndexedRedeemer(
@@ -335,7 +336,6 @@ class PaymentControllerTests(TestCase):
                 default_token_count=num_tokens,
                 num_redemption_groups=num_redemption_groups,
                 allowed_public_keys={public_key},
-                clock=Clock(),
             )
             self.assertThat(
                 Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -346,6 +346,7 @@ class PaymentControllerTests(TestCase):
             # The controller will find the voucher in the voucher store and
             # restart redemption on its own.
             return PaymentController(
+                Clock(),
                 store,
                 # It will succeed only for the higher counter values which did
                 # not succeed or did not get started on the first try.
@@ -362,7 +363,6 @@ class PaymentControllerTests(TestCase):
                 # redemption of a particular voucher.
                 num_redemption_groups=num_redemption_groups,
                 allowed_public_keys={public_key},
-                clock=Clock(),
             )
 
         first_try()
@@ -400,12 +400,12 @@ class PaymentControllerTests(TestCase):
 
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             redeemer,
             default_token_count=num_tokens,
             num_redemption_groups=num_redemption_groups,
             allowed_public_keys=set(),
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -426,11 +426,11 @@ class PaymentControllerTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
             allowed_public_keys={public_key},
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -461,11 +461,11 @@ class PaymentControllerTests(TestCase):
         details = "these are the reasons it broke"
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             ErrorRedeemer(details),
             default_token_count=100,
             allowed_public_keys=set(),
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -493,11 +493,11 @@ class PaymentControllerTests(TestCase):
         """
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
+            Clock(),
             store,
             DoubleSpendRedeemer(),
             default_token_count=100,
             allowed_public_keys=set(),
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -526,11 +526,11 @@ class PaymentControllerTests(TestCase):
         # Create the voucher state in the store with a redemption that will
         # certainly fail.
         unpaid_controller = PaymentController(
+            Clock(),
             store,
             UnpaidRedeemer(),
             default_token_count=100,
             allowed_public_keys=set(),
-            clock=Clock(),
         )
         self.assertThat(
             Deferred.fromCoroutine(unpaid_controller.redeem(voucher)),
@@ -547,11 +547,11 @@ class PaymentControllerTests(TestCase):
         # voucher state and attempt a redemption on its own.  It has I/O as an
         # `__init__` side-effect. :/
         success_controller = PaymentController(
+            Clock(),
             store,
             DummyRedeemer(public_key),
             default_token_count=100,
             allowed_public_keys={public_key},
-            clock=Clock(),
         )
 
         self.assertThat(
@@ -578,11 +578,11 @@ class PaymentControllerTests(TestCase):
             ),
         ).store
         controller = PaymentController(
+            clock,
             store,
             UnpaidRedeemer(),
             default_token_count=100,
             allowed_public_keys=set(),
-            clock=clock,
         )
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
@@ -681,12 +681,12 @@ class PaymentControllerTests(TestCase):
         redeemers = list(DummyRedeemer(public_key) for public_key in all_public_keys)
 
         controller = PaymentController(
+            clock,
             store,
             IndexedRedeemer(redeemers),
             default_token_count=token_count,
             num_redemption_groups=num_redemption_groups,
             allowed_public_keys=set(allowed_public_keys),
-            clock=clock,
         )
 
         # Even with disallowed public keys, the *redemption* is considered

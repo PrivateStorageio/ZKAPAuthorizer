@@ -27,6 +27,8 @@ storing it "again" is essentially free but this will not be reflected by this
 calculator).
 """
 
+from typing import Iterable
+
 import attr
 
 from .storage_common import required_passes, share_size_for_data
@@ -49,7 +51,7 @@ class PriceCalculator(object):
     _shares_total = attr.ib()
     _pass_value = attr.ib()
 
-    def calculate(self, sizes):
+    def calculate(self, sizes: Iterable[int]) -> int:
         """
         Calculate the price to store data of the given sizes for one lease
         period.

@@ -700,12 +700,12 @@ class ClientPluginTests(TestCase):
             )
 
             controller = PaymentController(
+                reactor,
                 store,
                 DummyRedeemer(public_key),
                 default_token_count=num_passes,
                 num_redemption_groups=1,
                 allowed_public_keys={public_key},
-                clock=reactor,
             )
             # Get a token inserted into the store.
             return await controller.redeem(voucher)
