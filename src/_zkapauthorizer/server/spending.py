@@ -1,6 +1,7 @@
 from typing import Any
 
 import attr
+from attrs import define, Factory, field
 from challenge_bypass_ristretto import PublicKey
 from prometheus_client import CollectorRegistry
 from twisted.internet.interfaces import IReactorTime
@@ -24,11 +25,11 @@ class ISpender(Interface):
         """
 
 
-@attr.s
+@define
 class _SpendingData(object):
-    spent_tokens = attr.ib(init=False, factory=dict)
+    spent_tokens: dict[bytes, list[bytes]] = field(init=False, default=Factory(dict))
 
-    def reset(self):
+    def reset(self) -> None:
         self.spent_tokens.clear()
 
 
@@ -40,14 +41,14 @@ class RecordingSpender(object):
     for testing purposes.
     """
 
-    _recorder = attr.ib(validator=attr.validators.instance_of(_SpendingData))
+    _recorder: _SpendingData = field(validator=attr.validators.instance_of(_SpendingData))
 
     @classmethod
     def make(cls) -> tuple[_SpendingData, ISpender]:
         recorder = _SpendingData()
         return recorder, cls(recorder)
 
-    def mark_as_spent(self, public_key, passes):
+    def mark_as_spent(self, public_key: PublicKey, passes: list[bytes]) -> None:
         self._recorder.spent_tokens.setdefault(public_key.encode_base64(), []).extend(
             passes
         )
