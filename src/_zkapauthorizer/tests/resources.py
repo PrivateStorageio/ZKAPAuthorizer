@@ -16,6 +16,7 @@ from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
 from ..config import Config
+from .._types import JSON
 
 # An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
 # runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
@@ -98,9 +99,9 @@ class TahoeStorage:
 
     node_dir: FilePath
     create_output: Optional[str] = None
-    process: Optional[Popen] = None
-    node_url: Optional[FilePath] = None
-    storage_furl: Optional[FilePath] = None
+    process: Optional[Popen[bytes]] = None
+    node_url: Optional[str] = None
+    storage_furl: Optional[str] = None
     node_pubkey: Optional[str] = None
 
     def run(self):
@@ -120,7 +121,7 @@ class TahoeStorage:
                 "create-node",
                 "--webport=tcp:port=0",
                 "--hostname=127.0.0.1",
-                self.node_dir.path,
+                self.node_dir.asTextMode().path,
             ],
             text=True,
             encoding="utf-8",
@@ -131,9 +132,9 @@ class TahoeStorage:
         """
         Start the node child process.
         """
-        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
+        eliot = ["--eliot-destination", "file:" + self.node_dir.asTextMode().child("log.eliot").path]
         self.process = Popen(
-            TAHOE + eliot + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
@@ -147,7 +148,7 @@ class TahoeStorage:
         wait_for_path(node_pubkey_path)
         self.node_pubkey = read_text(node_pubkey_path)
 
-    def servers_yaml_entry(self) -> dict:
+    def servers_yaml_entry(self) -> JSON:
         """
         Get an entry describing this storage node for a client's ``servers.yaml``
         file.
@@ -215,8 +216,8 @@ class TahoeClient:
     node_dir: FilePath
     storage: TahoeStorage
     create_output: Optional[str] = None
-    process: Optional[Popen] = None
-    node_url: Optional[FilePath] = None
+    process: Optional[Popen[bytes]] = None
+    node_url: Optional[DecodedURL] = None
 
     def read_config(self) -> Config:
         """
@@ -248,7 +249,7 @@ class TahoeClient:
                 "--shares-needed=1",
                 "--shares-total=1",
                 "--shares-happy=1",
-                self.node_dir.path,
+                self.node_dir.asTextMode().path,
             ],
             text=True,
             encoding="utf-8",
@@ -270,7 +271,7 @@ class TahoeClient:
         # some bug.  In that case the test will just hang and fail after
         # timing out.
         self.process = Popen(
-            TAHOE + eliot + ["run", self.node_dir.path],
+            TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
             stdout=self.node_dir.child("stdout").open("wb"),
             stderr=self.node_dir.child("stderr").open("wb"),
         )
