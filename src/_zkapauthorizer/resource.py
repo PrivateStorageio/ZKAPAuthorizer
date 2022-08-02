@@ -170,8 +170,13 @@ def from_configuration(
         LeaseMaintenanceConfig.from_node_config(node_config).get_lease_duration(),
     )
 
+    def get_api_auth_token() -> bytes:
+        token = node_config.get_private_config("api_auth_token")
+        assert isinstance(token, str)
+        return token.encode("utf-8")
+
     root = cast(IZKAPRoot, create_private_tree(
-        lambda: node_config.get_private_config("api_auth_token").encode("utf-8"),
+        get_api_auth_token,
         authorizationless_resource_tree(
             store,
             controller,
@@ -250,7 +255,7 @@ class ReplicateResource(Resource):
         request.finish() # type: ignore[no-untyped-call]
 
 
-class RecoverProtocol(WebSocketServerProtocol):
+class RecoverProtocol(WebSocketServerProtocol): # type: ignore[misc]
     """
     Speaks the server side of the WebSocket /recover protocol.
 
@@ -307,7 +312,7 @@ class RecoverProtocol(WebSocketServerProtocol):
 
 
 @define
-class RecoverFactory(WebSocketServerFactory):
+class RecoverFactory(WebSocketServerFactory): # type: ignore[misc]
     """
     Track state of recovery.
 
@@ -444,7 +449,7 @@ def authorizationless_resource_tree(
 
     :return IResource: The root of the resource hierarchy.
     """
-    root = Resource()
+    root = Resource() # type: ignore[no-untyped-call]
 
     root.putChild( # type: ignore[no-untyped-call]
         b"recover",
@@ -470,7 +475,7 @@ def authorizationless_resource_tree(
     )
     root.putChild( # type: ignore[no-untyped-call]
         b"version",
-        _ProjectVersion(),
+        _ProjectVersion(), # type: ignore[no-untyped-call]
     )
     root.putChild( # type: ignore[no-untyped-call]
         b"calculate-price",
