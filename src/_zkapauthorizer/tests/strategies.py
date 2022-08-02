@@ -16,6 +16,7 @@
 Hypothesis strategies for property testing.
 """
 
+from typing import Any, TypedDict, cast, Optional
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -24,6 +25,7 @@ from urllib.parse import quote
 import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
+from twisted.python.filepath import FilePath
 from hypothesis.strategies import SearchStrategy, binary, builds, characters
 from hypothesis.strategies import datetimes as naive_datetimes
 from hypothesis.strategies import (
@@ -46,6 +48,7 @@ from twisted.internet.task import Clock
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
+from ..validators import positive_integer, non_negative_integer
 from .. import NAME
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
@@ -75,11 +78,11 @@ from ..sql import (
 _POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
 
-def aware_datetimes(**kwargs) -> SearchStrategy[datetime]:
+def aware_datetimes(allow_imaginary: bool = True, **kwargs: datetime) -> SearchStrategy[datetime]:
     """
     Build timezone-aware (UTC) datetime instances.
     """
-    return naive_datetimes(timezones=just(timezone.utc), **kwargs)
+    return naive_datetimes(timezones=just(timezone.utc), allow_imaginary=allow_imaginary, **kwargs)
 
 
 def posix_safe_datetimes():
@@ -242,12 +245,12 @@ def node_nicknames():
         min_size=0,
         max_size=16,
         alphabet=characters(
-            blacklist_categories={
+            blacklist_categories=(
                 # Surrogates
                 "Cs",
                 # Unnamed and control characters
                 "Cc",
-            },
+            ),
         ),
     )
 
@@ -274,13 +277,24 @@ def dummy_ristretto_keys():
     )
 
 
-def server_configurations(signing_key_path):
+ServerConfig = TypedDict("ServerConfig", {"pass-value": int, "ristretto-issuer-root-url": str, "ristretto-signing-key-path": str}, total=False)
+
+def server_configurations(signing_key_path: FilePath) -> SearchStrategy[ServerConfig]:
     """
     Build configuration values for the server-side plugin.
 
-    :param str signing_key_path: A value to insert for the
+    :param signing_key_path: A value to insert for the
         **ristretto-signing-key-path** item.
     """
+    def add_more(config: dict[Any, Any]) -> ServerConfig:
+        config.update(
+            {
+                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
+                "ristretto-signing-key-path": signing_key_path.asTextMode().path,
+            }
+        )
+        return cast(ServerConfig, config)
+
     return one_of(
         fixed_dictionaries(
             {
@@ -290,15 +304,7 @@ def server_configurations(signing_key_path):
             }
         ),
         just({}),
-    ).map(
-        lambda config: config.update(
-            {
-                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
-                "ristretto-signing-key-path": signing_key_path.path,
-            }
-        )
-        or config,
-    )
+    ).map(add_more)
 
 
 def dummy_ristretto_keys_sets():
@@ -1128,8 +1134,8 @@ class _VoucherInsert(object):
     """
 
     voucher: bytes = attr.ib()
-    expected_tokens: int = attr.ib(validator=attr.validators.gt(0))
-    counter: int = attr.ib(validator=attr.validators.ge(0))
+    expected_tokens: int = attr.ib(validator=positive_integer)
+    counter: int = attr.ib(validator=non_negative_integer)
     tokens: list[RandomToken] = attr.ib()
 
 
@@ -1142,7 +1148,7 @@ class _ExistingState(object):
     vouchers: list[_VoucherInsert] = attr.ib()
 
 
-def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
+def existing_states(min_vouchers: int = 0, max_vouchers: int = 4) -> SearchStrategy[_ExistingState]:
     """
     Build possible existing states of a ``VoucherStore``.
 
@@ -1251,7 +1257,7 @@ def tables() -> SearchStrategy[Table]:
     )
 
 
-def sql_schemas(dict_kwargs=None) -> SearchStrategy[dict[str, Table]]:
+def sql_schemas(dict_kwargs: Optional[dict[Any, Any]]=None) -> SearchStrategy[dict[str, Table]]:
     """
     Build objects describing multiple tables in a SQLite3 database.
     """
