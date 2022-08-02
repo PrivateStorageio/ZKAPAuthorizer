@@ -814,7 +814,7 @@ def stat_bucket(storage_server: StorageServer, storage_index: bytes, sharepath: 
     """
     return ShareStat(
         size=get_storage_index_share_size(sharepath),
-        lease_expiration=get_lease_expiration(sharepath),
+        lease_expiration=get_lease_expiration(sharepath) or 0,
     )
 
 
@@ -824,7 +824,7 @@ def stat_slot(storage_server: StorageServer, slot: bytes, sharepath: bytes) -> S
     """
     return ShareStat(
         size=get_slot_share_size(sharepath),
-        lease_expiration=get_lease_expiration(sharepath),
+        lease_expiration=get_lease_expiration(sharepath) or 0,
     )
 
 
