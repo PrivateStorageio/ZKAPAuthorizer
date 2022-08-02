@@ -28,28 +28,35 @@ from foolscap.constraint import Any, IConstraint
 from foolscap.constraint import ByteStringConstraint
 from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
 
-
-@define
 class ShareStat(Copyable, RemoteCopy):
     """
     Represent some metadata about a share.
 
-    :ivar size: The size. in bytes, of the share.
+    :ivar int size: The size. in bytes, of the share.
 
-    :ivar lease_expiration: The POSIX timestamp of the time at which the lease
-        on this share expires, or None if there is no lease.
+    :ivar int lease_expiration: The POSIX timestamp of the time at which the
+        lease on this share expires, or None if there is no lease.
     """
 
     typeToCopy = copytype = "ShareStat"
 
     # To be a RemoteCopy it must be possible to instantiate this with no
     # arguments. :/ So supply defaults for these attributes.
-    size: int = 0
-    lease_expiration: int = 0
+    #
+    # Also, using attrs.define here completely breaks some internal Foolscap
+    # registration mechanism so do it the hard way.
+    def __init__(self, size: int = 0, lease_expiration: int = 0) -> None:
+        self.size = size
+        self.lease_expiration = lease_expiration
 
     # The RemoteCopy interface
-    def setCopyableState(self, state: dict[str, int]) -> None:
+    def setCopyableState(self, state: dict[str, Any]) -> None:
         self.__dict__ = state
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ShareStat):
+            return (self.size, self.lease_expiration) == (other.size, other.lease_expiration)
+        return NotImplemented
 
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
@@ -145,22 +152,22 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     get_buckets = RIStorageServer["get_buckets"]
 
-    def share_sizes(
-        storage_index_or_slot: bytes = StorageIndex,
+    def share_sizes( # type: ignore[no-untyped-def]
+        storage_index_or_slot=StorageIndex,
         # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
         # However, support for such a construction appears to be
         # unimplemented in Foolscap.  So, instead...
-        sharenums: Optional[set[int]] = Any(), # type: ignore[assignment]
-    ) -> dict[int, Offset]:
+        sharenums=Any(),
+    ):
         """
         Get the size of the given shares in the given storage index or slot.  If a
         share has no stored state, its size is reported as 0.
         """
-        return DictOf(int, Offset) # type: ignore[no-untyped-call,return-value]
+        return DictOf(int, Offset) # type: ignore[no-untyped-call]
 
-    def stat_shares(
-            storage_indexes_or_slots: list[bytes] = ListOf(StorageIndex), # type: ignore[assignment,no-untyped-call]
-    ) -> list[dict[int, ShareStat]]:
+    def stat_shares( # type: ignore[no-untyped-def]
+        storage_indexes_or_slots=ListOf(StorageIndex), # type: ignore[no-untyped-call,assignment]
+    ):
         """
         Get various metadata about shares in the given storage index or slot.
 
@@ -172,7 +179,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
             Keys are share numbers and values are the stats.
         """
         # Any() should be ShareStat but I don't know how to spell that.
-        return ListOf(DictOf(int, Any())) # type: ignore[no-untyped-call,return-value]
+        return ListOf(DictOf(int, Any())) # type: ignore[no-untyped-call]
 
     slot_readv = RIStorageServer["slot_readv"]
 
