@@ -455,7 +455,7 @@ def _create_maintenance_service(reactor: Any, client_node: _Client, store: Vouch
         maintain_leases,
         reactor,
         last_run_path,
-        random,
+        random.Random(),
         lease_maint_config=maint_config,
     )
 
