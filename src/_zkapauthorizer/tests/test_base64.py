@@ -26,7 +26,7 @@ from testtools.matchers import Equals
 from .._base64 import urlsafe_b64decode
 
 
-class Base64Tests(TestCase): # type: ignore[misc]
+class Base64Tests(TestCase):
     """
     Tests for ``urlsafe_b64decode``.
     """

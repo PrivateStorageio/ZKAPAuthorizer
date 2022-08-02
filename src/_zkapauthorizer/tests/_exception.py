@@ -36,7 +36,7 @@ def _is_user_exception(exc: BaseException) -> bool:
     return isinstance(exc, Exception)
 
 
-class MatchesExceptionType(Matcher): # type: ignore[misc]
+class MatchesExceptionType(Matcher):
     """
     Match an exc_info tuple against an exception type.
     """
@@ -72,7 +72,7 @@ class MatchesExceptionType(Matcher): # type: ignore[misc]
         return f"MatchesExceptionType({self.expected!r})"
 
 
-class Raises(Matcher): # type: ignore[misc]
+class Raises(Matcher):
     """Match if the matchee raises an exception when called.
 
     Exceptions which are not subclasses of Exception propogate out of the
