@@ -436,7 +436,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
         )
 
         self.assertThat(
-            operation(),
+            Deferred.fromCoroutine(operation()),
             succeeded(Always()),
         )
         expected = root_node.flatten()
@@ -543,7 +543,7 @@ class RenewLeasesTests(TestCase):
             get_now,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 
@@ -594,7 +594,7 @@ class MaintainLeasesFromRootTests(TestCase):
         )
         d = operation()
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 
@@ -646,7 +646,7 @@ class MaintainLeasesFromRootTests(TestCase):
         )
         d = operation()
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 

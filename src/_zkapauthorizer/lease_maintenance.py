@@ -29,7 +29,8 @@ from typing_extensions import TypeAlias
 import attr
 from attrs import define, Factory
 from allmydata.client import SecretHolder
-from allmydata.storage_client import StorageFarmBroker, StorageServer
+from allmydata.storage_client import StorageFarmBroker
+from allmydata.storage.server import StorageServer
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
 from allmydata.util.hashutil import (
     bucket_cancel_secret_hash,
