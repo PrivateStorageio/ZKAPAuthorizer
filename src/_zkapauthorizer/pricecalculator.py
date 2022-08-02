@@ -30,11 +30,12 @@ calculator).
 from typing import Iterable
 
 import attr
+from attrs import frozen
 
 from .storage_common import required_passes, share_size_for_data
 
 
-@attr.s
+@frozen
 class PriceCalculator(object):
     """
     :ivar int _shares_needed: The number of shares which are required to
@@ -47,9 +48,9 @@ class PriceCalculator(object):
         single pass.
     """
 
-    _shares_needed = attr.ib()
-    _shares_total = attr.ib()
-    _pass_value = attr.ib()
+    _shares_needed: int
+    _shares_total: int
+    _pass_value: int
 
     def calculate(self, sizes: Iterable[int]) -> int:
         """
