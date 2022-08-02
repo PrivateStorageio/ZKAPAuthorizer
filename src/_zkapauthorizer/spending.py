@@ -33,6 +33,7 @@ class IPassGroup(Interface):
     A group of passed meant to be spent together.
     """
 
+    unblinded_tokens: list[UnblindedToken] = Attribute("The unblinded signatures used to create the passes.")
     passes: list[Pass] = Attribute("The passes themselves.")
 
     def split(select_indices: Container[int]) -> tuple[IPassGroup, IPassGroup]:
@@ -87,14 +88,14 @@ class IPassFactory(Interface):
     An object which can create passes.
     """
 
-    def get(message, num_passes):
+    def get(message: bytes, num_passes: int) -> IPassGroup:
         """
-        :param unicode message: A request-binding message for the resulting passes.
+        :param message: A request-binding message for the resulting passes.
 
-        :param int num_passes: The number of passes to request.
+        :param num_passes: The number of passes to request.
 
-        :return IPassGroup: A group of passes bound to the given message and
-            of the requested size.
+        :return: A group of passes bound to the given message and of the
+            requested size.
         """
 
     def mark_spent(unblinded_tokens: list[UnblindedToken]) -> None:
@@ -155,15 +156,18 @@ class PassGroup(object):
         )
 
     def expand(self, by_amount: int) -> PassGroup:
+        return self + self._factory.get(self._message, by_amount)
+
+    def __add__(self, other: IPassGroup) -> PassGroup:
         return attr.evolve(
             self,
-            tokens=self._tokens + self._factory.get(self._message, by_amount)._tokens,
+            tokens=self._tokens + list(zip(other.unblinded_tokens, other.passes)),
         )
 
     def mark_spent(self) -> None:
         self._factory.mark_spent(self.unblinded_tokens)
 
-    def mark_invalid(self, reason) -> None:
+    def mark_invalid(self, reason: str) -> None:
         self._factory.mark_invalid(reason, self.unblinded_tokens)
 
     def reset(self) -> None:
@@ -180,7 +184,7 @@ class SpendingController(object):
 
     get_unblinded_tokens: Callable[[int], list[UnblindedToken]] = attr.ib()
     discard_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
-    invalidate_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
+    invalidate_unblinded_tokens: Callable[[str, list[UnblindedToken]], None] = attr.ib()
     reset_unblinded_tokens: Callable[[list[UnblindedToken]], None] = attr.ib()
 
     tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]] = attr.ib()
@@ -204,20 +208,20 @@ class SpendingController(object):
         )
         return PassGroup(message, self, list(zip(unblinded_tokens, passes)))
 
-    def mark_spent(self, unblinded_tokens):
+    def mark_spent(self, unblinded_tokens: list[UnblindedToken]) -> None:
         SPENT_PASSES.log(
             count=len(unblinded_tokens),
         )
         self.discard_unblinded_tokens(unblinded_tokens)
 
-    def mark_invalid(self, reason, unblinded_tokens):
+    def mark_invalid(self, reason: str, unblinded_tokens: list[UnblindedToken]) -> None:
         INVALID_PASSES.log(
             reason=reason,
             count=len(unblinded_tokens),
         )
         self.invalidate_unblinded_tokens(reason, unblinded_tokens)
 
-    def reset(self, unblinded_tokens):
+    def reset(self, unblinded_tokens: list[UnblindedToken]) -> None:
         RESET_PASSES.log(
             count=len(unblinded_tokens),
         )
