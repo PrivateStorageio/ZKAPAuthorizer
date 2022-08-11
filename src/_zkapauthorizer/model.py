@@ -28,7 +28,6 @@ from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
 from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast, NoReturn
 from typing_extensions import TypeAlias, ParamSpec, Concatenate
-from mypy_extensions import Arg
 
 import attr
 from aniso8601 import parse_datetime
