@@ -487,7 +487,7 @@ workflows:
             branches:
               # And make sure it runs for no other branch pushes.
               ignore: "/.*/"
-          repository: "pypi"
+          repository: "testpypi"
           requires:
             - "build-wheel"
 
