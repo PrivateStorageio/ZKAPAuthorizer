@@ -79,6 +79,7 @@ jobs:
               --debug=config `
               --module twisted.trial `
                 --rterrors `
+                --dry-run `
                 _zkapauthorizer
 
       - run:
@@ -195,6 +196,7 @@ jobs:
                 --module twisted.trial \
                   --jobs 4 \
                   --rterrors \
+                  --dry-run \
                   _zkapauthorizer
 
           environment:
