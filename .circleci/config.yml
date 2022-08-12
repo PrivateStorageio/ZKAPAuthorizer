@@ -529,17 +529,17 @@ workflows:
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
-        name: "macOS tests, python 3.9 xcode 12.3.0"
+        name: "macOS tests, python 3.9 xcode 12.5.1"
         py-version: "3.9"
-        xcode-version: "12.3.0"
+        xcode-version: "12.5.1"
 
     - "windows-tests":
-        name: "Windows tests, python 3.9"
+        name: "Windows tests, python 3.10"
 
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
           - "Linux tests, python 3.9"
           - "Linux tests, python 3.9, Tahoe-LAFS master"
-          - "macOS tests, python 3.9 xcode 12.3.0"
-          - "Windows tests, python 3.9"
+          - "macOS tests, python 3.9 xcode 12.5.1"
+          - "Windows tests, python 3.10"
