@@ -1,2 +1,2 @@
-mypy
+mypy==0.950
 mypy-zope
