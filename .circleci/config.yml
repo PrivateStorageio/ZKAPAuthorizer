@@ -545,7 +545,7 @@ workflows:
               - "3.9"
               - "3.10"
             xcode-version:
-              - "12.3.0"
+              - "12.5.1"
 
     - "windows-tests":
         matrix:
@@ -561,7 +561,7 @@ workflows:
           - "linux-tests-true-39-tahoe-lafs-master"
           - "linux-tests-true-310-tahoe-lafs"
           - "linux-tests-true-310-tahoe-lafs-master"
-          - "macos-tests-3.9-12.3.0"
-          - "macos-tests-3.10-12.3.0"
+          - "macos-tests-3.9-12.5.1"
+          - "macos-tests-3.10-12.5.1"
           - "windows-tests-3.9"
           - "windows-tests-3.10"

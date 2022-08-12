@@ -43,8 +43,9 @@ source =
        # Then the Nix test step combines the data files and rewrites the paths to look like this.
        /tmp/nix-build-zkapauthorizer-tests.drv-*/src/
 
-       # A Windows build embeds source paths like this one.
+       # A Windows build embeds source paths like one of these probably.
        C:\tools\miniconda3\Lib\site-packages\
+       C:\Python310\Lib\site-packages\
 
        # A macOS build embeds source paths like this one.
        /Users/distiller/project/venv/lib/python*/site-packages/
