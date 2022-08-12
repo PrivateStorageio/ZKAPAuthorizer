@@ -5,10 +5,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "mach-nix",
-        "rev": "3.5.0",
-        "sha256": "185qf6d5xg8qk1hb1y0b5gggr71vdz8v9d5ga4zg7dmcb1aypxcg",
+        "rev": "f15ea8677df951cb4fe608945fd98725dcd033b3",
+        "sha256": "1vi3nbmsdv3rk30pwiizhslbbbp7hy6rxign9d87sl8z6ixngnv8",
         "type": "tarball",
-        "url": "https://github.com/DavHau/mach-nix/archive/3.5.0.tar.gz",
+        "url": "https://github.com/DavHau/mach-nix/archive/f15ea8677df951cb4fe608945fd98725dcd033b3.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -29,10 +29,10 @@
         "homepage": "",
         "owner": "DavHau",
         "repo": "pypi-deps-db",
-        "rev": "3e6c4e328bdae5c9f1e8131833275cce26df47f0",
-        "sha256": "01rjxxv2chjjz5l55vplj76d616fld7226ai6lw6rhv93ypzfc13",
+        "rev": "ed4433b11615fc5d84e349ad8f9f2f468165c876",
+        "sha256": "1kf3syafp0zb1j9id3r7rcf63gjhd2wpz2nf3wgn1nwv3gqf15dv",
         "type": "tarball",
-        "url": "https://github.com/DavHau/pypi-deps-db/archive/3e6c4e328bdae5c9f1e8131833275cce26df47f0.tar.gz",
+        "url": "https://github.com/DavHau/pypi-deps-db/archive/ed4433b11615fc5d84e349ad8f9f2f468165c876.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "release2111": {
