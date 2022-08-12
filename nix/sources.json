@@ -3,12 +3,12 @@
         "branch": "master",
         "description": "Create highly reproducible python environments",
         "homepage": "",
-        "owner": "PrivateStorageio",
+        "owner": "DavHau",
         "repo": "mach-nix",
-        "rev": "31b21203a1350bff7c541e9dfdd4e07f76d874be",
-        "sha256": "0przsgmbbcnnqdff7n43zv5girix83ky4mjlxq7m2ksr3wyj2va2",
+        "rev": "3.5.0",
+        "sha256": "185qf6d5xg8qk1hb1y0b5gggr71vdz8v9d5ga4zg7dmcb1aypxcg",
         "type": "tarball",
-        "url": "https://github.com/PrivateStorageio/mach-nix/archive/31b21203a1350bff7c541e9dfdd4e07f76d874be.tar.gz",
+        "url": "https://github.com/DavHau/mach-nix/archive/3.5.0.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
