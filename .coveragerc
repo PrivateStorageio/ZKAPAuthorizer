@@ -44,8 +44,7 @@ source =
        /tmp/nix-build-zkapauthorizer-tests.drv-*/src/
 
        # A Windows build embeds source paths like one of these probably.
-       C:\tools\miniconda3\Lib\site-packages\
-       C:\Python310\Lib\site-packages\
+       ?:\*\site-packages\
 
        # A macOS build embeds source paths like this one.
        /Users/distiller/project/venv/lib/python*/site-packages/

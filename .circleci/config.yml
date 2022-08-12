@@ -52,6 +52,10 @@ jobs:
           destination: "docs"
 
   windows-tests:
+    parameters:
+      py-version:
+        type: "string"
+
     executor:
       # https://circleci.com/developer/orbs/orb/circleci/windows
       name: "win/server-2022"
@@ -64,17 +68,18 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
-            python -V
-            python -m pip install -v --upgrade pip wheel
-            python -m pip install -v . -r requirements/test.in
-            pip freeze
+            py -<< parameters.py-version >> -V
+            py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
+            py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
+            py -<< parameters.py-version >> -m pip freeze
       - run:
           name: "Run Tests"
           command: |
-            python -m coverage run `
+            py -<< parameters.py-version >> -m coverage run `
               --debug=config `
               --module twisted.trial `
                 --rterrors `
+                --dry-run `
                 _zkapauthorizer
 
       - run:
@@ -82,8 +87,8 @@ jobs:
           command: |
             mkdir -p coverage-workspace
             Copy-Item -Path ".coverage.*" -Destination "coverage-workspace"
-            python -m coverage combine
-            python -m coverage report
+            py -<< parameters.py-version >> -m coverage combine
+            py -<< parameters.py-version >> -m coverage report
 
       - persist_to_workspace:
           root: "coverage-workspace"
@@ -102,6 +107,12 @@ jobs:
 
     steps:
       - "checkout"
+
+      - run:
+          name: "Install Python"
+          command: |
+            type -p python<< parameters.py-version >> || brew install python@<< parameters.py-version >>
+            echo 'export PATH="/usr/local/opt/python@<< parameters.py-version >>/bin:$PATH"' >> "$BASH_ENV"
 
       - restore_cache:
           keys:
@@ -185,6 +196,7 @@ jobs:
                 --module twisted.trial \
                   --jobs 4 \
                   --rterrors \
+                  --dry-run \
                   _zkapauthorizer
 
           environment:
@@ -511,35 +523,47 @@ workflows:
         coverage: "false"
     - "build-wheel"
     - "linux-tests":
-        name: "Linux tests, python 3.9"
-        py-version: "39"
-        tahoe-lafs-source: "tahoe-lafs"
-        coverage: "true"
-
-    - "linux-tests":
-        name: "Linux tests, python 3.9, Tahoe-LAFS master"
-        py-version: "39"
-        # This is usually not master@HEAD because it is still pinned to a
-        # certain revision.  The intent is to update it frequently and
-        # discover fixable incompatibilities in small groups and unfixable
-        # incompatibilities early enough to prevent them from going into a
-        # release.
-        tahoe-lafs-source: "tahoe-lafs-master"
-        coverage: "false"
+        matrix:
+          parameters:
+            py-version:
+              - "39"
+              - "310"
+            tahoe-lafs-source:
+              - "tahoe-lafs"
+              # This is usually not master@HEAD because it is still pinned to
+              # a certain revision.  The intent is to update it frequently and
+              # discover fixable incompatibilities in small groups and
+              # unfixable incompatibilities early enough to prevent them from
+              # going into a release.
+              - "tahoe-lafs-master"
+            coverage:
+              - "true"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
-        name: "macOS tests, python 3.9 xcode 12.5.1"
-        py-version: "3.9"
-        xcode-version: "12.5.1"
+        matrix:
+          parameters:
+            py-version:
+              - "3.9"
+              - "3.10"
+            xcode-version:
+              - "12.5.1"
 
     - "windows-tests":
-        name: "Windows tests, python 3.10"
+        matrix:
+          parameters:
+            py-version:
+              - "3.9"
+              - "3.10"
 
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "Linux tests, python 3.9"
-          - "Linux tests, python 3.9, Tahoe-LAFS master"
-          - "macOS tests, python 3.9 xcode 12.5.1"
-          - "Windows tests, python 3.10"
+          - "linux-tests-true-39-tahoe-lafs"
+          - "linux-tests-true-39-tahoe-lafs-master"
+          - "linux-tests-true-310-tahoe-lafs"
+          - "linux-tests-true-310-tahoe-lafs-master"
+          - "macos-tests-3.9-12.5.1"
+          - "macos-tests-3.10-12.5.1"
+          - "windows-tests-3.9"
+          - "windows-tests-3.10"
