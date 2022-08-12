@@ -968,6 +968,107 @@ class RecoverTests(TestCase):
             ),
         )
 
+    @given(
+        tahoe_configs(),
+        api_auth_tokens(),
+    )
+    def test_recover_retry(self, get_config, api_auth_token):
+        """
+        If at first our download fails, we can still retry using the API.
+        """
+        downloads = []
+        fails = [RuntimeError("downloader fails")]
+
+        def get_sometimes_fail_downloader(cap):
+            async def do_download(set_state):
+                nonlocal downloads, fails
+                if fails:
+                    raise fails.pop(0)
+                downloads.append(set_state)
+                return (
+                    lambda: BytesIO(statements_to_snapshot([])),
+                    [],  # no event-streams
+                )
+
+            return do_download
+
+        clock = MemoryReactorClockResolver()
+        store = self.useFixture(TemporaryVoucherStore(aware_now, get_config)).store
+        factory = RecoverFactory(store, get_sometimes_fail_downloader)
+        pumper = create_pumper()
+        self.addCleanup(pumper.stop)
+
+        def create_proto():
+            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            proto = factory.buildProtocol(addr)
+            return proto
+
+        agent = create_memory_agent(clock, pumper, create_proto)
+        pumper.start()
+
+        # first recovery will fail
+        d0 = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
+        )
+        pumper._flush()
+
+        # try to recover again (this one should work, as we only fail
+        # once in the test-provided downloader)
+        d1 = Deferred.fromCoroutine(
+            recover(
+                agent,
+                DecodedURL.from_text("ws://127.0.0.1:1/"),
+                api_auth_token,
+                self.GOOD_CAPABILITY,
+            )
+        )
+        pumper._flush()
+
+        self.assertThat(
+            d0,
+            succeeded(
+                Equals(
+                    [
+                        {
+                            "stage": "started",
+                            "failure-reason": None,
+                        },
+                        # "our" downloader (above) doesn't set any downloading etc
+                        # state-updates
+                        {
+                            "stage": "download_failed",
+                            "failure-reason": "downloader fails",
+                        },
+                    ]
+                )
+            ),
+        )
+        # second attempt should succeed
+        self.assertThat(
+            d1,
+            succeeded(
+                Equals(
+                    [
+                        {
+                            "stage": "started",
+                            "failure-reason": None,
+                        },
+                        # "our" downloader (above) doesn't set any downloading etc
+                        # state-updates
+                        {
+                            "stage": "succeeded",
+                            "failure-reason": None,
+                        },
+                    ]
+                )
+            ),
+        )
+
 
 def maybe_extra_tokens():
     """

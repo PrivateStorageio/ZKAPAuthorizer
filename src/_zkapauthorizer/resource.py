@@ -351,9 +351,14 @@ class RecoverFactory(WebSocketServerFactory):
                     )
                 )
                 disconnect_clients()
+                self.recovering_d = None
 
             def happy(_):
+                # note that the StatefulRecoverer eats download /
+                # import errors so we'll exit here sometimes even
+                # though an error message has been sent...
                 disconnect_clients()
+                self.recovering_d = None
 
             self.recovering_d.addCallbacks(happy, err)
 
