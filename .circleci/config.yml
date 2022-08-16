@@ -220,7 +220,7 @@ jobs:
 
     docker:
       # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.1"
+      - image: "nixos/nix:2.9.2"
 
     environment:
       TWINE_REPOSITORY: "<< parameters.repository >>"
@@ -266,7 +266,7 @@ jobs:
   build-wheel:
     docker:
       # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.5.1"
+      - image: "nixos/nix:2.9.2"
 
     environment:
       # Let us use features marked "experimental".  For example, most/all of
@@ -298,7 +298,7 @@ jobs:
       - run:
           name: "Build Wheel"
           command: |
-            nix build -f wheel.nix
+            nix build .#wheel
             # Put the wheel in a regular directory so CircleCI doesn't get
             # confused by symlinks when it comes time to upload the wheel as
             # an artifact.
@@ -329,7 +329,7 @@ jobs:
       # one day someone pushed a bad revision to it and our CI broke.  So now
       # we just pin some recent version.  Who would have thought a floating
       # dependency would cause build instability?
-      - image: "nixos/nix:2.5.1"
+      - image: "nixos/nix:2.9.2"
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
@@ -367,25 +367,20 @@ jobs:
       - run:
           name: "Run Test Suite"
           command: |
-            # Building the package has, as a side effect, running the test
-            # suite.  If the test suite fails, so does the build.
-            #
-            # Pass in a couple args here to control how the test suite is run
-            # - configure Hypothesis so it can behave appropriately in a CI
-            # environment (where resources are scarce, competetion with other
-            # tenants is high, etc) and collect coverage information.
+            # Build one of the test packages defined by the flake.  Choose one
+            # that matches our parameters - python version, etc.
             #
             # Also explicitly specify the number of cores to use such that it
             # only slightly exceeds what CircleCI advertises for the resource
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            nix-build --cores 5 tests.nix \
-              --argstr hypothesisProfile ci \
-              --arg collectCoverage << parameters.coverage >> \
-              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
-              --argstr python python<< parameters.py-version >> \
-              --argstr testSuite _zkapauthorizer
+            # tests-python39-tahoe_dev-ci-cov
+            OUTPUT="
+            nix build \
+              --cores 5 \
+              --override-input tahoe-lafs << parameters.tahoe-lafs >> \
+              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
@@ -441,7 +436,7 @@ jobs:
   # A job that merges all of the coverage data and generates a report.
   finish-coverage:
     docker:
-      - image: "nixos/nix:2.8.1"
+      - image: "nixos/nix:2.9.2"
 
     steps:
       - "checkout"
