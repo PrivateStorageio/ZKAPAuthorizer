@@ -70,7 +70,12 @@ from testtools.matchers import (
     Not,
     StartsWith,
 )
-from testtools.twistedsupport import CaptureTwistedLogs, succeeded
+from testtools.twistedsupport import (
+    AsynchronousDeferredRunTest,
+    CaptureTwistedLogs,
+    flush_logged_errors,
+    succeeded,
+)
 from treq.testing import RequestTraversalAgent
 from twisted.internet.address import IPv4Address
 from twisted.internet.defer import Deferred
@@ -100,6 +105,7 @@ from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
     Error,
+    NotEmpty,
     Redeemed,
     Redeeming,
     Unpaid,
@@ -682,6 +688,23 @@ class RecoverTests(TestCase):
     GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
     GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
 
+    # All of the test methods complete synchronously but the Autobahn testing
+    # "pumper" stops asynchronously and we need to wait for it or delayed
+    # calls leak into the global reactor and fail later tests.
+    #
+    # We don't need much of a timeout but as always any value we pick is
+    # subject to the whims of the host OS scheduler and such things so we just
+    # go with a standard large value.
+    #
+    # Also we tell this runner to suppress Twisted's/trial's default logging
+    # because this runner is now going to install a log observer.  Many of
+    # these tests log errors which we check for and flush.  If we let
+    # testtools and Twisted both observe the log then we have to do all of
+    # that work twice, once for each system.
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(
+        timeout=60.0, suppress_twisted_logging=True
+    )
+
     @given(
         tahoe_configs(),
         api_auth_tokens(),
@@ -736,7 +759,7 @@ class RecoverTests(TestCase):
             ),
         )
         self.assertThat(
-            flushErrors(DownloaderBroken),
+            flush_logged_errors(DownloaderBroken),
             HasLength(1),
         )
 
@@ -801,7 +824,7 @@ class RecoverTests(TestCase):
             ),
         )
         self.assertThat(
-            flushErrors(Exception),
+            flush_logged_errors(NotEmpty),
             HasLength(1),
         )
 
@@ -887,7 +910,10 @@ class RecoverTests(TestCase):
                 ]
             ),
         )
-        flushErrors(Exception),
+        self.assertThat(
+            flush_logged_errors(ValueError, TypeError),
+            HasLength(1),
+        )
         return messages
 
     @given(
