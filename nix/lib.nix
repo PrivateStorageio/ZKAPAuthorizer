@@ -134,6 +134,8 @@ rec {
   toWheel = drv:
     let
       build-env = pkgs.python3.withPackages (ps: [
+        # something has an undetected six dependency
+        ps.six
         ps.setuptools ps.wheel ps.build
       ]);
     in
