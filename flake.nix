@@ -120,6 +120,7 @@
               requirements = ''
                 pudb
                 ${builtins.readFile ./requirements/test.in}
+                ${builtins.readFile ./requirements/lint.in}
                 ${builtins.readFile ./requirements/typecheck.in}
                 ${self.packages.${system}.default.requirements}
               '';
@@ -152,10 +153,23 @@
           python = defaultPyVersion;
           packagesExtra = [ self.packages.${system}.default ];
         };
+        checks-env = mach-nix.mkPython {
+          python = defaultPyVersion;
+          requirements = ''
+          ${builtins.readFile ./requirements/lint.in}
+          ${builtins.readFile ./requirements/typecheck.in}
+          # mypy requires all of the dependencies in the environment as well
+          ${self.packages.${system}.default.requirements}
+          '';
+        };
         twine-env = pkgs.python310.withPackages (ps: [ ps.twine ]);
       in {
         default = { type = "app"; program = "${tahoe-env}/bin/tahoe"; };
         twine = { type = "app"; program = "${twine-env}/bin/twine"; };
+        black = { type = "app"; program = "${checks-env}/bin/black"; };
+        isort = { type = "app"; program = "${checks-env}/bin/isort"; };
+        flake8 = { type = "app"; program = "${checks-env}/bin/flake8"; };
+        mypy = { type = "app"; program = "${checks-env}/bin/mypy"; };
       };
     });
 }
