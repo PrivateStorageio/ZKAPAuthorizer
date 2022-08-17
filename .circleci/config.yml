@@ -228,7 +228,7 @@ jobs:
 
       # Let us use features marked "experimental".  For example, most/all of
       # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
+      NIX_CONFIG: "experimental-features = nix-command flakes"
 
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
@@ -261,7 +261,7 @@ jobs:
               exit 1
             fi
 
-            nix shell -f nix/twine.nix twine --command twine upload --non-interactive release-workspace/*.whl
+            nix run .#twine -- upload --non-interactive release-workspace/*.whl
 
   build-wheel:
     docker:
@@ -271,7 +271,7 @@ jobs:
     environment:
       # Let us use features marked "experimental".  For example, most/all of
       # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
+      NIX_CONFIG: "experimental-features = nix-command flakes"
 
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
@@ -341,7 +341,7 @@ jobs:
 
       # Let us use features marked "experimental".  For example, most/all of
       # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
+      NIX_CONFIG: "experimental-features = nix-command flakes"
 
       # Pin a NixOS 21.11 revision.  Most of the software involved in the
       # build process is pinned by nix/sources.json with niv but a few things
@@ -383,17 +383,17 @@ jobs:
       - run:
           name: "Check Black"
           command: |
-            nix run .#black --check --diff
+            nix run .#black -- --check --diff
 
       - run:
           name: "Check isort"
           command: |
-            nix run .#isort --check --diff
+            nix run .#isort -- --check --diff
 
       - run:
           name: "Check flake8"
           command: |
-            nix run .#flake8 --check --diff
+            nix run .#flake8 -- --check --diff
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
@@ -441,7 +441,7 @@ jobs:
       - run:
           name: "Run Type Checks"
           command: |
-            nix run .#mypy src
+            nix run .#mypy -- src
       - run:
           <<: *PUSH_TO_CACHIX
 
