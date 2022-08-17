@@ -348,6 +348,11 @@ jobs:
 
       - run:
           name: "Run Test Suite"
+          # If we have to build absolutely everything from scratch or if it
+          # takes a while to download pypi-deps-db or some reason then we
+          # might be busy for a while.  We use --verbose to try to be a little
+          # noisier as we build but who knows what that actually guarantees...
+          no_output_timeout: "30m"
           command: |
             # Build one of the test packages defined by the flake.  Choose one
             # that matches our parameters - python version, etc.
@@ -358,6 +363,7 @@ jobs:
             # looks like it has many more cores than are actually usable by
             # our build.
             nix build \
+              --verbose \
               --cores 5 \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
