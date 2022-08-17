@@ -375,8 +375,6 @@ jobs:
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            # tests-python39-tahoe_dev-ci-cov
-            OUTPUT="
             nix build \
               --cores 5 \
               --override-input tahoe-lafs << parameters.tahoe-lafs >> \
