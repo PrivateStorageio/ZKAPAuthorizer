@@ -315,13 +315,10 @@ jobs:
     parameters:
       py-version:
         type: "string"
-      coverage:
-        type: "string"
-      tahoe-lafs-source:
-        # The name of a niv source in nix/sources.json which corresponds to
-        # a Tahoe-LAFS version. This is the version that will be declared as a
-        # dependency of the Nix package of ZKAPAuthorizer (and therefore used
-        # in the test run and pulled in should you install this package).
+      tahoe-lafs:
+        # Identify a Tahoe-LAFS version against which to test.  This must
+        # correspond to the `version` property of one of the attrsets defined
+        # in `nix/tahoe-version.nix`.
         type: "string"
 
     docker:
@@ -377,7 +374,6 @@ jobs:
             # our build.
             nix build \
               --cores 5 \
-              --override-input tahoe-lafs << parameters.tahoe-lafs >> \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
       - run:
@@ -414,20 +410,16 @@ jobs:
               bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
             fi
 
-      - when:
-          condition:
-            equal: [ "true", << parameters.coverage >> ]
-          steps:
-            - run:
-                name: "Persist Coverage to Workspace"
-                command: |
-                  mkdir -p coverage-workspace
-                  cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs-source >>
+      - run:
+          name: "Persist Coverage to Workspace"
+          command: |
+            mkdir -p coverage-workspace
+            cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs >>
 
-            - persist_to_workspace:
-                root: "coverage-workspace"
-                paths:
-                  - "*"
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   typecheck:
     <<: *LINUX_TESTS
@@ -524,9 +516,7 @@ workflows:
     - "documentation"
     - "typecheck":
         py-version: "39"
-        tahoe-lafs-source: "tahoe-lafs"
-        # factoring mistake makes this necessary
-        coverage: "false"
+        tahoe-lafs: "1_17_1"
     - "build-wheel"
     - "linux-tests":
         matrix:
@@ -534,16 +524,14 @@ workflows:
             py-version:
               - "39"
               - "310"
-            tahoe-lafs-source:
-              - "tahoe-lafs"
+            tahoe-lafs:
+              - "1_17_1"
               # This is usually not master@HEAD because it is still pinned to
               # a certain revision.  The intent is to update it frequently and
               # discover fixable incompatibilities in small groups and
               # unfixable incompatibilities early enough to prevent them from
               # going into a release.
-              - "tahoe-lafs-master"
-            coverage:
-              - "true"
+              - "dev"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
@@ -565,10 +553,10 @@ workflows:
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "linux-tests-true-39-tahoe-lafs"
-          - "linux-tests-true-39-tahoe-lafs-master"
-          - "linux-tests-true-310-tahoe-lafs"
-          - "linux-tests-true-310-tahoe-lafs-master"
+          - "linux-tests-39-1_17_1"
+          - "linux-tests-39-dev"
+          - "linux-tests-310-1_17_1"
+          - "linux-tests-310-dev"
           - "macos-tests-3.9-12.5.1"
           - "macos-tests-3.10-12.5.1"
           - "windows-tests-3.9"
