@@ -380,6 +380,21 @@ jobs:
               --override-input tahoe-lafs << parameters.tahoe-lafs >> \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
+      - run:
+          name: "Check Black"
+          command: |
+            nix run .#black --check --diff
+
+      - run:
+          name: "Check isort"
+          command: |
+            nix run .#isort --check --diff
+
+      - run:
+          name: "Check flake8"
+          command: |
+            nix run .#flake8 --check --diff
+
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
           when: "always"
