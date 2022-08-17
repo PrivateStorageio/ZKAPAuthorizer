@@ -370,17 +370,17 @@ jobs:
       - run:
           name: "Check Black"
           command: |
-            nix run .#black -- --check --diff
+            nix run .#black -- --check --diff src
 
       - run:
           name: "Check isort"
           command: |
-            nix run .#isort -- --check --diff
+            nix run .#isort -- --check --diff src
 
       - run:
           name: "Check flake8"
           command: |
-            nix run .#flake8 -- --check --diff
+            nix run .#flake8 -- --check --diff src
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
