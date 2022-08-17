@@ -96,17 +96,37 @@
     in rec {
       devShells = {
         default = pkgs.mkShell {
+          # Avoid leaving .pyc all over the source tree when manually
+          # triggering tests runs.
+          PYTHONDONTWRITEBYTECODE = "1";
+
+          # Make the source for two significant C-language dependencies easily
+          # available. Unfortunately, these are the source archives.  Unpack
+          # them and use `directory ...` in gdb to help it find them.
+          #
+          # TODO: Automatically unpack them and provide them as source
+          # directories instead.
+          SQLITE_SRC = "${pkgs.sqlite.src}";
+          PYTHON_SRC = "${pkgs.${defaultPyVersion}.src}";
+
+          # Make pudb the default.  We make sure it is installed below.
+          PYTHONBREAKPOINT = "pudb.set_trace";
+
           buildInputs = [
             # Put a Python environment that has all of the development, test,
             # and runtime dependencies in it - but not the package itself.
             (mach-nix.mkPython {
               python = defaultPyVersion;
               requirements = ''
+                pudb
                 ${builtins.readFile ./requirements/test.in}
                 ${builtins.readFile ./requirements/typecheck.in}
                 ${self.packages.${system}.default.requirements}
               '';
             })
+
+            # Give us gdb in case we need to debug CPython or an extension.
+            pkgs.gdb
           ];
 
           # Add the working copy's package source to the Python environment so
@@ -116,7 +136,7 @@
           shellHook =
             ''
             export PYTHONPATH=$PWD/src
-          '';
+            '';
         };
       };
 
