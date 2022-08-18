@@ -1,2 +1,6 @@
 mypy==0.950
 mypy-zope
+
+# the type shed...
+types-cryptography == 3.3.21
+types-PyYAML == 6.0.7
