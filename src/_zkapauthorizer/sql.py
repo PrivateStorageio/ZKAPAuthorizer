@@ -8,15 +8,22 @@ to support testing the replication/recovery system.
 from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from typing import Any, Iterable, Optional, Protocol, Union
+from typing import Any, Iterable, Optional, Protocol, Union, TypeAlias, TYPE_CHECKING
 from contextlib import AbstractContextManager
 
 from attrs import frozen
 from sqlparse import parse
 
-SQLType = Union[int, float, str, bytes, datetime, None]
-SQLRuntimeType = (int, float, str, bytes, datetime, type(None))
+SQLType: TypeAlias = Union[int, float, str, bytes, datetime, None]
+SQLRuntimeType: tuple[type, ...] = (int, float, str, bytes, datetime, type(None))
 
+if TYPE_CHECKING:
+    # _Parameters only exists in the typeshed sqlite3 pyi files.  We can only
+    # import from pyi files when we're type checking.
+    #
+    # Also, yes, it's private.  However, it expands to a ~30 term expression.
+    # This is the lesser of two evils.
+    from sqlite3.dbapi2 import _Parameters as Parameters
 
 class AbstractCursor(Protocol):
     """
@@ -31,10 +38,10 @@ class AbstractCursor(Protocol):
     def rowcount(self) -> Optional[int]:
         ...
 
-    def execute(self, statement: str, args: Iterable[Any]) -> "AbstractCursor":
+    def execute(self, statement: str, args: Parameters, /) -> "AbstractCursor":
         ...
 
-    def executemany(self, statement: str, args: Iterable[Iterable[Any]]) -> "AbstractCursor":
+    def executemany(self, statement: str, args: Iterable[Parameters]) -> "AbstractCursor":
         ...
 
     def close(self) -> None:

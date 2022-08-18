@@ -26,7 +26,7 @@ from ._json import loads
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast, NoReturn
+from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast, NoReturn, TYPE_CHECKING
 from typing_extensions import TypeAlias, ParamSpec, Concatenate
 
 import attr
@@ -45,7 +45,7 @@ from .replicate import (
     snapshot,
 )
 from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
-from .sql import BoundConnect, Cursor, SQLType
+from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
 from .validators import (
     base64_bytes,
@@ -58,6 +58,9 @@ from .validators import (
     is_base64_encoded,
     returns_aware_datetime_validator,
 )
+
+if TYPE_CHECKING:
+    from .sql import Parameters # type: ignore[attr-defined]
 
 _S = TypeVar("_S", bound="ConnectionHaver")
 _T = TypeVar("_T")
@@ -1216,8 +1219,8 @@ class Voucher(object):
     )
 
     @classmethod
-    def from_row(cls, row: tuple[SQLType, ...]) -> "Voucher":
-        def state_from_row(state: str, row: tuple[SQLType, ...]) -> VoucherState:
+    def from_row(cls, row: Parameters) -> "Voucher":
+        def state_from_row(state: str, row: Parameters) -> VoucherState:
             if state == "pending":
                 counter = row[3]
                 assert isinstance(counter, int)

@@ -66,6 +66,7 @@ from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import (
+    TYPE_CHECKING,
     cast,
     NoReturn,
     IO,
@@ -100,6 +101,9 @@ from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
 from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, FileNode
+
+if TYPE_CHECKING:
+    from .sql import Parameters # type: ignore[attr-defined]
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -515,7 +519,7 @@ class _ReplicationCapableCursor:
     def close(self) -> None:
         return self._cursor.close()
 
-    def execute(self, statement: str, row: Iterable[SQLType] = ()) -> Cursor:
+    def execute(self, statement: str, row: Parameters = ()) -> Cursor:
         """
         sqlite's Cursor API
 
@@ -538,7 +542,7 @@ class _ReplicationCapableCursor:
     def fetchone(self) -> tuple[SQLType]:
         return cast(tuple[SQLType], self._cursor.fetchone())
 
-    def executemany(self, statement: str, rows: Iterable[Any]) -> Cursor:
+    def executemany(self, statement: str, rows: Iterable[Parameters]) -> Cursor:
         self._cursor.executemany(statement, rows)
         if self._connection._replicating and statement_mutates(statement):
             self._connection._mutations.append((self._important, statement, rows))
