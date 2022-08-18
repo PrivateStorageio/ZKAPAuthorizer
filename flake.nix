@@ -61,6 +61,14 @@
       packageName = { pyVersion, tahoe-lafs }:
         "zkapauthorizer-${pyVersion}-tahoe_${tahoe-lafs.version}";
 
+      # Construct a matrix of package-building derivations.
+      #
+      # data Version = Version { version :: string, buildArgs :: attrset }
+      # data Coordinate = Coordinate { pyVersion :: string, tahoe-lafs :: Version }
+      #
+      # [ Coordinate ] -> { name = derivation; }
+      packageMatrix = derivationMatrix packageName packageForVersion;
+
       # The Hypothesis profiles of the test packages which we will expose.
       hypothesisProfiles = [ "fast" "ci" "big" "default" ];
 
@@ -85,6 +93,18 @@
           (if hypothesisProfile == null then "default" else hypothesisProfile)
           (if collectCoverage then "cov" else "nocov")
         ];
+
+      # Construct a matrix of test-running derivations.
+      #
+      # data Coordinate = Coordinate
+      #    { pyVersion :: string
+      #    , tahoe-lafs :: Version
+      #    , hypothesisProfile :: string
+      #    , collectCoverage :: bool
+      #    }
+      #
+      # [ Coordinate ] -> { name = derivation; }
+      testMatrix = derivationMatrix testName testsForVersion;
 
       defaultPackageName = packageName (builtins.head packageCoordinates);
 
@@ -142,8 +162,8 @@
       };
 
       packages =
-        derivationMatrix testCoordinates testName testsForVersion //
-        derivationMatrix packageCoordinates packageName packageForVersion //
+        testMatrix testCoordinates //
+        packageMatrix packageCoordinates //
         { default = self.packages.${system}.${defaultPackageName};
           wheel = toWheel self.packages.${system}.default;
         };

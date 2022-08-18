@@ -3,7 +3,11 @@ let
   inherit (import ./sh.nix { inherit lib; }) trial;
 in
 rec {
-  derivationMatrix = coordinates: formatter: navigate:
+  # Return an attrset where the keys are `formatter c` and the corresponding
+  # values are `navigate c`.
+  #
+  # (Coordinate -> string) -> (Coordinate -> a) -> [ Coordinate ] -> { string = a; }
+  derivationMatrix = formatter: navigate: coordinates:
     let
       chart = coord: accum: accum // {
         ${formatter coord} = navigate coord;
