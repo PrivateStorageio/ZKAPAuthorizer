@@ -28,6 +28,24 @@ aliases:
         pip install --upgrade certifi pip
         pip install ${PIP_REQUIREMENTS}
 
+  - nix_docker: &NIX_DOCKER
+      # Run in a highly Nix-capable environment.
+      - image: "nixos/nix:2.9.2"
+
+  - nix_environ: &NIX_ENVIRON
+      # Let us use features marked "experimental".  For example, most/all of
+      # the `nix <subcommand>` forms.
+      NIX_CONFIG: "experimental-features = nix-command flakes"
+
+      # Pin a NixOS 21.11 revision.  Most of the software involved in the
+      # build process is pinned by nix/sources.json with niv but a few things
+      # need to work before we get that far.  This pin is for those things.
+      # This pin has no particular bearing on what version of our dependencies
+      # we are testing against, what version of Python we support, etc.  It is
+      # part of CI infrastructure.
+      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
+
+
 jobs:
   documentation:
     docker:
@@ -219,24 +237,14 @@ jobs:
         type: "string"
 
     docker:
-      # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.1"
+      - <<: *NIX_DOCKER
 
     environment:
+      <<: *NIX_ENVIRON
+
       TWINE_REPOSITORY: "<< parameters.repository >>"
       TWINE_USERNAME: "__token__"
 
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
       # The only reason we need the source for this step is to get
@@ -261,44 +269,21 @@ jobs:
               exit 1
             fi
 
-            nix shell -f nix/twine.nix twine --command twine upload --non-interactive release-workspace/*.whl
+            nix run .#twine -- upload --non-interactive release-workspace/*.whl
 
   build-wheel:
     docker:
-      # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.5.1"
+      - <<: *NIX_DOCKER
 
     environment:
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
+      <<: *NIX_ENVIRON
 
     steps:
-      - run: &FIX_CA_CERTS
-          # Work around a bug in the 2.5.1 Docker image that prevents it from
-          # having any CA certificates to use to validate any certificates it
-          # encounters (and thus makes it incapable of talking to our binary
-          # caches).
-          #
-          # The work-around is from a comment on the issue
-          # https://github.com/NixOS/nix/issues/5797
-          name: "Fix CA Certificates"
-          command: |
-            mkdir -p /etc/ssl/certs/
-            ln -s $NIX_SSL_CERT_FILE /etc/ssl/certs/
       - "checkout"
       - run:
           name: "Build Wheel"
           command: |
-            nix build -f wheel.nix
+            nix build .#wheel
             # Put the wheel in a regular directory so CircleCI doesn't get
             # confused by symlinks when it comes time to upload the wheel as
             # an artifact.
@@ -315,46 +300,26 @@ jobs:
     parameters:
       py-version:
         type: "string"
-      coverage:
-        type: "string"
-      tahoe-lafs-source:
-        # The name of a niv source in nix/sources.json which corresponds to
-        # a Tahoe-LAFS version. This is the version that will be declared as a
-        # dependency of the Nix package of ZKAPAuthorizer (and therefore used
-        # in the test run and pulled in should you install this package).
+      tahoe-lafs:
+        # Identify a Tahoe-LAFS version against which to test.  This must
+        # correspond to the `version` property of one of the attrsets defined
+        # in `nix/tahoe-version.nix`.
         type: "string"
 
     docker:
-      # Run in a highly Nix-capable environment.  We used to use `latest` but
-      # one day someone pushed a bad revision to it and our CI broke.  So now
-      # we just pin some recent version.  Who would have thought a floating
-      # dependency would cause build instability?
-      - image: "nixos/nix:2.5.1"
+      - <<: *NIX_DOCKER
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
     resource_class: "large"
 
     environment:
+      <<: *NIX_ENVIRON
+
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
 
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
-
     steps:
-      - run:
-          <<: *FIX_CA_CERTS
-
       - run: &SETUP_CACHIX
           name: "Set up Cachix"
           command: |
@@ -366,26 +331,39 @@ jobs:
 
       - run:
           name: "Run Test Suite"
+          # If we have to build absolutely everything from scratch or if it
+          # takes a while to download pypi-deps-db or some reason then we
+          # might be busy for a while.  We use --verbose to try to be a little
+          # noisier as we build but who knows what that actually guarantees...
+          no_output_timeout: "30m"
           command: |
-            # Building the package has, as a side effect, running the test
-            # suite.  If the test suite fails, so does the build.
-            #
-            # Pass in a couple args here to control how the test suite is run
-            # - configure Hypothesis so it can behave appropriately in a CI
-            # environment (where resources are scarce, competetion with other
-            # tenants is high, etc) and collect coverage information.
+            # Build one of the test packages defined by the flake.  Choose one
+            # that matches our parameters - python version, etc.
             #
             # Also explicitly specify the number of cores to use such that it
             # only slightly exceeds what CircleCI advertises for the resource
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            nix-build --cores 5 tests.nix \
-              --argstr hypothesisProfile ci \
-              --arg collectCoverage << parameters.coverage >> \
-              --argstr tahoe-lafs-source << parameters.tahoe-lafs-source >> \
-              --argstr python python<< parameters.py-version >> \
-              --argstr testSuite _zkapauthorizer
+            nix build \
+              --verbose \
+              --cores 5 \
+              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
+
+      - run:
+          name: "Check Black"
+          command: |
+            nix run .#black -- --check --diff src
+
+      - run:
+          name: "Check isort"
+          command: |
+            nix run .#isort -- --check --diff src
+
+      - run:
+          name: "Check flake8"
+          command: |
+            nix run .#flake8 -- src
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
@@ -406,34 +384,28 @@ jobs:
               bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
             fi
 
-      - when:
-          condition:
-            equal: [ "true", << parameters.coverage >> ]
-          steps:
-            - run:
-                name: "Persist Coverage to Workspace"
-                command: |
-                  mkdir -p coverage-workspace
-                  cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs-source >>
+      - run:
+          name: "Persist Coverage to Workspace"
+          command: |
+            mkdir -p coverage-workspace
+            cp ./result*/.coverage coverage-workspace/.coverage.linux-<< parameters.py-version >>-<< parameters.tahoe-lafs >>
 
-            - persist_to_workspace:
-                root: "coverage-workspace"
-                paths:
-                  - "*"
+      - persist_to_workspace:
+          root: "coverage-workspace"
+          paths:
+            - "*"
 
   typecheck:
     <<: *LINUX_TESTS
 
     steps:
       - run:
-          <<: *FIX_CA_CERTS
-      - run:
           <<: *SETUP_CACHIX
       - "checkout"
       - run:
           name: "Run Type Checks"
           command: |
-            nix-shell --run 'mypy src'
+            nix run .#mypy -- src
       - run:
           <<: *PUSH_TO_CACHIX
 
@@ -441,7 +413,7 @@ jobs:
   # A job that merges all of the coverage data and generates a report.
   finish-coverage:
     docker:
-      - image: "nixos/nix:2.8.1"
+      - <<: *NIX_DOCKER
 
     steps:
       - "checkout"
@@ -516,9 +488,7 @@ workflows:
     - "documentation"
     - "typecheck":
         py-version: "39"
-        tahoe-lafs-source: "tahoe-lafs"
-        # factoring mistake makes this necessary
-        coverage: "false"
+        tahoe-lafs: "1_17_1"
     - "build-wheel"
     - "linux-tests":
         matrix:
@@ -526,16 +496,14 @@ workflows:
             py-version:
               - "39"
               - "310"
-            tahoe-lafs-source:
-              - "tahoe-lafs"
+            tahoe-lafs:
+              - "1_17_1"
               # This is usually not master@HEAD because it is still pinned to
               # a certain revision.  The intent is to update it frequently and
               # discover fixable incompatibilities in small groups and
               # unfixable incompatibilities early enough to prevent them from
               # going into a release.
-              - "tahoe-lafs-master"
-            coverage:
-              - "true"
+              - "dev"
 
     # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
     - "macos-tests":
@@ -557,10 +525,10 @@ workflows:
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "linux-tests-true-39-tahoe-lafs"
-          - "linux-tests-true-39-tahoe-lafs-master"
-          - "linux-tests-true-310-tahoe-lafs"
-          - "linux-tests-true-310-tahoe-lafs-master"
+          - "linux-tests-39-1_17_1"
+          - "linux-tests-39-dev"
+          - "linux-tests-310-1_17_1"
+          - "linux-tests-310-dev"
           - "macos-tests-3.9-12.5.1"
           - "macos-tests-3.10-12.5.1"
           - "windows-tests-3.9"

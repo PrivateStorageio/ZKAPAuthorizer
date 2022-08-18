@@ -37,7 +37,7 @@ To update the PyPI snapshot (and thus our python dependencies), run
 
 .. code:: shell
 
-   nix-shell --run 'niv update pypi-deps-db'
+   nix flake lock --update-input pypi-deps-db
 
 tahoe-lafs
 ..........
@@ -51,25 +51,18 @@ When installing using native Python packaging mechanisms
 the relevant Tahoe-LAFS dependency declaration is in ``setup.cfg``.
 See the comments there about the narrow version constraint used.
 
-When installing the Nix package the version of Tahoe-LAFS is determined by the "tahoe-lafs" entry in the niv-managed ``nix/sources.json``.
-When feasible this is a released version of Tahoe-LAFS.
-To update to a new release, run:
+Several Nix packages are available which use different versions of Tahoe-LAFS.
+The version is reflected in the package name.
+For example,
+``zkapauthorizer-python39-tahoe_1_17_1`` has a dependency on Tahoe-LAFS 1.17.1.
 
-.. code:: shell
+There is also a ``tahoe_dev`` variation that depends on a recent version of Tahoe-LAFS ``master``.
 
-   nix-shell --run 'niv update --rev tahoe-lafs-A.B.C tahoe-lafs'
-
-When it is not feasible to use a released version of Tahoe-LAFS,
-niv's ``--branch`` or ``--rev`` features can be used to update this dependency.
-
-It is also possible to pass a revision of ``pull/<pr-number>/head`` to test against a specific PR.
-
-We test against a pinned commit of Tahoe-LAFS master.
 To update to the current master@HEAD revision, run:
 
 .. code:: shell
 
-   nix-shell --run 'niv update tahoe-lafs-master --branch master'
+   nix flake lock --update-input tahoe-lafs-dev
 
 We intend for these updates to be performed periodically.
 At the moment, they must be performed manually.
@@ -78,22 +71,14 @@ It might be worthwhile to `automate this process <https://github.com/PrivateStor
 .. note::
 
    Since tahoe-lafs doesn't have correct version information when installed from a github archive,
-   the packaging in ``default.nix`` includes a fake version number.
+   the packaging in ``nix/tahoe-versions.nix`` includes a fake version number.
    This will need to be update manually at least when the minor version of tahoe-lafs changes.
 
-If you want to test additional versions, you can add an additional source, pointing at other version.
+If you want to test different versions,
+you can override the ``tahoe-lafs-dev`` input on the command line.
 
 .. code:: shell
 
-   nix-shell --run 'niv add -n tahoe-lafs-next tahoe-lafs/tahoe-lafs --rev "<rev>"'
-   nix-build tests.nix --argstr tahoe-lafs-source tahoe-lafs-next
+   nix build --override-input tahoe-lafs-dev /path/to/tahoe-lafs-version .#zkapauthorizer-python39-tahoe_dev
 
-``--argstr tahoe-lafs-source <...>`` can also be passed to ``nix-shell`` and ``nix-build default.nix``.
-
-nixpkgs
-.......
-
-We pin to a nixos channel release, which isn't directly supported by niv (`issue <https://github.com/nmattia/niv/issues/225>`_).
-Thus, the pin needs to be update manually.
-To do this, copy the ``url`` and ``sha256`` values from PrivateStorageio's `nixpkgs-2105.json <https://whetstone.privatestorage.io/privatestorage/PrivateStorageio/-/blob/develop/nixpkgs-2105.json>`_ into the ``release2105`` entry in ``nix/sources.json``.
-When this is deployed as part of Privatestorageio, we use the value pinned there, rather than the pin in this repository.
+The input can also be overridden for the test packages.
