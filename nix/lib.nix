@@ -26,7 +26,6 @@ rec {
   packageForVersion =
     { pyVersion
     , tahoe-lafs
-    , ...
     }:
     let
       tahoe-lafs-package = mach-nix.buildPythonPackage (
