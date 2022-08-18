@@ -687,6 +687,25 @@ async def download_child(
     dircap: DirectoryReadCapability,
     child_path: List[str],
 ) -> None:
+    """
+    Download a child from the identified directory.
+
+    :param outpath: The local filesystem path to which to write the downloaded
+        data.
+
+    :param client: The client to use for the download.
+
+    :param dircap: The capability of the containing directory.
+
+    :param, child_path: The child names to use to find the data to download.
+        Each element in the list is the name of an entry in a directory.  The
+        first element is an entry in ``dircap``, the next element is an entry
+        in whatever directory the first identified, and so on.  The final
+        element must identify a regular file and all other elements must
+        identify directories.
+
+    :return: ``None`` after the download is complete.
+    """
     if len(child_path) == 0:
         raise ValueError("Path to child must be provided")
     else:
