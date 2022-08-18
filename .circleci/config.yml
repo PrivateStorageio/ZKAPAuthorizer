@@ -380,7 +380,7 @@ jobs:
       - run:
           name: "Check flake8"
           command: |
-            nix run .#flake8 -- --check --diff src
+            nix run .#flake8 -- src
 
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
