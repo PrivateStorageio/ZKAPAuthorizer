@@ -50,7 +50,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred
-from zope.interface import Interface
+from zope.interface import Interface, implementer
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
@@ -566,6 +566,7 @@ class IFoo(Interface):
         pass
 
 
+@implementer(IFoo)
 class Foo:
     async def bar(self, a: T) -> tuple["Foo", T]:
         return (self, a)
