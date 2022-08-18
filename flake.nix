@@ -148,6 +148,10 @@
 
             # Give us gdb in case we need to debug CPython or an extension.
             pkgs.gdb
+
+            # Since we use CircleCI it is handy to have the CircleCI CLI tool
+            # available - for example, for validating config changes.
+            pkgs.circleci-cli
           ];
 
           # Add the working copy's package source to the Python environment so
