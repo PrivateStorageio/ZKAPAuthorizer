@@ -28,6 +28,24 @@ aliases:
         pip install --upgrade certifi pip
         pip install ${PIP_REQUIREMENTS}
 
+  - nix_docker: &NIX_DOCKER
+      # Run in a highly Nix-capable environment.
+      - image: "nixos/nix:2.9.2"
+
+  - nix_environ: &NIX_ENVIRON
+      # Let us use features marked "experimental".  For example, most/all of
+      # the `nix <subcommand>` forms.
+      NIX_CONFIG: "experimental-features = nix-command flakes"
+
+      # Pin a NixOS 21.11 revision.  Most of the software involved in the
+      # build process is pinned by nix/sources.json with niv but a few things
+      # need to work before we get that far.  This pin is for those things.
+      # This pin has no particular bearing on what version of our dependencies
+      # we are testing against, what version of Python we support, etc.  It is
+      # part of CI infrastructure.
+      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
+
+
 jobs:
   documentation:
     docker:
@@ -219,24 +237,14 @@ jobs:
         type: "string"
 
     docker:
-      # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.2"
+      - <<: *NIX_DOCKER
 
     environment:
+      <<: *NIX_ENVIRON
+
       TWINE_REPOSITORY: "<< parameters.repository >>"
       TWINE_USERNAME: "__token__"
 
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command flakes"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
       # The only reason we need the source for this step is to get
@@ -265,21 +273,10 @@ jobs:
 
   build-wheel:
     docker:
-      # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.2"
+      - <<: *NIX_DOCKER
 
     environment:
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command flakes"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
+      <<: *NIX_ENVIRON
 
     steps:
       - "checkout"
@@ -310,31 +307,17 @@ jobs:
         type: "string"
 
     docker:
-      # Run in a highly Nix-capable environment.  We used to use `latest` but
-      # one day someone pushed a bad revision to it and our CI broke.  So now
-      # we just pin some recent version.  Who would have thought a floating
-      # dependency would cause build instability?
-      - image: "nixos/nix:2.9.2"
+      - <<: *NIX_DOCKER
 
     # Tahoe-LAFS requires more memory than we get from the default resource
     # class and sometimes we have to build it.
     resource_class: "large"
 
     environment:
+      <<: *NIX_ENVIRON
+
       # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
-
-      # Let us use features marked "experimental".  For example, most/all of
-      # the `nix <subcommand>` forms.
-      NIX_CONFIG: "experimental-features = nix-command flakes"
-
-      # Pin a NixOS 21.11 revision.  Most of the software involved in the
-      # build process is pinned by nix/sources.json with niv but a few things
-      # need to work before we get that far.  This pin is for those things.
-      # This pin has no particular bearing on what version of our dependencies
-      # we are testing against, what version of Python we support, etc.  It is
-      # part of CI infrastructure.
-      NIXPKGS: "https://github.com/NixOS/nixpkgs/archive/28abc4e43a24d28729509e2d83f5c4f3b3418189.tar.gz"
 
     steps:
       - run: &SETUP_CACHIX
@@ -430,7 +413,7 @@ jobs:
   # A job that merges all of the coverage data and generates a report.
   finish-coverage:
     docker:
-      - image: "nixos/nix:2.9.2"
+      - <<: *NIX_DOCKER
 
     steps:
       - "checkout"
