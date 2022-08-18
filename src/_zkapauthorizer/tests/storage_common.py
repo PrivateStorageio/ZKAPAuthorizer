@@ -185,7 +185,7 @@ def privacypass_passes(
     return limited_get_passes
 
 
-def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]):
+def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]) -> _PassFactory:
     """
     Get a new factory for passes.
 
@@ -310,7 +310,7 @@ class _PassFactory(object):
         self.spent.update(unblinded_tokens)
         self.in_use.difference_update(unblinded_tokens)
 
-    def mark_invalid(self, reason, unblinded_tokens: list[UnblindedToken]) -> None:
+    def mark_invalid(self, reason: str, unblinded_tokens: list[UnblindedToken]) -> None:
         """
         Check the operation for consistency and update internal book-keeping
         related to the given tokens.
