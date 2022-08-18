@@ -276,6 +276,8 @@ class RecoverProtocol(WebSocketServerProtocol):
             if set(body.keys()) != {"recovery-capability"}:
                 raise ValueError("Unknown keys present in request")
             cap_str = body["recovery-capability"]
+            if not isinstance(cap_str, str):
+                raise ValueError(f"Recovery capability must be a string, got {type(cap_str)!r} instead.")
             recovery_capability = readonly_directory_from_string(cap_str)
         except Exception as e:
             self._log.failure("Failed to initiate recovery")
