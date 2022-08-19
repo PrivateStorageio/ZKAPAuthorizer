@@ -18,6 +18,10 @@ itself.
 """
 
 from __future__ import annotations
+from twisted.internet.task import Clock
+from ..foolscap import ShareStat
+from twisted.internet.defer import succeed
+from datetime import timedelta
 
 from functools import partial
 from inspect import iscoroutinefunction
@@ -312,3 +316,30 @@ def from_awaitable(a: Awaitable[_A]) -> Deferred[_A]:
         return await a
 
     return Deferred.fromCoroutine(adapt())
+
+@define
+class DummyStorageServer(object):
+    """
+    A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
+
+    :ivar buckets: A mapping from storage index to
+        metadata about shares at that storage index.
+    """
+
+    clock: Clock
+    buckets: dict[bytes, dict[int, ShareStat]]
+    lease_seed: bytes
+
+    def stat_shares(
+        self, storage_indexes: list[bytes]
+    ) -> Deferred[list[dict[int, ShareStat]]]:
+        return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
+
+    def get_lease_seed(self):
+        return self.lease_seed
+
+    def add_lease(self, storage_index, renew_secret, cancel_secret):
+        for stat in self.buckets.get(storage_index, {}).values():
+            stat.lease_expiration = int(
+                self.clock.seconds() + timedelta(days=31).total_seconds()
+            )

@@ -27,11 +27,12 @@ __all__ = [
     "matches_float_within_distance",
 ]
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from json import loads
-from typing import Generic, TypeVar, Union
+from typing import Generic, TypeVar, Union, Optional, Callable, Container
+from zope.interface.interface import InterfaceClass
 
-import attr
+from attrs import frozen, field, validators
 from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
@@ -40,6 +41,7 @@ from testtools.matchers import (
     Equals,
     GreaterThan,
     LessThan,
+    Mismatch,
 )
 from testtools.matchers import Matcher as _Matcher
 from testtools.matchers import (
@@ -55,6 +57,7 @@ from treq import content
 from treq.response import IResponse
 from twisted.web.http_headers import Headers
 
+from .common import DummyStorageServer
 from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
@@ -70,29 +73,31 @@ class Matcher(_Matcher, Generic[_T]):
     """
 
 
-@attr.s
+@frozen
 class Provides(object):
     """
     Match objects that provide all of a list of Zope Interface interfaces.
     """
 
-    interfaces = attr.ib(validator=attr.validators.instance_of(list))
+    interfaces: list[InterfaceClass] = field(validator=validators.instance_of(list))
 
-    def match(self, obj):
+    def match(self, obj: object) -> Optional[Mismatch]:
         missing = set()
         for iface in self.interfaces:
             if not iface.providedBy(obj):
                 missing.add(iface)
-        if missing:
-            return Mismatch(
-                "{} does not provide expected {}".format(
-                    obj,
-                    ", ".join(str(iface) for iface in missing),
-                )
+        if missing == set():
+            return None
+
+        return Mismatch(
+            "{} does not provide expected {}".format(
+                obj,
+                ", ".join(str(iface) for iface in missing),
             )
+        )
 
 
-def matches_version_dictionary():
+def matches_version_dictionary() -> Matcher[dict[str, Matcher[object]]]:
     """
     Match the dictionary returned by Tahoe-LAFS'
     ``RIStorageServer.get_version`` which is also the dictionary returned by
@@ -108,7 +113,7 @@ def matches_version_dictionary():
     )
 
 
-def returns(matcher):
+def returns(matcher: Matcher[_T]) -> Matcher[Callable[[], _T]]:
     """
     Matches a no-argument callable that returns a value matched by the given
     matcher.
@@ -116,32 +121,32 @@ def returns(matcher):
     return _Returns(matcher)
 
 
-class _Returns(_Matcher):
-    def __init__(self, result_matcher):
+class _Returns(_Matcher[_T]):
+    def __init__(self, result_matcher: Matcher[Callable[[], _T]]):
         self.result_matcher = result_matcher
 
-    def match(self, matchee):
+    def match(self, matchee: Callable[[], _T]) -> Optional[Mismatch]:
         return self.result_matcher.match(matchee())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Returns({})".format(self.result_matcher)
 
 
-def greater_or_equal(v):
+def greater_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value greater than or equal to ``v``.
     """
     return MatchesAny(GreaterThan(v), Equals(v))
 
 
-def lesser_or_equal(v):
+def lesser_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value less than or equal to ``v``.
     """
     return MatchesAny(LessThan(v), Equals(v))
 
 
-def between(low, high):
+def between(low: _T, high: _T) -> Matcher[_T]:
     """
     Matches a value in the range [low, high].
     """
@@ -151,7 +156,7 @@ def between(low, high):
     )
 
 
-def leases_current(relevant_storage_indexes, now, min_lease_remaining):
+def leases_current(relevant_storage_indexes: Container[bytes], now: datetime, min_lease_remaining: timedelta) -> Matcher[DummyStorageServer]:
     """
     Return a matcher on a ``DummyStorageServer`` instance which matches
     servers for which the leases on the given storage indexes do not expire
@@ -183,7 +188,7 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
     )
 
 
-def even():
+def even() -> Matcher[int]:
     """
     Matches even integers.
     """
@@ -193,7 +198,7 @@ def even():
     )
 
 
-def odd():
+def odd() -> Matcher[int]:
     """
     Matches odd integers.
     """
@@ -251,13 +256,13 @@ def matches_spent_passes(
     )
 
 
-def matches_json(matcher=Always()):
+def matches_json(matcher: Matcher[object]=Always()) -> Matcher[bytes]:
     """
     Return a matcher for a JSON string which can be decoded to an object
     matched by the given matcher.
     """
 
-    class Matcher:
+    class JSONMatcher(Matcher[bytes]):
         def match(self, s):
             try:
                 value = loads(s)
@@ -266,10 +271,10 @@ def matches_json(matcher=Always()):
 
             return matcher.match(value)
 
-    return Matcher()
+    return JSONMatcher()
 
 
-def matches_capability(type_matcher):
+def matches_capability(type_matcher: Matcher[str]) -> Matcher[str]:
     """
     Return a matcher for a unicode string representing a Tahoe-LAFS capability
     that has a type matched by ``type_matcher``.

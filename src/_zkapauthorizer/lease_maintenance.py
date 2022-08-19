@@ -672,7 +672,7 @@ def maintain_leases_from_root(
     min_lease_remaining: timedelta,
     progress: Callable[[], ILeaseMaintenanceObserver],
     get_now: Callable[[], datetime],
-) -> Callable[[], Coroutine[Deferred[None], None, [None]]]:
+) -> Callable[[], Coroutine[Deferred[None], None, None]]:
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
     and all its children and renews their leases if they have
