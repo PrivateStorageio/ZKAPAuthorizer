@@ -52,6 +52,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from treq import content
+from treq.response import IResponse
 from twisted.web.http_headers import Headers
 
 from ..model import Pass
@@ -206,7 +207,7 @@ def matches_response(
     code_matcher: Matcher[int] = Always(),
     headers_matcher: Matcher[Headers] = Always(),
     body_matcher: Matcher[bytes] = Always(),
-):
+) -> Matcher[IResponse]:
     """
     Match a Treq response object with certain code and body.
 
