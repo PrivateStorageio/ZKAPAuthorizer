@@ -23,6 +23,7 @@ from functools import partial
 from inspect import iscoroutinefunction
 from typing import Awaitable, Callable, TypeVar, Union, Generic, Optional, Type
 from typing_extensions import ParamSpec, Concatenate
+from typing import TypeAlias
 
 from attrs import Factory, define, field
 from ..eliot import log_call
@@ -30,7 +31,9 @@ from twisted.internet.defer import Deferred
 from twisted.python.reflect import fullyQualifiedName
 from zope.interface import Interface, classImplements, directlyProvides, providedBy
 from zope.interface.interface import InterfaceClass
+from ..config import Config
 
+GetConfig: TypeAlias = Callable[[str, str], Config]
 
 def skipIf(condition, reason):
     """

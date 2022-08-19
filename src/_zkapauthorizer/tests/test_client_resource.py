@@ -19,10 +19,10 @@ plugin.
 
 from base64 import b32encode
 from io import BytesIO
-from typing import Container
+from typing import Container, Optional
 from urllib.parse import quote
 
-import attr
+from attrs import frozen, Factory
 from allmydata.client import config_from_string
 from aniso8601 import parse_datetime
 from autobahn.twisted.testing import (
@@ -78,6 +78,7 @@ from testtools.matchers import (
     MatchesStructure,
     Not,
     StartsWith,
+    Mismatch,
 )
 from testtools.twistedsupport import (
     AsynchronousDeferredRunTest,
@@ -85,8 +86,10 @@ from testtools.twistedsupport import (
     flush_logged_errors,
     succeeded,
 )
+from treq import IResponse
 from treq.testing import RequestTraversalAgent
 from twisted.internet.address import IPv4Address
+from twisted.internet.base import DelayedCall
 from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
@@ -143,10 +146,12 @@ from ..storage_common import (
     get_configured_pass_value,
     required_passes,
 )
-from .common import flushErrors
+from .common import flushErrors, GetConfig
 from .fixtures import TemporaryVoucherStore
 from .matchers import between, matches_json, matches_response
 from .strategies import (
+        ExistingState,
+
     api_auth_tokens,
     aware_datetimes,
     client_doublespendredeemer_configurations,
@@ -177,10 +182,21 @@ TRANSIENT_ERROR = "something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started=True):
+    def schedule(f):
+        f()
+        return DelayedCall(
+            time=0,
+            func=f,
+            args=(),
+            kw={},
+            cancel=lambda dc: None,
+            reset=lambda dc: None,
+            seconds=lambda: 0,
+        )
     return Cooperator(
         # Don't stop consuming the iterator until it's done.
         terminationPredicateFactory=lambda: lambda: False,
-        scheduler=lambda what: (what(), object())[1],
+        scheduler=schedule,
         started=started,
     )
 
@@ -277,7 +293,7 @@ def root_from_config(
 
     :return IResource: The root client resource.
     """
-    db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
+    db_path = FilePath(config.get_private_path(CONFIG_DB_NAME)).asTextMode()
     return from_configuration(
         config,
         open_store(
@@ -464,7 +480,7 @@ class ResourceTests(TestCase):
             b"GET",
             b"http://127.0.0.1/" + b"/".join(path),
         )
-        responses = []
+        responses: list[IResponse] = []
         requesting.addCallback(responses.append)
         self.assertThat(
             requesting,
@@ -573,7 +589,7 @@ class ReplicateTests(TestCase):
         directory_writes().map(lambda rw: rw.reader),
     )
     def test_already_configured(
-        self, get_config, api_auth_token, dir_ro: DirectoryReadCapability
+        self, get_config: GetConfig, api_auth_token: str, dir_ro: DirectoryReadCapability
     ) -> None:
         """
         If replication has already been configured then the endpoint returns a
@@ -656,7 +672,7 @@ class ReplicateTests(TestCase):
         api_auth_tokens(),
         directory_writes().map(lambda rw: rw.reader),
     )
-    def test_created(self, get_config, api_auth_token, cap_ro) -> None:
+    def test_created(self, get_config: GetConfig, api_auth_token: str, cap_ro: DirectoryReadCapability) -> None:
         """
         On successful replica configuration, the endpoint returns a response with
         a 201 status code and an application/json-encoded body containing a
@@ -732,7 +748,7 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config, api_auth_token) -> None:
+    def test_internal_server_error(self, get_config: GetConfig, api_auth_token: str) -> None:
         """
         If recovery fails for some unrecognized reason we receive an error
         update over the WebSocket.
@@ -751,7 +767,7 @@ class RecoverTests(TestCase):
 
         def create_proto():
             factory = RecoverFactory(store, broken_get_downloader)
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -791,7 +807,7 @@ class RecoverTests(TestCase):
         api_auth_tokens(),
         existing_states(min_vouchers=1),
     )
-    def test_conflict(self, get_config, api_auth_token, existing_state) -> None:
+    def test_conflict(self, get_config: GetConfig, api_auth_token: str, existing_state: ExistingState) -> None:
         """
         If there is state in the local database the websocket streams an
         error and disconnects.
@@ -816,7 +832,7 @@ class RecoverTests(TestCase):
 
         def create_proto():
             factory = RecoverFactory(store, get_fail_downloader)
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -902,7 +918,7 @@ class RecoverTests(TestCase):
             ),
         )
 
-    def _request_error_test(self, message) -> list[tuple[tuple, dict]]:
+    def _request_error_test(self, message: bytes) -> list[tuple[bytes, bool]]:
         """
         Generic test of the server protocol's error-handling for incoming
         WebSocket messages.
@@ -913,8 +929,8 @@ class RecoverTests(TestCase):
         # hook into the protocol's error-handling methods
         messages = []
         closes = []
-        proto.sendClose = lambda *args, **kw: closes.append((args, kw))
-        proto.sendMessage = lambda *args, **kw: messages.append((args, kw))
+        proto.sendClose = lambda code=None, reason=None: closes.append((code, reason))
+        proto.sendMessage = lambda msg, isBinary: messages.append((msg, isBinary))
 
         # run test by sending the initial message
         proto.onMessage(message, False)
@@ -924,17 +940,12 @@ class RecoverTests(TestCase):
             closes,
             MatchesListwise(
                 [
-                    AfterPreprocessing(
-                        lambda args_kwargs: args_kwargs[1],
-                        MatchesDict(
-                            {
-                                "code": Equals(4000),
-                                "reason": StartsWith(
-                                    "Failed to parse recovery request: "
-                                ),
-                            }
+                    MatchesDict({
+                        "code": Equals(4000),
+                        "reason": StartsWith(
+                            "Failed to parse recovery request: "
                         ),
-                    ),
+                    }),
                 ]
             ),
         )
@@ -948,7 +959,7 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_status(self, get_config, api_auth_token) -> None:
+    def test_status(self, get_config: GetConfig, api_auth_token: str) -> None:
         """
         A first websocket that initiates a recovery sees the same messages
         as a second client (that uses the same dircap).
@@ -961,7 +972,7 @@ class RecoverTests(TestCase):
                 await downloading_d
                 downloads.append(set_state)
                 return (
-                    lambda: BytesIO(statements_to_snapshot([])),
+                    lambda: BytesIO(statements_to_snapshot(iter([]))),
                     [],  # no event-streams
                 )
 
@@ -974,7 +985,7 @@ class RecoverTests(TestCase):
         self.addCleanup(pumper.stop)
 
         def create_proto():
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -1089,9 +1100,11 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/lease-maintenance",
         )
         d.addCallback(readBody)
-        d.addCallback(
-            lambda body: loads(body)["spending"],
-        )
+        def get_spending(body: bytes) -> dict[str, object]:
+            b = loads(body)
+            assert isinstance(b, dict)
+            return b["spending"]
+        d.addCallback(get_spending)
         self.assertThat(
             d,
             succeeded(
@@ -1645,15 +1658,15 @@ def mime_types(blacklist: Container[str] = ()) -> SearchStrategy[str]:
     )
 
 
-@attr.s
+@frozen
 class Request(object):
     """
     Represent some of the parameters of an HTTP request.
     """
 
-    method = attr.ib()
-    headers = attr.ib()
-    data = attr.ib()
+    method: bytes
+    headers: Headers
+    data: bytes
 
 
 def bad_calculate_price_requests():
@@ -1676,7 +1689,7 @@ def bad_calculate_price_requests():
     good_headers = just({b"content-type": [b"application/json"]})
     bad_headers = fixed_dictionaries(
         {
-            b"content-type": mime_types(blacklist={b"application/json"},).map(
+            b"content-type": mime_types(blacklist={"application/json"},).map(
                 lambda content_type: [content_type.encode("utf-8")],
             ),
         }
@@ -1914,14 +1927,14 @@ def match_response(code, headers, phrase=Always()):
     )
 
 
-@attr.s
+@frozen
 class _MatchResponse(object):
-    code = attr.ib()
-    headers = attr.ib()
-    phrase = attr.ib()
-    _details = attr.ib(default=attr.Factory(dict))
+    code: int
+    headers: Headers
+    phrase: str
+    _details: dict[str, object] = Factory(dict)
 
-    def match(self, response):
+    def match(self, response: IResponse) -> Optional[Mismatch]:
         self._details.update(
             {
                 "code": response.code,

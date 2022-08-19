@@ -1140,7 +1140,7 @@ class _VoucherInsert(object):
 
 
 @attr.s(frozen=True)
-class _ExistingState(object):
+class ExistingState(object):
     """
     Represent some state which could already exist in a ``VoucherStore``.
     """
@@ -1148,7 +1148,7 @@ class _ExistingState(object):
     vouchers: list[_VoucherInsert] = attr.ib()
 
 
-def existing_states(min_vouchers: int = 0, max_vouchers: int = 4) -> SearchStrategy[_ExistingState]:
+def existing_states(min_vouchers: int = 0, max_vouchers: int = 4) -> SearchStrategy[ExistingState]:
     """
     Build possible existing states of a ``VoucherStore``.
 
@@ -1215,7 +1215,7 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4) -> SearchStrat
     voucher_inserts = vouchers_and_tokens.flatmap(build_voucher_inserts)
 
     return builds(
-        _ExistingState,
+        ExistingState,
         vouchers=voucher_inserts,
     )
 
