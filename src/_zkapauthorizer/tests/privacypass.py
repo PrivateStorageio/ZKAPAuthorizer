@@ -17,25 +17,24 @@ Ristretto-flavored PrivacyPass helpers for the test suite.
 """
 
 from challenge_bypass_ristretto import BatchDLEQProof, PublicKey
-
+from challenge_bypass_ristretto import SigningKey
+from challenge_bypass_ristretto import RandomToken
 from ..model import Pass
 
-
-def make_passes(signing_key, for_message, random_tokens):
+def make_passes(signing_key: SigningKey, for_message: bytes, random_tokens: list[RandomToken]) -> list[Pass]:
     """
     Create a number of cryptographically correct privacy passes.
 
-    :param challenge_bypass_ristretto.SigningKey signing_key: The key to use
-        to sign the passes.
+    :param signing_key: The key to use to sign the passes.
 
-    :param bytes for_message: The request-binding message with which to
-        associate the passes.
+    :param for_message: The request-binding message with which to associate
+        the passes.
 
-    :param list[challenge_bypass_ristretto.RandomToken] random_tokens: The
-        random tokens to feed in to the pass generation process.
+    :param random_tokens: The random tokens to feed in to the pass generation
+        process.
 
-    :return list[Pass]: The privacy passes.  The returned list has one
-        element for each element of ``random_tokens``.
+    :return: The privacy passes.  The returned list has one element for each
+        element of ``random_tokens``.
     """
     blinded_tokens = list(token.blind() for token in random_tokens)
     signatures = list(

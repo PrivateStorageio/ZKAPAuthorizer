@@ -177,7 +177,9 @@ def read_spending_success_histogram_bucket(
     note(
         "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
     )
-    return buckets[bucket_number].get()
+    result = buckets[bucket_number].get()
+    assert isinstance(result, int)
+    return result
 
 
 class PassValidationTests(TestCase):

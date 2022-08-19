@@ -16,7 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 from functools import partial
 from io import StringIO
 from os import mkdir
@@ -36,8 +36,9 @@ from autobahn.twisted.testing import (
     create_memory_agent,
     create_pumper,
 )
-from challenge_bypass_ristretto import SigningKey
-from eliot.testing import LoggedMessage, capture_logging
+from challenge_bypass_ristretto import SigningKey, PublicKey
+from eliot.testing import LoggedMessage
+from eliot import ILogger
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference
@@ -96,7 +97,7 @@ from .._plugin import (
 from .._storage_client import IncorrectStorageServerReference
 from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
-from ..eliot import GET_PASSES
+from ..eliot import GET_PASSES, capture_logging
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import (
@@ -681,14 +682,14 @@ class ClientPluginTests(TestCase):
     @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
         self,
-        logger,
-        get_config,
-        now,
-        announcement,
-        voucher,
-        num_passes,
-        public_key,
-    ):
+        logger: ILogger,
+        get_config: GetConfig,
+        now: datetime,
+        announcement: dict[str, str],
+        voucher: bytes,
+        num_passes: int,
+        public_key: PublicKey,
+    ) -> None:
         """
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
@@ -696,7 +697,7 @@ class ClientPluginTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         node_config = get_config(nodedir.path, "tub.port")
 

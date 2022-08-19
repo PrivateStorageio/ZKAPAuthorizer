@@ -42,7 +42,9 @@ def read_text(path: FilePath) -> str:
     """
     Read and decode some ASCII bytes from a file, stripping any whitespace.
     """
-    return path.getContent().decode("ascii").strip()
+    result = path.getContent().decode("ascii").strip()
+    assert isinstance(result, str)
+    return result
 
 
 def wait_for_path(path: FilePath, retry: Iterable[float] = RETRY_DELAY) -> None:

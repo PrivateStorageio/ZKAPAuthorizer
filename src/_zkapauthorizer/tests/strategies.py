@@ -19,7 +19,7 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Any, Optional, TypedDict, cast
+from typing import Any, Optional, TypedDict, cast, Callable, TypeVar
 from urllib.parse import quote
 
 import attr
@@ -64,6 +64,7 @@ from ..model import (
     Voucher,
 )
 from ..sql import (
+    Statement,
     Column,
     Delete,
     Insert,
@@ -410,23 +411,22 @@ def client_dummyredeemer_configurations(
         return config
 
     def share_a_key(allowed_keys):
+        def add_redeemer(config: dict[str, str]) -> dict[str, str]:
+            config.update(
+                {
+                    "redeemer": "dummy",
+                    # Pick out one of the allowed public keys so that the dummy
+                    # appears to produce usable tokens.
+                    "issuer-public-key": next(iter(allowed_keys)),
+                })
+            return config
         lease_configs = builds(
             make_lease_config,
             crawl_means,
             crawl_ranges,
             min_times_remaining,
         )
-        extra_config = lease_configs.map(
-            lambda config: config.update(
-                {
-                    "redeemer": "dummy",
-                    # Pick out one of the allowed public keys so that the dummy
-                    # appears to produce usable tokens.
-                    "issuer-public-key": next(iter(allowed_keys)),
-                }
-            )
-            or config,
-        )
+        extra_config = lease_configs.map(add_redeemer)
         return zkapauthz_configuration(
             extra_config,
             allowed_public_keys=just(allowed_keys),
@@ -1015,7 +1015,7 @@ def slot_test_and_write_vectors_for_shares():
     )
 
 
-def announcements():
+def announcements() -> SearchStrategy[dict[str, str]]:
     """
     Build announcements for the ZKAPAuthorizer plugin.
     """
@@ -1271,6 +1271,9 @@ def tables() -> SearchStrategy[Table]:
     """
     Build objects describing tables in a SQLite3 database.
     """
+    def first(x: tuple[str, Column]) -> str:
+        return x[0]
+
     return builds(
         Table,
         columns=lists(
@@ -1279,7 +1282,7 @@ def tables() -> SearchStrategy[Table]:
                 builds(Column, affinity=sampled_from(StorageAffinity)),
             ),
             min_size=1,
-            unique_by=lambda x: x[0],
+            unique_by=first,
         ),
     )
 
@@ -1391,3 +1394,21 @@ def deletes(name, table):
     Build objects describing row deletions from the given table.
     """
     return just(Delete(table_name=name))
+
+T = TypeVar("T")
+
+
+def mutations() -> SearchStrategy[Statement]:
+    """
+    Build statements that make changes to data.
+    """
+    def make(x: tuple[Callable[[str, Table], T], str, Table]) -> T:
+        return x[0](x[1], x[2])
+
+    return tuples(
+        sampled_from([inserts, deletes, updates]),
+        sql_identifiers(),
+        tables(),
+    ).flatmap(
+        make,
+    )

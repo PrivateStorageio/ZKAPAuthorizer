@@ -102,7 +102,7 @@ def matches_version_dictionary() -> Matcher[dict[str, Matcher[object]]]:
     ``RIStorageServer.get_version`` which is also the dictionary returned by
     our own ``RIPrivacyPassAuthorizedStorageServer.get_version``.
     """
-    return ContainsDict(
+    return ContainsDict( # type: ignore[no-any-return]
         {
             # It has these two top-level keys, at least.  Try not to be too
             # fragile by asserting much more than that they are present.
@@ -135,21 +135,21 @@ def greater_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value greater than or equal to ``v``.
     """
-    return MatchesAny(GreaterThan(v), Equals(v))
+    return MatchesAny(GreaterThan(v), Equals(v)) # type: ignore[no-any-return]
 
 
 def lesser_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value less than or equal to ``v``.
     """
-    return MatchesAny(LessThan(v), Equals(v))
+    return MatchesAny(LessThan(v), Equals(v)) # type: ignore[no-any-return]
 
 
 def between(low: _T, high: _T) -> Matcher[_T]:
     """
     Matches a value in the range [low, high].
     """
-    return MatchesAll(
+    return MatchesAll( # type: ignore[no-any-return]
         greater_or_equal(low),
         lesser_or_equal(high),
     )
@@ -172,7 +172,7 @@ def leases_current(
                 for (sharenum, stat) in shares.items():
                     yield stat
 
-    return AfterPreprocessing(
+    return AfterPreprocessing( # type: ignore[no-any-return]
         # Get share stats for storage indexes we should have
         # visited and maintained.
         lambda storage_server: list(get_relevant_stats(storage_server)),
@@ -195,7 +195,7 @@ def even() -> Matcher[int]:
     """
     Matches even integers.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing( # type: ignore[no-any-return]
         lambda n: n % 2,
         Equals(0),
     )
@@ -205,7 +205,7 @@ def odd() -> Matcher[int]:
     """
     Matches odd integers.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing( # type: ignore[no-any-return]
         lambda n: n % 2,
         Equals(1),
     )
@@ -228,7 +228,7 @@ def matches_response(
 
     :return: A matcher.
     """
-    return MatchesAll(
+    return MatchesAll( # type: ignore[no-any-return]
         MatchesStructure(
             code=code_matcher,
             headers=headers_matcher,
@@ -247,7 +247,7 @@ def matches_spent_passes(
     Returns a matcher for _SpendingData that checks whether the
     spent pass match the given public key and passes.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing( # type: ignore[no-any-return]
         lambda spending_recorder: spending_recorder.spent_tokens,
         MatchesDict(
             {
@@ -266,7 +266,7 @@ def matches_json(matcher: Matcher[object] = Always()) -> Matcher[bytes]:
     """
 
     class JSONMatcher(Matcher[bytes]):
-        def match(self, s):
+        def match(self, s: bytes) -> Optional[Mismatch]:
             try:
                 value = loads(s)
             except Exception as e:
@@ -291,7 +291,7 @@ def matches_capability(type_matcher: Matcher[str]) -> Matcher[str]:
             return pieces[1]
         return None
 
-    return AfterPreprocessing(
+    return AfterPreprocessing( # type: ignore[no-any-return]
         get_cap_type,
         type_matcher,
     )

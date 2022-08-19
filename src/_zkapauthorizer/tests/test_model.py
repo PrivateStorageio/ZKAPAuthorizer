@@ -101,6 +101,7 @@ from .common import GetConfig, from_awaitable
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
+    mutations,
     aware_datetimes,
     deletes,
     dummy_ristretto_keys,
@@ -1005,16 +1006,7 @@ class EventStreamTests(TestCase):
     @given(
         tahoe_configs(),
         posix_safe_datetimes(),
-        lists(
-            tuples(
-                sampled_from([inserts, deletes, updates]),
-                sql_identifiers(),
-                tables(),
-            ).flatmap(
-                lambda x: x[0](x[1], x[2]),
-            ),
-            min_size=2,
-        ),
+        lists(mutations(), min_size=2),
         randoms(),
     )
     def test_event_stream_prune(

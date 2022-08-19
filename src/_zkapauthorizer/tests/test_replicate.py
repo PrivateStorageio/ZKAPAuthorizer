@@ -8,6 +8,8 @@ from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
 from typing import IO, Callable, Optional
+from compose import compose
+from operator import attrgetter
 
 from attrs import frozen
 from eliot import start_action
@@ -372,15 +374,15 @@ def is_event_stream(
     """
 
     def is_filenode() -> Matcher[FileNode]:
-        return IsInstance(FileNode)
+        return IsInstance(FileNode) # type: ignore[no-any-return]
 
     def download_event_stream(cap: ReadCapability) -> EventStream:
         return EventStream.from_bytes(BytesIO(grid.download(cap)))
 
-    return MatchesAll(
+    return MatchesAll( # type: ignore[no-any-return]
         is_filenode(),
         AfterPreprocessing(
-            lambda item: download_event_stream(item.ro_uri),
+            compose(download_event_stream, attrgetter("ro_uri")),
             MatchesStructure(**kwargs),
         ),
     )

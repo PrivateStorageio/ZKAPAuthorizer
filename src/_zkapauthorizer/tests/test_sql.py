@@ -24,23 +24,14 @@ from testtools import TestCase
 from testtools.matchers import Equals
 
 from ..sql import Statement, statement_mutates
-from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
-
-mutations = tuples(
-    sampled_from([inserts, deletes, updates]),
-    sql_identifiers(),
-    tables(),
-).flatmap(
-    lambda x: x[0](x[1], x[2]),
-)
-
+from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates, mutations
 
 class MutateTests(TestCase):
     """
     Tests for ``statement_mutates``
     """
 
-    @given(mutations)
+    @given(mutations())
     def test_mutate(self, change: Statement) -> None:
         """
         ``statement_mutates`` returns True for SQL INSERT, DELETE, and UPDATE

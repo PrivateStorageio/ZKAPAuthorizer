@@ -19,7 +19,7 @@ plugin.
 
 from base64 import b32encode
 from io import BytesIO
-from typing import Container, Optional
+from typing import Container, Optional, cast
 from urllib.parse import quote
 
 from allmydata.client import config_from_string
@@ -1107,7 +1107,8 @@ class UnblindedTokenTests(TestCase):
         def get_spending(body: bytes) -> dict[str, object]:
             b = loads(body)
             assert isinstance(b, dict)
-            return b["spending"]
+            # TODO: cattrs
+            return cast(dict[str, object], b["spending"])
 
         d.addCallback(get_spending)
         self.assertThat(

@@ -16,8 +16,11 @@
 Tests for ``_zkapauthorizer.spending``.
 """
 
+from typing import Callable
+from random import Random
+from datetime import datetime
 from hypothesis import given
-from hypothesis.strategies import data, integers, randoms
+from hypothesis.strategies import data, integers, randoms, DataObject
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -30,9 +33,10 @@ from testtools.matchers import (
 from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 
+from ..model import VoucherStore
 from ..spending import IPassGroup, SpendingController
 from .fixtures import TemporaryVoucherStore
-from .matchers import Provides
+from .matchers import Matcher, Provides
 from .strategies import pass_counts, posix_safe_datetimes, vouchers
 
 
@@ -42,7 +46,7 @@ class PassGroupTests(TestCase):
     """
 
     @given(vouchers(), pass_counts(), posix_safe_datetimes())
-    def test_get(self, voucher, num_passes, now):
+    def test_get(self, voucher: bytes, num_passes: int, now: datetime) -> None:
         """
         ``IPassFactory.get`` returns an ``IPassGroup`` provider containing the
         requested number of passes.
@@ -72,15 +76,15 @@ class PassGroupTests(TestCase):
 
     def _test_token_group_operation(
         self,
-        operation,
-        rest_operation,
-        matches_tokens,
-        voucher,
-        num_passes,
-        now,
-        random,
-        data,
-    ):
+        operation: Callable[[IPassGroup], None],
+        rest_operation: Callable[[IPassGroup], None],
+        matches_tokens: Callable[[int, IPassGroup], Matcher[VoucherStore]],
+        voucher: bytes,
+        num_passes: int,
+        now: datetime,
+        random: Random,
+        data: DataObject,
+    ) -> None:
         configless = self.useFixture(TemporaryVoucherStore(get_now=lambda: now))
         # Make sure there are enough tokens for us to use!
         self.assertThat(
@@ -115,7 +119,7 @@ class PassGroupTests(TestCase):
         )
 
     @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
-    def test_spent(self, voucher, num_passes, now, random, data):
+    def test_spent(self, voucher: bytes, num_passes: int, now: datetime, random: Random, data: DataObject) -> None:
         """
         Passes in a group can be marked as successfully spent to prevent them from
         being re-used by a future ``get`` call.
@@ -127,7 +131,7 @@ class PassGroupTests(TestCase):
                 Equals(num_passes - len(group.passes)),
             )
 
-        return self._test_token_group_operation(
+        self._test_token_group_operation(
             lambda group: group.mark_spent(),
             # Reset the other group so its tokens are counted above.
             lambda group: group.reset(),
