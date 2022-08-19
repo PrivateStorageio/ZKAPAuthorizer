@@ -5,7 +5,8 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 from io import BytesIO
 from itertools import count
 from sqlite3 import connect
-from typing import TypeVar
+from typing import TypeVar, Callable
+from random import Random
 
 import attrs
 import cbor2
@@ -18,6 +19,7 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
+    DataObject,
     SearchStrategy,
     binary,
     builds,
@@ -79,9 +81,9 @@ from ..replicate import (
     snapshot,
     statements_to_snapshot,
 )
-from ..sql import Table, create_table
+from ..sql import Table, create_table, Statement
 from ..tahoe import ITahoeClient, MemoryGrid
-from .common import delayedProxy, from_awaitable
+from .common import delayedProxy, from_awaitable, GetConfig
 from .matchers import equals_database, raises
 from .strategies import (
     deletes,
@@ -101,7 +103,7 @@ class SnapshotEncodingTests(TestCase):
     """
 
     @given(lists(text()))
-    def test_roundtrip(self, statements) -> None:
+    def test_roundtrip(self, statements: list[str]) -> None:
         """
         Statements of a snapshot can be encoded to bytes and decoded to the same
         statements again using ``statements_to_snapshot`` and
@@ -109,7 +111,7 @@ class SnapshotEncodingTests(TestCase):
         """
         loaded = list(
             statements_from_snapshot(
-                lambda: BytesIO(statements_to_snapshot(statements))
+                lambda: BytesIO(statements_to_snapshot(iter(statements)))
             )
         )
         self.assertThat(
@@ -139,7 +141,7 @@ class SnapshotMachine(RuleBasedStateMachine):
     updates, row deletions, etc.
     """
 
-    def __init__(self, case) -> None:
+    def __init__(self, case: TestCase) -> None:
         super().__init__()
         self.case = case
         self.connection = connect(":memory:")
@@ -169,7 +171,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         name=sql_identifiers(),
         table=tables(),
     )
-    def create_table(self, name, table) -> None:
+    def create_table(self, name: str, table: Table) -> None:
         """
         Create a new table in the database.
         """
@@ -185,7 +187,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         random=randoms(),
         data=data(),
     )
-    def modify_rows(self, change_types, random, data) -> None:
+    def modify_rows(self, change_types: list[Callable[[str, Table], SearchStrategy[Statement]]], random: Random, data: DataObject) -> None:
         """
         Change some rows in some tables.
         """
@@ -457,7 +459,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setup(self, get_config) -> None:
+    def test_already_setup(self, get_config: GetConfig) -> None:
         """
         If replication is already set up, ``setup_tahoe_lafs_replication`` signals
         failure with ``ReplicationAlreadySetup``.
@@ -487,7 +489,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setting_up(self, get_config) -> None:
+    def test_already_setting_up(self, get_config: GetConfig) -> None:
         """
         If ``setup_tahoe_lafs_replication`` is called a second time before a first
         call has finished then the second call fails with
@@ -508,7 +510,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_setup(self, get_config) -> None:
+    def test_setup(self, get_config: GetConfig) -> None:
         """
         If replication was not previously set up then
         ``setup_tahoe_lafs_replication`` signals success with a read-only
@@ -559,10 +561,10 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
 
 class IFoo(Interface):
-    async def bar(a) -> None:
+    async def bar(a: T) -> tuple["IFoo", T]:
         pass
 
-    def baz(a) -> None:
+    def baz(a: T) -> tuple[T, "IFoo"]:
         pass
 
 
@@ -571,7 +573,7 @@ class Foo:
     async def bar(self, a: T) -> tuple["Foo", T]:
         return (self, a)
 
-    def baz(self, a) -> tuple[T, "Foo"]:
+    def baz(self, a: T) -> tuple[T, "Foo"]:
         return (a, self)
 
 
@@ -634,7 +636,7 @@ class EventStreamRecoveryTests(TestCase):
         randoms(),
     )
     def test_by_highest_sequence(
-        self, change_groups: list[list[Change]], random
+        self, change_groups: list[list[Change]], random: Random
     ) -> None:
         """
         ``sorted_event_streams`` returns a list of ``EventStream`` instances in
@@ -696,7 +698,7 @@ class EventStreamRecoveryTests(TestCase):
         """
         expected = "hello, world"
         create_table = Change(1, "CREATE TABLE [foo] ([a] TEXT)", (), False)
-        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)  # type: ignore
+        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)
 
         db = connect(":memory:")
         cursor = db.cursor()
