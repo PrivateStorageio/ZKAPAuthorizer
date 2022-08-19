@@ -1,7 +1,7 @@
 from typing import Any, Sequence
 
 import attr
-from attrs import define, Factory, field
+from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey
 from prometheus_client import CollectorRegistry
 from twisted.internet.interfaces import IReactorTime
@@ -41,7 +41,9 @@ class RecordingSpender(object):
     for testing purposes.
     """
 
-    _recorder: _SpendingData = field(validator=attr.validators.instance_of(_SpendingData))
+    _recorder: _SpendingData = field(
+        validator=attr.validators.instance_of(_SpendingData)
+    )
 
     @classmethod
     def make(cls) -> tuple[_SpendingData, ISpender]:

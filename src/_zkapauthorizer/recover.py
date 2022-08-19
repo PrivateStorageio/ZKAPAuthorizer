@@ -16,19 +16,15 @@ from collections.abc import Awaitable
 from enum import Enum, auto
 from functools import partial
 from io import BytesIO
-from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence, Any
+from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define, field
-from tahoe_capabilities import (
-    DirectoryReadCapability,
-    danger_real_capability_string,
-    readable_from_string,
-)
+from tahoe_capabilities import DirectoryReadCapability, danger_real_capability_string
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
-from .tahoe import DataProvider, ITahoeClient, download_child, FileNode
+from .tahoe import DataProvider, FileNode, ITahoeClient, download_child
 
 
 class SnapshotMissing(Exception):

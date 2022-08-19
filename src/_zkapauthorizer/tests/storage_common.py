@@ -185,7 +185,7 @@ def privacypass_passes(
     return limited_get_passes
 
 
-def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]) -> _PassFactory:
+def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]) -> "_PassFactory":
     """
     Get a new factory for passes.
 

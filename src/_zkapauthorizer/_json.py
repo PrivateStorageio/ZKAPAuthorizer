@@ -13,9 +13,9 @@
 # limitations under the License.
 
 from json import dumps as _dumps
-from typing import Any
-from typing import cast
 from json import loads as _loads
+from typing import Any, cast
+
 from ._types import JSON
 
 

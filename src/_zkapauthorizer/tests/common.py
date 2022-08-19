@@ -18,26 +18,26 @@ itself.
 """
 
 from __future__ import annotations
-from twisted.internet.task import Clock
-from ..foolscap import ShareStat
-from twisted.internet.defer import succeed
-from datetime import timedelta
 
+from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, TypeVar, Union, Generic, Optional, Type
-from typing_extensions import ParamSpec, Concatenate
-from typing import TypeAlias
+from typing import Awaitable, Callable, Generic, Optional, TypeAlias, TypeVar, Union
 
 from attrs import Factory, define, field
-from ..eliot import log_call
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, succeed
+from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
-from zope.interface import Interface, classImplements, directlyProvides, providedBy
+from typing_extensions import Concatenate, ParamSpec
+from zope.interface import Interface, directlyProvides, providedBy
 from zope.interface.interface import InterfaceClass
+
 from ..config import Config
+from ..eliot import log_call
+from ..foolscap import ShareStat
 
 GetConfig: TypeAlias = Callable[[str, str], Config]
+
 
 def skipIf(condition, reason):
     """
@@ -237,7 +237,9 @@ def proxyForObject(
 
     ifaces = list(providedBy(o))
     if len(ifaces) != 1:
-        raise ValueError(f"Cannot determine proxy interface for {o!r} from among {ifaces!r}")
+        raise ValueError(
+            f"Cannot determine proxy interface for {o!r} from among {ifaces!r}"
+        )
 
     [iface] = ifaces
 
@@ -316,6 +318,7 @@ def from_awaitable(a: Awaitable[_A]) -> Deferred[_A]:
         return await a
 
     return Deferred.fromCoroutine(adapt())
+
 
 @define
 class DummyStorageServer(object):

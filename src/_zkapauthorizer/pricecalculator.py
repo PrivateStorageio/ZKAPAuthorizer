@@ -29,7 +29,6 @@ calculator).
 
 from typing import Iterable
 
-import attr
 from attrs import frozen
 
 from .storage_common import required_passes, share_size_for_data

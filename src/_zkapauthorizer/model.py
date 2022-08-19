@@ -22,12 +22,22 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from functools import wraps
-from ._json import loads
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, List, Optional, TypeVar, Protocol, Union, Literal, cast, NoReturn, TYPE_CHECKING
-from typing_extensions import TypeAlias, ParamSpec, Concatenate
+from typing import (
+    TYPE_CHECKING,
+    Awaitable,
+    Callable,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Protocol,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import attr
 from aniso8601 import parse_datetime
@@ -35,10 +45,11 @@ from attrs import define, field, frozen
 from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from typing_extensions import Concatenate, ParamSpec, TypeAlias
 from zope.interface import Interface, implementer
 
-from ._json import dumps_utf8
-from ._types import GetTime, JSON
+from ._json import dumps_utf8, loads
+from ._types import JSON, GetTime
 from .replicate import (
     _ReplicationCapableConnection,
     _ReplicationCapableCursor,
@@ -48,19 +59,16 @@ from .schema import get_schema_upgrades, get_schema_version, run_schema_upgrades
 from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
 from .validators import (
-    base64_bytes,
     aware_datetime_validator,
-    greater_than,
-    has_length,
-    positive_integer,
-    non_negative_integer,
+    base64_bytes,
     is_aware_datetime,
-    is_base64_encoded,
+    non_negative_integer,
+    positive_integer,
     returns_aware_datetime_validator,
 )
 
 if TYPE_CHECKING:
-    from .sql import Parameters # type: ignore[attr-defined]
+    from .sql import Parameters  # type: ignore[attr-defined]
 
 _S = TypeVar("_S", bound="ConnectionHaver")
 _T = TypeVar("_T")
@@ -71,6 +79,7 @@ class JSONAble(Protocol):
     """
     An object which can marshal itself to JSON-compatible types.
     """
+
     def to_json_v1(self) -> JSON:
         ...
 
@@ -113,6 +122,7 @@ class StoreOpenError(Exception):
     """
     There was a problem opening the underlying data store.
     """
+
     reason: Exception
 
 
@@ -206,7 +216,7 @@ class ConnectionHaver:
 
 
 def with_cursor_async(
-        f: Callable[Concatenate[_S, _ReplicationCapableCursor, _P], Awaitable[_T]],
+    f: Callable[Concatenate[_S, _ReplicationCapableCursor, _P], Awaitable[_T]],
 ) -> Callable[Concatenate[_S, _P], Awaitable[_T]]:
     """
     Like ``with_cursor`` but support decorating async functions instead.
@@ -229,7 +239,7 @@ def with_cursor_async(
 
 
 def with_cursor(
-        f: Callable[Concatenate[_S, _ReplicationCapableCursor,_P], _T],
+    f: Callable[Concatenate[_S, _ReplicationCapableCursor, _P], _T],
 ) -> Callable[Concatenate[_S, _P], _T]:
     """
     Decorate a function so it is automatically passed a cursor with an active
@@ -276,7 +286,7 @@ def path_to_memory_uri(path: FilePath) -> str:
             scheme="file",
             # segmentsFrom(FilePath("/")) is tempting but on Windows "/" is
             # not necessarily the root for every path.
-            path=path.asTextMode().path.split(os.sep), # type: ignore[no-untyped-call]
+            path=path.asTextMode().path.split(os.sep),  # type: ignore[no-untyped-call]
         )
         .add("mode", "memory")
         # The shared cache mode is required for two connections to the same
@@ -286,14 +296,20 @@ def path_to_memory_uri(path: FilePath) -> str:
         .to_text()
     )
 
+
 # def (database: Union[builtins.str, builtins.bytes, os.PathLike[builtins.str], os.PathLike[builtins.bytes]], timeout: builtins.float =, detect_types: builtins.int =, isolation_level: Union[builtins.str, None] =, check_same_thread: builtins.bool =, factory: Union[Type[sqlite3.dbapi2.Connection], None] =, cached_statements: builtins.int =, uri: builtins.bool =) -> sqlite3.dbapi2.Connection
-def memory_connect(path: str, isolation_level: Optional[str] = None) -> _SQLite3Connection:
+def memory_connect(
+    path: str, isolation_level: Optional[str] = None
+) -> _SQLite3Connection:
     """
     Always connect to an in-memory SQLite3 database.
     """
-    pseudo_path: FilePath = FilePath(path) # type: ignore[no-untyped-call]
-    conn = _connect(path_to_memory_uri(pseudo_path), isolation_level=isolation_level, uri=True)
+    pseudo_path: FilePath = FilePath(path)  # type: ignore[no-untyped-call]
+    conn = _connect(
+        path_to_memory_uri(pseudo_path), isolation_level=isolation_level, uri=True
+    )
     return conn
+
 
 # The largest integer SQLite3 can represent in an integer column.  Larger than
 # this an the representation loses precision as a floating point.
@@ -353,7 +369,9 @@ class VoucherStore(ConnectionHaver):
         return snapshot(self._connection)
 
     @with_cursor_async
-    async def call_if_empty(self, cursor: Cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
+    async def call_if_empty(
+        self, cursor: Cursor, f: Callable[[Cursor], Awaitable[_T]]
+    ) -> _T:
         """
         Transactionally determine that the database is empty and call the given
         function if it is or raise ``NotEmpty`` if it is not.
@@ -602,7 +620,9 @@ class VoucherStore(ConnectionHaver):
         )
         self._delete_corresponding_tokens(cursor, voucher_text, new_counter - 1)
 
-    def _delete_corresponding_tokens(self, cursor: Cursor, voucher: str, counter: int) -> None:
+    def _delete_corresponding_tokens(
+        self, cursor: Cursor, voucher: str, counter: int
+    ) -> None:
         """
         Delete rows from the [tokens] table corresponding to the given redemption
         group.
@@ -615,7 +635,9 @@ class VoucherStore(ConnectionHaver):
         )
 
     @with_cursor
-    def mark_voucher_double_spent(self, cursor: _ReplicationCapableCursor, /, voucher: bytes) -> None:
+    def mark_voucher_double_spent(
+        self, cursor: _ReplicationCapableCursor, /, voucher: bytes
+    ) -> None:
         """
         Mark a voucher as having failed redemption because it has already been
         spent.
@@ -649,7 +671,9 @@ class VoucherStore(ConnectionHaver):
                 )
 
     @with_cursor
-    def get_unblinded_tokens(self, cursor: _ReplicationCapableCursor, /, count: int) -> List[UnblindedToken]:
+    def get_unblinded_tokens(
+        self, cursor: _ReplicationCapableCursor, /, count: int
+    ) -> List[UnblindedToken]:
         """
         Get some unblinded tokens.
 
@@ -736,7 +760,10 @@ class VoucherStore(ConnectionHaver):
 
     @with_cursor
     def discard_unblinded_tokens(
-            self, cursor: _ReplicationCapableCursor, /, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Get rid of some unblinded tokens.  The tokens will be completely removed
@@ -778,7 +805,11 @@ class VoucherStore(ConnectionHaver):
 
     @with_cursor
     def invalidate_unblinded_tokens(
-            self, cursor: _ReplicationCapableCursor, /, reason: str, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        reason: str,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Mark some unblinded tokens as invalid and unusable.  Some record of the
@@ -817,7 +848,10 @@ class VoucherStore(ConnectionHaver):
 
     @with_cursor
     def reset_unblinded_tokens(
-            self, cursor: _ReplicationCapableCursor, /, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Make some unblinded tokens available to be retrieved from the store again.
@@ -859,7 +893,7 @@ class VoucherStore(ConnectionHaver):
 
     @with_cursor
     def get_latest_lease_maintenance_activity(
-            self, cursor: _ReplicationCapableCursor, /
+        self, cursor: _ReplicationCapableCursor, /
     ) -> Optional[LeaseMaintenanceActivity]:
         """
         Get a description of the most recently completed lease maintenance
@@ -1169,6 +1203,7 @@ class Error(object):
             "details": self.details,
         }
 
+
 VoucherState: TypeAlias = Union[
     Pending,
     Redeeming,
@@ -1177,6 +1212,7 @@ VoucherState: TypeAlias = Union[
     Unpaid,
     Error,
 ]
+
 
 @frozen
 class Voucher(object):

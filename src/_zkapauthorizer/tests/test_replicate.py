@@ -7,21 +7,22 @@ from functools import partial
 from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
-from typing import Callable, Optional, IO
+from typing import IO, Callable, Optional
 
 from attrs import frozen
 from eliot import start_action
+from fixtures import TempDir
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import readable_from_string, ReadCapability
+from tahoe_capabilities import ReadCapability
 from testtools import TestCase
 from testtools.matchers import (
-    Always,
     AfterPreprocessing,
-    IsInstance,
+    Always,
     Contains,
     Equals,
     HasLength,
+    IsInstance,
     MatchesAll,
     MatchesDict,
     MatchesStructure,
@@ -33,9 +34,10 @@ from testtools.matchers._higherorder import MismatchesAll
 from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
-from fixtures import TempDir
-from ..eliot import log_call
+
+from .._types import CapStr
 from ..config import REPLICA_RWCAP_BASENAME
+from ..eliot import log_call
 from ..model import RandomToken, VoucherStore, aware_now
 from ..replicate import (
     EventStream,
@@ -49,8 +51,7 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from .._types import CapStr
-from ..tahoe import DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid, FileNode
+from ..tahoe import DataProvider, DirectoryEntry, FileNode, ITahoeClient, MemoryGrid
 from .common import delayedProxy, from_awaitable
 from .fixtures import TemporaryVoucherStore
 from .matchers import Matcher, returns
@@ -361,7 +362,9 @@ def repeat_until(condition: Callable[[], bool], action: Callable[[], object]) ->
             break
 
 
-def is_event_stream(grid: MemoryGrid, **kwargs: Matcher[object]) -> Matcher[tuple[str, dict[str, object]]]:
+def is_event_stream(
+    grid: MemoryGrid, **kwargs: Matcher[object]
+) -> Matcher[tuple[str, dict[str, object]]]:
     """
     Match a Tahoe-LAFS directory entry representing a file which can be
     retrieved from the given grid and which contains an ``EventStream`` with a

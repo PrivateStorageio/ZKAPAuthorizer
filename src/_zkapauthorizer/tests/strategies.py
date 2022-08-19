@@ -16,16 +16,15 @@
 Hypothesis strategies for property testing.
 """
 
-from typing import Any, TypedDict, cast, Optional
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import Any, Optional, TypedDict, cast
 from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
-from twisted.python.filepath import FilePath
 from hypothesis.strategies import SearchStrategy, binary, builds, characters
 from hypothesis.strategies import datetimes as naive_datetimes
 from hypothesis.strategies import (
@@ -45,10 +44,10 @@ from hypothesis.strategies import (
 )
 from twisted.internet.defer import succeed
 from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
-from ..validators import positive_integer, non_negative_integer
 from .. import NAME
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
@@ -74,15 +73,20 @@ from ..sql import (
     Table,
     Update,
 )
+from ..validators import non_negative_integer, positive_integer
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
 
-def aware_datetimes(allow_imaginary: bool = True, **kwargs: datetime) -> SearchStrategy[datetime]:
+def aware_datetimes(
+    allow_imaginary: bool = True, **kwargs: datetime
+) -> SearchStrategy[datetime]:
     """
     Build timezone-aware (UTC) datetime instances.
     """
-    return naive_datetimes(timezones=just(timezone.utc), allow_imaginary=allow_imaginary, **kwargs)
+    return naive_datetimes(
+        timezones=just(timezone.utc), allow_imaginary=allow_imaginary, **kwargs
+    )
 
 
 def posix_safe_datetimes() -> SearchStrategy[datetime]:
@@ -117,7 +121,7 @@ def posix_timestamps() -> SearchStrategy[float]:
     )
 
 
-def clocks(now: SearchStrategy[float]=posix_timestamps()) -> SearchStrategy[Clock]:
+def clocks(now: SearchStrategy[float] = posix_timestamps()) -> SearchStrategy[Clock]:
     """
     Build ``twisted.internet.task.Clock`` instances set to a time built by
     ``now``.
@@ -168,7 +172,11 @@ def encoding_parameters() -> SearchStrategy[tuple[int, int, int]]:
 
 EncodingParameters = tuple[Optional[int], Optional[int], Optional[int]]
 
-def tahoe_config_texts(storage_client_plugins: dict[str, SearchStrategy[object]], shares: SearchStrategy[EncodingParameters]) -> SearchStrategy[str]:
+
+def tahoe_config_texts(
+    storage_client_plugins: dict[str, SearchStrategy[object]],
+    shares: SearchStrategy[EncodingParameters],
+) -> SearchStrategy[str]:
     """
     Build the text of complete Tahoe-LAFS configurations for a node.
 
@@ -181,7 +189,9 @@ def tahoe_config_texts(storage_client_plugins: dict[str, SearchStrategy[object]]
         default).
     """
 
-    def merge_shares(shares: tuple[int, int, int], the_rest: dict[str, object]) -> dict[str, object]:
+    def merge_shares(
+        shares: tuple[int, int, int], the_rest: dict[str, object]
+    ) -> dict[str, object]:
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
                 the_rest["shares." + k] = f"{v}"
@@ -222,7 +232,10 @@ def tahoe_config_texts(storage_client_plugins: dict[str, SearchStrategy[object]]
     )
 
 
-def minimal_tahoe_configs(storage_client_plugins: Optional[dict[str, SearchStrategy[object]]]=None, shares: SearchStrategy[EncodingParameters]=just((None, None, None))) -> SearchStrategy[str]:
+def minimal_tahoe_configs(
+    storage_client_plugins: Optional[dict[str, SearchStrategy[object]]] = None,
+    shares: SearchStrategy[EncodingParameters] = just((None, None, None)),
+) -> SearchStrategy[str]:
     """
     Build complete Tahoe-LAFS configurations for a node.
 
@@ -279,7 +292,16 @@ def dummy_ristretto_keys() -> SearchStrategy[str]:
     )
 
 
-ServerConfig = TypedDict("ServerConfig", {"pass-value": int, "ristretto-issuer-root-url": str, "ristretto-signing-key-path": str}, total=False)
+ServerConfig = TypedDict(
+    "ServerConfig",
+    {
+        "pass-value": int,
+        "ristretto-issuer-root-url": str,
+        "ristretto-signing-key-path": str,
+    },
+    total=False,
+)
+
 
 def server_configurations(signing_key_path: FilePath) -> SearchStrategy[ServerConfig]:
     """
@@ -288,6 +310,7 @@ def server_configurations(signing_key_path: FilePath) -> SearchStrategy[ServerCo
     :param signing_key_path: A value to insert for the
         **ristretto-signing-key-path** item.
     """
+
     def add_more(config: dict[Any, Any]) -> ServerConfig:
         config.update(
             {
@@ -1150,7 +1173,9 @@ class ExistingState(object):
     vouchers: list[_VoucherInsert] = attr.ib()
 
 
-def existing_states(min_vouchers: int = 0, max_vouchers: int = 4) -> SearchStrategy[ExistingState]:
+def existing_states(
+    min_vouchers: int = 0, max_vouchers: int = 4
+) -> SearchStrategy[ExistingState]:
     """
     Build possible existing states of a ``VoucherStore``.
 
@@ -1259,7 +1284,9 @@ def tables() -> SearchStrategy[Table]:
     )
 
 
-def sql_schemas(dict_kwargs: Optional[dict[Any, Any]]=None) -> SearchStrategy[dict[str, Table]]:
+def sql_schemas(
+    dict_kwargs: Optional[dict[Any, Any]] = None
+) -> SearchStrategy[dict[str, Table]]:
     """
     Build objects describing multiple tables in a SQLite3 database.
     """

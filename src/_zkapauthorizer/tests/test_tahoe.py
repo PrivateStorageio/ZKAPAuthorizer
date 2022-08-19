@@ -15,24 +15,16 @@ from pyutil.mathutil import div_ceil
 from tahoe_capabilities import readable_from_string, writeable_directory_from_string
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import (
-    AfterPreprocessing,
-    ContainsDict,
-    Equals,
-    Is,
-    IsInstance,
-    Not,
-)
+from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
 from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
 from twisted.python.filepath import FilePath
 
-from .common import from_awaitable
-from ..storage_common import required_passes
 from .._types import CapStr
+from ..storage_common import required_passes
 from ..tahoe import (
-    FileNode,
     DirectoryNode,
+    FileNode,
     ITahoeClient,
     MemoryGrid,
     NotADirectoryError,
@@ -46,6 +38,7 @@ from ..tahoe import (
     download_child,
     required_passes_for_data,
 )
+from .common import from_awaitable
 from .fixtures import Treq
 from .resources import client_manager
 from .strategies import encoding_parameters, minimal_tahoe_configs
@@ -77,7 +70,7 @@ class IntegrationMixin:
     resources = [("client", client_manager)]
 
     def setUp(self: TestCase) -> None:
-        super().setUp() # type: ignore[misc]
+        super().setUp()  # type: ignore[misc]
         setUpResources(self, self.resources, None)
         self.addCleanup(lambda: tearDownResources(self, self.resources, None))
 
@@ -98,7 +91,7 @@ class MemoryMixin:
     """
 
     def setUp(self) -> None:
-        super().setUp() # type: ignore[misc]
+        super().setUp()  # type: ignore[misc]
         self.grid = MemoryGrid()
 
     def get_client(self):
@@ -220,7 +213,9 @@ class DownloadChildTests(MemoryMixin, TestCase):
         except NotADirectoryError:
             pass
         else:
-            self.fail(f"Expected NotADirectoryError, got return value instead")  # pragma: nocover
+            self.fail(
+                "Expected NotADirectoryError, got return value instead"
+            )  # pragma: nocover
 
 
 class UploadDownloadIntegrationTests(
@@ -292,16 +287,22 @@ class DirectoryTestsMixin:
             details = children[name]
             self.assertThat(
                 details,
-                Equals(FileNode(
-                    size=len(file_content(name)),
-                    ro_uri=readable_from_string(expected_entry_caps[name]),
-                )),
+                Equals(
+                    FileNode(
+                        size=len(file_content(name)),
+                        ro_uri=readable_from_string(expected_entry_caps[name]),
+                    )
+                ),
             )
 
         details = children["directory"]
         self.assertThat(
             details,
-            Equals(DirectoryNode(ro_uri=writeable_directory_from_string(inner_dir_cap).reader)),
+            Equals(
+                DirectoryNode(
+                    ro_uri=writeable_directory_from_string(inner_dir_cap).reader
+                )
+            ),
         )
 
     @async_test

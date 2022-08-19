@@ -21,6 +21,7 @@ from typing import Iterable, TypeVar
 _K = TypeVar("_K")
 _V = TypeVar("_V")
 
+
 def _merge_dictionaries(dictionaries: Iterable[dict[_K, _V]]) -> dict[_K, _V]:
     """
     Collapse a sequence of dictionaries into one, with collisions resolved by
@@ -47,7 +48,9 @@ def _tahoe_config_quote(text: str) -> str:
     return text.replace("%", "%%")
 
 
-def config_string_from_sections(divided_sections: Iterable[dict[str, dict[str, str]]]) -> str:
+def config_string_from_sections(
+    divided_sections: Iterable[dict[str, dict[str, str]]]
+) -> str:
     """
     Get the .ini-syntax unicode string representing the given configuration
     values.

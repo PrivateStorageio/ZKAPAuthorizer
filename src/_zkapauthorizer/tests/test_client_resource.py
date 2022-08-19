@@ -22,9 +22,9 @@ from io import BytesIO
 from typing import Container, Optional
 from urllib.parse import quote
 
-from attrs import frozen, Factory
 from allmydata.client import config_from_string
 from aniso8601 import parse_datetime
+from attrs import Factory, frozen
 from autobahn.twisted.testing import (
     MemoryReactorClockResolver,
     create_memory_agent,
@@ -76,9 +76,9 @@ from testtools.matchers import (
     MatchesDict,
     MatchesListwise,
     MatchesStructure,
+    Mismatch,
     Not,
     StartsWith,
-    Mismatch,
 )
 from testtools.twistedsupport import (
     AsynchronousDeferredRunTest,
@@ -146,12 +146,11 @@ from ..storage_common import (
     get_configured_pass_value,
     required_passes,
 )
-from .common import flushErrors, GetConfig
+from .common import GetConfig, flushErrors
 from .fixtures import TemporaryVoucherStore
 from .matchers import between, matches_json, matches_response
 from .strategies import (
-        ExistingState,
-
+    ExistingState,
     api_auth_tokens,
     aware_datetimes,
     client_doublespendredeemer_configurations,
@@ -193,6 +192,7 @@ def uncooperator(started=True):
             reset=lambda dc: None,
             seconds=lambda: 0,
         )
+
     return Cooperator(
         # Don't stop consuming the iterator until it's done.
         terminationPredicateFactory=lambda: lambda: False,
@@ -589,7 +589,10 @@ class ReplicateTests(TestCase):
         directory_writes().map(lambda rw: rw.reader),
     )
     def test_already_configured(
-        self, get_config: GetConfig, api_auth_token: str, dir_ro: DirectoryReadCapability
+        self,
+        get_config: GetConfig,
+        api_auth_token: str,
+        dir_ro: DirectoryReadCapability,
     ) -> None:
         """
         If replication has already been configured then the endpoint returns a
@@ -672,7 +675,12 @@ class ReplicateTests(TestCase):
         api_auth_tokens(),
         directory_writes().map(lambda rw: rw.reader),
     )
-    def test_created(self, get_config: GetConfig, api_auth_token: str, cap_ro: DirectoryReadCapability) -> None:
+    def test_created(
+        self,
+        get_config: GetConfig,
+        api_auth_token: str,
+        cap_ro: DirectoryReadCapability,
+    ) -> None:
         """
         On successful replica configuration, the endpoint returns a response with
         a 201 status code and an application/json-encoded body containing a
@@ -748,7 +756,9 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config: GetConfig, api_auth_token: str) -> None:
+    def test_internal_server_error(
+        self, get_config: GetConfig, api_auth_token: str
+    ) -> None:
         """
         If recovery fails for some unrecognized reason we receive an error
         update over the WebSocket.
@@ -807,7 +817,9 @@ class RecoverTests(TestCase):
         api_auth_tokens(),
         existing_states(min_vouchers=1),
     )
-    def test_conflict(self, get_config: GetConfig, api_auth_token: str, existing_state: ExistingState) -> None:
+    def test_conflict(
+        self, get_config: GetConfig, api_auth_token: str, existing_state: ExistingState
+    ) -> None:
         """
         If there is state in the local database the websocket streams an
         error and disconnects.
@@ -940,12 +952,12 @@ class RecoverTests(TestCase):
             closes,
             MatchesListwise(
                 [
-                    MatchesDict({
-                        "code": Equals(4000),
-                        "reason": StartsWith(
-                            "Failed to parse recovery request: "
-                        ),
-                    }),
+                    MatchesDict(
+                        {
+                            "code": Equals(4000),
+                            "reason": StartsWith("Failed to parse recovery request: "),
+                        }
+                    ),
                 ]
             ),
         )
@@ -1100,10 +1112,12 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/lease-maintenance",
         )
         d.addCallback(readBody)
+
         def get_spending(body: bytes) -> dict[str, object]:
             b = loads(body)
             assert isinstance(b, dict)
             return b["spending"]
+
         d.addCallback(get_spending)
         self.assertThat(
             d,

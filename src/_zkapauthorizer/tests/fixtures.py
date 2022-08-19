@@ -36,7 +36,7 @@ from twisted.web.client import Agent, HTTPConnectionPool
 from .._plugin import open_store
 from ..config import CONFIG_DB_NAME, EmptyConfig, TahoeConfig
 from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import memory_connect, VoucherStore
+from ..model import VoucherStore, memory_connect
 from ..replicate import with_replication
 
 

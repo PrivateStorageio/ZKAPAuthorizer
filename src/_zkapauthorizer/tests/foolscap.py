@@ -17,11 +17,17 @@ Testing helpers related to Foolscap.
 """
 
 from typing import Awaitable, NoReturn
+
 import attr
 from attrs import define, field
-from foolscap.api import Any, Copyable, Referenceable, RemoteInterface # type: ignore[attr-defined]
-from foolscap.ipb import IRemoteReference
+from foolscap.api import (  # type: ignore[attr-defined]
+    Any,
+    Copyable,
+    Referenceable,
+    RemoteInterface,
+)
 from foolscap.copyable import CopyableSlicer, ICopyable
+from foolscap.ipb import IRemoteReference
 from twisted.internet.defer import fail, succeed
 from zope.interface import implementer
 
@@ -85,7 +91,7 @@ class LocalTracker(object):
         return "pb://abcd@127.0.0.1:12345/efgh"
 
 
-@implementer(IRemoteReference)   # type: ignore # zope.interface.implementer accepts interface, not ...
+@implementer(IRemoteReference)  # type: ignore # zope.interface.implementer accepts interface, not ...
 @define
 class LocalRemote(object):
     """
@@ -109,7 +115,9 @@ class LocalRemote(object):
             self._referenceable.getInterface(),
         )
 
-    def notifyOnDisconnect(self, callback: object, *args: object, **kwargs: object) -> NoReturn:
+    def notifyOnDisconnect(
+        self, callback: object, *args: object, **kwargs: object
+    ) -> NoReturn:
         raise NotImplementedError()
 
     def dontNotifyOnDisconnect(self, cookie: object) -> NoReturn:
@@ -118,7 +126,9 @@ class LocalRemote(object):
     def callRemoteOnly(self, name: str, *args: object, **kwargs: object) -> NoReturn:
         raise NotImplementedError()
 
-    def callRemote(self, methname: str, *args: object, **kwargs: object) -> Awaitable[object]:
+    def callRemote(
+        self, methname: str, *args: object, **kwargs: object
+    ) -> Awaitable[object]:
         """
         Call the given method on the wrapped object, passing the given arguments.
 

@@ -20,9 +20,8 @@ from datetime import datetime, timedelta
 from random import Random
 
 import attr
-from attrs import define
 from allmydata.client import SecretHolder
-from allmydata.interfaces import IServer, IStorageBroker, IDirectoryNode
+from allmydata.interfaces import IDirectoryNode, IServer, IStorageBroker
 from allmydata.util.hashutil import CRYPTO_VAL_SIZE
 from fixtures import TempDir
 from hypothesis import given, note
@@ -51,11 +50,9 @@ from testtools.twistedsupport import succeeded
 from twisted.application.service import IService
 from twisted.internet.defer import Deferred, maybeDeferred, succeed
 from twisted.internet.task import Clock
-from twisted.internet.interfaces import IReactorTime
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
-from .common import DummyStorageServer
 from ..config import empty_config
 from ..foolscap import ShareStat
 from ..lease_maintenance import (
@@ -69,6 +66,7 @@ from ..lease_maintenance import (
     renew_leases,
     visit_storage_indexes_from_root,
 )
+from .common import DummyStorageServer
 from .matchers import Provides, between, leases_current
 from .strategies import (
     clocks,
@@ -339,8 +337,10 @@ class LeaseMaintenanceServiceTests(TestCase):
         """
         When the service is stopped, the delayed call in the reactor is removed.
         """
+
         async def maintain_leases() -> None:
             pass
+
         service = lease_maintenance_service(
             maintain_leases,
             clock,

@@ -4,9 +4,9 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from io import BytesIO
 from itertools import count
-from sqlite3 import connect
-from typing import TypeVar, Callable
 from random import Random
+from sqlite3 import connect
+from typing import Callable, TypeVar
 
 import attrs
 import cbor2
@@ -81,9 +81,9 @@ from ..replicate import (
     snapshot,
     statements_to_snapshot,
 )
-from ..sql import Table, create_table, Statement
+from ..sql import Statement, Table, create_table
 from ..tahoe import ITahoeClient, MemoryGrid
-from .common import delayedProxy, from_awaitable, GetConfig
+from .common import GetConfig, delayedProxy, from_awaitable
 from .matchers import equals_database, raises
 from .strategies import (
     deletes,
@@ -187,7 +187,12 @@ class SnapshotMachine(RuleBasedStateMachine):
         random=randoms(),
         data=data(),
     )
-    def modify_rows(self, change_types: list[Callable[[str, Table], SearchStrategy[Statement]]], random: Random, data: DataObject) -> None:
+    def modify_rows(
+        self,
+        change_types: list[Callable[[str, Table], SearchStrategy[Statement]]],
+        random: Random,
+        data: DataObject,
+    ) -> None:
         """
         Change some rows in some tables.
         """

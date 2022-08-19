@@ -17,16 +17,15 @@ Functionality shared between the storage client and server.
 """
 
 from base64 import b64encode
-from typing import Callable, Union, ValuesView, Dict, List, Tuple, TypedDict, Set, cast
+from typing import Callable, Dict, List, Set, Tuple, TypedDict, Union, ValuesView, cast
 
-from attrs import define, field, validators
+from attrs import define
 from pyutil.mathutil import div_ceil
 
 from . import NAME
-from .eliot import MUTABLE_PASSES_REQUIRED
-from .validators import greater_than
 from .config import Config
-from ._types import Attribute
+from .eliot import MUTABLE_PASSES_REQUIRED
+
 
 @define(auto_exc=False, str=True)
 class MorePassesRequired(Exception):
@@ -166,6 +165,7 @@ def required_passes(
     # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
     return result
 
+
 Secrets = tuple[bytes, bytes, bytes]
 TestVector = List[Tuple[int, int, bytes, bytes]]
 DataVector = List[Tuple[int, bytes]]
@@ -173,6 +173,7 @@ TestWriteVectors = Tuple[TestVector, DataVector, Union[None, int]]
 ReadVector = list[tuple[int, int]]
 
 _div_ceil = cast(Callable[[int, int], int], div_ceil)
+
 
 def share_size_for_data(shares_needed: int, datasize: int) -> int:
     """
@@ -237,7 +238,9 @@ def get_allocated_size(tw_vectors: Dict[int, TestWriteVectors]) -> int:
     )
 
 
-def get_implied_data_length(data_vector: DataVector, new_length: Union[None, int]) -> int:
+def get_implied_data_length(
+    data_vector: DataVector, new_length: Union[None, int]
+) -> int:
     """
     :param data_vector: See ``allmydata.interfaces.DataVector``.
 
@@ -256,7 +259,11 @@ def get_implied_data_length(data_vector: DataVector, new_length: Union[None, int
     return min(new_length, data_based_size)
 
 
-def get_required_new_passes_for_mutable_write(pass_value: int, current_sizes: Dict[int, int], tw_vectors: Dict[int, TestWriteVectors]) -> int:
+def get_required_new_passes_for_mutable_write(
+    pass_value: int,
+    current_sizes: Dict[int, int],
+    tw_vectors: Dict[int, TestWriteVectors],
+) -> int:
     """
     Get the number of new passes required to authorize a given write to a
     mutable.
@@ -305,7 +312,9 @@ class TestWriteVectorSummary(TypedDict):
     new_length: Union[None, int]
 
 
-def summarize(tw_vectors: Dict[int, TestWriteVectors]) -> Dict[int, TestWriteVectorSummary]:
+def summarize(
+    tw_vectors: Dict[int, TestWriteVectors]
+) -> Dict[int, TestWriteVectorSummary]:
     return {
         sharenum: {
             "testv": list(

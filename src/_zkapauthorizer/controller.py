@@ -17,36 +17,32 @@ This module implements controllers (in the MVC sense) for the web interface
 for the client side of the storage plugin.
 """
 
-from typing import Optional, Any, TypeVar, Awaitable, Callable, Generator, Union, Literal, cast, Sequence
-from typing_extensions import TypeAlias
 from base64 import b64decode, b64encode
-from datetime import timedelta
-from functools import partial
+from datetime import datetime, timedelta
 from hashlib import sha256
 from json import loads
-from operator import delitem, setitem
-from datetime import datetime
+from typing import Any, Awaitable, Callable, Optional, Sequence, TypeVar
 
 import attr
 import challenge_bypass_ristretto
-from attrs import define, Factory, field, frozen
+from attrs import Factory, define, field, frozen
 from treq import content
 from treq.client import HTTPClient
-from twisted.internet.defer import Deferred, fail, inlineCallbacks, returnValue, succeed
+from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import LoopingCall
 from twisted.logger import Logger
-from twisted.python.reflect import namedAny
 from twisted.python.failure import Failure
 from twisted.python.url import URL
 from twisted.web.client import Agent
+from typing_extensions import TypeAlias
 from zope.interface import Interface, implementer
 
-from .config import Config
 from ._base64 import urlsafe_b64decode
 from ._json import dumps_utf8
 from ._stack import less_limited_stack
 from ._types import JSON
+from .config import Config
 from .model import Error as model_Error
 from .model import Pass
 from .model import Pending as model_Pending
@@ -124,7 +120,9 @@ class IRedeemer(Interface):
     An ``IRedeemer`` can exchange a voucher for one or more passes.
     """
 
-    def random_tokens_for_voucher(voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         """
         Generate a number of random tokens to use in the redemption process for
         the given voucher.
@@ -143,7 +141,9 @@ class IRedeemer(Interface):
             anonymity property of the system.
         """
 
-    async def redeemWithCounter(voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         """
         Redeem a voucher for unblinded tokens which can be used to construct
         passes.
@@ -171,7 +171,9 @@ class IRedeemer(Interface):
         :raise: An exception representing any retryable redemption error.
         """
 
-    def tokens_to_passes(message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         """
         Construct passes from unblinded tokens which are suitable for use with a
         given message.
@@ -203,13 +205,19 @@ class IndexedRedeemer(object):
 
     redeemers: Sequence[IRedeemer]
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         raise NotImplementedError("IndexedRedeemer cannot create passes")
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
 
         redeemer = self.redeemers[counter]
         self._log.info(
@@ -238,17 +246,29 @@ class NonRedeemer(object):
     _redeeming: Deferred[RedemptionResult] = Factory(Deferred)
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "NonRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "NonRedeemer":
         return cls()
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         # Don't try to redeem them.
         return await self._redeeming
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         raise Exception(
             "Cannot be called because no unblinded tokens are ever returned."
         )
@@ -265,20 +285,32 @@ class ErrorRedeemer(object):
     details: str = field(validator=attr.validators.instance_of(str))
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "ErrorRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "ErrorRedeemer":
         details = node_config.get_config(
             section=section_name,
             option="details",
         )
         return cls(details)
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         raise Exception(self.details)
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         raise Exception(
             "Cannot be called because no unblinded tokens are ever returned."
         )
@@ -293,16 +325,28 @@ class DoubleSpendRedeemer(object):
     """
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "DoubleSpendRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "DoubleSpendRedeemer":
         return cls()
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         raise NotImplementedError("DoubleSpendRedeemer cannot create passes")
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         raise AlreadySpent(voucher)
 
 
@@ -315,16 +359,28 @@ class UnpaidRedeemer(object):
     """
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "UnpaidRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "UnpaidRedeemer":
         return cls()
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         raise NotImplementedError("UnpaidRedeemer cannot create passes")
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         raise Unpaid(voucher)
 
 
@@ -339,18 +395,26 @@ class RecordingRedeemer(object):
     original: IRedeemer
     redemptions: list[tuple[Voucher, int, list[RandomToken]]] = attr.Factory(list)
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         return self.original.tokens_to_passes(message, unblinded_tokens)
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         self.redemptions.append((voucher, counter, random_tokens))
         return await self.original.redeemWithCounter(voucher, counter, random_tokens)
 
 
-def dummy_random_tokens(voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+def dummy_random_tokens(
+    voucher: Voucher, counter: int, count: int
+) -> list[RandomToken]:
     v = urlsafe_b64decode(voucher.number)
 
     def dummy_random_token(n: int) -> RandomToken:
@@ -385,7 +449,13 @@ class DummyRedeemer(object):
     )
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "DummyRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "DummyRedeemer":
         return cls(
             node_config.get_config(
                 section=section_name,
@@ -393,14 +463,18 @@ class DummyRedeemer(object):
             ),
         )
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         """
         Generate some number of random tokens to submit along with a voucher for
         redemption.
         """
         return dummy_random_tokens(voucher, counter, count)
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         """
         :return: An already-fired ``Deferred`` that has a list of
           ``UnblindedToken`` instances wrapping meaningless values.
@@ -411,6 +485,7 @@ class DummyRedeemer(object):
                     voucher,
                 ),
             )
+
         def dummy_unblinded_token(random_token: RandomToken) -> UnblindedToken:
             random_value = b64decode(random_token.token_value)
             unblinded_value = random_value + b"x" * (96 - len(random_value))
@@ -421,7 +496,9 @@ class DummyRedeemer(object):
             self._public_key,
         )
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         def token_to_pass(token: UnblindedToken) -> Pass:
             # Generate distinct strings based on the unblinded token which we
             # can include in the resulting Pass.  This ensures the pass values
@@ -487,7 +564,13 @@ class RistrettoRedeemer(object):
     _api_root: URL = field(validator=attr.validators.instance_of(URL))
 
     @classmethod
-    def make(cls, section_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> "RistrettoRedeemer":
+    def make(
+        cls,
+        section_name: str,
+        node_config: Config,
+        announcement: StorageAnnouncement,
+        reactor: Any,
+    ) -> "RistrettoRedeemer":
         configured_issuer = node_config.get_config(
             section=section_name,
             option="ristretto-issuer-root-url",
@@ -510,11 +593,13 @@ class RistrettoRedeemer(object):
                 raise IssuerConfigurationMismatch(announced_issuer, configured_issuer)
 
         return cls(
-            HTTPClient(Agent(reactor)), # type: ignore[no-untyped-call]
+            HTTPClient(Agent(reactor)),  # type: ignore[no-untyped-call]
             URL.from_text(configured_issuer),
         )
 
-    def random_tokens_for_voucher(self, voucher: Voucher, counter: int, count: int) -> list[RandomToken]:
+    def random_tokens_for_voucher(
+        self, voucher: Voucher, counter: int, count: int
+    ) -> list[RandomToken]:
         return list(
             RandomToken(
                 challenge_bypass_ristretto.RandomToken.create().encode_base64(),
@@ -522,7 +607,9 @@ class RistrettoRedeemer(object):
             for n in range(count)
         )
 
-    async def redeemWithCounter(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> RedemptionResult:
+    async def redeemWithCounter(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> RedemptionResult:
         basic_random_tokens = list(
             challenge_bypass_ristretto.RandomToken.decode_base64(token.token_value)
             for token in random_tokens
@@ -601,7 +688,9 @@ class RistrettoRedeemer(object):
             marshaled_public_key,
         )
 
-    def tokens_to_passes(self, message: bytes, unblinded_tokens: list[UnblindedToken]) -> list[Pass]:
+    def tokens_to_passes(
+        self, message: bytes, unblinded_tokens: list[UnblindedToken]
+    ) -> list[Pass]:
         assert isinstance(message, bytes)
         assert isinstance(unblinded_tokens, list)
         assert all(isinstance(element, UnblindedToken) for element in unblinded_tokens)
@@ -818,7 +907,7 @@ class PaymentController(object):
             get_tokens,
         )
 
-    async def redeem(self, voucher: bytes, num_tokens: Optional[int]=None) -> None:
+    async def redeem(self, voucher: bytes, num_tokens: Optional[int] = None) -> None:
         """
         :param voucher: A voucher to redeem.
 
@@ -884,7 +973,9 @@ class PaymentController(object):
                 )
                 break
 
-    async def _perform_redeem(self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]) -> bool:
+    async def _perform_redeem(
+        self, voucher: Voucher, counter: int, random_tokens: list[RandomToken]
+    ) -> bool:
         """
         Use the redeemer to redeem the given voucher and random tokens.
 
@@ -910,16 +1001,18 @@ class PaymentController(object):
                 started=self.store.now(),
                 counter=voucher.state.counter,
             )
-            result = await self.redeemer.redeemWithCounter(voucher, counter, random_tokens)
+            result = await self.redeemer.redeemWithCounter(
+                voucher, counter, random_tokens
+            )
         except:
-            f = Failure() # type: ignore[no-untyped-call]
+            f = Failure()  # type: ignore[no-untyped-call]
             self._redeem_failure(voucher.number, f)
             return False
         else:
             try:
                 self._redeem_success(voucher.number, counter, result)
             except:
-                f = Failure() # type: ignore[no-untyped-call]
+                f = Failure()  # type: ignore[no-untyped-call]
                 self._final_redeem_error(voucher.number, f)
                 return False
             else:
@@ -927,7 +1020,9 @@ class PaymentController(object):
         finally:
             del self._active[voucher.number]
 
-    def _redeem_success(self, voucher: bytes, counter: int, result: RedemptionResult) -> None:
+    def _redeem_success(
+        self, voucher: bytes, counter: int, result: RedemptionResult
+    ) -> None:
         """
         Update the database state to reflect that a voucher was redeemed and to
         store the resulting unblinded tokens (which can be used to construct
@@ -946,13 +1041,13 @@ class PaymentController(object):
         )
 
     def _redeem_failure(self, voucher: bytes, reason: Failure) -> None:
-        if reason.check(AlreadySpent): # type: ignore[no-untyped-call]
+        if reason.check(AlreadySpent):  # type: ignore[no-untyped-call]
             self._log.error(
                 "Voucher {voucher} reported as already spent during redemption.",
                 voucher=voucher,
             )
             self.store.mark_voucher_double_spent(voucher)
-        elif reason.check(Unpaid): # type: ignore[no-untyped-call]
+        elif reason.check(Unpaid):  # type: ignore[no-untyped-call]
             self._log.error(
                 "Voucher {voucher} reported as not paid for during redemption.",
                 voucher=voucher,
@@ -1007,7 +1102,12 @@ class PaymentController(object):
         return voucher
 
 
-def get_redeemer(plugin_name: str, node_config: Config, announcement: StorageAnnouncement, reactor: Any) -> IRedeemer:
+def get_redeemer(
+    plugin_name: str,
+    node_config: Config,
+    announcement: StorageAnnouncement,
+    reactor: Any,
+) -> IRedeemer:
     section_name = "storageclient.plugins.{}".format(plugin_name)
     redeemer_kind = node_config.get_config(
         section=section_name,
@@ -1029,6 +1129,7 @@ _REDEEMERS: dict[str, Callable[[str, Config, StorageAnnouncement, Any], IRedeeme
 A = TypeVar("A")
 B = TypeVar("B")
 C = TypeVar("C")
+
 
 async def bracket(
     first: Callable[[], Optional[Awaitable[A]]],

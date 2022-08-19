@@ -2,13 +2,14 @@
 Testtools matchers related to SQL functionality.
 """
 
-from typing import Iterator, Union, Optional
+from typing import Iterator, Optional, Union
 
-from attrs import define, field
-from testtools.matchers import AfterPreprocessing, Annotate, Equals, Mismatch
+from attrs import define
+from testtools.matchers import AfterPreprocessing, Annotate, Equals
 from testtools.matchers import Matcher as _Matcher
+from testtools.matchers import Mismatch
 
-from ..sql import Connection, Statement, Insert, Table, escape_identifier
+from ..sql import Connection, Insert, Statement, Table, escape_identifier
 from ._float_matchers import matches_float_within_distance
 
 

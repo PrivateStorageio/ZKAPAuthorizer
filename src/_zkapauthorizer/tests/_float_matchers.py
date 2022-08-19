@@ -1,5 +1,5 @@
-from typing import Optional
 from math import isnan, nextafter
+from typing import Optional
 
 from attrs import define
 from testtools.matchers import Mismatch

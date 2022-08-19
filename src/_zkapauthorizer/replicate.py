@@ -66,10 +66,8 @@ from io import BytesIO
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import (
-    TYPE_CHECKING,
-    cast,
-    NoReturn,
     IO,
+    TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
@@ -77,15 +75,16 @@ from typing import (
     Generator,
     Iterable,
     Iterator,
+    NoReturn,
     Optional,
     Protocol,
     Sequence,
+    cast,
 )
 
 import cbor2
 from attrs import Attribute, Factory, define, field, frozen
 from compose import compose
-from .eliot import log_call
 from tahoe_capabilities import (
     DirectoryReadCapability,
     digested_capability_string,
@@ -99,11 +98,12 @@ from twisted.python.lockfile import FilesystemLock
 
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
+from .eliot import log_call
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import DataProvider, DirectoryEntry, ITahoeClient, FileNode
+from .tahoe import DataProvider, DirectoryEntry, FileNode, ITahoeClient
 
 if TYPE_CHECKING:
-    from .sql import Parameters # type: ignore[attr-defined]
+    from .sql import Parameters  # type: ignore[attr-defined]
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -188,7 +188,9 @@ class Change:
     important: bool
 
     @arguments.validator
-    def _validate_arguments(self, attribute: "Attribute[Sequence[SQLType]]", value: Sequence[SQLType]) -> None:
+    def _validate_arguments(
+        self, attribute: "Attribute[Sequence[SQLType]]", value: Sequence[SQLType]
+    ) -> None:
         """
         Require that the value has as elements only values are legal SQL values.
 
@@ -255,12 +257,7 @@ class EventStream:
             raise ValueError(
                 f"Unknown serialized event stream version {serial_version}"
             )
-        return cls(
-            changes=[
-                Change(*args)
-                for args in data["events"]
-            ]
-        )
+        return cls(changes=[Change(*args) for args in data["events"]])
 
 
 class AlreadySettingUp(Exception):
@@ -299,16 +296,16 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
 
     # Take an advisory lock on the configuration path to avoid concurrency
     # shennanigans.
-    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock") # type: ignore[no-untyped-call]
+    config_lock = FilesystemLock(config_path.asTextMode().path + ".lock")  # type: ignore[no-untyped-call]
 
-    if not config_lock.lock(): # type: ignore[no-untyped-call]
+    if not config_lock.lock():  # type: ignore[no-untyped-call]
         raise AlreadySettingUp()
     try:
 
         # Check to see if there is already configuration.
-        if config_path.exists(): # type: ignore[no-untyped-call]
+        if config_path.exists():  # type: ignore[no-untyped-call]
             rwcap_obj = writeable_directory_from_string(
-                config_path.getContent().decode("ascii") # type: ignore[no-untyped-call]
+                config_path.getContent().decode("ascii")  # type: ignore[no-untyped-call]
             )
             raise ReplicationAlreadySetup(digested_capability_string(rwcap_obj))
 
@@ -316,12 +313,12 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
         rw_cap = await client.make_directory()
 
         # Store the resulting write-cap in the node's private directory
-        config_path.setContent(rw_cap.encode("ascii")) # type: ignore[no-untyped-call]
+        config_path.setContent(rw_cap.encode("ascii"))  # type: ignore[no-untyped-call]
 
     finally:
         # On success and failure, release the lock since we're done with the
         # file for now.
-        config_lock.unlock() # type: ignore[no-untyped-call]
+        config_lock.unlock()  # type: ignore[no-untyped-call]
 
     # Return the corresponding read-cap.
     return writeable_directory_from_string(rw_cap).reader
@@ -333,7 +330,7 @@ def is_replication_setup(config: Config) -> bool:
         the Tahoe-LAFS node associated with the given configuration.
     """
     # Find the configuration path for this node's replica.
-    if FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists(): # type: ignore[no-untyped-call]
+    if FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)).exists():  # type: ignore[no-untyped-call]
         return True
     return False
 
@@ -343,8 +340,8 @@ def get_replica_rwcap(config: Config) -> CapStr:
     :return: a mutable directory capability for our replica.
     :raises: Exception if replication is not setup
     """
-    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME)) # type: ignore[no-untyped-call]
-    rwcap_bytes: bytes = rwcap_file.getContent() # type: ignore[no-untyped-call]
+    rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))  # type: ignore[no-untyped-call]
+    rwcap_bytes: bytes = rwcap_file.getContent()  # type: ignore[no-untyped-call]
     return rwcap_bytes.decode("ascii")
 
 
@@ -654,7 +651,10 @@ def get_tahoe_lafs_direntry_lister(
     async def lister() -> dict[str, DirectoryEntry]:
         entries = await client.list_directory(directory_mutable_cap)
         return {
-            name: DirectoryEntry("filenode" if isinstance(entry, FileNode) else "dirnode", getattr(entry, "size", 0))
+            name: DirectoryEntry(
+                "filenode" if isinstance(entry, FileNode) else "dirnode",
+                getattr(entry, "size", 0),
+            )
             for name, entry in entries.items()
         }
 
@@ -834,7 +834,7 @@ class _ReplicationService(Service):
         return self._connection._conn
 
     def startService(self) -> None:
-        super().startService() # type: ignore[no-untyped-call]
+        super().startService()  # type: ignore[no-untyped-call]
 
         # Register ourselves as a change observer (first! we don't want to
         # miss anything) and then put the database into replication mode so
@@ -1032,7 +1032,7 @@ class _ReplicationService(Service):
         """
         Cancel the replication operation and then wait for it to complete.
         """
-        super().stopService() # type: ignore[no-untyped-call]
+        super().stopService()  # type: ignore[no-untyped-call]
 
         replicating = self._replicating
         if replicating is None:

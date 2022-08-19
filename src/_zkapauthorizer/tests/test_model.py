@@ -17,17 +17,17 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
-from random import Random
 from datetime import datetime, timedelta
 from functools import partial
 from io import BytesIO
 from itertools import count
-from sqlite3 import Connection, Cursor, OperationalError, connect
-from typing import TypeVar, NoReturn, Callable
+from random import Random
+from sqlite3 import OperationalError, connect
+from typing import Callable, NoReturn, TypeVar
 
 import cbor2
+from fixtures import TempDir
 from hypothesis import assume, given, note
-from hypothesis.strategies import DataObject, SearchStrategy
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -36,6 +36,8 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
+    DataObject,
+    SearchStrategy,
     booleans,
     builds,
     data,
@@ -47,7 +49,6 @@ from hypothesis.strategies import (
     timedeltas,
     tuples,
 )
-from fixtures import TempDir
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -62,9 +63,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
 
-from ..sql import Statement, Table, AbstractCursor
 from ..model import (
-    RandomToken,
     ConnectionHaver,
     DoubleSpend,
     LeaseMaintenanceActivity,
@@ -72,6 +71,7 @@ from ..model import (
     NotEnoughTokens,
     Pass,
     Pending,
+    RandomToken,
     Redeemed,
     UnblindedToken,
     Voucher,
@@ -79,7 +79,6 @@ from ..model import (
     aware_now,
     memory_connect,
     with_cursor_async,
-    Pass,
 )
 from ..recover import (
     RecoveryStages,
@@ -97,7 +96,8 @@ from ..replicate import (
     prune_events_to,
     with_replication,
 )
-from .common import from_awaitable, GetConfig
+from ..sql import AbstractCursor, Statement, Table
+from .common import GetConfig, from_awaitable
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
@@ -143,7 +143,9 @@ class WithCursorAsyncTests(TestCase):
             pass
 
         class Database(ConnectionHaver):
-            _connection = with_replication(connect(":memory:"), enable_replication=False)
+            _connection = with_replication(
+                connect(":memory:"), enable_replication=False
+            )
 
             @with_cursor_async
             async def f(self, cursor: AbstractCursor) -> NoReturn:
@@ -170,7 +172,9 @@ class WithCursorAsyncTests(TestCase):
         """
 
         class Database(ConnectionHaver):
-            _connection = with_replication(connect(":memory:"), enable_replication=False)
+            _connection = with_replication(
+                connect(":memory:"), enable_replication=False
+            )
             expected = object()
 
             @with_cursor_async
@@ -290,7 +294,9 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         tokens=lists(random_tokens(), min_size=1, max_size=10, unique=True),
     )
-    def test_not_empty_if_any_vouchers(self, voucher: bytes, tokens: list[RandomToken]) -> None:
+    def test_not_empty_if_any_vouchers(
+        self, voucher: bytes, tokens: list[RandomToken]
+    ) -> None:
         """
         If there are any vouchers in the database a ``VoucherStore`` is using then
         it is not empty.
@@ -310,7 +316,9 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_spendable_tokens(self, voucher: bytes, num_passes: int) -> None:
+    def test_not_empty_if_any_spendable_tokens(
+        self, voucher: bytes, num_passes: int
+    ) -> None:
         """
         If there are spendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -326,7 +334,9 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_unspendable_tokens(self, voucher: bytes, num_passes: int) -> None:
+    def test_not_empty_if_any_unspendable_tokens(
+        self, voucher: bytes, num_passes: int
+    ) -> None:
         """
         If there are unspendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -363,7 +373,9 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
-    def test_get_missing(self, get_config: GetConfig, now: datetime, voucher: bytes) -> None:
+    def test_get_missing(
+        self, get_config: GetConfig, now: datetime, voucher: bytes
+    ) -> None:
         """
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
@@ -380,7 +392,13 @@ class VoucherStoreTests(TestCase):
         lists(random_tokens(), min_size=1, unique=True),
         aware_datetimes(),
     )
-    def test_add(self, get_config: GetConfig, voucher: bytes, tokens: list[RandomToken], now: datetime) -> None:
+    def test_add(
+        self,
+        get_config: GetConfig,
+        voucher: bytes,
+        tokens: list[RandomToken],
+        now: datetime,
+    ) -> None:
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
@@ -405,7 +423,12 @@ class VoucherStoreTests(TestCase):
         aware_datetimes(),
     )
     def test_add_with_distinct_counters(
-        self, get_config: GetConfig, voucher: bytes, counters: list[int], tokens: list[RandomToken], now: datetime
+        self,
+        get_config: GetConfig,
+        voucher: bytes,
+        counters: list[int],
+        tokens: list[RandomToken],
+        now: datetime,
     ) -> None:
         """
         ``VoucherStore.add`` adds new tokens to the store when passed the same
@@ -441,7 +464,13 @@ class VoucherStoreTests(TestCase):
         aware_datetimes(),
         lists(random_tokens(), min_size=1, unique=True),
     )
-    def test_add_idempotent(self, get_config: GetConfig, voucher: bytes, now: datetime, tokens: list[RandomToken]) -> None:
+    def test_add_idempotent(
+        self,
+        get_config: GetConfig,
+        voucher: bytes,
+        now: datetime,
+        tokens: list[RandomToken],
+    ) -> None:
         """
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
@@ -483,7 +512,13 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), lists(vouchers(), unique=True), data())
-    def test_list(self, get_config: GetConfig, now: datetime, vouchers: list[bytes], data: DataObject) -> None:
+    def test_list(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        vouchers: list[bytes],
+        data: DataObject,
+    ) -> None:
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
@@ -529,7 +564,9 @@ class VoucherStoreSnapshotTests(TestCase):
         integers(min_value=1, max_value=2**63 - 1),
         lists(random_tokens(), unique=True),
     )
-    def test_vouchers(self, now: datetime, voucher: bytes, expected: int, tokens: list[RandomToken]) -> None:
+    def test_vouchers(
+        self, now: datetime, voucher: bytes, expected: int, tokens: list[RandomToken]
+    ) -> None:
         """
         Vouchers are present in the snapshot.
         """
@@ -736,9 +773,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         """
         if self.num_vouchers_redeemed == 0:
             self.case.assertThat(
-                from_awaitable(
-                    self.store.call_if_empty(lambda cursor: succeed(True))
-                ),
+                from_awaitable(self.store.call_if_empty(lambda cursor: succeed(True))),
                 succeeded(Equals(True)),
             )
         else:
@@ -826,7 +861,12 @@ class LeaseMaintenanceTests(TestCase):
             ),
         ),
     )
-    def test_lease_maintenance_activity(self, get_config: GetConfig, now: datetime, activity: list[tuple[timedelta, list[tuple[int, int]], timedelta]]) -> None:
+    def test_lease_maintenance_activity(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        activity: list[tuple[timedelta, list[tuple[int, int]], timedelta]],
+    ) -> None:
         """
         ``VoucherStore.get_latest_lease_maintenance_activity`` returns a
         ``LeaseMaintenanceTests`` with fields reflecting the most recently
@@ -905,7 +945,13 @@ class EventStreamTests(TestCase):
         lists(sampled_from([inserts, deletes, updates]), min_size=1),
     )
     def test_event_stream_serialization(
-        self, get_config: GetConfig, now: datetime, ids: list[str], table: Table, data: DataObject, change_types: list[Callable[[str, Table], SearchStrategy[Statement]]]
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        ids: list[str],
+        table: Table,
+        data: DataObject,
+        change_types: list[Callable[[str, Table], SearchStrategy[Statement]]],
     ) -> None:
         """
         Various kinds of SQL statements can be serialized into and out of
@@ -971,7 +1017,13 @@ class EventStreamTests(TestCase):
         ),
         randoms(),
     )
-    def test_event_stream_prune(self, get_config: GetConfig, now: datetime, changes: list[Statement], random: Random) -> None:
+    def test_event_stream_prune(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        changes: list[Statement],
+        random: Random,
+    ) -> None:
         """
         After ``prune_events_to``, ``get_events`` only returns events events with
         a greater sequence number.
@@ -1016,7 +1068,9 @@ class VoucherTests(TestCase):
         )
 
 
-def paired_tokens(num_tokens: SearchStrategy[int]=integers(min_value=1, max_value=1000)) -> SearchStrategy[tuple[list[RandomToken], list[UnblindedToken]]]:
+def paired_tokens(
+    num_tokens: SearchStrategy[int] = integers(min_value=1, max_value=1000)
+) -> SearchStrategy[tuple[list[RandomToken], list[UnblindedToken]]]:
     """
     Build tuples of two lists of the same length, one of random tokens and one
     of unblinded tokens.
@@ -1055,7 +1109,13 @@ class UnblindedTokenStoreTests(TestCase):
         booleans(),
     )
     def test_unblinded_tokens_without_voucher(
-        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, unblinded_tokens: list[UnblindedToken], completed: bool
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        public_key: str,
+        unblinded_tokens: list[UnblindedToken],
+        completed: bool,
     ) -> None:
         """
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
@@ -1081,7 +1141,13 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_unblinded_tokens_round_trip(
-        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, completed: bool, tokens: tuple[list[RandomToken], list[UnblindedToken]]
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        public_key: str,
+        completed: bool,
+        tokens: tuple[list[RandomToken], list[UnblindedToken]],
     ) -> None:
         """
         Unblinded tokens that are added to the store can later be retrieved and counted.
@@ -1119,7 +1185,12 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_mark_vouchers_redeemed(
-        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, tokens: tuple[list[RandomToken], list[UnblindedToken]]
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        public_key: str,
+        tokens: tuple[list[RandomToken], list[UnblindedToken]],
     ) -> None:
         """
         The voucher for unblinded tokens that are added to the store is marked as
@@ -1153,7 +1224,11 @@ class UnblindedTokenStoreTests(TestCase):
         lists(random_tokens(), min_size=1, unique=True),
     )
     def test_mark_vouchers_double_spent(
-        self, get_config: GetConfig, now: datetime, voucher_value: bytes, random_tokens: list[RandomToken]
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        random_tokens: list[RandomToken],
     ) -> None:
         """
         A voucher which is reported as double-spent is marked in the database as
@@ -1182,7 +1257,12 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_mark_spent_vouchers_double_spent(
-        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, tokens: tuple[list[RandomToken], list[UnblindedToken]]
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        public_key: str,
+        tokens: tuple[list[RandomToken], list[UnblindedToken]],
     ) -> None:
         """
         A voucher which has already been spent cannot be marked as double-spent.

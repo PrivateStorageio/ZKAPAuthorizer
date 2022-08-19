@@ -19,7 +19,7 @@ Tests for ``_zkapauthorizer.controller``.
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import loads
-from typing import Callable, Sequence
+from typing import Callable
 
 import attr
 from challenge_bypass_ristretto import (
@@ -49,7 +49,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import StubTreq
-from twisted.internet.defer import fail, succeed, Deferred
+from twisted.internet.defer import Deferred, fail
 from twisted.internet.interfaces import IReactorTime
 from twisted.internet.task import Clock
 from twisted.python.url import URL
@@ -59,7 +59,6 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
-from .common import GetConfig
 from .._json import dumps_utf8
 from ..controller import (
     AlreadySpent,
@@ -87,6 +86,7 @@ from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
 from ..model import UnblindedToken
 from ..model import Unpaid as model_Unpaid
+from .common import GetConfig
 from .fixtures import TemporaryVoucherStore
 from .matchers import Provides, between, raises
 from .strategies import (
@@ -253,7 +253,14 @@ class PaymentControllerTests(TestCase):
         voucher_counters(),
         dummy_ristretto_keys(),
     )
-    def test_redeeming(self, get_config: GetConfig, now: datetime, voucher: bytes, num_successes: int, public_key: str) -> None:
+    def test_redeeming(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        num_successes: int,
+        public_key: str,
+    ) -> None:
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
         working on redeeming it with a counter value that reflects the number
@@ -748,19 +755,23 @@ class PaymentControllerTests(TestCase):
         allowed_tokens = []
         for counter, redeemer in enumerate(redeemers):
             if redeemer._public_key in allowed_public_keys:
-                unblinded_tokens = extract_result(Deferred.fromCoroutine(redeemer.redeemWithCounter(
-                    voucher_obj,
-                    counter,
-                    redeemer.random_tokens_for_voucher(
-                        voucher_obj,
-                        counter,
-                        token_count_for_group(
-                            num_redemption_groups,
-                            token_count,
+                unblinded_tokens = extract_result(
+                    Deferred.fromCoroutine(
+                        redeemer.redeemWithCounter(
+                            voucher_obj,
                             counter,
-                        ),
-                    ),
-                ))).unblinded_tokens
+                            redeemer.random_tokens_for_voucher(
+                                voucher_obj,
+                                counter,
+                                token_count_for_group(
+                                    num_redemption_groups,
+                                    token_count,
+                                    counter,
+                                ),
+                            ),
+                        )
+                    )
+                ).unblinded_tokens
                 allowed_tokens.extend(unblinded_tokens)
         self.expectThat(
             store.get_unblinded_tokens(store.count_unblinded_tokens()),
@@ -995,11 +1006,13 @@ class RistrettoRedeemerTests(TestCase):
         redeemer = RistrettoRedeemer(treq, NOWHERE)
 
         random_tokens = redeemer.random_tokens_for_voucher(voucher, counter, num_tokens)
-        d = Deferred.fromCoroutine(redeemer.redeemWithCounter(
-            voucher,
-            counter,
-            random_tokens,
-        ))
+        d = Deferred.fromCoroutine(
+            redeemer.redeemWithCounter(
+                voucher,
+                counter,
+                random_tokens,
+            )
+        )
 
         def unblinded_tokens_to_passes(result):
             passes = redeemer.tokens_to_passes(message, result.unblinded_tokens)
@@ -1470,6 +1483,7 @@ class _BracketTestMixin:
 
         async def between() -> None:
             actions.append("between")
+
         last = partial(actions.append, "last")
 
         self.assertThat(

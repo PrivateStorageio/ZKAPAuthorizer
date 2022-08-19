@@ -15,8 +15,8 @@ from testresources import TestResourceManager
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
-from ..config import Config
 from .._types import JSON
+from ..config import Config
 
 # An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
 # runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
@@ -132,7 +132,10 @@ class TahoeStorage:
         """
         Start the node child process.
         """
-        eliot = ["--eliot-destination", "file:" + self.node_dir.asTextMode().child("log.eliot").path]
+        eliot = [
+            "--eliot-destination",
+            "file:" + self.node_dir.asTextMode().child("log.eliot").path,
+        ]
         self.process = Popen(
             TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
             stdout=self.node_dir.child("stdout").open("wb"),

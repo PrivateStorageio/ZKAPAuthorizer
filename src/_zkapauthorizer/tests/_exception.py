@@ -20,9 +20,8 @@ __all__ = [
     "raises",
 ]
 
-from typing import Any, Optional, Callable
-
 import sys
+from typing import Any, Callable, Optional
 
 from testtools.content import TracebackContent
 from testtools.matchers import Matcher, Mismatch

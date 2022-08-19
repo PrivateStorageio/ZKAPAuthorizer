@@ -82,13 +82,19 @@ class EmptyConfig:
     configuration.
     """
 
-    _basedir: FilePath = FilePath(".") # type: ignore[no-untyped-call]
+    _basedir: FilePath = FilePath(".")  # type: ignore[no-untyped-call]
 
-    def get_config(self, section: str, option: str, default: object = object(), boolean: bool = False) -> object:
+    def get_config(
+        self,
+        section: str,
+        option: str,
+        default: object = object(),
+        boolean: bool = False,
+    ) -> object:
         return default
 
     def get_private_path(self, name: str) -> str:
-        private = self._basedir.child("private") # type: ignore[no-untyped-call]
+        private = self._basedir.child("private")  # type: ignore[no-untyped-call]
         child = private.child(name)
         child_str = cast(str, child.path)
         return child_str
@@ -102,7 +108,7 @@ def read_node_url(config: Config) -> DecodedURL:
     Get the root of the node's HTTP API.
     """
     return DecodedURL.from_text(
-        FilePath(config.get_config_path("node.url")) # type: ignore[no-untyped-call]
+        FilePath(config.get_config_path("node.url"))  # type: ignore[no-untyped-call]
         .getContent()
         .decode("ascii")
         .strip()

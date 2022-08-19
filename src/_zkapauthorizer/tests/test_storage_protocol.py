@@ -19,6 +19,7 @@ Tests for communication between the client and server components.
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
 from challenge_bypass_ristretto import PublicKey, SigningKey, random_signing_key
+from foolscap.ipb import IRemoteReference
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import assume, given
 from hypothesis.strategies import data as data_strategy
@@ -39,8 +40,8 @@ from testtools.twistedsupport import failed, succeeded
 # I'd rather use https://twistedmatrix.com/trac/ticket/8900 but efforts
 # there appear to have stalled.
 from testtools.twistedsupport._deferred import extract_result
-from twisted.internet.task import Clock
 from twisted.internet.defer import Deferred
+from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 
@@ -57,14 +58,13 @@ from ..storage_common import (
     get_implied_data_length,
     required_passes,
 )
-from foolscap.ipb import IRemoteReference
-from .common import skipIf, from_awaitable
+from .common import from_awaitable, skipIf
 from .fixtures import AnonymousStorageServer
 from .foolscap import LocalRemote
 from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
-    _PassFactory,
     LEASE_INTERVAL,
+    _PassFactory,
     get_passes,
     pass_factory,
     privacypass_passes,
@@ -319,15 +319,17 @@ class ShareTests(TestCase):
         those resulting buckets.
         """
         alreadygot, allocated = extract_result(
-            Deferred.fromCoroutine(self.client.allocate_buckets(
-                storage_index,
-                renew_secret,
-                cancel_secret,
-                sharenums,
-                size,
-                canary=self.canary,
-            ),
-        ))
+            Deferred.fromCoroutine(
+                self.client.allocate_buckets(
+                    storage_index,
+                    renew_secret,
+                    cancel_secret,
+                    sharenums,
+                    size,
+                    canary=self.canary,
+                ),
+            )
+        )
         self.expectThat(
             alreadygot,
             Equals(set()),
@@ -347,7 +349,9 @@ class ShareTests(TestCase):
             bucket.remote_write(0, bytes_for_share(sharenum, size))
             bucket.remote_close()
 
-        readers = extract_result(Deferred.fromCoroutine(self.client.get_buckets(storage_index)))
+        readers = extract_result(
+            Deferred.fromCoroutine(self.client.get_buckets(storage_index))
+        )
 
         self.expectThat(
             set(readers.keys()),
@@ -527,11 +531,13 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            Deferred.fromCoroutine(self.client.add_lease(
-                storage_index,
-                renew_lease_secret,
-                cancel_secret,
-            )),
+            Deferred.fromCoroutine(
+                self.client.add_lease(
+                    storage_index,
+                    renew_lease_secret,
+                    cancel_secret,
+                )
+            ),
             succeeded(Always()),
         )
 
@@ -773,16 +779,18 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         wrote, read = extract_result(
-            from_awaitable(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v) in test_and_write_vectors_for_shares.items()
-                },
-                r_vector=[],
-            ),
-        ))
+            from_awaitable(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v) in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                ),
+            )
+        )
         self.assertThat(
             wrote,
             Equals(True),
@@ -840,12 +848,14 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            from_awaitable(self.client.advise_corrupt_share(
-                b"immutable",
-                storage_index,
-                sharenum,
-                b"the bits look bad",
-            )),
+            from_awaitable(
+                self.client.advise_corrupt_share(
+                    b"immutable",
+                    storage_index,
+                    sharenum,
+                    b"the bits look bad",
+                )
+            ),
             succeeded(Always()),
         )
         self.assertThat(
@@ -871,12 +881,14 @@ class ShareTests(TestCase):
         self.clock.advance(now)
 
         def write(vector):
-            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={k: v.for_call() for (k, v) in vector.items()},
-                r_vector=[],
-            ))
+            return from_awaitable(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={k: v.for_call() for (k, v) in vector.items()},
+                    r_vector=[],
+                )
+            )
 
         grant_times = {}
         for n, vector in enumerate(share_vectors):
@@ -973,15 +985,17 @@ class ShareTests(TestCase):
             )
 
         def write():
-            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v) in test_and_write_vectors_for_shares.items()
-                },
-                r_vector=[],
-            ))
+            return from_awaitable(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v) in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                )
+            )
 
         # Perform an initial write so there is something to rewrite.
         self.assertThat(
@@ -1036,15 +1050,17 @@ class ShareTests(TestCase):
         secrets = (write_enabler, renew_secret, cancel_secret)
 
         def write():
-            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={
-                    k: v.for_call()
-                    for (k, v) in test_and_write_vectors_for_shares.items()
-                },
-                r_vector=[],
-            ))
+            return from_awaitable(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={
+                        k: v.for_call()
+                        for (k, v) in test_and_write_vectors_for_shares.items()
+                    },
+                    r_vector=[],
+                )
+            )
 
         # Create a share we can toy with.
         self.assertThat(write(), is_successful_write())
@@ -1105,12 +1121,14 @@ class ShareTests(TestCase):
         empty_test_vector: TestVector = []
 
         def write(tw_vectors):
-            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors=tw_vectors,
-                r_vector=[],
-            ))
+            return from_awaitable(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors=tw_vectors,
+                    r_vector=[],
+                )
+            )
 
         def equal_test_vector(data_vector):
             return list((offset, len(data), data) for (offset, data) in data_vector)
@@ -1179,13 +1197,17 @@ def assert_read_back_data(
         )
 
         _, single_read = extract_result(
-            Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
-                storage_index,
-                secrets=secrets,
-                tw_vectors={},
-                r_vector=list(map(write_vector_to_read_vector, vectors.write_vector)),
-            ),
-        ))
+            Deferred.fromCoroutine(
+                self.client.slot_testv_and_readv_and_writev(
+                    storage_index,
+                    secrets=secrets,
+                    tw_vectors={},
+                    r_vector=list(
+                        map(write_vector_to_read_vector, vectors.write_vector)
+                    ),
+                ),
+            )
+        )
 
         self.assertThat(
             single_read[sharenum],

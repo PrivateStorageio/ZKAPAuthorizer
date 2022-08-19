@@ -24,8 +24,6 @@ from sqlite3 import connect as _sqlite3_connect
 from typing import Any, Callable, Optional
 from weakref import WeakValueDictionary
 
-from foolscap.ipb import IRemoteReference
-from allmydata.storage.server import StorageServer
 from allmydata.client import _Client
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
@@ -33,15 +31,17 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
 )
 from allmydata.node import MissingConfigEntry
+from allmydata.storage.server import StorageServer
 from attrs import Factory, define, field, frozen
 from autobahn.twisted.resource import WebSocketResource
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
+from foolscap.ipb import IRemoteReference
 from prometheus_client import CollectorRegistry, write_to_textfile
 from tahoe_capabilities import DirectoryReadCapability
 from twisted.application.service import IService, MultiService
 from twisted.internet import task
-from twisted.internet.defer import succeed, Deferred
+from twisted.internet.defer import Deferred, succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.web.guard import HTTPAuthSessionWrapper
@@ -70,7 +70,8 @@ from .replicate import (
     setup_tahoe_lafs_replication,
     with_replication,
 )
-from .resource import from_configuration as resource_from_configuration, IZKAPRoot
+from .resource import IZKAPRoot
+from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
 from .sql import UnboundConnect
@@ -180,7 +181,7 @@ class ZKAPAuthorizer(object):
 
     @_service.default
     def _service_default(self) -> MultiService:
-        svc = MultiService() # type: ignore[no-untyped-call]
+        svc = MultiService()  # type: ignore[no-untyped-call]
         # There doesn't seem to be an API in Twisted to hook a service up to
         # the reactor.  There are pieces of it but they're spread out and
         # mixed with other stuff.  So, just do it ourselves.  See
@@ -204,7 +205,7 @@ class ZKAPAuthorizer(object):
         try:
             store = self._stores[key]
         except KeyError:
-            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME)) # type: ignore[no-untyped-call]
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))  # type: ignore[no-untyped-call]
             unreplicated_conn = _open_database(partial(self._connect, db_path.path))
             replicated_conn = with_replication(
                 unreplicated_conn, is_replication_setup(node_config)
@@ -232,9 +233,11 @@ class ZKAPAuthorizer(object):
             10,
         )
         svc = replication_service(replicated_conn, replica, cost)
-        svc.setServiceParent(self._service) # type: ignore[no-untyped-call]
+        svc.setServiceParent(self._service)  # type: ignore[no-untyped-call]
 
-    def _get_redeemer(self, node_config: Config, announcement: Optional[dict[str, Any]]) -> IRedeemer:
+    def _get_redeemer(
+        self, node_config: Config, announcement: Optional[dict[str, Any]]
+    ) -> IRedeemer:
         """
         :return: The voucher redeemer indicated by the given configuration.  A
             new instance is returned on every call because the redeemer
@@ -242,7 +245,11 @@ class ZKAPAuthorizer(object):
         """
         return get_redeemer(self.name, node_config, announcement, self.reactor)
 
-    def get_storage_server(self, configuration: dict[str, Any], get_anonymous_storage_server: Callable[[], StorageServer]) -> Deferred[AnnounceableStorageServer]:
+    def get_storage_server(
+        self,
+        configuration: dict[str, Any],
+        get_anonymous_storage_server: Callable[[], StorageServer],
+    ) -> Deferred[AnnounceableStorageServer]:
         registry = CollectorRegistry()
         kwargs = configuration.copy()
 
@@ -250,15 +257,15 @@ class ZKAPAuthorizer(object):
         metrics_interval = kwargs.pop("prometheus-metrics-interval", None)
         metrics_pathname = kwargs.pop("prometheus-metrics-path", None)
         if metrics_interval is not None and metrics_pathname is not None:
-            metrics_path = FilePath(metrics_pathname) # type: ignore[no-untyped-call]
-            metrics_path.parent().makedirs(ignoreExistingDirectory=True) # type: ignore[no-untyped-call]
+            metrics_path = FilePath(metrics_pathname)  # type: ignore[no-untyped-call]
+            metrics_path.parent().makedirs(ignoreExistingDirectory=True)  # type: ignore[no-untyped-call]
             t = task.LoopingCall(make_safe_writer(metrics_pathname, registry))
             t.clock = self.reactor
             t.start(int(metrics_interval))
 
         root_url = kwargs.pop("ristretto-issuer-root-url")
         pass_value = int(kwargs.pop("pass-value", BYTES_PER_PASS))
-        key_path = FilePath(kwargs.pop("ristretto-signing-key-path")) # type: ignore[no-untyped-call]
+        key_path = FilePath(kwargs.pop("ristretto-signing-key-path"))  # type: ignore[no-untyped-call]
         signing_key = load_signing_key(key_path)
         public_key = PublicKey.from_signing_key(signing_key)
         announcement = {
@@ -286,7 +293,12 @@ class ZKAPAuthorizer(object):
             ),
         )
 
-    def get_storage_client(self, node_config: Config, announcement: dict[str, Any], get_rref: Callable[[], IRemoteReference]) -> ZKAPAuthorizerStorageClient:
+    def get_storage_client(
+        self,
+        node_config: Config,
+        announcement: dict[str, Any],
+        get_rref: Callable[[], IRemoteReference],
+    ) -> ZKAPAuthorizerStorageClient:
         """
         Create an ``IStorageClient`` that submits ZKAPs with certain requests in
         order to authorize them.  The ZKAPs are extracted from the database
@@ -357,7 +369,9 @@ def make_safe_writer(
 _init_storage = _Client.__dict__["init_storage"]
 
 
-def _attach_zkapauthorizer_services(self: _Client, announceable_storage_servers: list[IAnnounceableStorageServer]) -> None:
+def _attach_zkapauthorizer_services(
+    self: _Client, announceable_storage_servers: list[IAnnounceableStorageServer]
+) -> None:
     """
     A monkey-patched version of ``_Client.init_storage`` which also
     initializes ZKAPAuthorizer's services.
@@ -419,12 +433,14 @@ def _maybe_attach_service(
         except:
             _log.failure(f"Attaching {name} service to client node")
         else:
-            service.setServiceParent(client_node) # type: ignore[no-untyped-call]
+            service.setServiceParent(client_node)  # type: ignore[no-untyped-call]
     else:
         _log.info(f"Found existing {name} service")
 
 
-def _create_maintenance_service(reactor: Any, client_node: _Client, store: VoucherStore) -> IService:
+def _create_maintenance_service(
+    reactor: Any, client_node: _Client, store: VoucherStore
+) -> IService:
     """
     Create a lease maintenance service to be attached to the given client
     node.
@@ -449,7 +465,7 @@ def _create_maintenance_service(reactor: Any, client_node: _Client, store: Vouch
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
-    last_run_path = FilePath(node_config.get_private_path("last-lease-maintenance-run")) # type: ignore[no-untyped-call]
+    last_run_path = FilePath(node_config.get_private_path("last-lease-maintenance-run"))  # type: ignore[no-untyped-call]
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
         maintain_leases,
@@ -505,7 +521,7 @@ def load_signing_key(path: FilePath) -> SigningKey:
 
     :return: An object representing the key read.
     """
-    key_bytes = path.getContent() # type: ignore[no-untyped-call]
+    key_bytes = path.getContent()  # type: ignore[no-untyped-call]
     return SigningKey.decode_base64(key_bytes.strip())
 
 

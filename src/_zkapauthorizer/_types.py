@@ -17,9 +17,9 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Generic, TypeVar, Union
+
 from attrs import Attribute as _Attribute
-from typing import TYPE_CHECKING, Generic, TypeVar, Union
 
 # A Tahoe-LAFS capability string
 CapStr = str
@@ -31,8 +31,10 @@ _T = TypeVar("_T")
 if TYPE_CHECKING:
     Attribute = _Attribute
 else:
+
     class Attribute(_Attribute, Generic[_T]):
         pass
+
 
 # mypy does not support recursive types so we can't say much about what's in
 # the containers here.

@@ -19,6 +19,7 @@ from typing import Iterator, cast
 
 from .sql import AbstractCursor
 
+
 def get_schema_version(cursor: AbstractCursor) -> int:
     cursor.execute(
         """

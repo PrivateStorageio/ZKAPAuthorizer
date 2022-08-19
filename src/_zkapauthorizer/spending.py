@@ -33,7 +33,9 @@ class IPassGroup(Interface):
     A group of passed meant to be spent together.
     """
 
-    unblinded_tokens: list[UnblindedToken] = Attribute("The unblinded signatures used to create the passes.")
+    unblinded_tokens: list[UnblindedToken] = Attribute(
+        "The unblinded signatures used to create the passes."
+    )
     passes: list[Pass] = Attribute("The passes themselves.")
 
     def split(select_indices: Container[int]) -> tuple[IPassGroup, IPassGroup]:
@@ -190,7 +192,11 @@ class SpendingController(object):
     tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]] = attr.ib()
 
     @classmethod
-    def for_store(cls, tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]], store: VoucherStore) -> "SpendingController":
+    def for_store(
+        cls,
+        tokens_to_passes: Callable[[bytes, list[UnblindedToken]], list[Pass]],
+        store: VoucherStore,
+    ) -> "SpendingController":
         return cls(
             get_unblinded_tokens=store.get_unblinded_tokens,
             discard_unblinded_tokens=store.discard_unblinded_tokens,

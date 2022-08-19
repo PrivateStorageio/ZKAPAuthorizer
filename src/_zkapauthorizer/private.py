@@ -10,9 +10,7 @@ Support code for applying token-based HTTP authorization rules to a
 Twisted Web resource hierarchy.
 """
 
-from typing import Callable, TypeVar, Type, Literal, Union
-from zope.interface import Interface
-from zope.interface.interface import InterfaceClass
+from typing import Callable, Union
 
 # https://github.com/twisted/nevow/issues/106 may affect this code but if so
 # then the hotfix Tahoe-LAFS applies should deal with it.
@@ -28,12 +26,13 @@ from twisted.cred.checkers import ANONYMOUS
 from twisted.cred.credentials import ICredentials
 from twisted.cred.error import UnauthorizedLogin
 from twisted.cred.portal import IRealm, Portal
-from twisted.internet.defer import fail, succeed, Deferred
+from twisted.internet.defer import Deferred, fail, succeed
 from twisted.python.failure import Failure
 from twisted.web.guard import HTTPAuthSessionWrapper
 from twisted.web.iweb import ICredentialFactory, IRequest
 from twisted.web.resource import IResource
 from zope.interface import implementer
+from zope.interface.interface import InterfaceClass
 
 del awp
 
@@ -70,7 +69,7 @@ class TokenChecker(object):
         required_token = self.get_auth_token()
         if credentials.equals(required_token):
             return succeed(ANONYMOUS)
-        return fail(Failure(UnauthorizedLogin())) # type: ignore[no-untyped-call]
+        return fail(Failure(UnauthorizedLogin()))  # type: ignore[no-untyped-call]
 
 
 @implementer(ICredentialFactory)
@@ -85,6 +84,7 @@ class TokenCredentialFactory(object):
     def decode(self, response: bytes, request: IRequest) -> Token:
         return Token(response)
 
+
 @implementer(IRealm)
 @define
 class PrivateRealm(object):
@@ -93,7 +93,9 @@ class PrivateRealm(object):
     def _logout(self) -> None:
         pass
 
-    def requestAvatar(self, avatarId: str, mind: object, *interfaces: InterfaceClass) -> tuple[InterfaceClass, IResource, Callable[[], None]]:
+    def requestAvatar(
+        self, avatarId: str, mind: object, *interfaces: InterfaceClass
+    ) -> tuple[InterfaceClass, IResource, Callable[[], None]]:
         if IResource in interfaces:
             return (IResource, self._root, self._logout)
         raise NotImplementedError(
@@ -101,15 +103,19 @@ class PrivateRealm(object):
         )
 
 
-def _create_private_tree(get_auth_token: Callable[[], bytes], vulnerable: IResource) -> HTTPAuthSessionWrapper:
+def _create_private_tree(
+    get_auth_token: Callable[[], bytes], vulnerable: IResource
+) -> HTTPAuthSessionWrapper:
     realm = PrivateRealm(vulnerable)
     checker = TokenChecker(get_auth_token)
-    portal = Portal(realm, [checker]) # type: ignore[no-untyped-call]
+    portal = Portal(realm, [checker])  # type: ignore[no-untyped-call]
     credentials = TokenCredentialFactory()
-    return HTTPAuthSessionWrapper(portal, [credentials]) # type: ignore[no-untyped-call]
+    return HTTPAuthSessionWrapper(portal, [credentials])  # type: ignore[no-untyped-call]
 
 
-def create_private_tree(get_auth_token: Callable[[], bytes], vulnerable_tree: IResource) -> HTTPAuthSessionWrapper:
+def create_private_tree(
+    get_auth_token: Callable[[], bytes], vulnerable_tree: IResource
+) -> HTTPAuthSessionWrapper:
     """
     Create a new resource tree that only allows requests if they include a
     correct `Authorization: tahoe-lafs <api_auth_token>` header (where

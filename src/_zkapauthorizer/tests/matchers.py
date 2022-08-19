@@ -29,10 +29,9 @@ __all__ = [
 
 from datetime import datetime, timedelta
 from json import loads
-from typing import Generic, TypeVar, Union, Optional, Callable, Container, Iterable
-from zope.interface.interface import InterfaceClass
+from typing import Callable, Container, Generic, Iterable, Optional, TypeVar, Union
 
-from attrs import frozen, field, validators
+from attrs import field, frozen, validators
 from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
@@ -41,7 +40,6 @@ from testtools.matchers import (
     Equals,
     GreaterThan,
     LessThan,
-    Mismatch,
 )
 from testtools.matchers import Matcher as _Matcher
 from testtools.matchers import (
@@ -56,13 +54,14 @@ from testtools.twistedsupport import succeeded
 from treq import content
 from treq.response import IResponse
 from twisted.web.http_headers import Headers
+from zope.interface.interface import InterfaceClass
 
-from .common import DummyStorageServer
 from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
 from ._float_matchers import matches_float_within_distance
 from ._sql_matchers import equals_database
+from .common import DummyStorageServer
 
 _T = TypeVar("_T")
 
@@ -156,7 +155,11 @@ def between(low: _T, high: _T) -> Matcher[_T]:
     )
 
 
-def leases_current(relevant_storage_indexes: Container[bytes], now: datetime, min_lease_remaining: timedelta) -> Matcher[DummyStorageServer]:
+def leases_current(
+    relevant_storage_indexes: Container[bytes],
+    now: datetime,
+    min_lease_remaining: timedelta,
+) -> Matcher[DummyStorageServer]:
     """
     Return a matcher on a ``DummyStorageServer`` instance which matches
     servers for which the leases on the given storage indexes do not expire
@@ -256,7 +259,7 @@ def matches_spent_passes(
     )
 
 
-def matches_json(matcher: Matcher[object]=Always()) -> Matcher[bytes]:
+def matches_json(matcher: Matcher[object] = Always()) -> Matcher[bytes]:
     """
     Return a matcher for a JSON string which can be decoded to an object
     matched by the given matcher.

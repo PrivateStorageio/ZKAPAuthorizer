@@ -16,12 +16,12 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from typing import TypeAlias, Callable, Any, Awaitable
 from datetime import timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
 from sqlite3 import connect
+from typing import Any, Awaitable
 
 from allmydata.client import config_from_string, create_client_from_config
 from allmydata.interfaces import (
@@ -77,15 +77,13 @@ from twisted.plugin import getPlugins
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
+from twisted.web.guard import HTTPAuthSessionWrapper
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource
-from twisted.web.guard import HTTPAuthSessionWrapper
-
-# XXX
-from .._plugin import storage_server_plugin
-# from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
+
+# XXX
 from .._plugin import (
     ZKAPAuthorizer,
     _CostBasedPolicy,
@@ -93,10 +91,12 @@ from .._plugin import (
     get_root_nodes,
     load_signing_key,
     open_store,
+    storage_server_plugin,
 )
 from .._storage_client import IncorrectStorageServerReference
-from ..config import Config, CONFIG_DB_NAME
+from ..config import CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
+from ..eliot import GET_PASSES
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
 from ..model import (
@@ -113,9 +113,8 @@ from ..replicate import (
     with_replication,
 )
 from ..resource import recover
-from ..eliot import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
-from .common import skipIf, GetConfig
+from .common import GetConfig, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, matches_response, raises
@@ -140,6 +139,9 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
+
+# from twisted.plugins.zkapauthorizer import storage_server_plugin
+
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 

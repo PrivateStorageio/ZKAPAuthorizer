@@ -16,18 +16,21 @@
 This module implements validators for ``attrs``-defined attributes.
 """
 
-from typing import Callable, Protocol, TypeVar, Sequence
 from base64 import b64decode
 from datetime import datetime
+from typing import Callable, Protocol, Sequence, TypeVar
 
-from ._types import Attribute
 from ._base64 import urlsafe_b64decode
+from ._types import Attribute
 
 _T = TypeVar("_T")
 
 ValidatorType = Callable[[object, Attribute[_T], _T], None]
 
-def returns_aware_datetime_validator(inst: object, attr: Attribute[Callable[[], datetime]], value: Callable[[], datetime]) -> None:
+
+def returns_aware_datetime_validator(
+    inst: object, attr: Attribute[Callable[[], datetime]], value: Callable[[], datetime]
+) -> None:
     """
     An attrs validator that verifies the attribute value is a function that
     returns a timezone-aware datetime instance for at least one call.
@@ -49,7 +52,9 @@ def is_aware_datetime(value: datetime) -> bool:
     return isinstance(value, datetime) and value.tzinfo is not None
 
 
-def aware_datetime_validator(inst: object, attr: Attribute[datetime], value: datetime) -> None:
+def aware_datetime_validator(
+    inst: object, attr: Attribute[datetime], value: datetime
+) -> None:
     """
     An attrs validator that verifies the attribute value is a timezone-aware
     datetime instance.
@@ -59,13 +64,17 @@ def aware_datetime_validator(inst: object, attr: Attribute[datetime], value: dat
     raise TypeError(f"{attr.name!r} must be an aware datetime instance (got {value!r})")
 
 
-def is_base64_encoded(b64decode: Callable[[bytes], bytes] = b64decode) -> ValidatorType[bytes]:
+def is_base64_encoded(
+    b64decode: Callable[[bytes], bytes] = b64decode
+) -> ValidatorType[bytes]:
     """
     Return an attrs validator that verifies that the attributes is a base64
     encoded byte string.
     """
 
-    def validate_is_base64_encoded(inst: object, attr: Attribute[bytes], value: bytes) -> None:
+    def validate_is_base64_encoded(
+        inst: object, attr: Attribute[bytes], value: bytes
+    ) -> None:
         try:
             b64decode(value)
         except TypeError:
@@ -79,9 +88,10 @@ def is_base64_encoded(b64decode: Callable[[bytes], bytes] = b64decode) -> Valida
     return validate_is_base64_encoded
 
 
-
 def has_length(expected: int) -> ValidatorType[Sequence[_T]]:
-    def validate_has_length(inst: object, attr: Attribute[Sequence[_T]], value: Sequence[_T]) -> None:
+    def validate_has_length(
+        inst: object, attr: Attribute[Sequence[_T]], value: Sequence[_T]
+    ) -> None:
         if len(value) != expected:
             raise ValueError(
                 "{name!r} must have length {expected}, instead has length {actual}".format(
@@ -100,7 +110,9 @@ class Ordered(Protocol):
 
 
 def greater_than(expected: Ordered) -> ValidatorType[Ordered]:
-    def validate_relation(inst: object, attr: Attribute[Ordered], value: Ordered) -> None:
+    def validate_relation(
+        inst: object, attr: Attribute[Ordered], value: Ordered
+    ) -> None:
         if value > expected:
             return None
 
@@ -113,6 +125,7 @@ def greater_than(expected: Ordered) -> ValidatorType[Ordered]:
         )
 
     return validate_relation
+
 
 def bounded_integer(min_bound: int) -> ValidatorType[int]:
     def validator(inst: object, attr: Attribute[int], value: int) -> None:
@@ -130,10 +143,13 @@ def bounded_integer(min_bound: int) -> ValidatorType[int]:
             )
 
         return None
+
     return validator
+
 
 positive_integer = bounded_integer(0)
 non_negative_integer = bounded_integer(-1)
+
 
 def base64_bytes(length: int) -> ValidatorType[bytes]:
     def validator(inst: object, attr: Attribute[bytes], value: bytes) -> None:
@@ -152,4 +168,5 @@ def base64_bytes(length: int) -> ValidatorType[bytes]:
             )
 
         return None
+
     return validator

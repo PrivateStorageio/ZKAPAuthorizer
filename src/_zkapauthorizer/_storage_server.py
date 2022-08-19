@@ -27,7 +27,17 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Any, Optional, Callable, Iterator, Container, ValuesView, NoReturn, Union, Sequence
+from typing import (
+    Any,
+    Callable,
+    Container,
+    Iterator,
+    NoReturn,
+    Optional,
+    Sequence,
+    Union,
+    ValuesView,
+)
 
 import attr
 from allmydata.interfaces import TestAndWriteVectorsForShares
@@ -44,7 +54,7 @@ from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
-from attrs import frozen, field
+from attrs import field, frozen
 from challenge_bypass_ristretto import (
     PublicKey,
     SigningKey,
@@ -52,8 +62,8 @@ from challenge_bypass_ristretto import (
     VerificationSignature,
 )
 from eliot import start_action
-from foolscap.referenceable import Referenceable
 from foolscap.ipb import IRemoteReference
+from foolscap.referenceable import Referenceable
 from prometheus_client import CollectorRegistry, Histogram
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
@@ -65,12 +75,11 @@ from .eliot import log_call
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
 from .server.spending import ISpender
-from .validators import positive_integer
 from .storage_common import (
+    MorePassesRequired,
     ReadVector,
     Secrets,
     TestWriteVectors,
-    MorePassesRequired,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
@@ -78,6 +87,7 @@ from .storage_common import (
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
+from .validators import positive_integer
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
@@ -110,7 +120,9 @@ class _ValidationResult(object):
     signature_check_failed: Sequence[int]
 
     @classmethod
-    def _is_invalid_pass(cls, message: bytes, pass_: Pass, signing_key: SigningKey) -> bool:
+    def _is_invalid_pass(
+        cls, message: bytes, pass_: Pass, signing_key: SigningKey
+    ) -> bool:
         """
         Cryptographically check the validity of a single pass.
 
@@ -138,7 +150,9 @@ class _ValidationResult(object):
             return True
 
     @classmethod
-    def validate_passes(cls, message: bytes, passes: list[bytes], signing_key: SigningKey) -> "_ValidationResult":
+    def validate_passes(
+        cls, message: bytes, passes: list[bytes], signing_key: SigningKey
+    ) -> "_ValidationResult":
         """
         Check all of the given passes for validity.
 
@@ -246,7 +260,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # writer bookkeeping ourselves.
         if bw in self._bucket_writer_disconnect_markers:
             canary, disconnect_marker = self._bucket_writer_disconnect_markers.pop(bw)
-            canary.dontNotifyOnDisconnect(disconnect_marker) # type: ignore[no-untyped-call]
+            canary.dontNotifyOnDisconnect(disconnect_marker)  # type: ignore[no-untyped-call]
 
     def __attrs_post_init__(self) -> None:
         """
@@ -375,7 +389,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Copy/paste the disconnection handling logic from
         # StorageServer.remote_allocate_buckets.
         for bw in bucketwriters.values():
-            disconnect_marker = canary.notifyOnDisconnect(bw.disconnected) # type: ignore[no-untyped-call]
+            disconnect_marker = canary.notifyOnDisconnect(bw.disconnected)  # type: ignore[no-untyped-call]
             self._bucket_writer_disconnect_markers[bw] = (
                 canary,
                 disconnect_marker,
@@ -388,7 +402,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             k: FoolscapBucketWriter(bw) for (k, bw) in bucketwriters.items()
         }
 
-    def remote_get_buckets(self, storage_index: bytes) -> dict[int, FoolscapBucketWriter]:
+    def remote_get_buckets(
+        self, storage_index: bytes
+    ) -> dict[int, FoolscapBucketWriter]:
         """
         Pass-through without pass check to let clients read immutable shares as
         long as those shares exist.
@@ -398,7 +414,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             for (k, bucket) in self._original.get_buckets(storage_index).items()
         }
 
-    def remote_add_lease(self, passes: list[bytes], storage_index: bytes, renew_secret: bytes, cancel_secret: bytes) -> None:
+    def remote_add_lease(
+        self,
+        passes: list[bytes],
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+    ) -> None:
         """
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
@@ -423,16 +445,22 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         self._metric_spending_successes.observe(len(validation.valid))
         return None
 
-    def remote_advise_corrupt_share(self, share_type: bytes, storage_index: bytes, shnum: int, reason: bytes) -> None:
+    def remote_advise_corrupt_share(
+        self, share_type: bytes, storage_index: bytes, shnum: int, reason: bytes
+    ) -> None:
         """
         Pass-through without a pass check to let clients inform us of possible
         issues with the system without incurring any cost to themselves.
         """
-        result = self._original.advise_corrupt_share(share_type, storage_index, shnum, reason)
+        result = self._original.advise_corrupt_share(
+            share_type, storage_index, shnum, reason
+        )
         assert result is None
         return None
 
-    def remote_share_sizes(self, storage_index_or_slot: bytes, sharenums: Container[int]) -> dict[int, int]:
+    def remote_share_sizes(
+        self, storage_index_or_slot: bytes, sharenums: Container[int]
+    ) -> dict[int, int]:
         with start_action(
             action_type="zkapauthorizer:storage-server:remote:share-sizes",
             storage_index_or_slot=storage_index_or_slot,
@@ -572,7 +600,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Propagate the result of the operation.
         return result
 
-    def remote_slot_readv(self, storage_index: bytes, shares: Optional[Container[int]], readv: ReadVector) -> Deferred[bytes]:
+    def remote_slot_readv(
+        self, storage_index: bytes, shares: Optional[Container[int]], readv: ReadVector
+    ) -> Deferred[bytes]:
         """
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
@@ -581,7 +611,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         assert isinstance(result, Deferred)
         return result
 
-def check_pass_quantity(pass_value: int, validation: _ValidationResult, share_sizes: Union[ValuesView[int], list[int]]) -> None:
+
+def check_pass_quantity(
+    pass_value: int,
+    validation: _ValidationResult,
+    share_sizes: Union[ValuesView[int], list[int]],
+) -> None:
     """
     Check that the given number of passes is sufficient to cover leases
     for one period for shares of the given sizes.
@@ -634,7 +669,12 @@ def check_pass_quantity_for_lease(
     return allocated_sizes
 
 
-def check_pass_quantity_for_write(pass_value: int, validation: _ValidationResult, sharenums: set[int], allocated_size: int) -> None:
+def check_pass_quantity_for_write(
+    pass_value: int,
+    validation: _ValidationResult,
+    sharenums: set[int],
+    allocated_size: int,
+) -> None:
     """
     Determine if the given number of valid passes is sufficient for an
     attempted write.
@@ -655,7 +695,9 @@ def check_pass_quantity_for_write(pass_value: int, validation: _ValidationResult
     check_pass_quantity(pass_value, validation, [allocated_size] * len(sharenums))
 
 
-def get_all_share_paths(storage_server: StorageServer, storage_index: bytes) -> Iterator[tuple[int, bytes]]:
+def get_all_share_paths(
+    storage_server: StorageServer, storage_index: bytes
+) -> Iterator[tuple[int, bytes]]:
     """
     Get the paths of all shares in the given storage index (or slot).
 
@@ -685,7 +727,9 @@ def get_all_share_paths(storage_server: StorageServer, storage_index: bytes) -> 
             yield sharenum, join(bucket, candidate)
 
 
-def get_all_share_numbers(storage_server: StorageServer, storage_index: bytes) -> Iterator[int]:
+def get_all_share_numbers(
+    storage_server: StorageServer, storage_index: bytes
+) -> Iterator[int]:
     """
     Get all share numbers in the given storage index (or slot).
 
@@ -704,7 +748,11 @@ def get_all_share_numbers(storage_server: StorageServer, storage_index: bytes) -
     action_type="zkapauthorizer:storage-server:get-share-sizes",
     include_args=["storage_index_or_slot", "sharenums"],
 )
-def get_share_sizes(storage_server: StorageServer, storage_index_or_slot: bytes, sharenums: Optional[Container[int]]) -> list[tuple[int, int]]:
+def get_share_sizes(
+    storage_server: StorageServer,
+    storage_index_or_slot: bytes,
+    sharenums: Optional[Container[int]],
+) -> list[tuple[int, int]]:
     """
     Get sizes of the given share numbers for the given storage index *or*
     slot.
@@ -722,7 +770,11 @@ def get_share_sizes(storage_server: StorageServer, storage_index_or_slot: bytes,
     )
 
 
-def get_share_stats(storage_server: StorageServer, storage_index_or_slot: bytes, sharenums: Optional[Container[int]]) -> Iterator[tuple[int, ShareStat]]:
+def get_share_stats(
+    storage_server: StorageServer,
+    storage_index_or_slot: bytes,
+    sharenums: Optional[Container[int]],
+) -> Iterator[tuple[int, ShareStat]]:
     """
     Get the stats for the given share numbers for the given storage index *or*
     slot.
@@ -808,7 +860,9 @@ def get_storage_index_share_size(sharepath: bytes) -> int:
     )
 
 
-def stat_bucket(storage_server: StorageServer, storage_index: bytes, sharepath: bytes) -> ShareStat:
+def stat_bucket(
+    storage_server: StorageServer, storage_index: bytes, sharepath: bytes
+) -> ShareStat:
     """
     Get a ``ShareStat`` for the shares in a bucket.
     """
@@ -818,7 +872,9 @@ def stat_bucket(storage_server: StorageServer, storage_index: bytes, sharepath: 
     )
 
 
-def stat_slot(storage_server: StorageServer, slot: bytes, sharepath: bytes) -> ShareStat:
+def stat_slot(
+    storage_server: StorageServer, slot: bytes, sharepath: bytes
+) -> ShareStat:
     """
     Get a ``ShareStat`` for the shares in a slot.
     """
@@ -882,7 +938,13 @@ def get_stat(sharepath: bytes) -> Callable[[StorageServer, bytes, bytes], ShareS
             raise ValueError("Cannot interpret share header {!r}".format(magic))
 
 
-def add_leases_for_writev(storage_server: StorageServer, storage_index: bytes, secrets: Secrets, tw_vectors: dict[int, TestWriteVectors], now: float) -> None:
+def add_leases_for_writev(
+    storage_server: StorageServer,
+    storage_index: bytes,
+    secrets: Secrets,
+    tw_vectors: dict[int, TestWriteVectors],
+    now: float,
+) -> None:
     """
     Add a new lease using the given secrets to all shares written by
     ``tw_vectors``.
@@ -918,7 +980,7 @@ def get_share_path(
     Get the path to the given storage server's storage for the given share.
     """
     result = (
-        FilePath(storage_server.sharedir) # type: ignore[no-untyped-call]
+        FilePath(storage_server.sharedir)  # type: ignore[no-untyped-call]
         .preauthChild(storage_index_to_dir(storage_index))
         .child("{}".format(sharenum))
     )

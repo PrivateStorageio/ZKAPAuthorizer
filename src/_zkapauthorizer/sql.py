@@ -5,11 +5,12 @@ This is focused on SQLite3 and no doubt nevertheless incomplete.  The goal is
 to support testing the replication/recovery system.
 """
 
+from contextlib import AbstractContextManager
 from datetime import datetime
 from enum import Enum, auto
-from sqlite3 import Connection as _SQLite3Connection, Cursor as _SQLite3Cursor
-from typing import Any, Iterable, Optional, Protocol, Union, TypeAlias, TYPE_CHECKING, Optional, Callable
-from contextlib import AbstractContextManager
+from sqlite3 import Connection as _SQLite3Connection
+from sqlite3 import Cursor as _SQLite3Cursor
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Protocol, TypeAlias, Union
 
 from attrs import frozen
 from sqlparse import parse
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     # Also, yes, it's private.  However, it expands to a ~30 term expression.
     # This is the lesser of two evils.
     from sqlite3.dbapi2 import _Parameters as Parameters
+
 
 class AbstractCursor(Protocol):
     """
@@ -41,7 +43,9 @@ class AbstractCursor(Protocol):
     def execute(self, statement: str, args: Parameters, /) -> "AbstractCursor":
         ...
 
-    def executemany(self, statement: str, args: Iterable[Parameters]) -> "AbstractCursor":
+    def executemany(
+        self, statement: str, args: Iterable[Parameters]
+    ) -> "AbstractCursor":
         ...
 
     def close(self) -> None:
@@ -148,12 +152,15 @@ class Table:
 
     columns: list[tuple[str, Column]]
 
+
 class Statement(Protocol):
     @property
     def table_name(self) -> str:
         ...
+
     def statement(self) -> str:
         ...
+
     def arguments(self) -> tuple[SQLType, ...]:
         ...
 
@@ -303,8 +310,10 @@ def statement_mutates(statement: str) -> bool:
     (parsed,) = parse(statement)
     return parsed.get_type() not in {"SELECT"}
 
+
 def f(c: Connection, c2: Cursor) -> None:
     pass
+
 
 def g(c: _SQLite3Connection, c2: _SQLite3Cursor) -> None:
     f(c, c2)

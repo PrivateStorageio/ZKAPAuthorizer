@@ -17,16 +17,12 @@ Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
 to communicate between storage clients and servers.
 """
 
-from typing import Optional
-
-import attr
-from attrs import define
 from allmydata.interfaces import Offset, RIStorageServer, StorageIndex
-from foolscap.schema import DictOf, ListOf
+from foolscap.constraint import Any, ByteStringConstraint, IConstraint
 from foolscap.copyable import Copyable, RemoteCopy
-from foolscap.constraint import Any, IConstraint
-from foolscap.constraint import ByteStringConstraint
 from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
+from foolscap.schema import DictOf, ListOf
+
 
 class ShareStat(Copyable, RemoteCopy):
     """
@@ -55,7 +51,10 @@ class ShareStat(Copyable, RemoteCopy):
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ShareStat):
-            return (self.size, self.lease_expiration) == (other.size, other.lease_expiration)
+            return (self.size, self.lease_expiration) == (
+                other.size,
+                other.lease_expiration,
+            )
         return NotImplemented
 
 
@@ -86,8 +85,8 @@ _PASS_LENGTH = 177
 # Take those values and turn them into the appropriate Foolscap constraint
 # objects.  Foolscap seems to have a convention of representing these as
 # CamelCase module-level values so I replicate that here.
-_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH) # type: ignore[no-untyped-call]
-_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL) # type: ignore[no-untyped-call]
+_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH)  # type: ignore[no-untyped-call]
+_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL)  # type: ignore[no-untyped-call]
 
 
 def add_passes(schema: RemoteMethodSchema) -> RemoteMethodSchema:
@@ -102,7 +101,9 @@ def add_passes(schema: RemoteMethodSchema) -> RemoteMethodSchema:
     return add_arguments(schema, [("passes", _PassList)])
 
 
-def add_arguments(schema: RemoteMethodSchema, kwargs: list[tuple[str, IConstraint]]) -> RemoteMethodSchema:
+def add_arguments(
+    schema: RemoteMethodSchema, kwargs: list[tuple[str, IConstraint]]
+) -> RemoteMethodSchema:
     """
     Create a new schema like ``schema`` but with the arguments given by
     ``kwargs`` prepended to the signature.
@@ -115,7 +116,7 @@ def add_arguments(schema: RemoteMethodSchema, kwargs: list[tuple[str, IConstrain
     """
     new_kwargs = dict(schema.argConstraints)
     new_kwargs.update(kwargs)
-    modified_schema = RemoteMethodSchema(**new_kwargs) # type: ignore[no-untyped-call]
+    modified_schema = RemoteMethodSchema(**new_kwargs)  # type: ignore[no-untyped-call]
     # Initialized from **new_kwargs, RemoteMethodSchema.argumentNames is in
     # some arbitrary, probably-incorrect order.  This breaks user code which
     # tries to use positional arguments.  Put them back in the order they were
@@ -152,7 +153,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     get_buckets = RIStorageServer["get_buckets"]
 
-    def share_sizes( # type: ignore[no-untyped-def]
+    def share_sizes(  # type: ignore[no-untyped-def]
         storage_index_or_slot=StorageIndex,
         # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
         # However, support for such a construction appears to be
@@ -163,10 +164,10 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
         Get the size of the given shares in the given storage index or slot.  If a
         share has no stored state, its size is reported as 0.
         """
-        return DictOf(int, Offset) # type: ignore[no-untyped-call]
+        return DictOf(int, Offset)  # type: ignore[no-untyped-call]
 
-    def stat_shares( # type: ignore[no-untyped-def]
-        storage_indexes_or_slots=ListOf(StorageIndex), # type: ignore[no-untyped-call,assignment]
+    def stat_shares(  # type: ignore[no-untyped-def]
+        storage_indexes_or_slots=ListOf(StorageIndex),  # type: ignore[no-untyped-call,assignment]
     ):
         """
         Get various metadata about shares in the given storage index or slot.
@@ -179,7 +180,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
             Keys are share numbers and values are the stats.
         """
         # Any() should be ShareStat but I don't know how to spell that.
-        return ListOf(DictOf(int, Any())) # type: ignore[no-untyped-call]
+        return ListOf(DictOf(int, Any()))  # type: ignore[no-untyped-call]
 
     slot_readv = RIStorageServer["slot_readv"]
 

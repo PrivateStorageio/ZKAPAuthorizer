@@ -19,19 +19,25 @@ refresh leases on all shares reachable from a root.
 
 from __future__ import annotations
 
-from random import Random
 from datetime import datetime, timedelta
 from errno import ENOENT
-from functools import partial
-from typing import Any, Callable, Iterable, Awaitable, NewType, Optional, Generic, TypeVar, Coroutine
-from typing_extensions import TypeAlias
+from random import Random
+from typing import (
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generic,
+    Iterable,
+    NewType,
+    Optional,
+    TypeVar,
+)
 
 import attr
-from attrs import define, Factory
 from allmydata.client import SecretHolder
-from allmydata.storage_client import StorageFarmBroker
-from allmydata.storage.server import StorageServer
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
+from allmydata.storage.server import StorageServer
+from allmydata.storage_client import StorageFarmBroker
 from allmydata.util.hashutil import (
     bucket_cancel_secret_hash,
     bucket_renewal_secret_hash,
@@ -39,12 +45,14 @@ from allmydata.util.hashutil import (
     file_renewal_secret_hash,
 )
 from aniso8601 import parse_datetime
-from twisted.application.service import Service, IService
-from twisted.internet.defer import inlineCallbacks, maybeDeferred, Deferred
-from twisted.python.log import err
-from twisted.python.filepath import FilePath
+from attrs import Factory, define
+from twisted.application.service import IService, Service
+from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IDelayedCall, IReactorTime
 from twisted.python.failure import Failure
-from twisted.internet.interfaces import IReactorTime, IDelayedCall
+from twisted.python.filepath import FilePath
+from twisted.python.log import err
+from typing_extensions import TypeAlias
 from zope.interface import implementer
 
 from .config import Config, read_duration
@@ -58,7 +66,10 @@ StorageIndex = NewType("StorageIndex", bytes)
 Visitor: TypeAlias = Callable[[StorageIndex], None]
 VisitAssets: TypeAlias = Callable[[Visitor], Awaitable[None]]
 
-async def visit_storage_indexes(root_nodes: list[IFilesystemNode], visit: Visitor) -> None:
+
+async def visit_storage_indexes(
+    root_nodes: list[IFilesystemNode], visit: Visitor
+) -> None:
     """
     Call a visitor with the storage index of each of ``root_nodes`` and
     that of all nodes reachable from them.
@@ -241,7 +252,12 @@ def soonest_expiration(stats: Iterable[ShareStat]) -> ShareStat:
     )
 
 
-async def renew_lease(renewal_secret: bytes, cancel_secret: bytes, storage_index: StorageIndex, server: StorageServer) -> None:
+async def renew_lease(
+    renewal_secret: bytes,
+    cancel_secret: bytes,
+    storage_index: StorageIndex,
+    server: StorageServer,
+) -> None:
     """
     Renew the lease on the shares in one storage index on one server.
 
@@ -281,7 +297,9 @@ async def renew_lease(renewal_secret: bytes, cancel_secret: bytes, storage_index
     )
 
 
-def needs_lease_renew(min_lease_remaining: timedelta, stat: ShareStat, now: datetime) -> bool:
+def needs_lease_renew(
+    min_lease_remaining: timedelta, stat: ShareStat, now: datetime
+) -> bool:
     """
     Determine if a lease needs renewal.
 
@@ -298,7 +316,9 @@ def needs_lease_renew(min_lease_remaining: timedelta, stat: ShareStat, now: date
     remaining = datetime.utcfromtimestamp(stat.lease_expiration) - now
     return remaining < min_lease_remaining
 
+
 _C = TypeVar("_C")
+
 
 @define
 class _FuzzyTimerService(Service, Generic[_C]):
@@ -334,7 +354,7 @@ class _FuzzyTimerService(Service, Generic[_C]):
     _call: Optional[IDelayedCall] = None
 
     def startService(self) -> None:
-        Service.startService(self) # type: ignore[no-untyped-call]
+        Service.startService(self)  # type: ignore[no-untyped-call]
         self._call = self.reactor.callLater(
             self.initial_interval.total_seconds(),
             self._iterate,
@@ -344,19 +364,21 @@ class _FuzzyTimerService(Service, Generic[_C]):
         if self._call is not None:
             self._call.cancel()
             self._call = None
-        return Service.stopService(self) # type: ignore[no-untyped-call,no-any-return]
+        return Service.stopService(self)  # type: ignore[no-untyped-call,no-any-return]
 
     def _iterate(self) -> None:
         """
         Run the operation once and then schedule it to run again.
         """
+
         async def go() -> None:
             try:
                 await self.operation()
             except:
-                f = Failure() # type: ignore[no-untyped-call]
-                err(f, f"Fuzzy timer service ({self.name})") # type: ignore[no-untyped-call]
+                f = Failure()  # type: ignore[no-untyped-call]
+                err(f, f"Fuzzy timer service ({self.name})")  # type: ignore[no-untyped-call]
             self._schedule()
+
         Deferred.fromCoroutine(go())
 
     def _schedule(self) -> None:
@@ -367,6 +389,7 @@ class _FuzzyTimerService(Service, Generic[_C]):
             self.sample_interval_distribution().total_seconds(),
             self._iterate,
         )
+
 
 def lease_maintenance_service(
     maintain_leases: Callable[[], Awaitable[None]],
@@ -433,14 +456,16 @@ def lease_maintenance_service(
 
     return _FuzzyTimerService(
         SERVICE_NAME,
-        lambda: Deferred.fromCoroutine(bracket(
-            lambda: None,
-            lambda: write_time_to_path(
-                last_run_path,
-                datetime.utcfromtimestamp(reactor.seconds()),
-            ),
-            maintain_leases,
-        )),
+        lambda: Deferred.fromCoroutine(
+            bracket(
+                lambda: None,
+                lambda: write_time_to_path(
+                    last_run_path,
+                    datetime.utcfromtimestamp(reactor.seconds()),
+                ),
+                maintain_leases,
+            )
+        ),
         initial_interval,
         sample_interval_distribution,
         get_lease_maint_config,
@@ -580,9 +605,7 @@ def write_time_to_path(path: FilePath, when: datetime) -> None:
 
     :param when: The datetime to write.
     """
-    path.setContent( # type: ignore[no-untyped-call]
-        when.isoformat().encode("utf-8")
-    )
+    path.setContent(when.isoformat().encode("utf-8"))  # type: ignore[no-untyped-call]
 
 
 def read_time_from_path(path: FilePath) -> Optional[datetime]:
@@ -595,7 +618,7 @@ def read_time_from_path(path: FilePath) -> Optional[datetime]:
         instance giving the time represented in the file.
     """
     try:
-        when = path.getContent() # type: ignore[no-untyped-call]
+        when = path.getContent()  # type: ignore[no-untyped-call]
     except IOError as e:
         if ENOENT == e.errno:
             return None
@@ -607,8 +630,8 @@ def read_time_from_path(path: FilePath) -> Optional[datetime]:
 
 
 def visit_storage_indexes_from_root(
-        visit_assets: Callable[[VisitAssets], Awaitable[None]],
-        get_root_nodes: Callable[[], list[IFilesystemNode]],
+    visit_assets: Callable[[VisitAssets], Awaitable[None]],
+    get_root_nodes: Callable[[], list[IFilesystemNode]],
 ) -> Callable[[], Coroutine[Deferred[None], None, None]]:
     """
     An operation for ``lease_maintenance_service`` which applies the given
@@ -622,6 +645,7 @@ def visit_storage_indexes_from_root(
 
     :return: A no-argument callable to perform the visits.
     """
+
     async def result() -> None:
         # Make sure we call get_root_nodes each time to give us a chance
         # to notice when it changes.
@@ -715,7 +739,11 @@ def maintain_leases_from_root(
     )
 
 
-def calculate_initial_interval(sample_interval_distribution: Callable[[], timedelta], last_run: datetime, now: datetime) -> timedelta:
+def calculate_initial_interval(
+    sample_interval_distribution: Callable[[], timedelta],
+    last_run: datetime,
+    now: datetime,
+) -> timedelta:
     """
     Determine how long to wait before performing an initial (for this process)
     scan for aging leases.
