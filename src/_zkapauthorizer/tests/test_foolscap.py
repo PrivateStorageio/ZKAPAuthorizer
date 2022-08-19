@@ -17,7 +17,7 @@ Tests for Foolscap-related test helpers.
 """
 
 from fixtures import Fixture
-from foolscap.api import Any, RemoteInterface, Violation
+from foolscap.api import Any, RemoteInterface, Violation # type: ignore[attr-defined]
 from foolscap.furl import decode_furl
 from foolscap.pb import Tub
 from foolscap.referenceable import RemoteReferenceOnly, RemoteReferenceTracker
@@ -40,10 +40,10 @@ from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, R
 
 
 class IHasSchema(RemoteInterface):
-    def method(arg=int):
+    def method(arg=int): # type: ignore[assignment]
         return bytes
 
-    def good_method(arg=int):
+    def good_method(arg=int): # type: ignore[assignment]
         return None
 
     def whatever_method(arg=Any()):
