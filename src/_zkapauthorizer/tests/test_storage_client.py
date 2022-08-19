@@ -40,8 +40,8 @@ from .. import NAME
 from .._storage_client import call_with_passes
 from .._storage_server import _ValidationResult
 from ..api import MorePassesRequired
-from ..model import NotEnoughTokens
-from ..spending import PassGroup
+from ..model import NotEnoughTokens, Pass
+from ..spending import IPassGroup
 from ..storage_common import (
     get_configured_allowed_public_keys,
     get_configured_pass_value,
@@ -51,7 +51,6 @@ from ..storage_common import (
 from .matchers import raises
 from .storage_common import pass_factory, privacypass_passes
 from .strategies import dummy_ristretto_keys, pass_counts
-
 
 class GetConfiguredValueTests(TestCase):
     """
@@ -288,7 +287,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_retry_on_rejected_passes(self, num_passes):
+    def test_retry_on_rejected_passes(self, num_passes: int) -> None:
         """
         ``call_with_passes`` tries calling the given method again with a new list
         of passes, still of length ```num_passes``, but without the passes
@@ -297,12 +296,12 @@ class CallWithPassesTests(TestCase):
         # We'll reject one pass from each of two calls so make sure we have
         # two more than necessary.
         reject_count = 2
-        rejected_passes = set()
+        rejected_passes: set[Pass] = set()
         passes = pass_factory(
             privacypass_passes(self.signing_key, num_passes + reject_count)
         )
 
-        async def maybe_reject_passes(group: PassGroup) -> None:
+        async def maybe_reject_passes(group: IPassGroup) -> None:
             if len(rejected_passes) < reject_count:
                 # Reject the first pass
                 rejected_passes.add(group.passes[0])
@@ -398,8 +397,8 @@ class CallWithPassesTests(TestCase):
         passes it acquired.
         """
         passes = pass_factory(privacypass_passes(self.signing_key, num_passes + extras))
-        rejected = []
-        accepted = []
+        rejected: list[Pass] = []
+        accepted: list[Pass] = []
 
         def reject_half_passes(group):
             num = len(group.passes)

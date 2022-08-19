@@ -106,8 +106,8 @@ class _ValidationResult(object):
         of passes which did not have a correct signature.
     """
 
-    valid: list[bytes]
-    signature_check_failed: list[int]
+    valid: Sequence[bytes]
+    signature_check_failed: Sequence[int]
 
     @classmethod
     def _is_invalid_pass(cls, message: bytes, pass_: Pass, signing_key: SigningKey) -> bool:
