@@ -23,7 +23,7 @@ from hypothesis.strategies import sampled_from, tuples
 from testtools import TestCase
 from testtools.matchers import Equals
 
-from ..sql import statement_mutates
+from ..sql import Statement, statement_mutates
 from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates
 
 mutations = tuples(
@@ -41,7 +41,7 @@ class MutateTests(TestCase):
     """
 
     @given(mutations)
-    def test_mutate(self, change) -> None:
+    def test_mutate(self, change: Statement) -> None:
         """
         ``statement_mutates`` returns True for SQL INSERT, DELETE, and UPDATE
         statements.
@@ -56,7 +56,7 @@ class MutateTests(TestCase):
             lambda x: x[0](x[1]),
         )
     )
-    def test_non_mutate(self, change) -> None:
+    def test_non_mutate(self, change: Statement) -> None:
         """
         ``statement_mutates`` returns False for SQL SELECT and BEGIN IMMEDIATE
         TRANSACTION statements.
