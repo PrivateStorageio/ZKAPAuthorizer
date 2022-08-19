@@ -19,7 +19,7 @@ Common fixtures to let the test suite focus on application logic.
 import gc
 from base64 import b64encode
 from datetime import datetime
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Optional
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -36,7 +36,7 @@ from twisted.web.client import Agent, HTTPConnectionPool
 from .._plugin import open_store
 from ..config import CONFIG_DB_NAME, EmptyConfig, TahoeConfig
 from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import memory_connect
+from ..model import memory_connect, VoucherStore
 from ..replicate import with_replication
 
 
@@ -95,6 +95,7 @@ class TemporaryVoucherStore(Fixture):
     get_config: Callable[[str, str], TahoeConfig] = _get_empty_config
     _public_key: str = b64encode(b"A" * 32).decode("utf-8")
     redeemer: IRedeemer = field(init=False)
+    store: Optional[VoucherStore] = None
 
     @redeemer.default
     def _redeemer_default(self):
@@ -103,7 +104,7 @@ class TemporaryVoucherStore(Fixture):
     def _setUp(self):
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME))
+        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME)).asTextMode()
         self.store = open_store(
             self.get_now,
             with_replication(memory_connect(db_path.path), False),
@@ -124,6 +125,8 @@ class TemporaryVoucherStore(Fixture):
 
         :return: A ``Deferred`` that fires with the redemption result.
         """
+        if self.store is None:
+            raise ValueError("Must be set up before redeem()")
         return await PaymentController(
             Clock(),
             self.store,
