@@ -16,7 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from functools import partial
 from io import StringIO
 from os import mkdir
@@ -36,9 +36,9 @@ from autobahn.twisted.testing import (
     create_memory_agent,
     create_pumper,
 )
-from challenge_bypass_ristretto import SigningKey, PublicKey
-from eliot.testing import LoggedMessage
+from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import ILogger
+from eliot.testing import LoggedMessage
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference

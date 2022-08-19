@@ -16,12 +16,19 @@
 Ristretto-flavored PrivacyPass helpers for the test suite.
 """
 
-from challenge_bypass_ristretto import BatchDLEQProof, PublicKey
-from challenge_bypass_ristretto import SigningKey
-from challenge_bypass_ristretto import RandomToken
+from challenge_bypass_ristretto import (
+    BatchDLEQProof,
+    PublicKey,
+    RandomToken,
+    SigningKey,
+)
+
 from ..model import Pass
 
-def make_passes(signing_key: SigningKey, for_message: bytes, random_tokens: list[RandomToken]) -> list[Pass]:
+
+def make_passes(
+    signing_key: SigningKey, for_message: bytes, random_tokens: list[RandomToken]
+) -> list[Pass]:
     """
     Create a number of cryptographically correct privacy passes.
 

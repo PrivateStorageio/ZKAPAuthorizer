@@ -24,7 +24,8 @@ from testtools import TestCase
 from testtools.matchers import Equals
 
 from ..sql import Statement, statement_mutates
-from .strategies import deletes, inserts, selects, sql_identifiers, tables, updates, mutations
+from .strategies import mutations, selects, sql_identifiers
+
 
 class MutateTests(TestCase):
     """

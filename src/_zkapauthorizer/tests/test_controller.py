@@ -125,7 +125,9 @@ class TokenCountForGroupTests(TestCase):
         integers(),
         integers(),
     )
-    def test_out_of_bounds(self, num_groups: int, total_tokens: int, group_number: int) -> None:
+    def test_out_of_bounds(
+        self, num_groups: int, total_tokens: int, group_number: int
+    ) -> None:
         """
         If there are not enough tokens so that each group gets at least one or if
         the indicated group number does properly identify a group from the
@@ -185,7 +187,13 @@ class PaymentControllerTests(TestCase):
     """
 
     @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
-    def test_should_not_redeem(self, get_config: GetConfig, now: datetime, voucher: bytes, public_key: PublicKey) -> None:
+    def test_should_not_redeem(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        public_key: PublicKey,
+    ) -> None:
         """
         ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
         a state when redemption should not be started.
@@ -222,7 +230,9 @@ class PaymentControllerTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
-    def test_not_redeemed_while_redeeming(self, get_config: GetConfig, now: datetime, voucher: bytes) -> None:
+    def test_not_redeemed_while_redeeming(
+        self, get_config: GetConfig, now: datetime, voucher: bytes
+    ) -> None:
         """
         A ``Voucher`` is not marked redeemed before ``IRedeemer.redeem``
         completes.
@@ -312,7 +322,13 @@ class PaymentControllerTests(TestCase):
         dummy_ristretto_keys(),
     )
     def test_restart_redeeming(
-        self, get_config: GetConfig, now: datetime, voucher: bytes, before_restart: int, after_restart: int, public_key: PublicKey
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        before_restart: int,
+        after_restart: int,
+        public_key: PublicKey,
     ) -> None:
         """
         If some redemption groups for a voucher have succeeded but the process is
@@ -399,7 +415,12 @@ class PaymentControllerTests(TestCase):
         integers(min_value=0, max_value=100),
     )
     def test_stop_redeeming_on_error(
-        self, get_config: GetConfig, now: datetime, voucher: bytes, counter: int, extra_tokens: int
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        counter: int,
+        extra_tokens: int,
     ) -> None:
         """
         If an error is encountered on one of the redemption attempts performed by
@@ -432,7 +453,13 @@ class PaymentControllerTests(TestCase):
         )
 
     @given(tahoe_configs(), dummy_ristretto_keys(), aware_datetimes(), vouchers())
-    def test_redeemed_after_redeeming(self, get_config: GetConfig, public_key: PublicKey, now: datetime, voucher: bytes) -> None:
+    def test_redeemed_after_redeeming(
+        self,
+        get_config: GetConfig,
+        public_key: PublicKey,
+        now: datetime,
+        voucher: bytes,
+    ) -> None:
         """
         A ``Voucher`` is marked as redeemed after ``IRedeemer.redeem`` succeeds.
         """
@@ -465,7 +492,9 @@ class PaymentControllerTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_error_state(self, get_config: GetConfig, now: datetime, voucher: bytes) -> None:
+    def test_error_state(
+        self, get_config: GetConfig, now: datetime, voucher: bytes
+    ) -> None:
         """
         If ``IRedeemer.redeem`` fails with an unrecognized exception then the
         voucher is put into the error state.
@@ -498,7 +527,9 @@ class PaymentControllerTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
-    def test_double_spent_after_double_spend(self, get_config: GetConfig, now: datetime, voucher: bytes) -> None:
+    def test_double_spent_after_double_spend(
+        self, get_config: GetConfig, now: datetime, voucher: bytes
+    ) -> None:
         """
         A ``Voucher`` is marked as double-spent after ``IRedeemer.redeem`` fails
         with ``AlreadySpent``.
@@ -529,7 +560,13 @@ class PaymentControllerTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
-    def test_redeem_pending_on_startup(self, get_config: GetConfig, now: datetime, voucher: bytes, public_key: PublicKey) -> None:
+    def test_redeem_pending_on_startup(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        public_key: PublicKey,
+    ) -> None:
         """
         When ``PaymentController`` is created, any vouchers in the store in the
         pending state are redeemed.

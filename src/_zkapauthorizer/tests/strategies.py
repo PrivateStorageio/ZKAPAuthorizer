@@ -19,7 +19,7 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from typing import Any, Optional, TypedDict, cast, Callable, TypeVar
+from typing import Any, Callable, Optional, TypedDict, TypeVar, cast
 from urllib.parse import quote
 
 import attr
@@ -64,12 +64,12 @@ from ..model import (
     Voucher,
 )
 from ..sql import (
-    Statement,
     Column,
     Delete,
     Insert,
     Select,
     SQLType,
+    Statement,
     StorageAffinity,
     Table,
     Update,
@@ -418,8 +418,10 @@ def client_dummyredeemer_configurations(
                     # Pick out one of the allowed public keys so that the dummy
                     # appears to produce usable tokens.
                     "issuer-public-key": next(iter(allowed_keys)),
-                })
+                }
+            )
             return config
+
         lease_configs = builds(
             make_lease_config,
             crawl_means,
@@ -1271,6 +1273,7 @@ def tables() -> SearchStrategy[Table]:
     """
     Build objects describing tables in a SQLite3 database.
     """
+
     def first(x: tuple[str, Column]) -> str:
         return x[0]
 
@@ -1395,6 +1398,7 @@ def deletes(name, table):
     """
     return just(Delete(table_name=name))
 
+
 T = TypeVar("T")
 
 
@@ -1402,6 +1406,7 @@ def mutations() -> SearchStrategy[Statement]:
     """
     Build statements that make changes to data.
     """
+
     def make(x: tuple[Callable[[str, Table], T], str, Table]) -> T:
         return x[0](x[1], x[2])
 

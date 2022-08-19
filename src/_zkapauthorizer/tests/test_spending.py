@@ -16,11 +16,12 @@
 Tests for ``_zkapauthorizer.spending``.
 """
 
-from typing import Callable
-from random import Random
 from datetime import datetime
+from random import Random
+from typing import Callable
+
 from hypothesis import given
-from hypothesis.strategies import data, integers, randoms, DataObject
+from hypothesis.strategies import DataObject, data, integers, randoms
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -119,7 +120,14 @@ class PassGroupTests(TestCase):
         )
 
     @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
-    def test_spent(self, voucher: bytes, num_passes: int, now: datetime, random: Random, data: DataObject) -> None:
+    def test_spent(
+        self,
+        voucher: bytes,
+        num_passes: int,
+        now: datetime,
+        random: Random,
+        data: DataObject,
+    ) -> None:
         """
         Passes in a group can be marked as successfully spent to prevent them from
         being re-used by a future ``get`` call.

@@ -18,14 +18,14 @@ Eliot field, message, and action definitions for ZKAPAuthorizer.
 
 from functools import wraps
 from json import JSONEncoder
-from typing import Awaitable, Callable, Optional, TypeVar, cast, Any
+from typing import Any, Awaitable, Callable, Optional, TypeVar, cast
 
 from allmydata.util.eliotutil import log_call_deferred as _log_call_deferred
 from eliot import ActionType, Field, MessageType
-from eliot.json import EliotJSONEncoder
 from eliot import log_call as _log_call
-from eliot.testing import capture_logging as _capture_logging
 from eliot import start_action
+from eliot.json import EliotJSONEncoder
+from eliot.testing import capture_logging as _capture_logging
 from typing_extensions import ParamSpec
 
 PRIVACYPASS_MESSAGE = Field(
@@ -159,17 +159,14 @@ def log_call_coroutine(
 
 
 def capture_logging(
-        assertion: Any,
-        *assertionArgs: Any,
-        encoder_: JSONEncoder = EliotJSONEncoder,
-        **assertionKwargs: Any,
+    assertion: Any,
+    *assertionArgs: Any,
+    encoder_: JSONEncoder = EliotJSONEncoder,
+    **assertionKwargs: Any,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     return cast(
         Callable[[Callable[P, T]], Callable[P, T]],
         _capture_logging(
-            assertion,
-            *assertionArgs,
-            encoder_=encoder_,
-            **assertionKwargs
+            assertion, *assertionArgs, encoder_=encoder_, **assertionKwargs
         ),
     )

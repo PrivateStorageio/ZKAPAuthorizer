@@ -5,13 +5,13 @@ Tests for the replication system in ``_zkapauthorizer.replicate``.
 from base64 import b64encode, urlsafe_b64encode
 from functools import partial
 from io import BytesIO
+from operator import attrgetter
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
 from typing import IO, Callable, Optional
-from compose import compose
-from operator import attrgetter
 
 from attrs import frozen
+from compose import compose
 from eliot import start_action
 from fixtures import TempDir
 from hypothesis import given
@@ -374,12 +374,12 @@ def is_event_stream(
     """
 
     def is_filenode() -> Matcher[FileNode]:
-        return IsInstance(FileNode) # type: ignore[no-any-return]
+        return IsInstance(FileNode)  # type: ignore[no-any-return]
 
     def download_event_stream(cap: ReadCapability) -> EventStream:
         return EventStream.from_bytes(BytesIO(grid.download(cap)))
 
-    return MatchesAll( # type: ignore[no-any-return]
+    return MatchesAll(  # type: ignore[no-any-return]
         is_filenode(),
         AfterPreprocessing(
             compose(download_event_stream, attrgetter("ro_uri")),

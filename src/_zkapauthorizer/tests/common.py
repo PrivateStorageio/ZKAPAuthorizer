@@ -22,16 +22,25 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, Generic, Optional, TypeAlias, TypeVar, Union, cast
+from typing import (
+    Awaitable,
+    Callable,
+    Generic,
+    Optional,
+    TypeAlias,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from attrs import Factory, define, field
+from testtools import TestCase
 from twisted.internet.defer import Deferred, succeed
 from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
 from typing_extensions import Concatenate, ParamSpec
 from zope.interface import Interface, directlyProvides, providedBy
 from zope.interface.interface import InterfaceClass
-from testtools import TestCase
 
 from ..config import Config
 from ..eliot import log_call
@@ -42,7 +51,12 @@ GetConfig: TypeAlias = Callable[[str, str], Config]
 T = TypeVar("T")
 P = ParamSpec("P")
 
-def skipIf(condition: bool, reason: str) -> Callable[[Callable[Concatenate[TC, P], object]], Callable[Concatenate[TC, P], object]]:
+
+def skipIf(
+    condition: bool, reason: str
+) -> Callable[
+    [Callable[Concatenate[TC, P], object]], Callable[Concatenate[TC, P], object]
+]:
     """
     Create a decorate a function to be skipped if the given condition is true.
 
@@ -59,16 +73,15 @@ def skipIf(condition: bool, reason: str) -> Callable[[Callable[Concatenate[TC, P
 
 TC = TypeVar("TC", bound=TestCase)
 
-def _skipper(reason: str) -> Callable[
-        [Callable[Concatenate[TC, P], object]],
-        Callable[Concatenate[TC, P], object]
+
+def _skipper(
+    reason: str,
+) -> Callable[
+    [Callable[Concatenate[TC, P], object]], Callable[Concatenate[TC, P], object]
 ]:
     def wrapper(
-            f: Callable[Concatenate[TC, P], object]
-    ) -> Callable[
-        Concatenate[TC, P],
-        object
-    ]:
+        f: Callable[Concatenate[TC, P], object]
+    ) -> Callable[Concatenate[TC, P], object]:
         def skipIt(self: TC, /, *a: P.args, **kw: P.kwargs) -> None:
             self.skipTest(reason)
 

@@ -101,11 +101,11 @@ from .common import GetConfig, from_awaitable
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
-    mutations,
     aware_datetimes,
     deletes,
     dummy_ristretto_keys,
     inserts,
+    mutations,
     pass_counts,
     posix_safe_datetimes,
     random_tokens,
