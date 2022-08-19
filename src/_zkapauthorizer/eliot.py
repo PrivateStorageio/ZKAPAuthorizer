@@ -22,7 +22,7 @@ from typing import Awaitable, Callable, Optional, TypeVar, cast, Any
 
 from allmydata.util.eliotutil import log_call_deferred as _log_call_deferred
 from eliot import ActionType, Field, MessageType
-from eliot import EliotJSONEncoder
+from eliot.json import EliotJSONEncoder
 from eliot import log_call as _log_call
 from eliot.testing import capture_logging as _capture_logging
 from eliot import start_action

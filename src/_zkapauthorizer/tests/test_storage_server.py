@@ -157,7 +157,7 @@ def read_spending_success_histogram_total(
 
 def read_spending_success_histogram_bucket(
     storage_server: ZKAPAuthorizerStorageServer, num_passes: int
-) -> int:
+) -> float:
     """
     Read the value of a single bucket of the spending success metric
     histogram.
@@ -178,7 +178,7 @@ def read_spending_success_histogram_bucket(
         "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
     )
     result = buckets[bucket_number].get()
-    assert isinstance(result, int)
+    assert isinstance(result, float), result
     return result
 
 
