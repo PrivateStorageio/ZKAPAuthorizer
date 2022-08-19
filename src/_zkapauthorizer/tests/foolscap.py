@@ -17,7 +17,7 @@ Testing helpers related to Foolscap.
 """
 
 import attr
-from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
+from foolscap.api import Any, Copyable, Referenceable, RemoteInterface # type: ignore[attr-defined]
 from foolscap.copyable import CopyableSlicer, ICopyable
 from twisted.internet.defer import fail, succeed
 from zope.interface import implementer
