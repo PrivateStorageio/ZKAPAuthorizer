@@ -83,6 +83,11 @@ import cbor2
 from attrs import Factory, define, field, frozen
 from compose import compose
 from eliot import log_call
+from tahoe_capabilities import (
+    DirectoryReadCapability,
+    digested_capability_string,
+    writeable_directory_from_string,
+)
 from twisted.application.service import IService, Service
 from twisted.internet.defer import CancelledError, Deferred, DeferredQueue, succeed
 from twisted.logger import Logger
@@ -92,13 +97,7 @@ from twisted.python.lockfile import FilesystemLock
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
-from .tahoe import (
-    DataProvider,
-    DirectoryEntry,
-    ITahoeClient,
-    attenuate_writecap,
-    capability_from_string,
-)
+from .tahoe import DataProvider, DirectoryEntry, ITahoeClient
 
 # function which can set remote ZKAPAuthorizer state.
 Uploader = Callable[[str, DataProvider], Awaitable[None]]
@@ -285,7 +284,7 @@ async def fail_setup_replication():
     raise Exception("Test not set up for replication")
 
 
-async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
+async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCapability:
     """
     Configure the ZKAPAuthorizer plugin that lives in the Tahoe-LAFS node with
     the given configuration to replicate its state onto Tahoe-LAFS storage
@@ -304,9 +303,10 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
 
         # Check to see if there is already configuration.
         if config_path.exists():
-            rwcap_obj = capability_from_string(config_path.getContent())
-            rocap_str = rwcap_obj.get_readonly().to_string().decode("ascii")
-            raise ReplicationAlreadySetup(rocap_str)
+            rwcap_obj = writeable_directory_from_string(
+                config_path.getContent().decode("ascii")
+            )
+            raise ReplicationAlreadySetup(digested_capability_string(rwcap_obj))
 
         # Create a directory with it
         rw_cap = await client.make_directory()
@@ -319,11 +319,8 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> str:
         # file for now.
         config_lock.unlock()
 
-    # Attenuate it to a read-cap
-    rocap = attenuate_writecap(rw_cap)
-
-    # Return the read-cap
-    return rocap
+    # Return the corresponding read-cap.
+    return writeable_directory_from_string(rw_cap).reader
 
 
 def is_replication_setup(config: Config) -> bool:

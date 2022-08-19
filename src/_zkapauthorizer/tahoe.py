@@ -7,13 +7,24 @@ from functools import wraps
 from hashlib import sha256
 from json import loads
 from tempfile import mkdtemp
-from typing import IO, Any, Callable, Iterable, Optional, Union
+from typing import IO, Any, Callable, List, Optional, Union
 
 import treq
-from allmydata.uri import from_string as capability_from_string
 from allmydata.util.base32 import b2a as b32encode
 from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
+from tahoe_capabilities import (
+    DirectoryReadCapability,
+    ReadCapability,
+    capability_from_string,
+    danger_real_capability_string,
+    digested_capability_string,
+    is_directory,
+    is_write,
+    readable_from_string,
+    readonly_directory_from_string,
+    writeable_from_string,
+)
 from treq.client import HTTPClient
 from twisted.internet.error import ConnectionRefusedError
 from twisted.python.filepath import FilePath
@@ -208,8 +219,7 @@ async def download(
     client: HTTPClient,
     outpath: FilePath,
     api_root: DecodedURL,
-    cap: str,
-    child_path: Optional[Iterable[str]] = None,
+    cap: ReadCapability,
 ) -> None:
     """
     Download the object identified by the given capability to the given path.
@@ -226,15 +236,14 @@ async def download(
         use to perform the upload.  This should typically be the ``node.url``
         value from a Tahoe-LAFS client node.
 
+    :param cap: The capability of the data to download.
+
     :raise: If there is a problem downloading the data then some exception is
         raised.
     """
     outtemp = outpath.temporarySibling()
 
-    uri = api_root.child("uri").child(cap)
-    if child_path is not None:
-        for segment in child_path:
-            uri = uri.child(segment)
+    uri = api_root.child("uri").child(danger_real_capability_string(cap))
 
     resp = await client.get(uri)
     if resp.code == 200:
@@ -375,7 +384,8 @@ class ITahoeClient(Interface):
         """
 
     async def download(
-        outpath: FilePath, cap: CapStr, child_path: Optional[Iterable[str]]
+        outpath: FilePath,
+        cap: ReadCapability,
     ) -> None:
         """
         Download the contents of an object to a given local path.
@@ -458,8 +468,8 @@ class Tahoe(object):
         """
         return FilePath(self._node_config.get_private_path(name))
 
-    def download(self, outpath, cap, child_path):
-        return download(self.client, outpath, self._api_root, cap, child_path)
+    async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
+        await download(self.client, outpath, self._api_root, cap)
 
     def upload(self, get_data_provider):
         return upload_bytes(self.client, get_data_provider, self._api_root)
@@ -538,8 +548,10 @@ class MemoryGrid:
         self._counter += 1
         return cap
 
-    def download(self, cap: CapStr) -> Union[bytes, _Directory]:
-        return self._objects[cap]
+    def download(self, cap: ReadCapability) -> bytes:
+        data = self._objects[danger_real_capability_string(cap)]
+        assert isinstance(data, bytes)
+        return data
 
     def make_directory(self) -> CapStr:
         def encode(s: str) -> str:
@@ -556,26 +568,30 @@ class MemoryGrid:
         return cap
 
     def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
-        d = capability_from_string(dir_cap)
-        if d.is_readonly():
+        capobj = capability_from_string(dir_cap)
+        if not is_write(capobj):
             raise NotWriteableError()
-        dirobj = self._objects[dir_cap]
-        if isinstance(dirobj, _Directory):
-            dirobj.children[entry_name] = entry_cap
-        else:
+        if not is_directory(capobj):
             raise ValueError(
                 f"Cannot link entry into non-directory capability ({dir_cap[:7]})"
             )
+        else:
+            dirobj = self._objects[dir_cap]
+            # It is a directory cap so we know the object will be a
+            # _Directory.
+            assert isinstance(dirobj, _Directory)
+            dirobj.children[entry_name] = entry_cap
 
     def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
-        d = capability_from_string(dir_cap)
-        if d.is_readonly():
+        capobj = capability_from_string(dir_cap)
+        if not is_write(capobj):
             raise NotWriteableError()
-        dirobj = self._objects[dir_cap]
-        if isinstance(dirobj, _Directory):
-            del dirobj.children[entry_name]
-        else:
+        if not is_directory(capobj):
             raise NotADirectoryError()
+        dirobj = self._objects[dir_cap]
+        # It is a directory cap so we know the object will be a _Directory.
+        assert isinstance(dirobj, _Directory)
+        del dirobj.children[entry_name]
 
     def list_directory(self, dir_cap: CapStr) -> dict[str, list[Any]]:
         def kind(entry):
@@ -634,21 +650,10 @@ class _MemoryTahoe:
         """
         return self._nodedir.child("private").child(name)
 
-    async def download(self, outpath, cap, child_path):
-        d = self._grid.download(cap)
-        if child_path is not None:
-            for p in child_path:
-                if cap.startswith("URI:DIR2"):
-                    cap = d.children[p]
-                    d = self._grid.download(cap)
-                else:
-                    raise TahoeAPIError(
-                        "get", DecodedURL(), 400, _no_children_message.format(path=p)
-                    )
-        if isinstance(d, bytes):
-            outpath.setContent(d)
-        else:
-            raise ValueError(f"Cannot download non-data capability ({cap[:7]})")
+    async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
+        data = self._grid.download(cap)
+        assert isinstance(data, bytes)
+        outpath.setContent(data)
 
     async def upload(self, data_provider: DataProvider):
         """
@@ -676,12 +681,58 @@ class _MemoryTahoe:
         return self._grid.list_directory(dir_cap)
 
 
+async def download_child(
+    outpath: FilePath,
+    client: ITahoeClient,
+    dircap: DirectoryReadCapability,
+    child_path: List[str],
+) -> None:
+    """
+    Download a child from the identified directory.
+
+    :param outpath: The local filesystem path to which to write the downloaded
+        data.
+
+    :param client: The client to use for the download.
+
+    :param dircap: The capability of the containing directory.
+
+    :param, child_path: The child names to use to find the data to download.
+        Each element in the list is the name of an entry in a directory.  The
+        first element is an entry in ``dircap``, the next element is an entry
+        in whatever directory the first identified, and so on.  The final
+        element must identify a regular file and all other elements must
+        identify directories.
+
+    :return: ``None`` after the download is complete.
+    """
+    if len(child_path) == 0:
+        raise ValueError("Path to child must be provided")
+    else:
+        p = child_path[0]
+        children = await client.list_directory(danger_real_capability_string(dircap))
+        child = children[p]
+        ro_uri = child[1]["ro_uri"]
+
+        if len(child_path) == 1:
+            await client.download(outpath, readable_from_string(ro_uri))
+        else:
+            if child[0] == "dirnode":
+                next_dircap = readonly_directory_from_string(ro_uri)
+                await download_child(outpath, client, next_dircap, child_path[1:])
+            else:
+                raise NotADirectoryError(
+                    digested_capability_string(capability_from_string(ro_uri))
+                )
+
+
 def attenuate_writecap(rw_cap: CapStr) -> CapStr:
     """
     Get a read-only capability corresponding to the same data as the given
     read-write capability.
     """
-    return capability_from_string(rw_cap).get_readonly().to_string().decode("ascii")
+
+    return danger_real_capability_string(writeable_from_string(rw_cap).reader)
 
 
 def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:

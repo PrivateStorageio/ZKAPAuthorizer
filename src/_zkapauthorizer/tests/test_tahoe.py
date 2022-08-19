@@ -3,6 +3,7 @@ Tests for ``_zkapauthorizer.tahoe``.
 """
 
 from io import BytesIO
+from typing import Callable, Coroutine, Generator
 
 from allmydata.client import config_from_string
 from allmydata.test.strategies import write_capabilities
@@ -11,11 +12,11 @@ from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
+from tahoe_capabilities import readable_from_string, writeable_directory_from_string
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
-    Contains,
     ContainsDict,
     Equals,
     Is,
@@ -29,6 +30,7 @@ from twisted.python.filepath import FilePath
 from ..storage_common import required_passes
 from ..tahoe import (
     CapStr,
+    ITahoeClient,
     MemoryGrid,
     NotADirectoryError,
     NotWriteableError,
@@ -38,11 +40,28 @@ from ..tahoe import (
     _scrub_cap,
     async_retry,
     attenuate_writecap,
+    download_child,
     required_passes_for_data,
 )
 from .fixtures import Treq
 from .resources import client_manager
 from .strategies import encoding_parameters, minimal_tahoe_configs
+
+
+def async_test(
+    f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]
+) -> Callable[[TestCase], Deferred[None]]:
+    """
+    Decorate a coroutine function to adapt it into a function that can be used
+    as a test method.
+    """
+
+    @inlineCallbacks
+    def g(self) -> Generator[Deferred[object], object, None]:
+        d: Deferred[object] = Deferred.fromCoroutine(f(self))
+        yield d
+
+    return g
 
 
 class IntegrationMixin:
@@ -135,29 +154,42 @@ class UploadDownloadTestsMixin:
     # Support test methods that return a Deferred.
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
 
-    @inlineCallbacks
-    def test_found(self):
+    def get_client(self) -> ITahoeClient:
+        """
+        Get the ``ITahoeClient`` provider to test.
+        """
+        raise NotImplementedError()
+
+    @async_test
+    async def test_found(self) -> None:
         """
         If the identified object can be downloaded then it is written to the given
         path.
         """
         client = self.get_client()
 
-        workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
+        tempdir = self.useFixture(TempDir())  # type: ignore[attr-defined]
+        workdir = FilePath(tempdir.join("test_found"))
         workdir.makedirs()
         content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        cap = yield Deferred.fromCoroutine(client.upload(lambda: BytesIO(content)))
-        yield Deferred.fromCoroutine(client.download(outpath, cap, None))
+        cap = readable_from_string(await client.upload(lambda: BytesIO(content)))
+        await client.download(outpath, cap)
 
-        self.assertThat(
+        self.assertThat(  # type: ignore[attr-defined]
             outpath.getContent(),
             Equals(content),
         )
 
-    @inlineCallbacks
-    def test_not_directory(self):
+
+class DownloadChildTests(MemoryMixin, TestCase):
+    """
+    Tests for ``download_child``.
+    """
+
+    @async_test
+    async def test_not_directory(self) -> None:
         """
         If a child path is given and the identified object is not a directory then ...
         """
@@ -171,20 +203,21 @@ class UploadDownloadTestsMixin:
         def get_content():
             return BytesIO(content)
 
-        cap = yield Deferred.fromCoroutine(client.upload(get_content))
+        dircap = await client.make_directory()
+        filecap = await client.upload(get_content)
+        await client.link(dircap, "foo", filecap)
 
-        d = Deferred.fromCoroutine(client.download(outpath, cap, ["somepath"]))
         try:
-            result = yield d
-        except TahoeAPIError as e:
-            self.assertThat(e.method, Equals("get"))
-            self.assertThat(e.status, Equals(400))
-            self.assertThat(
-                e.body,
-                Contains("Files have no children named"),
+            result = await download_child(
+                outpath,
+                client,
+                writeable_directory_from_string(dircap).reader,
+                ["foo", "somepath"],
             )
+        except NotADirectoryError:
+            pass
         else:
-            self.fail(f"Expected TahoeAPIError, got {result!r}")  # pragma: nocover
+            self.fail(f"Expected NotADirectoryError, got {result!r}")  # pragma: nocover
 
 
 class UploadDownloadIntegrationTests(
@@ -211,6 +244,12 @@ class DirectoryTestsMixin:
 
     # Support test methods that return a Deferred.
     run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=60.0)
+
+    def get_client(self) -> ITahoeClient:
+        """
+        Get the ``ITahoeClient`` provider to test.
+        """
+        raise NotImplementedError()
 
     @inlineCallbacks
     def test_list_directory(self):
@@ -294,36 +333,33 @@ class DirectoryTestsMixin:
         else:
             self.fail(f"expected ValueError, got {result!r}")  # pragma: nocover
 
-    @inlineCallbacks
-    def test_link(self):
+    @async_test
+    async def test_link(self) -> None:
         """
         ``link`` adds an entry to a directory.
         """
-        tmp = FilePath(self.useFixture(TempDir()).path)
+        tmp = FilePath(self.useFixture(TempDir()).path)  # type: ignore[attr-defined]
         content = b"some content"
         tahoe = self.get_client()
 
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
-        yield Deferred.fromCoroutine(
-            tahoe.link(
-                dir_cap,
-                entry_name,
-                entry_cap,
-            ),
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        await tahoe.link(
+            dir_cap,
+            entry_name,
+            entry_cap,
         )
 
         outpath = tmp.child("destination")
-        yield Deferred.fromCoroutine(
-            tahoe.download(
-                outpath,
-                dir_cap,
-                child_path=[entry_name],
-            ),
+        await download_child(
+            outpath,
+            tahoe,
+            writeable_directory_from_string(dir_cap).reader,
+            child_path=[entry_name],
         )
 
-        self.assertThat(
+        self.assertThat(  # type: ignore[attr-defined]
             outpath.getContent(),
             Equals(content),
         )

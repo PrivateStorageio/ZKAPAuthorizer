@@ -36,6 +36,7 @@ from autobahn.twisted.resource import WebSocketResource
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
 from prometheus_client import CollectorRegistry, write_to_textfile
+from tahoe_capabilities import DirectoryReadCapability
 from twisted.application.service import IService, MultiService
 from twisted.internet import task
 from twisted.internet.defer import succeed
@@ -45,7 +46,7 @@ from twisted.web.guard import HTTPAuthSessionWrapper
 from zope.interface import implementer
 
 from . import NAME
-from ._types import CapStr, GetTime
+from ._types import GetTime
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import get_redeemer
@@ -75,7 +76,6 @@ from .storage_common import BYTES_PER_PASS, get_configured_pass_value
 from .tahoe import (
     ITahoeClient,
     ShareEncoding,
-    attenuate_writecap,
     get_tahoe_client,
     required_passes_for_data,
 )
@@ -216,7 +216,7 @@ class ZKAPAuthorizer(object):
 
     def _add_replication_service(
         self, replicated_conn: _ReplicationCapableConnection, node_config: Config
-    ) -> CapStr:
+    ) -> None:
         """
         Create a replication service for the given database and arrange for it to
         start and stop when the reactor starts and stops.
@@ -232,7 +232,6 @@ class ZKAPAuthorizer(object):
         replication_service(replicated_conn, replica, cost).setServiceParent(
             self._service
         )
-        return mutable
 
     def _get_redeemer(self, node_config, announcement):
         """
@@ -317,13 +316,13 @@ class ZKAPAuthorizer(object):
         store = self._get_store(node_config)
         tahoe = self._get_tahoe_client(self.reactor, node_config)
 
-        async def setup_replication():
+        async def setup_replication() -> DirectoryReadCapability:
             # Setup replication
-            await setup_tahoe_lafs_replication(tahoe)
+            replica_ro = await setup_tahoe_lafs_replication(tahoe)
             # And then turn replication on for the database connection already
             # in use.
-            mutable = self._add_replication_service(store._connection, node_config)
-            return attenuate_writecap(mutable)
+            self._add_replication_service(store._connection, node_config)
+            return replica_ro
 
         return resource_from_configuration(
             node_config,

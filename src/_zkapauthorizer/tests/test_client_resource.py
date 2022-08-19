@@ -50,6 +50,15 @@ from hypothesis.strategies import (
 )
 from openapi_spec_validator import validate_spec
 from openapi_spec_validator.readers import read_from_filename
+from tahoe_capabilities import (
+    Capability,
+    DirectoryReadCapability,
+    DirectoryWriteCapability,
+    MDMFDirectoryWrite,
+    SSKDirectoryWrite,
+    danger_real_capability_string,
+)
+from tahoe_capabilities.strategies import chk_reads, mdmf_writes, ssk_writes
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -154,6 +163,16 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
+
+
+def directory_writes() -> SearchStrategy[DirectoryWriteCapability]:
+    return one_of(
+        [
+            ssk_writes().map(SSKDirectoryWrite),
+            mdmf_writes().map(MDMFDirectoryWrite),
+        ]
+    )
+
 
 TRANSIENT_ERROR = "something went wrong, who knows what"
 
@@ -552,8 +571,11 @@ class ReplicateTests(TestCase):
     @given(
         tahoe_configs(),
         api_auth_tokens(),
+        directory_writes().map(lambda rw: rw.reader),
     )
-    def test_already_configured(self, get_config, api_auth_token):
+    def test_already_configured(
+        self, get_config, api_auth_token, dir_ro: DirectoryReadCapability
+    ) -> None:
         """
         If replication has already been configured then the endpoint returns a
         response with a 409 status code.
@@ -565,7 +587,7 @@ class ReplicateTests(TestCase):
         )
 
         async def setup_replication():
-            raise ReplicationAlreadySetup("URI:DIR2-RO:foo:bar")
+            raise ReplicationAlreadySetup(danger_real_capability_string(dir_ro))
 
         root = root_from_config(config, aware_now, setup_replication=setup_replication)
         agent = RequestTraversalAgent(root)
@@ -633,8 +655,9 @@ class ReplicateTests(TestCase):
     @given(
         tahoe_configs(),
         api_auth_tokens(),
+        directory_writes().map(lambda rw: rw.reader),
     )
-    def test_created(self, get_config, api_auth_token):
+    def test_created(self, get_config, api_auth_token, cap_ro) -> None:
         """
         On successful replica configuration, the endpoint returns a response with
         a 201 status code and an application/json-encoded body containing a
@@ -645,9 +668,8 @@ class ReplicateTests(TestCase):
             get_config,
             api_auth_token,
         )
-        cap_ro = "URI:DIR2-RO:aaaa:bbbb"
 
-        async def setup_replication():
+        async def setup_replication() -> DirectoryReadCapability:
             return cap_ro
 
         root = root_from_config(config, aware_now, setup_replication=setup_replication)
@@ -667,7 +689,9 @@ class ReplicateTests(TestCase):
                     body_matcher=matches_json(
                         Equals(
                             {
-                                "recovery-capability": cap_ro,
+                                "recovery-capability": danger_real_capability_string(
+                                    cap_ro
+                                ),
                             }
                         ),
                     ),
@@ -865,13 +889,18 @@ class RecoverTests(TestCase):
             dumps_utf8({"recovery-capability": "hello world"}),
         )
 
-    def test_not_a_readonly_dircap(self) -> None:
+    @given(one_of([directory_writes(), chk_reads()]))
+    def test_not_a_readonly_dircap(self, cap: Capability) -> None:
         """
         If the ``recovery-capability`` property value is not a read-only directory
         capability string then the endpoint returns a 400 response.
         """
         self._request_error_test(
-            dumps_utf8({"recovery-capability": "URI:CHK:aaaa:bbbb:1:2:3"}),
+            dumps_utf8(
+                {
+                    "recovery-capability": danger_real_capability_string(cap),
+                }
+            ),
         )
 
     def _request_error_test(self, message) -> list[tuple[tuple, dict]]:
