@@ -7,15 +7,16 @@ from functools import partial
 from io import BytesIO
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
-from typing import Callable, Optional
+from typing import Callable, Optional, IO
 
 from attrs import frozen
-from eliot import log_call, start_action
+from eliot import start_action
 from hypothesis import given
 from hypothesis.strategies import lists, text
 from tahoe_capabilities import readable_from_string, ReadCapability
 from testtools import TestCase
 from testtools.matchers import (
+    Always,
     AfterPreprocessing,
     IsInstance,
     Contains,
@@ -32,7 +33,8 @@ from testtools.matchers._higherorder import MismatchesAll
 from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
-
+from fixtures import TempDir
+from ..eliot import log_call
 from ..config import REPLICA_RWCAP_BASENAME
 from ..model import RandomToken, VoucherStore, aware_now
 from ..replicate import (
@@ -47,10 +49,11 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid, FileNode
+from .._types import CapStr
+from ..tahoe import DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid, FileNode
 from .common import delayedProxy, from_awaitable
-from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import Always, Matcher, returns
+from .fixtures import TemporaryVoucherStore
+from .matchers import Matcher, returns
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -286,11 +289,11 @@ def match_upload(
 
 
 @frozen
-class _MatchUpload(Matcher):
+class _MatchUpload(Matcher[tuple[str, DataProvider]]):
     """
-    Match a two-tuple where the first element is the name of an upload and the
-    second element is a function that returns a ``BinaryIO`` that has contents
-    that can be parsed as an ``EventStream``.
+    Match a two-tuple where the first element is the name of an upload and
+    the second element is a function that returns an ``IO[bytes]`` that has
+    contents that can be parsed as an ``EventStream``.
 
     :ivar name_matcher: A matcher for the upload name.
 
@@ -322,11 +325,11 @@ class _MatchUpload(Matcher):
         return None
 
 
-async def noop_upload(name, get_bytes) -> None:
+async def noop_upload(name: str, get_bytes: Callable[[], IO[bytes]]) -> None:
     pass
 
 
-async def noop_prune(predicate) -> None:
+async def noop_prune(predicate: object) -> None:
     pass
 
 
@@ -358,7 +361,7 @@ def repeat_until(condition: Callable[[], bool], action: Callable[[], object]) ->
             break
 
 
-def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, dict]]:
+def is_event_stream(grid: MemoryGrid, **kwargs: Matcher[object]) -> Matcher[tuple[str, dict[str, object]]]:
     """
     Match a Tahoe-LAFS directory entry representing a file which can be
     retrieved from the given grid and which contains an ``EventStream`` with a
@@ -780,7 +783,7 @@ class TahoeDirectoryListerTests(TestCase):
         directory_names=lists(text(max_size=100), max_size=3, unique=True),
         file_names=lists(text(max_size=100), max_size=3, unique=True),
     )
-    def test_list(self, directory_names, file_names) -> None:
+    def test_list(self, directory_names: list[str], file_names: list[str]) -> None:
         """
         ``get_tahoe_lafs_direntry_lister`` returns a callable that can read the
         entries details from a Tahoe-LAFS directory.
