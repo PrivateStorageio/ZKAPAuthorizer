@@ -26,6 +26,7 @@ from typing_extensions import ParamSpec, Concatenate
 
 import attr
 from foolscap.referenceable import RemoteReference
+from foolscap.ipb import IRemoteReference
 from attrs import define, field, Factory
 from allmydata.interfaces import IStorageServer
 from attr.validators import provides
@@ -224,19 +225,19 @@ async def call_with_passes(
 
 
 class RRefHaver(Protocol):
-    def _rref(self) -> RemoteReference:
+    def _rref(self) -> IRemoteReference:
         ...
 
 _S = TypeVar("_S", bound=RRefHaver)
 
 def with_rref(
-        f: Callable[Concatenate[_S, RemoteReference, _P], _T],
+        f: Callable[Concatenate[_S, IRemoteReference, _P], _T],
 ) -> Callable[Concatenate[_S, _P], _T]:
     """
     Decorate a function so that it automatically receives a
-    ``RemoteReference`` as its first argument when called.
+    ``IRemoteReference`` as its first argument when called.
 
-    The ``RemoteReference`` is retrieved by calling ``_rref`` on the first
+    The ``IRemoteReference`` is retrieved by calling ``_rref`` on the first
     argument passed to the function (expected to be ``self``).
     """
 
@@ -256,7 +257,7 @@ def _encode_passes(group: IPassGroup) -> list[bytes]:
     return list(t.pass_bytes for t in group.passes)
 
 
-async def stat_shares(rref: RemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
+async def stat_shares(rref: IRemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
     unknown = await rref.callRemote( # type: ignore[no-untyped-call]
         "stat_shares",
         storage_indexes,
@@ -278,7 +279,7 @@ async def stat_shares(rref: RemoteReference, storage_indexes: list[bytes]) -> li
         known.append(known_stats)
     return known
 
-async def get_share_sizes(rref: RemoteReference, storage_index: bytes) -> dict[int, int]:
+async def get_share_sizes(rref: IRemoteReference, storage_index: bytes) -> dict[int, int]:
     unknown_sizes = await rref.callRemote( # type: ignore[no-untyped-call]
         "share_sizes",
         storage_index,
@@ -296,7 +297,7 @@ async def get_share_sizes(rref: RemoteReference, storage_index: bytes) -> dict[i
 
 
 async def slot_testv_and_readv_and_writev(
-        rref: RemoteReference,
+        rref: IRemoteReference,
         passes: IPassGroup,
         storage_index: bytes,
         secrets: Secrets,
@@ -352,7 +353,7 @@ class ZKAPAuthorizerStorageClient(object):
     of this scheme.
 
     :ivar _get_rref: A no-argument callable which retrieves the most recently
-        valid ``RemoteReference`` corresponding to the server-side object for
+        valid ``IRemoteReference`` corresponding to the server-side object for
         this scheme.
 
     :ivar _get_passes: A callable to use to retrieve passes which can be used
@@ -365,14 +366,14 @@ class ZKAPAuthorizerStorageClient(object):
         "RIPrivacyPassAuthorizedStorageServer.tahoe.privatestorage.io"
     )
     _pass_value: int = field(validator=positive_integer)
-    _get_rref: Callable[[], RemoteReference]
+    _get_rref: Callable[[], IRemoteReference]
     _get_passes: Callable[[bytes, int], IPassGroup]
     _clock: IReactorTime = field(
         validator=provides(IReactorTime),
         default=Factory(partial(namedAny, "twisted.internet.reactor")),
     )
 
-    def _rref(self) -> RemoteReference:
+    def _rref(self) -> IRemoteReference:
         rref = self._get_rref()
         # rref provides foolscap.ipb.IRemoteReference but in practice it is a
         # foolscap.referenceable.RemoteReference instance.  The interface
@@ -381,6 +382,7 @@ class ZKAPAuthorizerStorageClient(object):
         #
         # Foolscap development isn't exactly racing along and if we're lucky
         # we'll switch to HTTP before too long anyway.
+        assert isinstance(rref, RemoteReference)
         actual_name = rref.tracker.interfaceName
         expected_name = self._expected_remote_interface_name
         if actual_name != expected_name:
@@ -392,7 +394,7 @@ class ZKAPAuthorizerStorageClient(object):
         return rref
 
     @with_rref
-    async def get_version(self, rref: RemoteReference) -> dict[bytes, Any]:
+    async def get_version(self, rref: IRemoteReference) -> dict[bytes, Any]:
         unknown_version = await rref.callRemote( # type: ignore[no-untyped-call]
             "get_version",
         )
@@ -442,13 +444,13 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     async def allocate_buckets(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         storage_index: bytes,
         renew_secret: bytes,
         cancel_secret: bytes,
         sharenums: set[int],
         allocated_size: int,
-        canary: RemoteReference,
+        canary: IRemoteReference,
     ) -> tuple[set[int], dict[int, Any]]:
         num_passes = required_passes(
             self._pass_value, [allocated_size] * len(sharenums)
@@ -477,7 +479,7 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     async def get_buckets(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         storage_index: bytes,
     ) -> dict[int, Any]:
         unknown_buckets = await rref.callRemote( # type: ignore[no-untyped-call]
@@ -497,7 +499,7 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     async def add_lease(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         storage_index: bytes,
         renew_secret: bytes,
         cancel_secret: bytes,
@@ -523,13 +525,13 @@ class ZKAPAuthorizerStorageClient(object):
         return None
 
     @with_rref
-    async def stat_shares(self, rref: RemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
+    async def stat_shares(self, rref: IRemoteReference, storage_indexes: list[bytes]) -> list[dict[int, ShareStat]]:
         return await stat_shares(rref, storage_indexes)
 
     @with_rref
     async def advise_corrupt_share(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         share_type: str,
         storage_index: bytes,
         shnum: int,
@@ -548,7 +550,7 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     async def slot_testv_and_readv_and_writev(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         storage_index: bytes,
         secrets: Secrets,
         tw_vectors: TestWriteVectors,
@@ -626,7 +628,7 @@ class ZKAPAuthorizerStorageClient(object):
     @with_rref
     async def slot_readv(
         self,
-        rref: RemoteReference,
+        rref: IRemoteReference,
         storage_index: bytes,
         shares: list[int],
         r_vector: ReadVector,
