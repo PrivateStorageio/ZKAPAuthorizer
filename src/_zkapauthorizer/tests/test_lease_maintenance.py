@@ -17,10 +17,12 @@ Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
 from datetime import datetime, timedelta
+from random import Random
 
 import attr
+from attrs import define
 from allmydata.client import SecretHolder
-from allmydata.interfaces import IServer, IStorageBroker
+from allmydata.interfaces import IServer, IStorageBroker, IDirectoryNode
 from allmydata.util.hashutil import CRYPTO_VAL_SIZE
 from fixtures import TempDir
 from hypothesis import given, note
@@ -49,6 +51,7 @@ from testtools.twistedsupport import succeeded
 from twisted.application.service import IService
 from twisted.internet.defer import Deferred, maybeDeferred, succeed
 from twisted.internet.task import Clock
+from twisted.internet.interfaces import IReactorTime
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
@@ -83,7 +86,7 @@ def dummy_maintain_leases():
     pass
 
 
-@attr.s
+@define
 class DummyStorageServer(object):
     """
     A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
@@ -92,9 +95,9 @@ class DummyStorageServer(object):
         metadata about shares at that storage index.
     """
 
-    clock = attr.ib()
-    buckets: dict[bytes, dict[int, ShareStat]] = attr.ib()
-    lease_seed = attr.ib()
+    clock: Clock
+    buckets: dict[bytes, dict[int, ShareStat]]
+    lease_seed: bytes
 
     def stat_shares(
         self, storage_indexes: list[bytes]
@@ -106,7 +109,7 @@ class DummyStorageServer(object):
 
     def add_lease(self, storage_index, renew_secret, cancel_secret):
         for stat in self.buckets.get(storage_index, {}).values():
-            stat.lease_expiration = (
+            stat.lease_expiration = int(
                 self.clock.seconds() + timedelta(days=31).total_seconds()
             )
 
@@ -363,8 +366,10 @@ class LeaseMaintenanceServiceTests(TestCase):
         """
         When the service is stopped, the delayed call in the reactor is removed.
         """
+        async def maintain_leases() -> None:
+            pass
         service = lease_maintenance_service(
-            lambda: None,
+            maintain_leases,
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
@@ -388,7 +393,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         randoms(),
         clocks(),
     )
-    def test_nodes_visited(self, random, clock) -> None:
+    def test_nodes_visited(self, random: Random, clock: Clock) -> None:
         """
         When the service runs, it calls the ``maintain_leases`` object.
         """
@@ -420,14 +425,14 @@ class VisitStorageIndexesFromRootTests(TestCase):
     """
 
     @given(node_hierarchies(), clocks())
-    def test_visits_all_nodes(self, root_node, clock):
+    def test_visits_all_nodes(self, root_node: IDirectoryNode, clock: Clock) -> None:
         """
         The operation calls the specified visitor with every node from the root to
         its deepest children.
         """
-        visited = []
+        visited: list[bytes] = []
 
-        def perform_visit(visit_assets):
+        async def perform_visit(visit_assets):
             return visit_assets(visited.append)
 
         operation = visit_storage_indexes_from_root(

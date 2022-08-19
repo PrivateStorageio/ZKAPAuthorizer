@@ -23,7 +23,7 @@ from random import Random
 from datetime import datetime, timedelta
 from errno import ENOENT
 from functools import partial
-from typing import Any, Callable, Iterable, Awaitable, NewType, Optional, Generic, TypeVar
+from typing import Any, Callable, Iterable, Awaitable, NewType, Optional, Generic, TypeVar, Coroutine
 from typing_extensions import TypeAlias
 
 import attr
@@ -609,7 +609,7 @@ def read_time_from_path(path: FilePath) -> Optional[datetime]:
 def visit_storage_indexes_from_root(
         visit_assets: Callable[[VisitAssets], Awaitable[None]],
         get_root_nodes: Callable[[], list[IFilesystemNode]],
-) -> Callable[[], Awaitable[None]]:
+) -> Callable[[], Coroutine[Deferred[None], None, None]]:
     """
     An operation for ``lease_maintenance_service`` which applies the given
     visitor to ``root_node`` and all its children.
@@ -672,7 +672,7 @@ def maintain_leases_from_root(
     min_lease_remaining: timedelta,
     progress: Callable[[], ILeaseMaintenanceObserver],
     get_now: Callable[[], datetime],
-) -> Callable[[], Awaitable[None]]:
+) -> Callable[[], Coroutine[Deferred[None], None, [None]]]:
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
     and all its children and renews their leases if they have
