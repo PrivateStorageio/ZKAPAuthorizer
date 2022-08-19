@@ -24,7 +24,7 @@ from sqlite3 import connect as _sqlite3_connect
 from typing import Any, Callable, Optional
 from weakref import WeakValueDictionary
 
-from foolscap.referenceable import RemoteReference
+from foolscap.ipb import IRemoteReference
 from allmydata.storage.server import StorageServer
 from allmydata.client import _Client
 from allmydata.interfaces import (
@@ -286,7 +286,7 @@ class ZKAPAuthorizer(object):
             ),
         )
 
-    def get_storage_client(self, node_config: Config, announcement: dict[str, Any], get_rref: Callable[[], RemoteReference]) -> ZKAPAuthorizerStorageClient:
+    def get_storage_client(self, node_config: Config, announcement: dict[str, Any], get_rref: Callable[[], IRemoteReference]) -> ZKAPAuthorizerStorageClient:
         """
         Create an ``IStorageClient`` that submits ZKAPs with certain requests in
         order to authorize them.  The ZKAPs are extracted from the database

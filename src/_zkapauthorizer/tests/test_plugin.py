@@ -16,6 +16,7 @@
 Tests for the Tahoe-LAFS plugin.
 """
 
+from typing import TypeAlias, Callable, Any, Awaitable
 from datetime import timedelta
 from functools import partial
 from io import StringIO
@@ -39,7 +40,7 @@ from challenge_bypass_ristretto import SigningKey
 from eliot.testing import LoggedMessage, capture_logging
 from fixtures import TempDir
 from foolscap.broker import Broker
-from foolscap.ipb import IReferenceable, IRemotelyCallable
+from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference
 from foolscap.referenceable import LocalReferenceable
 from hyperlink import DecodedURL
 from hypothesis import given, settings
@@ -78,8 +79,11 @@ from twisted.python.runtime import platform
 from twisted.test.proto_helpers import StringTransport
 from twisted.web.http_headers import Headers
 from twisted.web.resource import IResource
+from twisted.web.guard import HTTPAuthSessionWrapper
 
-from twisted.plugins.zkapauthorizer import storage_server_plugin
+# XXX
+from .._plugin import storage_server_plugin
+# from twisted.plugins.zkapauthorizer import storage_server_plugin
 
 from .. import NAME
 from .._plugin import (
@@ -91,7 +95,7 @@ from .._plugin import (
     open_store,
 )
 from .._storage_client import IncorrectStorageServerReference
-from ..config import CONFIG_DB_NAME
+from ..config import Config, CONFIG_DB_NAME
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
@@ -109,9 +113,9 @@ from ..replicate import (
     with_replication,
 )
 from ..resource import recover
-from ..spending import GET_PASSES
+from ..eliot import GET_PASSES
 from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
-from .common import skipIf
+from .common import skipIf, GetConfig
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Provides, matches_response, raises
@@ -269,7 +273,7 @@ class PluginTests(TestCase):
         )
 
 
-def no_tahoe_client(reactor, node_config) -> ITahoeClient:
+def no_tahoe_client(reactor: object, node_config: object) -> ITahoeClient:
     """
     :raise: Always raise an exception.
     """
@@ -434,12 +438,12 @@ class ServiceTests(TestCase):
         )
 
     @given(tahoe_configs().flatmap(just))
-    def test_replicating(self, get_config) -> None:
+    def test_replicating(self, get_config: GetConfig) -> None:
         """
         There is a replication service for a database which has been placed into
         replication mode.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         node_config = get_config(nodedir.path, "tub.port")
         grid = MemoryGrid()
         tahoe = grid.client(FilePath(node_config._basedir))
@@ -620,14 +624,14 @@ class ClientPluginTests(TestCase):
     )
     def test_mismatch_storage_server_furl(
         self,
-        get_config,
-        announcement,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        size,
-    ):
+        get_config: GetConfig,
+        announcement: dict[str, Any],
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+        sharenums: set[int],
+        size: int,
+    ) -> None:
         """
         If the ``get_rref`` passed to ``get_storage_client`` returns a reference
         to something other than an ``RIPrivacyPassAuthorizedStorageServer``
@@ -637,7 +641,7 @@ class ClientPluginTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         node_config = get_config(nodedir.path, "tub.port")
 
@@ -647,14 +651,16 @@ class ClientPluginTests(TestCase):
             partial(get_rref, RIStorageServer),
         )
 
-        def use_it():
+        def use_it() -> Awaitable[object]:
+            canary = LocalReferenceable(None)
+            assert IRemoteReference.providedBy(canary)
             return storage_client.allocate_buckets(
                 storage_index,
                 renew_secret,
                 cancel_secret,
                 sharenums,
                 size,
-                LocalReferenceable(None),
+                canary,
             )
 
         self.assertThat(
@@ -826,7 +832,7 @@ class ClientResourceTests(TestCase):
         )
 
     @given(tahoe_configs())
-    def test_downloader(self, get_config) -> None:
+    def test_downloader(self, get_config: GetConfig) -> None:
         """
         The recovery resource is configured with a downloader that retrieves
         objects using the plugin's Tahoe-LAFS client.
@@ -834,7 +840,7 @@ class ClientResourceTests(TestCase):
         # This test is too complicated.  The implementation should be factored
         # so we can test what we want to test here without involving a Tahoe
         # client, the plugin, and the client resource.
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
         token = "hello world"
@@ -856,12 +862,13 @@ class ClientResourceTests(TestCase):
         # hook those together, but for now we reach in "directly" to
         # grab the WebSocketResource and set up Autobahn's test agent
         # that way (requiring the factory from the real resource)...
+        assert isinstance(root, HTTPAuthSessionWrapper)
         wsr = get_recovery_websocket_resource(root)
         clock = MemoryReactorClockResolver()
         pumper = create_pumper()
 
         def create_proto():
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             # use the _actual_ WebSocketResource's factory
             proto = wsr._factory.buildProtocol(addr)
             return proto
