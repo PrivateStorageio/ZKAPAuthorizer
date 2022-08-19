@@ -7,8 +7,8 @@ to support testing the replication/recovery system.
 
 from datetime import datetime
 from enum import Enum, auto
-from sqlite3 import Connection as _SQLite3Connection
-from typing import Any, Iterable, Optional, Protocol, Union, TypeAlias, TYPE_CHECKING
+from sqlite3 import Connection as _SQLite3Connection, Cursor as _SQLite3Cursor
+from typing import Any, Iterable, Optional, Protocol, Union, TypeAlias, TYPE_CHECKING, Optional, Callable
 from contextlib import AbstractContextManager
 
 from attrs import frozen
@@ -65,7 +65,7 @@ class AbstractConnection(Protocol):
     def iterdump(self) -> Iterable[str]:
         ...
 
-    def cursor(self, cursorClass: Optional[type] = None) -> AbstractCursor:
+    def cursor(self, cursorClass: None = None) -> AbstractCursor:
         ...
 
     def __enter__(self) -> AbstractContextManager["AbstractConnection"]:
@@ -92,12 +92,7 @@ class UnboundConnect(Protocol):
     def __call__(
         self,
         path: str,
-        timeout: Optional[int] = None,
-        detect_types: Optional[bool] = None,
         isolation_level: Optional[str] = None,
-        check_same_thread: bool = False,
-        factory: Any = None,
-        cached_statements: Any = None,
     ) -> _SQLite3Connection:
         """
         Get a new database connection.
@@ -111,12 +106,7 @@ class BoundConnect(Protocol):
 
     def __call__(
         self,
-        timeout: Optional[int] = None,
-        detect_types: Optional[bool] = None,
         isolation_level: Optional[str] = None,
-        check_same_thread: bool = False,
-        factory: Any = None,
-        cached_statements: Any = None,
     ) -> _SQLite3Connection:
         """
         Get a new database connection.
@@ -312,3 +302,9 @@ def statement_mutates(statement: str) -> bool:
         return False
     (parsed,) = parse(statement)
     return parsed.get_type() not in {"SELECT"}
+
+def f(c: Connection, c2: Cursor) -> None:
+    pass
+
+def g(c: _SQLite3Connection, c2: _SQLite3Cursor) -> None:
+    f(c, c2)
