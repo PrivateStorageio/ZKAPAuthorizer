@@ -18,7 +18,7 @@ Tests for communication between the client and server components.
 
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.shares import get_share_file
-from challenge_bypass_ristretto import PublicKey, random_signing_key
+from challenge_bypass_ristretto import PublicKey, SigningKey, random_signing_key
 from foolscap.referenceable import LocalReferenceable
 from hypothesis import assume, given
 from hypothesis.strategies import data as data_strategy
@@ -50,17 +50,20 @@ from ..api import (
     ZKAPAuthorizerStorageServer,
 )
 from ..foolscap import ShareStat
-from ..server.spending import RecordingSpender
+from ..server.spending import RecordingSpender, _SpendingData
 from ..storage_common import (
+    TestVector,
     allocate_buckets_message,
     get_implied_data_length,
     required_passes,
 )
-from .common import skipIf
+from foolscap.ipb import IRemoteReference
+from .common import skipIf, from_awaitable
 from .fixtures import AnonymousStorageServer
 from .foolscap import LocalRemote
 from .matchers import matches_spent_passes, matches_version_dictionary
 from .storage_common import (
+    _PassFactory,
     LEASE_INTERVAL,
     get_passes,
     pass_factory,
@@ -141,11 +144,24 @@ class ShareTests(TestCase):
         which are used by these tests.
     """
 
-    pass_value = 128 * 1024
+    pass_value: int = 128 * 1024
+    canary: IRemoteReference
+    signing_key: SigningKey
+    public_key_hash: PublicKey
+    pass_factory: _PassFactory
+    clock: Clock
+    anonymous_storage_server: AnonymousStorageServer
+    spending_recorder: _SpendingData
+    server: ZKAPAuthorizerStorageServer
+    local_remote_server: LocalRemote
+    client: ZKAPAuthorizerStorageClient
 
     def setUp(self):
         super(ShareTests, self).setUp()
-        self.canary = LocalReferenceable(None)
+        localref = LocalReferenceable(None)
+        assert IRemoteReference.providedBy(localref)
+        self.canary = localref
+
         self.signing_key = random_signing_key()
         self.public_key_hash = PublicKey.from_signing_key(
             self.signing_key
@@ -757,7 +773,7 @@ class ShareTests(TestCase):
 
         # Create a share we can toy with.
         wrote, read = extract_result(
-            Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
+            from_awaitable(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -824,7 +840,7 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            Deferred.fromCoroutine(self.client.advise_corrupt_share(
+            from_awaitable(self.client.advise_corrupt_share(
                 b"immutable",
                 storage_index,
                 sharenum,
@@ -855,7 +871,7 @@ class ShareTests(TestCase):
         self.clock.advance(now)
 
         def write(vector):
-            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
+            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={k: v.for_call() for (k, v) in vector.items()},
@@ -957,7 +973,7 @@ class ShareTests(TestCase):
             )
 
         def write():
-            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
+            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -1020,7 +1036,7 @@ class ShareTests(TestCase):
         secrets = (write_enabler, renew_secret, cancel_secret)
 
         def write():
-            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
+            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors={
@@ -1086,10 +1102,10 @@ class ShareTests(TestCase):
         If test vectors are given then the write is allowed if they match the
         existing data.
         """
-        empty_test_vector = []
+        empty_test_vector: TestVector = []
 
         def write(tw_vectors):
-            return Deferred.fromCoroutine(self.client.slot_testv_and_readv_and_writev(
+            return from_awaitable(self.client.slot_testv_and_readv_and_writev(
                 storage_index,
                 secrets=secrets,
                 tw_vectors=tw_vectors,

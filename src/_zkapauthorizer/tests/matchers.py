@@ -29,7 +29,7 @@ __all__ = [
 
 from datetime import datetime, timedelta
 from json import loads
-from typing import Generic, TypeVar, Union, Optional, Callable, Container
+from typing import Generic, TypeVar, Union, Optional, Callable, Container, Iterable
 from zope.interface.interface import InterfaceClass
 
 from attrs import frozen, field, validators
@@ -238,7 +238,7 @@ def matches_response(
 
 
 def matches_spent_passes(
-    public_key_hash: bytes, spent_passes: list[Pass]
+    public_key_hash: bytes, spent_passes: Iterable[Pass]
 ) -> Matcher[_SpendingData]:
     """
     Returns a matcher for _SpendingData that checks whether the

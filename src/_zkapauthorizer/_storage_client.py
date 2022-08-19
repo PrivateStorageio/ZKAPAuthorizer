@@ -532,7 +532,7 @@ class ZKAPAuthorizerStorageClient(object):
     async def advise_corrupt_share(
         self,
         rref: IRemoteReference,
-        share_type: str,
+        share_type: bytes,
         storage_index: bytes,
         shnum: int,
         reason: bytes,

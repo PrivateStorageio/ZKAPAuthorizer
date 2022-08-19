@@ -16,8 +16,11 @@
 Testing helpers related to Foolscap.
 """
 
+from typing import Awaitable, NoReturn
 import attr
+from attrs import define, field
 from foolscap.api import Any, Copyable, Referenceable, RemoteInterface # type: ignore[attr-defined]
+from foolscap.ipb import IRemoteReference
 from foolscap.copyable import CopyableSlicer, ICopyable
 from twisted.internet.defer import fail, succeed
 from zope.interface import implementer
@@ -82,32 +85,40 @@ class LocalTracker(object):
         return "pb://abcd@127.0.0.1:12345/efgh"
 
 
-@attr.s
+@implementer(IRemoteReference)   # type: ignore # zope.interface.implementer accepts interface, not ...
+@define
 class LocalRemote(object):
     """
     Adapt a referenceable to behave as if it were a remote reference instead.
-
-    This is only a partial implementation of ``IRemoteReference`` so it
-    doesn't declare the interface.
 
     ``foolscap.referenceable.LocalReferenceable`` is in many ways a better
     adapter between these interfaces but it also uses ``eventually`` which
     complicates matters immensely for testing.
 
-    :ivar foolscap.ipb.IReferenceable _referenceable: The object to which this
-        provides a simulated remote interface.
+    :ivar _referenceable: The object to which this provides a simulated remote
+        interface.
     """
 
-    _referenceable = attr.ib()
-    check_args = attr.ib(default=True)
-    tracker = attr.ib(default=None)
+    _referenceable: Referenceable
+    check_args: bool = True
+    tracker: LocalTracker = field()
 
-    def __attrs_post_init__(self):
-        self.tracker = LocalTracker(
+    @tracker.default
+    def _tracker_default(self):
+        return LocalTracker(
             self._referenceable.getInterface(),
         )
 
-    def callRemote(self, methname, *args, **kwargs):
+    def notifyOnDisconnect(self, callback: object, *args: object, **kwargs: object) -> NoReturn:
+        raise NotImplementedError()
+
+    def dontNotifyOnDisconnect(self, cookie: object) -> NoReturn:
+        raise NotImplementedError()
+
+    def callRemoteOnly(self, name: str, *args: object, **kwargs: object) -> NoReturn:
+        raise NotImplementedError()
+
+    def callRemote(self, methname: str, *args: object, **kwargs: object) -> Awaitable[object]:
         """
         Call the given method on the wrapped object, passing the given arguments.
 
