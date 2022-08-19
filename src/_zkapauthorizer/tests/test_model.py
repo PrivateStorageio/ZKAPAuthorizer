@@ -971,7 +971,7 @@ class EventStreamTests(TestCase):
                     Change(
                         next(sequence),
                         change.statement(),
-                        change.arguments(),
+                        list(change.arguments()),
                         False,
                     )
                 )

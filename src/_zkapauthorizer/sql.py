@@ -40,11 +40,11 @@ class AbstractCursor(Protocol):
     def rowcount(self) -> Optional[int]:
         ...
 
-    def execute(self, statement: str, args: Parameters, /) -> "AbstractCursor":
+    def execute(self, statement: str, args: "Parameters", /) -> "AbstractCursor":
         ...
 
     def executemany(
-        self, statement: str, args: Iterable[Parameters]
+        self, statement: str, args: Iterable["Parameters"]
     ) -> "AbstractCursor":
         ...
 

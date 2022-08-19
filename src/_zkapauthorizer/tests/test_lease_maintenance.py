@@ -406,7 +406,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
         visited: list[bytes] = []
 
         async def perform_visit(visit_assets):
-            return visit_assets(visited.append)
+            return await visit_assets(visited.append)
 
         operation = visit_storage_indexes_from_root(
             perform_visit,

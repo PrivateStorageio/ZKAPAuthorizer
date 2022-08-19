@@ -120,7 +120,7 @@ def returns(matcher: Matcher[_T]) -> Matcher[Callable[[], _T]]:
     return _Returns(matcher)
 
 
-class _Returns(_Matcher[_T]):
+class _Returns(Matcher[_T]):
     def __init__(self, result_matcher: Matcher[Callable[[], _T]]):
         self.result_matcher = result_matcher
 

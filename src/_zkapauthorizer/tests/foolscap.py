@@ -27,7 +27,7 @@ from foolscap.api import (  # type: ignore[attr-defined]
     RemoteInterface,
 )
 from foolscap.copyable import CopyableSlicer, ICopyable
-from foolscap.ipb import IRemoteReference
+from foolscap.referenceable import RemoteReference
 from twisted.internet.defer import fail, succeed
 from zope.interface import implementer
 
@@ -91,9 +91,8 @@ class LocalTracker(object):
         return "pb://abcd@127.0.0.1:12345/efgh"
 
 
-@implementer(IRemoteReference)  # type: ignore # zope.interface.implementer accepts interface, not ...
 @define
-class LocalRemote(object):
+class LocalRemote(RemoteReference):
     """
     Adapt a referenceable to behave as if it were a remote reference instead.
 
@@ -123,12 +122,10 @@ class LocalRemote(object):
     def dontNotifyOnDisconnect(self, cookie: object) -> NoReturn:
         raise NotImplementedError()
 
-    def callRemoteOnly(self, name: str, *args: object, **kwargs: object) -> NoReturn:
+    def callRemoteOnly(self, _name: Any, *args: Any, **kwargs: Any) -> NoReturn:
         raise NotImplementedError()
 
-    def callRemote(
-        self, methname: str, *args: object, **kwargs: object
-    ) -> Awaitable[object]:
+    def callRemote(self, _name: Any, *args: Any, **kwargs: Any) -> Awaitable[object]:
         """
         Call the given method on the wrapped object, passing the given arguments.
 
@@ -138,12 +135,12 @@ class LocalRemote(object):
         :return Deferred: The result of the call on the wrapped object.
         """
         try:
-            schema = self._referenceable.getInterface()[methname]
+            schema = self._referenceable.getInterface()[_name]
             if self.check_args:
                 schema.checkAllArgs(args, kwargs, inbound=True)
             _check_copyables(list(args) + list(kwargs.values()))
             result = self._referenceable.doRemoteCall(
-                methname,
+                _name,
                 args,
                 kwargs,
             )

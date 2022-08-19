@@ -644,8 +644,9 @@ class EventStreamRecoveryTests(TestCase):
         self, change_groups: list[list[Change]], random: Random
     ) -> None:
         """
-        ``sorted_event_streams`` returns a list of ``EventStream`` instances in
-        increasing order of their ``highest_sequence`` result with empty ``EventStream`` instances excluded.
+        ``sorted_event_streams`` returns a list of ``EventStream`` instances
+        in increasing order of their ``highest_sequence`` result with empty
+        ``EventStream`` instances excluded.
         """
         # Take the groups of Changes and build EventStreams from them,
         # renumbering the changes so they're monotonically increasing.  This
@@ -656,10 +657,9 @@ class EventStreamRecoveryTests(TestCase):
         def resequence(c: Change) -> Change:
             return attrs.evolve(c, sequence=next(seq))
 
-        # Generator has incompatible item type "Change"; expected "_T_co"
         expected = [
             EventStream(
-                changes=(resequence(change) for change in change_group),  # type: ignore
+                changes=list(resequence(change) for change in change_group),
             )
             for change_group in change_groups
         ]
@@ -681,7 +681,7 @@ class EventStreamRecoveryTests(TestCase):
                         Change,
                         sequence=integers(),
                         statement=text(),
-                        arguments=just(()),
+                        arguments=just([]),
                         important=just(False),
                     ),
                 ),

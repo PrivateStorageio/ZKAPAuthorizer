@@ -184,7 +184,7 @@ class Change:
 
     sequence: int
     statement: str
-    arguments: Sequence[SQLType]
+    arguments: Sequence[SQLType] = field()
     important: bool
 
     @arguments.validator

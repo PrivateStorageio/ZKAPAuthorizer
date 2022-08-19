@@ -304,11 +304,11 @@ class RecoverProtocol(WebSocketServerProtocol):  # type: ignore[misc]
                     f"Recovery capability must be a string, got {type(cap_str)!r} instead."
                 )
             recovery_capability = readonly_directory_from_string(cap_str)
-        except Exception as e:
+        except Exception:
             self._log.failure("Failed to initiate recovery")
             self.sendClose(
                 code=4000,
-                reason=f"Failed to parse recovery request: {e}",
+                reason="Failed to parse recovery request",
             )
             return
         # we have a valid request, tell our factory to start recovery

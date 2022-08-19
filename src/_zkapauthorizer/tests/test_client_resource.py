@@ -74,11 +74,9 @@ from testtools.matchers import (
     MatchesAll,
     MatchesAny,
     MatchesDict,
-    MatchesListwise,
     MatchesStructure,
     Mismatch,
     Not,
-    StartsWith,
 )
 from testtools.twistedsupport import (
     AsynchronousDeferredRunTest,
@@ -86,7 +84,7 @@ from testtools.twistedsupport import (
     flush_logged_errors,
     succeeded,
 )
-from treq import IResponse
+from treq.response import IResponse
 from treq.testing import RequestTraversalAgent
 from twisted.internet.address import IPv4Address
 from twisted.internet.base import DelayedCall
@@ -947,23 +945,16 @@ class RecoverTests(TestCase):
         # run test by sending the initial message
         proto.onMessage(message, False)
 
-        # all errors should result in a close message
-        self.assertThat(
-            closes,
-            MatchesListwise(
-                [
-                    MatchesDict(
-                        {
-                            "code": Equals(4000),
-                            "reason": StartsWith("Failed to parse recovery request: "),
-                        }
-                    ),
-                ]
-            ),
-        )
+        # The parse error gets logged.
         self.assertThat(
             flush_logged_errors(ValueError, TypeError),
             HasLength(1),
+        )
+
+        # all errors should result in a close message
+        self.assertThat(
+            closes,
+            Equals([(4000, "Failed to parse recovery request")]),
         )
         return messages
 

@@ -612,7 +612,7 @@ class ReplicationServiceTests(TestCase):
 
         # since we've uploaded everything, there should be no
         # events in the store
-        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        self.assertEqual([], get_events(tvs.store._connection).changes)
 
     def test_snapshot_prune(self) -> None:
         """
@@ -710,7 +710,7 @@ class ReplicationServiceTests(TestCase):
         delay_controller.run()
 
         # now there should be no local changes
-        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        self.assertEqual([], get_events(tvs.store._connection).changes)
         # ...and we should have pruned the prior event-stream .. so we
         # interrogate the predicate we _were_ given to ensure it would
         # have said "yes" to the event-stream we did upload
