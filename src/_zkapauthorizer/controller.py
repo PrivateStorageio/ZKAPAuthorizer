@@ -29,7 +29,7 @@ from datetime import datetime
 
 import attr
 import challenge_bypass_ristretto
-from attrs import define, Factory, field
+from attrs import define, Factory, field, frozen
 from treq import content
 from treq.client import HTTPClient
 from twisted.internet.defer import Deferred, fail, inlineCallbacks, returnValue, succeed
@@ -100,7 +100,7 @@ class UnrecognizedFailureReason(Exception):
     response: JSON
 
 
-@attr.s
+@frozen
 class RedemptionResult(object):
     """
     Contain the results of an attempt to redeem a voucher for ZKAP material.
@@ -191,8 +191,8 @@ class IRedeemer(Interface):
         """
 
 
-@define
 @implementer(IRedeemer)
+@define
 class IndexedRedeemer(object):
     """
     A ``IndexedRedeemer`` delegates redemption to a redeemer chosen to
@@ -255,7 +255,7 @@ class NonRedeemer(object):
 
 
 @implementer(IRedeemer)
-@attr.s(frozen=True)
+@frozen
 class ErrorRedeemer(object):
     """
     An ``ErrorRedeemer`` immediately locally fails voucher redemption with a
@@ -285,7 +285,7 @@ class ErrorRedeemer(object):
 
 
 @implementer(IRedeemer)
-@attr.s
+@frozen
 class DoubleSpendRedeemer(object):
     """
     A ``DoubleSpendRedeemer`` pretends to try to redeem vouchers for ZKAPs but
@@ -307,7 +307,7 @@ class DoubleSpendRedeemer(object):
 
 
 @implementer(IRedeemer)
-@attr.s
+@frozen
 class UnpaidRedeemer(object):
     """
     An ``UnpaidRedeemer`` pretends to try to redeem vouchers for ZKAPs but
@@ -366,7 +366,7 @@ def dummy_random_tokens(voucher: Voucher, counter: int, count: int) -> list[Rand
 
 
 @implementer(IRedeemer)
-@attr.s
+@define
 class DummyRedeemer(object):
     """
     A ``DummyRedeemer`` pretends to redeem vouchers for ZKAPs.  Instead of
