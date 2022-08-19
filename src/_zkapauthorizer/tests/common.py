@@ -27,7 +27,6 @@ from typing import (
     Callable,
     Generic,
     Optional,
-    TypeAlias,
     TypeVar,
     Union,
     cast,
@@ -38,7 +37,7 @@ from testtools import TestCase
 from twisted.internet.defer import Deferred, succeed
 from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
-from typing_extensions import Concatenate, ParamSpec
+from typing_extensions import Concatenate, ParamSpec, TypeAlias
 from zope.interface import Interface, directlyProvides, providedBy
 from zope.interface.interface import InterfaceClass
 
