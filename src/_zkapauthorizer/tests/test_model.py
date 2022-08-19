@@ -17,15 +17,17 @@
 Tests for ``_zkapauthorizer.model``.
 """
 
+from random import Random
 from datetime import datetime, timedelta
 from functools import partial
 from io import BytesIO
 from itertools import count
-from sqlite3 import Connection, OperationalError, connect
-from typing import TypeVar
+from sqlite3 import Connection, Cursor, OperationalError, connect
+from typing import TypeVar, NoReturn, Callable
 
 import cbor2
 from hypothesis import assume, given, note
+from hypothesis.strategies import DataObject, SearchStrategy
 from hypothesis.stateful import (
     RuleBasedStateMachine,
     invariant,
@@ -45,6 +47,7 @@ from hypothesis.strategies import (
     timedeltas,
     tuples,
 )
+from fixtures import TempDir
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -59,7 +62,10 @@ from testtools.matchers import (
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, succeed
 
+from ..sql import Statement, Table, AbstractCursor
 from ..model import (
+    RandomToken,
+    ConnectionHaver,
     DoubleSpend,
     LeaseMaintenanceActivity,
     NotEmpty,
@@ -73,6 +79,7 @@ from ..model import (
     aware_now,
     memory_connect,
     with_cursor_async,
+    Pass,
 )
 from ..recover import (
     RecoveryStages,
@@ -90,8 +97,8 @@ from ..replicate import (
     prune_events_to,
     with_replication,
 )
-from .common import from_awaitable
-from .fixtures import TempDir, TemporaryVoucherStore
+from .common import from_awaitable, GetConfig
+from .fixtures import TemporaryVoucherStore
 from .matchers import raises
 from .strategies import (
     aware_datetimes,
@@ -116,7 +123,7 @@ from .strategies import (
 _T = TypeVar("_T")
 
 
-async def fail(cursor) -> None:
+async def fail(cursor: object) -> NoReturn:
     raise Exception("Should not be called")
 
 
@@ -135,13 +142,13 @@ class WithCursorAsyncTests(TestCase):
         class SomeException(Exception):
             pass
 
-        class Database:
-            _connection: Connection = connect(":memory:")
+        class Database(ConnectionHaver):
+            _connection = with_replication(connect(":memory:"), enable_replication=False)
 
             @with_cursor_async
-            async def f(self, cursor) -> None:
-                cursor.execute("CREATE TABLE [bad] ([a] INT)")
-                cursor.execute("INSERT INTO [bad] VALUES (1)")
+            async def f(self, cursor: AbstractCursor) -> NoReturn:
+                cursor.execute("CREATE TABLE [bad] ([a] INT)", ())
+                cursor.execute("INSERT INTO [bad] VALUES (1)", ())
                 raise SomeException()
 
         self.assertThat(
@@ -162,8 +169,8 @@ class WithCursorAsyncTests(TestCase):
         the transaction.
         """
 
-        class Database:
-            _connection: Connection = connect(":memory:")
+        class Database(ConnectionHaver):
+            _connection = with_replication(connect(":memory:"), enable_replication=False)
             expected = object()
 
             @with_cursor_async
@@ -195,8 +202,8 @@ class WithCursorAsyncTests(TestCase):
         conn_a = memory_connect(path)
         conn_b = memory_connect(path)
 
-        class Database:
-            _connection: Connection = conn_a
+        class Database(ConnectionHaver):
+            _connection = with_replication(conn_a, enable_replication=False)
             expected = object()
             task: Deferred[None] = Deferred()
 
@@ -283,7 +290,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         tokens=lists(random_tokens(), min_size=1, max_size=10, unique=True),
     )
-    def test_not_empty_if_any_vouchers(self, voucher, tokens) -> None:
+    def test_not_empty_if_any_vouchers(self, voucher: bytes, tokens: list[RandomToken]) -> None:
         """
         If there are any vouchers in the database a ``VoucherStore`` is using then
         it is not empty.
@@ -303,7 +310,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_spendable_tokens(self, voucher, num_passes) -> None:
+    def test_not_empty_if_any_spendable_tokens(self, voucher: bytes, num_passes: int) -> None:
         """
         If there are spendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -319,7 +326,7 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         voucher=vouchers(),
         num_passes=integers(min_value=1, max_value=10),
     )
-    def test_not_empty_if_any_unspendable_tokens(self, voucher, num_passes) -> None:
+    def test_not_empty_if_any_unspendable_tokens(self, voucher: bytes, num_passes: int) -> None:
         """
         If there are unspendable ZKAPs in the database a ``VoucherStore`` is using
         then it is not empty.
@@ -342,7 +349,7 @@ class VoucherStoreTests(TestCase):
     """
 
     @given(integers(min_value=1))
-    def test_reject_naive_datetime(self, pass_value) -> None:
+    def test_reject_naive_datetime(self, pass_value: int) -> None:
         """
         ``VoucherStore`` raises ``TypeError`` on initialization if given a ``now``
         that returns a datetime without a timezone.
@@ -356,7 +363,7 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
-    def test_get_missing(self, get_config, now, voucher) -> None:
+    def test_get_missing(self, get_config: GetConfig, now: datetime, voucher: bytes) -> None:
         """
         ``VoucherStore.get`` raises ``KeyError`` when called with a
         voucher not previously added to the store.
@@ -373,7 +380,7 @@ class VoucherStoreTests(TestCase):
         lists(random_tokens(), min_size=1, unique=True),
         aware_datetimes(),
     )
-    def test_add(self, get_config, voucher, tokens, now) -> None:
+    def test_add(self, get_config: GetConfig, voucher: bytes, tokens: list[RandomToken], now: datetime) -> None:
         """
         ``VoucherStore.get`` returns a ``Voucher`` representing a voucher
         previously added to the store with ``VoucherStore.add``.
@@ -398,7 +405,7 @@ class VoucherStoreTests(TestCase):
         aware_datetimes(),
     )
     def test_add_with_distinct_counters(
-        self, get_config, voucher, counters, tokens, now
+        self, get_config: GetConfig, voucher: bytes, counters: list[int], tokens: list[RandomToken], now: datetime
     ) -> None:
         """
         ``VoucherStore.add`` adds new tokens to the store when passed the same
@@ -434,7 +441,7 @@ class VoucherStoreTests(TestCase):
         aware_datetimes(),
         lists(random_tokens(), min_size=1, unique=True),
     )
-    def test_add_idempotent(self, get_config, voucher, now, tokens) -> None:
+    def test_add_idempotent(self, get_config: GetConfig, voucher: bytes, now: datetime, tokens: list[RandomToken]) -> None:
         """
         More than one call to ``VoucherStore.add`` with the same argument results
         in the same state as a single call.
@@ -476,7 +483,7 @@ class VoucherStoreTests(TestCase):
         )
 
     @given(tahoe_configs(), aware_datetimes(), lists(vouchers(), unique=True), data())
-    def test_list(self, get_config, now, vouchers, data) -> None:
+    def test_list(self, get_config: GetConfig, now: datetime, vouchers: list[bytes], data: DataObject) -> None:
         """
         ``VoucherStore.list`` returns a ``list`` containing a ``Voucher`` object
         for each voucher previously added.
@@ -522,7 +529,7 @@ class VoucherStoreSnapshotTests(TestCase):
         integers(min_value=1, max_value=2**63 - 1),
         lists(random_tokens(), unique=True),
     )
-    def test_vouchers(self, now, voucher, expected, tokens) -> None:
+    def test_vouchers(self, now: datetime, voucher: bytes, expected: int, tokens: list[RandomToken]) -> None:
         """
         Vouchers are present in the snapshot.
         """
@@ -557,7 +564,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         redeemed successfully by this machine.
     """
 
-    def __init__(self, case) -> None:
+    def __init__(self, case: TestCase) -> None:
         super(UnblindedTokenStateMachine, self).__init__()
         self.case = case
         self.configless = TemporaryVoucherStore(
@@ -575,13 +582,19 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
     def teardown(self) -> None:
         self.configless.cleanUp()
 
+    @property
+    def store(self) -> VoucherStore:
+        store = self.configless.store
+        assert store is not None
+        return store
+
     @rule(voucher=vouchers(), num_passes=pass_counts())
-    def redeem_voucher(self, voucher, num_passes) -> None:
+    def redeem_voucher(self, voucher: bytes, num_passes: int) -> None:
         """
         A voucher can be redeemed, adding more unblinded tokens to the store.
         """
         try:
-            self.configless.store.get(voucher)
+            self.store.get(voucher)
         except KeyError:
             pass
         else:
@@ -597,13 +610,13 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.num_vouchers_redeemed += 1
 
     @rule(num_passes=pass_counts())
-    def get_passes(self, num_passes) -> None:
+    def get_passes(self, num_passes: int) -> None:
         """
         Some passes can be requested from the store.  The resulting passes are not
         spent, invalid, or already in-use.
         """
         assume(num_passes <= self.available)
-        tokens = self.configless.store.get_unblinded_tokens(num_passes)
+        tokens = self.store.get_unblinded_tokens(num_passes)
         note("get_passes: {}".format(tokens))
 
         # No tokens we are currently using may be returned again.  Nor may
@@ -624,13 +637,13 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         self.available -= num_passes
 
     @rule(excess_passes=pass_counts())
-    def not_enough_passes(self, excess_passes) -> None:
+    def not_enough_passes(self, excess_passes: int) -> None:
         """
         If an attempt is made to get more passes than are available,
         ``get_unblinded_tokens`` raises ``NotEnoughTokens``.
         """
         self.case.assertThat(
-            lambda: self.configless.store.get_unblinded_tokens(
+            lambda: self.store.get_unblinded_tokens(
                 self.available + excess_passes,
             ),
             raises(NotEnoughTokens),
@@ -638,34 +651,34 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def spend_passes(self, random, data) -> None:
+    def spend_passes(self, random: Random, data: DataObject) -> None:
         """
         Some in-use passes can be discarded.
         """
         self.using, to_spend = random_slice(self.using, random, data)
         note("spend_passes: {}".format(to_spend))
-        self.configless.store.discard_unblinded_tokens(to_spend)
+        self.store.discard_unblinded_tokens(to_spend)
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def reset_passes(self, random, data) -> None:
+    def reset_passes(self, random: Random, data: DataObject) -> None:
         """
         Some in-use passes can be returned to not-in-use state.
         """
         self.using, to_reset = random_slice(self.using, random, data)
         note("reset_passes: {}".format(to_reset))
-        self.configless.store.reset_unblinded_tokens(to_reset)
+        self.store.reset_unblinded_tokens(to_reset)
         self.available += len(to_reset)
 
     @precondition(lambda self: len(self.using) > 0)
     @rule(random=randoms(), data=data())
-    def invalidate_passes(self, random, data) -> None:
+    def invalidate_passes(self, random: Random, data: DataObject) -> None:
         """
         Some in-use passes are unusable and should be set aside.
         """
         self.using, to_invalidate = random_slice(self.using, random, data)
         note("invalidate_passes: {}".format(to_invalidate))
-        self.configless.store.invalidate_unblinded_tokens(
+        self.store.invalidate_unblinded_tokens(
             "reason",
             to_invalidate,
         )
@@ -683,8 +696,8 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         maybe this is a good argument for using an explicitly attached
         temporary database instead of the built-in ``temp`` database.
         """
-        cursor = self.configless.store._connection.cursor()
-        with self.configless.store._connection:
+        cursor = self.store._connection.cursor()
+        with self.store._connection:
             cursor.execute("DELETE FROM [in-use]")
         self.available += len(self.using)
         del self.using[:]
@@ -700,7 +713,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         sometimes.
         """
         self.case.assertThat(
-            self.configless.store.count_random_tokens(),
+            self.store.count_random_tokens(),
             Equals(0),
         )
 
@@ -711,7 +724,7 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         available to be spent.
         """
         self.case.assertThat(
-            self.configless.store.count_unblinded_tokens(),
+            self.store.count_unblinded_tokens(),
             Equals(self.available),
         )
 
@@ -723,14 +736,14 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         """
         if self.num_vouchers_redeemed == 0:
             self.case.assertThat(
-                Deferred.fromCoroutine(
-                    self.configless.store.call_if_empty(lambda cursor: succeed(True))
+                from_awaitable(
+                    self.store.call_if_empty(lambda cursor: succeed(True))
                 ),
                 succeeded(Equals(True)),
             )
         else:
             self.case.assertThat(
-                Deferred.fromCoroutine(self.configless.store.call_if_empty(fail)),
+                from_awaitable(self.store.call_if_empty(fail)),
                 failed(
                     AfterPreprocessing(lambda f: f.value, IsInstance(NotEmpty)),
                 ),
@@ -813,7 +826,7 @@ class LeaseMaintenanceTests(TestCase):
             ),
         ),
     )
-    def test_lease_maintenance_activity(self, get_config, now, activity) -> None:
+    def test_lease_maintenance_activity(self, get_config: GetConfig, now: datetime, activity: list[tuple[timedelta, list[tuple[int, int]], timedelta]]) -> None:
         """
         ``VoucherStore.get_latest_lease_maintenance_activity`` returns a
         ``LeaseMaintenanceTests`` with fields reflecting the most recently
@@ -875,7 +888,7 @@ class EventStreamTests(TestCase):
             ),
         ),
     )
-    def test_roundtrip_through_bytes(self, eventstream) -> None:
+    def test_roundtrip_through_bytes(self, eventstream: EventStream) -> None:
         """
         ``EventStream`` instances round-trip through ``to_bytes`` and
         ``from_bytes``.
@@ -892,7 +905,7 @@ class EventStreamTests(TestCase):
         lists(sampled_from([inserts, deletes, updates]), min_size=1),
     )
     def test_event_stream_serialization(
-        self, get_config, now, ids, table, data, change_types
+        self, get_config: GetConfig, now: datetime, ids: list[str], table: Table, data: DataObject, change_types: list[Callable[[str, Table], SearchStrategy[Statement]]]
     ) -> None:
         """
         Various kinds of SQL statements can be serialized into and out of
@@ -907,7 +920,7 @@ class EventStreamTests(TestCase):
         sequence = count(1)
         for sql_id in ids:
             for change_type in change_types:
-                change = data.draw(change_type(sql_id, table))
+                change: Statement = data.draw(change_type(sql_id, table))
                 expected_changes.append(
                     Change(
                         next(sequence),
@@ -920,8 +933,7 @@ class EventStreamTests(TestCase):
                     curse = store._connection.cursor()
                     add_events(curse, [(change.statement(), change.arguments())], False)
 
-        # List comprehension has incompatible type List[Change]; expected List[_T_co]
-        expected_stream = EventStream(expected_changes)  # type: ignore
+        expected_stream = EventStream(expected_changes)
         actual_changes = get_events(store._connection)
         self.assertThat(
             actual_changes,
@@ -959,7 +971,7 @@ class EventStreamTests(TestCase):
         ),
         randoms(),
     )
-    def test_event_stream_prune(self, get_config, now, changes, random) -> None:
+    def test_event_stream_prune(self, get_config: GetConfig, now: datetime, changes: list[Statement], random: Random) -> None:
         """
         After ``prune_events_to``, ``get_events`` only returns events events with
         a greater sequence number.
@@ -994,7 +1006,7 @@ class VoucherTests(TestCase):
     """
 
     @given(voucher_objects())
-    def test_json_roundtrip(self, reference) -> None:
+    def test_json_roundtrip(self, reference: Voucher) -> None:
         """
         ``Voucher.to_json . Voucher.from_json → id``
         """
@@ -1004,12 +1016,10 @@ class VoucherTests(TestCase):
         )
 
 
-def paired_tokens(num_tokens=integers(min_value=1, max_value=1000)):
+def paired_tokens(num_tokens: SearchStrategy[int]=integers(min_value=1, max_value=1000)) -> SearchStrategy[tuple[list[RandomToken], list[UnblindedToken]]]:
     """
     Build tuples of two lists of the same length, one of random tokens and one
     of unblinded tokens.
-
-    :rtype: ([RandomTokens], [UnblindedTokens])
     """
 
     def pairs(num):
@@ -1045,7 +1055,7 @@ class UnblindedTokenStoreTests(TestCase):
         booleans(),
     )
     def test_unblinded_tokens_without_voucher(
-        self, get_config, now, voucher_value, public_key, unblinded_tokens, completed
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, unblinded_tokens: list[UnblindedToken], completed: bool
     ) -> None:
         """
         Unblinded tokens for a voucher which has not been added to the store cannot be inserted.
@@ -1071,7 +1081,7 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_unblinded_tokens_round_trip(
-        self, get_config, now, voucher_value, public_key, completed, tokens
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, completed: bool, tokens: tuple[list[RandomToken], list[UnblindedToken]]
     ) -> None:
         """
         Unblinded tokens that are added to the store can later be retrieved and counted.
@@ -1109,7 +1119,7 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_mark_vouchers_redeemed(
-        self, get_config, now, voucher_value, public_key, tokens
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, tokens: tuple[list[RandomToken], list[UnblindedToken]]
     ) -> None:
         """
         The voucher for unblinded tokens that are added to the store is marked as
@@ -1143,7 +1153,7 @@ class UnblindedTokenStoreTests(TestCase):
         lists(random_tokens(), min_size=1, unique=True),
     )
     def test_mark_vouchers_double_spent(
-        self, get_config, now, voucher_value, random_tokens
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes, random_tokens: list[RandomToken]
     ) -> None:
         """
         A voucher which is reported as double-spent is marked in the database as
@@ -1172,7 +1182,7 @@ class UnblindedTokenStoreTests(TestCase):
         paired_tokens(),
     )
     def test_mark_spent_vouchers_double_spent(
-        self, get_config, now, voucher_value, public_key, tokens
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes, public_key: str, tokens: tuple[list[RandomToken], list[UnblindedToken]]
     ) -> None:
         """
         A voucher which has already been spent cannot be marked as double-spent.
@@ -1194,7 +1204,7 @@ class UnblindedTokenStoreTests(TestCase):
         vouchers(),
     )
     def test_mark_invalid_vouchers_double_spent(
-        self, get_config, now, voucher_value
+        self, get_config: GetConfig, now: datetime, voucher_value: bytes
     ) -> None:
         """
         A voucher which is not known cannot be marked as double-spent.
@@ -1217,14 +1227,14 @@ class UnblindedTokenStoreTests(TestCase):
     )
     def test_not_enough_unblinded_tokens(
         self,
-        get_config,
-        now,
-        voucher_value,
-        public_key,
-        completed,
-        extra_bits,
-        extra_fuzz,
-        tokens,
+        get_config: GetConfig,
+        now: datetime,
+        voucher_value: bytes,
+        public_key: str,
+        completed: bool,
+        extra_bits: int,
+        extra_fuzz: int,
+        tokens: tuple[list[RandomToken], list[UnblindedToken]],
     ) -> None:
         """
         ``get_unblinded_tokens`` raises ``NotEnoughTokens`` if ``count`` is
@@ -1266,7 +1276,7 @@ class PassTests(TestCase):
     """
 
     @given(zkaps())
-    def test_roundtrip(self, pass_) -> None:
+    def test_roundtrip(self, pass_: Pass) -> None:
         """
         ``Pass`` round-trips through ``Pass.from_bytes`` and ``Pass.pass_bytes``.
         """

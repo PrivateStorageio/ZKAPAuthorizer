@@ -85,7 +85,7 @@ def aware_datetimes(allow_imaginary: bool = True, **kwargs: datetime) -> SearchS
     return naive_datetimes(timezones=just(timezone.utc), allow_imaginary=allow_imaginary, **kwargs)
 
 
-def posix_safe_datetimes():
+def posix_safe_datetimes() -> SearchStrategy[datetime]:
     """
     Build datetime instances in a range that can be represented as floats
     without losing microsecond precision.
@@ -107,7 +107,7 @@ def posix_safe_datetimes():
     )
 
 
-def posix_timestamps():
+def posix_timestamps() -> SearchStrategy[float]:
     """
     Build floats in a range that can represent time without losing microsecond
     precision.
@@ -117,7 +117,7 @@ def posix_timestamps():
     )
 
 
-def clocks(now=posix_timestamps()):
+def clocks(now: SearchStrategy[float]=posix_timestamps()) -> SearchStrategy[Clock]:
     """
     Build ``twisted.internet.task.Clock`` instances set to a time built by
     ``now``.
@@ -126,7 +126,7 @@ def clocks(now=posix_timestamps()):
         the range of time_t).
     """
 
-    def clock_at_time(when):
+    def clock_at_time(when: float) -> Clock:
         c = Clock()
         c.advance(when)
         return c
@@ -166,7 +166,9 @@ def encoding_parameters() -> SearchStrategy[tuple[int, int, int]]:
     ).map(order)
 
 
-def tahoe_config_texts(storage_client_plugins, shares):
+EncodingParameters = tuple[Optional[int], Optional[int], Optional[int]]
+
+def tahoe_config_texts(storage_client_plugins: dict[str, SearchStrategy[object]], shares: SearchStrategy[EncodingParameters]) -> SearchStrategy[str]:
     """
     Build the text of complete Tahoe-LAFS configurations for a node.
 
@@ -179,7 +181,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
         default).
     """
 
-    def merge_shares(shares, the_rest):
+    def merge_shares(shares: tuple[int, int, int], the_rest: dict[str, object]) -> dict[str, object]:
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
                 the_rest["shares." + k] = f"{v}"
@@ -220,7 +222,7 @@ def tahoe_config_texts(storage_client_plugins, shares):
     )
 
 
-def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, None))):
+def minimal_tahoe_configs(storage_client_plugins: Optional[dict[str, SearchStrategy[object]]]=None, shares: SearchStrategy[EncodingParameters]=just((None, None, None))) -> SearchStrategy[str]:
     """
     Build complete Tahoe-LAFS configurations for a node.
 
@@ -237,7 +239,7 @@ def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, 
     )
 
 
-def node_nicknames():
+def node_nicknames() -> SearchStrategy[str]:
     """
     Builds Tahoe-LAFS node nicknames.
     """
@@ -255,7 +257,7 @@ def node_nicknames():
     )
 
 
-def dummy_ristretto_keys():
+def dummy_ristretto_keys() -> SearchStrategy[str]:
     """
     Build string values which one could imagine might be Ristretto-flavored
     PrivacyPass signing or public keys.
@@ -307,7 +309,7 @@ def server_configurations(signing_key_path: FilePath) -> SearchStrategy[ServerCo
     ).map(add_more)
 
 
-def dummy_ristretto_keys_sets():
+def dummy_ristretto_keys_sets() -> SearchStrategy[set[str]]:
     """
     Build small sets of "dummy" Ristretto keys.  See ``dummy_ristretto_keys``.
     """
@@ -736,7 +738,7 @@ def verification_signatures():
     ).map(b64encode)
 
 
-def zkaps():
+def zkaps() -> SearchStrategy[Pass]:
     """
     Build random ZKAPs as ``Pass`` instances.
     """

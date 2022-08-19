@@ -184,7 +184,7 @@ class Change:
 
     sequence: int
     statement: str
-    arguments: Sequence[SQLType] = field(converter=tuple)
+    arguments: Sequence[SQLType]
     important: bool
 
     @arguments.validator
@@ -209,7 +209,7 @@ class EventStream:
         to the schema will be accompanied with an increment to this value.
     """
 
-    changes: Sequence[Change] = field(converter=tuple)
+    changes: Sequence[Change]
     version: ClassVar[int] = 1
 
     def highest_sequence(self) -> Optional[int]:
