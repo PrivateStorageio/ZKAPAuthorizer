@@ -26,7 +26,7 @@ def _configure_hypothesis():
 
     from hypothesis import HealthCheck, settings
 
-    base = dict(
+    base = settings(
         suppress_health_check=[
             # CPU resources available to builds typically varies significantly
             # from run to run making it difficult to determine if "too slow"
@@ -39,24 +39,25 @@ def _configure_hypothesis():
         deadline=None,
     )
 
-    settings.register_profile("default", **base)
+    settings.register_profile("default", base)
 
     settings.register_profile(
         "ci",
+        base,
         # Make CI runs a little more aggressive in amount of coverage they try
         # to provide.
         max_examples=200,
-        **base,
     )
 
     settings.register_profile(
         "fast",
+        base,
         max_examples=2,
-        **base,
     )
 
     settings.register_profile(
         "big",
+        base,
         max_examples=10000,
         # The only rule-based state machine we have now is quite simple and
         # can probably be completely explored in about 5 steps.  Give it some
@@ -64,7 +65,6 @@ def _configure_hypothesis():
         # full 50 because, combined with searching for 10000 successful
         # examples this makes the stateful test take *ages* to complete.
         stateful_step_count=15,
-        **base,
     )
 
     profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")
@@ -85,7 +85,7 @@ def _monkeypatch_tahoe_3874():
         uri = DecodedURL.from_text(request.uri.decode("utf8"))
         capability = None
         for arg, value in uri.query:
-            if arg == "uri":
+            if arg == "uri" and value is not None:
                 capability = value.encode("ascii")
         # it's legal to use the form "/uri/<capability>"
         if capability is None and request.postpath and request.postpath[0]:
