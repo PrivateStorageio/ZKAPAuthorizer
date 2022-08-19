@@ -129,7 +129,7 @@ class ValidationResultTests(TestCase):
                         MorePassesRequired(
                             len(good),
                             required,
-                            set(badsig),
+                            frozenset(badsig),
                         ),
                     ),
                     AfterPreprocessing(
