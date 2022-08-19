@@ -354,7 +354,7 @@ class CallWithPassesTests(TestCase):
         def reject_passes(group):
             passes = group.passes
             _ValidationResult(
-                valid=range(len(passes)),
+                valid=[p.preimage for p in passes],
                 signature_check_failed=[],
             ).raise_for(len(passes) + 1)
 
@@ -416,7 +416,7 @@ class CallWithPassesTests(TestCase):
             # no matter which iteration rejected them.
             rejected.extend(group.passes[i] for i in reject_indexes)
             _ValidationResult(
-                valid=accept_indexes,
+                valid=[p.preimage for p in accepted],
                 signature_check_failed=reject_indexes,
             ).raise_for(num)
 

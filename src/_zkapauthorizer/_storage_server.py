@@ -27,7 +27,7 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Any, Optional, Callable, Iterator, Container, ValuesView, NoReturn, Union
+from typing import Any, Optional, Callable, Iterator, Container, ValuesView, NoReturn, Union, Sequence
 
 import attr
 from allmydata.interfaces import TestAndWriteVectorsForShares

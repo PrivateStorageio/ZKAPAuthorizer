@@ -257,9 +257,7 @@ class EventStream:
             )
         return cls(
             changes=[
-                # List comprehension has incompatible type List[Change]; expected List[_T_co]
-                # https://github.com/python-attrs/attrs/issues/519
-                Change(*args)  # type: ignore
+                Change(*args)
                 for args in data["events"]
             ]
         )
@@ -714,9 +712,7 @@ def get_events(conn: _SQLite3Connection) -> EventStream:
         rows = cursor.fetchall()
     return EventStream(
         changes=[
-            # List comprehension has incompatible type List[Change]; expected List[_T_co]
-            # https://github.com/python-attrs/attrs/issues/519
-            Change(seq, stmt, cbor2.loads(arguments), important)  # type: ignore
+            Change(seq, stmt, cbor2.loads(arguments), important)
             for seq, stmt, arguments, important in rows
         ]
     )

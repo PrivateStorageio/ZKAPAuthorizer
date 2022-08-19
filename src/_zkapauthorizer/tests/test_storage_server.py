@@ -115,7 +115,7 @@ class ValidationResultTests(TestCase):
         with details of the validation and how it fell short of what was
         required.
         """
-        good = [0, 1, 2, 3]
+        good = [b"0", b"1", b"2", b"3"]
         badsig = [4]
         required = 10
         result = _ValidationResult(good, badsig)

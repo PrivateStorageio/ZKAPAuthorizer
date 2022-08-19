@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Sequence
 
 import attr
 from attrs import define, Factory, field
@@ -13,7 +13,7 @@ class ISpender(Interface):
     An ``ISpender`` can records spent ZKAPs and reports double spends.
     """
 
-    def mark_as_spent(public_key: PublicKey, passes: list[bytes]) -> None:
+    def mark_as_spent(public_key: PublicKey, passes: Sequence[bytes]) -> None:
         """
         Record the given ZKAPs (associated to the given public key as having
         been spent.
@@ -48,7 +48,7 @@ class RecordingSpender(object):
         recorder = _SpendingData()
         return recorder, cls(recorder)
 
-    def mark_as_spent(self, public_key: PublicKey, passes: list[bytes]) -> None:
+    def mark_as_spent(self, public_key: PublicKey, passes: Sequence[bytes]) -> None:
         self._recorder.spent_tokens.setdefault(public_key.encode_base64(), []).extend(
             passes
         )
