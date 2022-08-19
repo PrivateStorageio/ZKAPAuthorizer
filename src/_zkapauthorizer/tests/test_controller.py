@@ -19,7 +19,7 @@ Tests for ``_zkapauthorizer.controller``.
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import loads
-from typing import Callable
+from typing import Callable, Sequence
 
 import attr
 from challenge_bypass_ristretto import (
@@ -47,6 +47,7 @@ from testtools.matchers import (
     MatchesStructure,
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
+from testtools.twistedsupport._deferred import extract_result
 from treq.testing import StubTreq
 from twisted.internet.defer import fail, succeed, Deferred
 from twisted.internet.interfaces import IReactorTime
@@ -58,6 +59,7 @@ from twisted.web.iweb import IAgent
 from twisted.web.resource import ErrorPage, Resource
 from zope.interface import implementer
 
+from .common import GetConfig
 from .._json import dumps_utf8
 from ..controller import (
     AlreadySpent,
@@ -251,7 +253,7 @@ class PaymentControllerTests(TestCase):
         voucher_counters(),
         dummy_ristretto_keys(),
     )
-    def test_redeeming(self, get_config, now, voucher, num_successes, public_key):
+    def test_redeeming(self, get_config: GetConfig, now: datetime, voucher: bytes, num_successes: int, public_key: str) -> None:
         """
         A ``Voucher`` is marked redeeming while ``IRedeemer.redeem`` is actively
         working on redeeming it with a counter value that reflects the number
@@ -261,9 +263,10 @@ class PaymentControllerTests(TestCase):
         # at least *one* run through so we'll bump this up to be sure we get
         # that.
         counter = num_successes + 1
-        redeemer = IndexedRedeemer(
-            [DummyRedeemer(public_key)] * num_successes + [NonRedeemer()],
-        )
+        redeemers: list[IRedeemer] = []
+        redeemers.extend([DummyRedeemer(public_key)] * num_successes)
+        redeemers.append(NonRedeemer())
+        redeemer = IndexedRedeemer(redeemers)
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
             Clock(),
@@ -324,15 +327,16 @@ class PaymentControllerTests(TestCase):
 
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
 
-        def first_try():
+        def first_try() -> None:
+            # It will let `before_restart` attempts succeed before hanging.
+            redeemers: list[IRedeemer] = []
+            redeemers.extend([DummyRedeemer(public_key)] * before_restart)
+            redeemers.extend([NonRedeemer()] * after_restart)
+
             controller = PaymentController(
                 Clock(),
                 store,
-                # It will let `before_restart` attempts succeed before hanging.
-                IndexedRedeemer(
-                    [DummyRedeemer(public_key)] * before_restart
-                    + [NonRedeemer()] * after_restart,
-                ),
+                IndexedRedeemer(redeemers),
                 default_token_count=num_tokens,
                 num_redemption_groups=num_redemption_groups,
                 allowed_public_keys={public_key},
@@ -342,18 +346,19 @@ class PaymentControllerTests(TestCase):
                 has_no_result(),
             )
 
-        def second_try():
+        def second_try() -> PaymentController:
+            redeemers: list[IRedeemer] = []
+            # It will succeed only for the higher counter values which did
+            # not succeed or did not get started on the first try.
+            redeemers.extend([NonRedeemer()] * before_restart)
+            redeemers.extend([DummyRedeemer(public_key)] * after_restart)
+
             # The controller will find the voucher in the voucher store and
             # restart redemption on its own.
             return PaymentController(
                 Clock(),
                 store,
-                # It will succeed only for the higher counter values which did
-                # not succeed or did not get started on the first try.
-                IndexedRedeemer(
-                    [NonRedeemer()] * before_restart
-                    + [DummyRedeemer(public_key)] * after_restart,
-                ),
+                IndexedRedeemer(redeemers),
                 # The default token count for this new controller doesn't
                 # matter.  The redemption attempt already started with some
                 # token count.  That token count must be respected on
@@ -740,24 +745,23 @@ class PaymentControllerTests(TestCase):
         # And finally only tokens from the groups using an allowed key should
         # be made available to be spent.
         voucher_obj = store.get(voucher)
-        allowed_tokens = list(
-            unblinded_token
-            for counter, redeemer in enumerate(redeemers)
-            if redeemer._public_key in allowed_public_keys
-            for unblinded_token in Deferred.fromCoroutine(redeemer.redeemWithCounter(
-                voucher_obj,
-                counter,
-                redeemer.random_tokens_for_voucher(
+        allowed_tokens = []
+        for counter, redeemer in enumerate(redeemers):
+            if redeemer._public_key in allowed_public_keys:
+                unblinded_tokens = extract_result(Deferred.fromCoroutine(redeemer.redeemWithCounter(
                     voucher_obj,
                     counter,
-                    token_count_for_group(
-                        num_redemption_groups,
-                        token_count,
+                    redeemer.random_tokens_for_voucher(
+                        voucher_obj,
                         counter,
+                        token_count_for_group(
+                            num_redemption_groups,
+                            token_count,
+                            counter,
+                        ),
                     ),
-                ),
-            )).result.unblinded_tokens
-        )
+                ))).unblinded_tokens
+                allowed_tokens.extend(unblinded_tokens)
         self.expectThat(
             store.get_unblinded_tokens(store.count_unblinded_tokens()),
             Equals(allowed_tokens),
@@ -1322,13 +1326,13 @@ class _BracketTestMixin:
     def wrap_failure(self, result):
         raise NotImplementedError()
 
-    def test_success(self):
+    def test_success(self: TestCase) -> None:
         """
         ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
         ``Deferred`` that fires with the result of ``between``.
         """
         result = object()
-        actions = []
+        actions: list[str] = []
         first = partial(actions.append, "first")
 
         def between():
@@ -1347,7 +1351,7 @@ class _BracketTestMixin:
             Equals(["first", "between", "last"]),
         )
 
-    def test_failure(self) -> None:
+    def test_failure(self: TestCase) -> None:
         """
         ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
         ``Deferred`` that fires with the failure result of ``between``.
@@ -1356,7 +1360,7 @@ class _BracketTestMixin:
         class SomeException(Exception):
             pass
 
-        actions = []
+        actions: list[str] = []
         first = partial(actions.append, "first")
 
         def between():
@@ -1378,7 +1382,7 @@ class _BracketTestMixin:
             Equals(["first", "between", "last"]),
         )
 
-    def test_success_with_failing_last(self):
+    def test_success_with_failing_last(self: TestCase) -> None:
         """
         If the ``between`` action succeeds and the ``last`` action fails then
         ``bracket`` fails the same way as the ``last`` action.
@@ -1387,7 +1391,7 @@ class _BracketTestMixin:
         class SomeException(Exception):
             pass
 
-        actions = []
+        actions: list[str] = []
         first = partial(actions.append, "first")
 
         def between():
@@ -1412,7 +1416,7 @@ class _BracketTestMixin:
             Equals(["first", "between", "last"]),
         )
 
-    def test_failure_with_failing_last(self):
+    def test_failure_with_failing_last(self: TestCase) -> None:
         """
         If both the ``between`` and ``last`` actions fail then ``bracket`` fails
         the same way as the ``last`` action.
@@ -1424,7 +1428,7 @@ class _BracketTestMixin:
         class AnotherException(Exception):
             pass
 
-        actions = []
+        actions: list[str] = []
         first = partial(actions.append, "first")
 
         def between():
@@ -1449,7 +1453,7 @@ class _BracketTestMixin:
             Equals(["first", "between", "last"]),
         )
 
-    def test_first_failure(self):
+    def test_first_failure(self: TestCase) -> None:
         """
         If the ``first`` action fails then ``bracket`` fails the same way and
         runs neither the ``between`` nor ``last`` actions.
@@ -1458,13 +1462,14 @@ class _BracketTestMixin:
         class SomeException(Exception):
             pass
 
-        actions = []
+        actions: list[str] = []
 
         def first():
             actions.append("first")
             return self.wrap_failure(SomeException())
 
-        between = partial(actions.append, "between")
+        async def between() -> None:
+            actions.append("between")
         last = partial(actions.append, "last")
 
         self.assertThat(
