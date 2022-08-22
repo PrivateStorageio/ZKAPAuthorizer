@@ -59,7 +59,7 @@ class AnonymousStorageServer(Fixture):
     tempdir: FilePath = attr.ib(default=None)
     storage_server: StorageServer = attr.ib(default=None)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         self.tempdir = FilePath(self.useFixture(TempDir()).join("storage"))
         self.storage_server = StorageServer(
             self.tempdir.path,
@@ -98,10 +98,10 @@ class TemporaryVoucherStore(Fixture):
     store: Optional[VoucherStore] = None
 
     @redeemer.default
-    def _redeemer_default(self):
+    def _redeemer_default(self) -> DummyRedeemer:
         return DummyRedeemer(self._public_key)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
         db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME)).asTextMode()
@@ -112,14 +112,14 @@ class TemporaryVoucherStore(Fixture):
         )
         self.addCleanup(self._cleanUp)
 
-    def _cleanUp(self):
+    def _cleanUp(self) -> None:
         """
         Drop the reference to the ``VoucherStore`` so the underlying SQLite3
         connection can close.
         """
         self.store = None
 
-    async def redeem(self, voucher, num_passes):
+    async def redeem(self, voucher: bytes, num_passes: int) -> None:
         """
         Redeem a voucher for some passes.
 
@@ -160,10 +160,10 @@ class Treq(Fixture):
     pool: HTTPConnectionPool = field()
 
     @pool.default
-    def _pool(self):
+    def _pool(self) -> HTTPConnectionPool:
         return HTTPConnectionPool(self.reactor)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         # Make sure connections from the connection pool are cleaned up at the
         # end of the test.
         self.case.addCleanup(self._cleanup)
@@ -206,7 +206,7 @@ class DetectLeakedDescriptors(Fixture):
         "privatestorageio-zkapauthz-v1.sqlite3 (deleted)",
     }
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         fdpath = FilePath("/proc/self/fd")
         if fdpath.isdir():
             # If it exists, we can inspect it to learn about open file
@@ -215,8 +215,8 @@ class DetectLeakedDescriptors(Fixture):
             self._before = fdpath.children()
             self.addCleanup(self._cleanup)
 
-    def _cleanup(self):
-        def get_leaked():
+    def _cleanup(self) -> None:
+        def get_leaked() -> set[str]:
             after = FilePath("/proc/self/fd").children()
             return {
                 e.realpath()
