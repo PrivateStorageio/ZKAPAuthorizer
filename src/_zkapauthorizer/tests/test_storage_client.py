@@ -17,6 +17,7 @@ Tests for ``_zkapauthorizer._storage_client``.
 """
 
 from functools import partial
+from typing import Callable, NoReturn, TypeAlias
 
 from allmydata.client import config_from_string
 from challenge_bypass_ristretto import random_signing_key
@@ -52,6 +53,8 @@ from .matchers import raises
 from .storage_common import pass_factory, privacypass_passes
 from .strategies import dummy_ristretto_keys, pass_counts
 
+SetupOp: TypeAlias = Callable[[IPassGroup], None]
+
 
 class GetConfiguredValueTests(TestCase):
     """
@@ -59,7 +62,7 @@ class GetConfiguredValueTests(TestCase):
     """
 
     @given(integers(min_value=1, max_value=255))
-    def test_get_configured_shares_needed(self, expected):
+    def test_get_configured_shares_needed(self, expected: int) -> None:
         """
         ``get_configured_shares_needed`` reads the ``shares.needed`` value from
         the ``client`` section as an integer.
@@ -83,7 +86,7 @@ shares.total = 10
         )
 
     @given(integers(min_value=1, max_value=255))
-    def test_get_configured_shares_total(self, expected):
+    def test_get_configured_shares_total(self, expected: int) -> None:
         """
         ``get_configured_shares_total`` reads the ``shares.total`` value from
         the ``client`` section as an integer.
@@ -107,7 +110,7 @@ shares.total = {}
         )
 
     @given(integers(min_value=1, max_value=10000000))
-    def test_get_configured_pass_value(self, expected):
+    def test_get_configured_pass_value(self, expected: int) -> None:
         """
         ``get_configured_pass_value`` reads the ``pass-value`` value from the
         ``storageclient.plugins.privatestorageio-zkapauthz-v2`` section as an
@@ -135,7 +138,7 @@ pass-value={pass_value}
         )
 
     @given(sets(dummy_ristretto_keys(), min_size=1, max_size=10))
-    def test_get_configured_allowed_public_keys(self, expected):
+    def test_get_configured_allowed_public_keys(self, expected: set[str]) -> None:
         """
         ``get_configured_pass_value`` reads the ``pass-value`` value from the
         ``storageclient.plugins.privatestorageio-zkapauthz-v2`` section as an
@@ -169,12 +172,12 @@ class CallWithPassesTests(TestCase):
     Tests for ``call_with_passes``.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.signing_key = random_signing_key()
 
     @given(pass_counts())
-    def test_success_result(self, num_passes):
+    def test_success_result(self, num_passes: int) -> None:
         """
         ``call_with_passes`` returns a ``Deferred`` that fires with the same
         success result as that of the ``Deferred`` returned by the method
@@ -198,7 +201,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_failure_result(self, num_passes):
+    def test_failure_result(self, num_passes: int) -> None:
         """
         ``call_with_passes`` returns a ``Deferred`` that fires with the same
         failure result as that of the ``Deferred`` returned by the method
@@ -227,7 +230,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_passes_issued(self, num_passes):
+    def test_passes_issued(self, num_passes: int) -> None:
         """
         ``call_with_passes`` calls the given method with an ``IPassGroup``
         provider containing ``num_passes`` created by the function passed for
@@ -254,7 +257,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_passes_spent_on_success(self, num_passes):
+    def test_passes_spent_on_success(self, num_passes: int) -> None:
         """
         ``call_with_passes`` marks the passes it uses as spent if the operation
         succeeds.
@@ -277,7 +280,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_passes_returned_on_failure(self, num_passes):
+    def test_passes_returned_on_failure(self, num_passes: int) -> None:
         """
         ``call_with_passes`` returns the passes it uses if the operation fails.
         """
@@ -360,7 +363,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts())
-    def test_pass_through_too_few_passes(self, num_passes):
+    def test_pass_through_too_few_passes(self, num_passes: int) -> None:
         """
         ``call_with_passes`` lets ``MorePassesRequired`` propagate through it if
         no passes have been marked as invalid.  This happens if all passes
@@ -368,7 +371,7 @@ class CallWithPassesTests(TestCase):
         """
         passes = pass_factory(privacypass_passes(self.signing_key, num_passes))
 
-        def reject_passes(group):
+        def reject_passes(group: IPassGroup) -> NoReturn:
             passes = group.passes
             _ValidationResult(
                 valid=[p.preimage for p in passes],
@@ -408,7 +411,7 @@ class CallWithPassesTests(TestCase):
         )
 
     @given(pass_counts(), pass_counts())
-    def test_not_enough_tokens_for_retry(self, num_passes, extras):
+    def test_not_enough_tokens_for_retry(self, num_passes: int, extras: int) -> None:
         """
         When there are not enough tokens to successfully complete a retry with the
         required number of passes, ``call_with_passes`` marks all passes
@@ -419,7 +422,7 @@ class CallWithPassesTests(TestCase):
         rejected: list[Pass] = []
         accepted: list[Pass] = []
 
-        def reject_half_passes(group):
+        def reject_half_passes(group: IPassGroup) -> NoReturn:
             num = len(group.passes)
             # Floor division will always short-change valid here, even for a
             # group size of 1.  Therefore there will always be some passes
@@ -473,15 +476,15 @@ class CallWithPassesTests(TestCase):
         )
 
 
-def reset(group):
+def reset(group: IPassGroup) -> None:
     group.reset()
 
 
-def spend(group):
+def spend(group: IPassGroup) -> None:
     group.mark_spent()
 
 
-def invalidate(group):
+def invalidate(group: IPassGroup) -> None:
     group.mark_invalid("reason")
 
 
@@ -493,12 +496,12 @@ class PassFactoryTests(TestCase):
     ``test_spending.PassGroupTests``.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.signing_key = random_signing_key()
 
     @given(pass_counts(), pass_counts())
-    def test_returned_passes_reused(self, num_passes_a, num_passes_b):
+    def test_returned_passes_reused(self, num_passes_a: int, num_passes_b: int) -> None:
         """
         ``IPassGroup.reset`` makes passes available to be returned by
         ``IPassGroup.get`` again.
@@ -517,7 +520,9 @@ class PassFactoryTests(TestCase):
             Equals(group_b.passes[:min_passes]),
         )
 
-    def _test_disallowed_transition(self, num_passes, setup_op, invalid_op):
+    def _test_disallowed_transition(
+        self, num_passes: int, setup_op: SetupOp, invalid_op: SetupOp
+    ) -> None:
         """
         Assert that after some setup operation completes, another operation raises
         ``ValueError``.
@@ -541,7 +546,7 @@ class PassFactoryTests(TestCase):
         )
 
     @given(pass_counts(), sampled_from([reset, spend, invalidate]))
-    def test_not_spendable(self, num_passes, setup_op):
+    def test_not_spendable(self, num_passes: int, setup_op: SetupOp) -> None:
         """
         ``PassGroup.mark_spent`` raises ``ValueError`` if any passes in the group
         are in a state other than in-use.
@@ -553,7 +558,7 @@ class PassFactoryTests(TestCase):
         )
 
     @given(pass_counts(), sampled_from([reset, spend, invalidate]))
-    def test_not_resetable(self, num_passes, setup_op):
+    def test_not_resetable(self, num_passes: int, setup_op: SetupOp) -> None:
         """
         ``PassGroup.reset`` raises ``ValueError`` if any passes in the group are
         in a state other than in-use.
@@ -565,7 +570,7 @@ class PassFactoryTests(TestCase):
         )
 
     @given(pass_counts(), sampled_from([reset, spend, invalidate]))
-    def test_not_invalidateable(self, num_passes, setup_op):
+    def test_not_invalidateable(self, num_passes: int, setup_op: SetupOp) -> None:
         """
         ``PassGroup.mark_invalid`` raises ``ValueError`` if any passes in the
         group are in a state other than in-use.
