@@ -19,7 +19,7 @@ Tests for our custom Hypothesis strategies.
 from allmydata.client import config_from_string
 from fixtures import TempDir
 from hypothesis import given, note
-from hypothesis.strategies import data, just, one_of
+from hypothesis.strategies import DataObject, data, just, one_of
 from testtools import TestCase
 
 from .strategies import encoding_parameters, tahoe_config_texts
@@ -31,7 +31,7 @@ class TahoeConfigsTests(TestCase):
     """
 
     @given(data())
-    def test_parses(self, data):
+    def test_parses(self, data: DataObject) -> None:
         """
         Configurations built by the strategy can be parsed.
         """
