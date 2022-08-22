@@ -182,8 +182,14 @@
           requirements = ''
           ${builtins.readFile ./requirements/lint.in}
           ${builtins.readFile ./requirements/typecheck.in}
-          # mypy requires all of the dependencies in the environment as well
+
+          # mypy requires all of the runtime dependencies in the environment
+          # as well
           ${self.packages.${system}.default.requirements}
+
+          # and the test-time dependencies if you want the test suite to type
+          # check, too.
+          ${builtins.readFile ./requirements/test.in}
           '';
         };
         twine-env = pkgs.python310.withPackages (ps: [ ps.twine ]);
