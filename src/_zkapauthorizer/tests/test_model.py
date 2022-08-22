@@ -23,7 +23,7 @@ from io import BytesIO
 from itertools import count
 from random import Random
 from sqlite3 import OperationalError, connect
-from typing import Callable, NoReturn, TypeVar
+from typing import Callable, Literal, NoReturn, TypeVar
 
 import cbor2
 from fixtures import TempDir
@@ -96,7 +96,7 @@ from ..replicate import (
     prune_events_to,
     with_replication,
 )
-from ..sql import AbstractCursor, Statement, Table
+from ..sql import AbstractCursor, SQLType, Statement, Table
 from .common import GetConfig, from_awaitable
 from .fixtures import TemporaryVoucherStore
 from .matchers import raises
@@ -179,9 +179,9 @@ class WithCursorAsyncTests(TestCase):
             expected = object()
 
             @with_cursor_async
-            async def f(self, cursor):
-                cursor.execute("CREATE TABLE [good] ([a] INT)")
-                cursor.execute("INSERT INTO [good] VALUES (1)")
+            async def f(self, cursor: AbstractCursor) -> object:
+                cursor.execute("CREATE TABLE [good] ([a] INT)", ())
+                cursor.execute("INSERT INTO [good] VALUES (1)", ())
                 return self.expected
 
         self.assertThat(
@@ -213,10 +213,10 @@ class WithCursorAsyncTests(TestCase):
             task: Deferred[None] = Deferred()
 
             @with_cursor_async
-            async def f(self, cursor_a):
+            async def f(self, cursor_a: AbstractCursor) -> object:
                 # Have an observable effect
-                cursor_a.execute("CREATE TABLE [foo] ([a] INT)")
-                cursor_a.execute("INSERT INTO [foo] VALUES (1)")
+                cursor_a.execute("CREATE TABLE [foo] ([a] INT)", ())
+                cursor_a.execute("INSERT INTO [foo] VALUES (1)", ())
                 # The transaction is still open while we wait.
                 await self.task
                 return self.expected
@@ -271,9 +271,9 @@ class VoucherStoreCallIfEmptyTests(TestCase):
         self.setup_example()
         store = self.store_fixture.store
 
-        async def side_effect(cursor):
-            cursor.execute("CREATE TABLE [it_ran] (a INT)")
-            cursor.execute("INSERT INTO [it_ran] VALUES (1)")
+        async def side_effect(cursor: AbstractCursor) -> Literal[True]:
+            cursor.execute("CREATE TABLE [it_ran] (a INT)", ())
+            cursor.execute("INSERT INTO [it_ran] VALUES (1)", ())
             return True
 
         self.assertThat(
@@ -281,8 +281,10 @@ class VoucherStoreCallIfEmptyTests(TestCase):
             succeeded(Equals(True)),
         )
 
-        async def check_side_effect(cursor):
-            rows = cursor.execute("SELECT * FROM [it_ran]")
+        async def check_side_effect(
+            cursor: AbstractCursor,
+        ) -> list[tuple[SQLType, ...]]:
+            cursor.execute("SELECT * FROM [it_ran]", ())
             rows = cursor.fetchall()
             return rows
 
@@ -797,7 +799,9 @@ class UnblindedTokenStateMachine(RuleBasedStateMachine):
         )
 
 
-def random_slice(taken_from, random, data):
+def random_slice(
+    taken_from: list[_T], random: Random, data: DataObject
+) -> tuple[list[_T], list[_T]]:
     """
     Divide ``taken_from`` into two pieces with elements randomly assigned to
     one piece or the other.
@@ -1068,7 +1072,9 @@ def paired_tokens(
     of unblinded tokens.
     """
 
-    def pairs(num):
+    def pairs(
+        num: int,
+    ) -> SearchStrategy[tuple[list[RandomToken], list[UnblindedToken]]]:
         return tuples(
             lists(
                 random_tokens(),
