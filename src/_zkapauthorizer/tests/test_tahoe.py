@@ -3,6 +3,7 @@ Tests for ``_zkapauthorizer.tahoe``.
 """
 
 from io import BytesIO
+from typing import BinaryIO, NoReturn
 
 from allmydata.client import config_from_string
 from allmydata.test.strategies import write_capabilities
@@ -77,7 +78,7 @@ class MemoryMixin:
         super().setUp()  # type: ignore[misc]
         self.grid = MemoryGrid()
 
-    def get_client(self):
+    def get_client(self) -> ITahoeClient:
         """
         Create a new Tahoe client object pointed at the ``MemoryGrid`` created in
         set up.
@@ -91,7 +92,7 @@ class TahoeAPIErrorTests(TestCase):
     """
 
     @given(cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")))
-    def test_scrub_cap(self, cap):
+    def test_scrub_cap(self, cap: str) -> None:
         """
         ``_scrub_cap`` returns a different string than it is called with.
         """
@@ -108,7 +109,15 @@ class TahoeAPIErrorTests(TestCase):
         path_extra=lists(text()),
         cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")),
     )
-    def test_scrubbed_url(self, scheme, host, port, query, path_extra, cap):
+    def test_scrubbed_url(
+        self,
+        scheme: str,
+        host: str,
+        port: int,
+        query: list[tuple[str, str]],
+        path_extra: list[str],
+        cap: str,
+    ) -> None:
         """
         ``TahoeAPIError.url`` has capability strings scrubbed from it to avoid
         accidentally leaking secrets in logs.
@@ -179,7 +188,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
         content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        def get_content():
+        def get_content() -> BinaryIO:
             return BytesIO(content)
 
         dircap = await client.make_directory()
@@ -490,7 +499,7 @@ class AsyncRetryTests(TestCase):
     Tests for ``async_retry``.
     """
 
-    def test_success(self):
+    def test_success(self) -> None:
         """
         If the decorated function returns a coroutine that returns a value then
         the coroutine returned by the decorator function returns the same
@@ -499,7 +508,7 @@ class AsyncRetryTests(TestCase):
         result = object()
 
         @async_retry([lambda exc: True])
-        async def decorated():
+        async def decorated() -> object:
             return result
 
         self.assertThat(
@@ -507,7 +516,7 @@ class AsyncRetryTests(TestCase):
             succeeded(Is(result)),
         )
 
-    def test_not_matched_failure(self):
+    def test_not_matched_failure(self) -> None:
         """
         If the decorated function returns a coroutine that raises an exception not
         matched by any of the matchers then the coroutine returned by the
@@ -518,7 +527,7 @@ class AsyncRetryTests(TestCase):
             pass
 
         @async_retry([lambda exc: False])
-        async def decorated():
+        async def decorated() -> NoReturn:
             raise Exc()
 
         self.assertThat(
@@ -531,7 +540,7 @@ class AsyncRetryTests(TestCase):
             ),
         )
 
-    def test_matched_failure(self):
+    def test_matched_failure(self) -> None:
         """
         If the decorated function returns a coroutine that raises an exception
         that is matched by one of the matchers then function is called again
@@ -542,7 +551,7 @@ class AsyncRetryTests(TestCase):
         result = object()
 
         @async_retry([lambda exc: True])
-        async def decorated():
+        async def decorated() -> object:
             nonlocal fail
             if fail:
                 fail = False
