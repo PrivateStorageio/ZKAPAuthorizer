@@ -19,8 +19,10 @@ Tests for ``_zkapauthorizer.tests.matchers``.
 from json import dumps
 from math import isfinite, nextafter
 from sqlite3 import Connection, connect
+from typing import Callable, Sequence
 
 from hypothesis import assume, example, given
+from hypothesis.core import TestFunc
 from hypothesis.strategies import (
     booleans,
     fixed_dictionaries,
@@ -35,7 +37,7 @@ from testtools import TestCase
 from testtools.matchers import Always, Annotate, Equals, Is, Not
 from zope.interface import Interface, implementer
 
-from ..sql import Column, Insert, StorageAffinity, Table, create_table
+from ..sql import Column, Insert, Statement, StorageAffinity, Table, create_table
 from ._sql_matchers import structured_dump
 from .matchers import (
     Provides,
@@ -70,7 +72,7 @@ class ProvidesTests(TestCase):
     Tests for ``Provides``.
     """
 
-    def test_match(self):
+    def test_match(self) -> None:
         """
         ``Provides.match`` returns ``None`` when the given object provides all of
         the configured interfaces.
@@ -80,7 +82,7 @@ class ProvidesTests(TestCase):
             Is(None),
         )
 
-    def test_mismatch(self):
+    def test_mismatch(self) -> None:
         """
         ``Provides.match`` does not return ``None`` when the given object provides
         none of the configured interfaces.
@@ -96,7 +98,7 @@ class ReturnsTests(TestCase):
     Tests for ``returns``.
     """
 
-    def test_match(self):
+    def test_match(self) -> None:
         """
         ``returns(m)`` returns a matcher that matches when the given object
         returns a value matched by ``m``.
@@ -107,7 +109,7 @@ class ReturnsTests(TestCase):
             Is(None),
         )
 
-    def test_mismatch(self):
+    def test_mismatch(self) -> None:
         """
         ``returns(m)`` returns a matcher that does not match when the given object
         returns a value not matched by ``m``.
@@ -125,7 +127,7 @@ class MatchesJSONTests(TestCase):
     Tests for ``matches_json``.
     """
 
-    def test_non_string(self):
+    def test_non_string(self) -> None:
         """
         If the value given isn't a string then ``matches_json`` does not match.
         """
@@ -134,7 +136,7 @@ class MatchesJSONTests(TestCase):
             Not(Is(None)),
         )
 
-    def test_unparseable(self):
+    def test_unparseable(self) -> None:
         """
         If the value can't be parsed as JSON then ``matches_json`` does not match.
         """
@@ -143,7 +145,7 @@ class MatchesJSONTests(TestCase):
             Not(Is(None)),
         )
 
-    def test_does_not_match(self):
+    def test_does_not_match(self) -> None:
         """
         If the parsed value isn't matched by the given matcher then
         ``matches_json`` does not match.
@@ -154,7 +156,7 @@ class MatchesJSONTests(TestCase):
             Not(Is(None)),
         )
 
-    def test_matches(self):
+    def test_matches(self) -> None:
         """
         If the parsed value is matched by the given matcher then ``matches_json``
         matches.
@@ -195,7 +197,7 @@ class MatchFloatWithinDistanceTests(TestCase):
     Tests for ``matches_float_within_distance``.
     """
 
-    def test_nan_rejected(self):
+    def test_nan_rejected(self) -> None:
         """
         A reference or actual value of NaN never matches because the distance is
         undefined.
@@ -211,7 +213,9 @@ class MatchFloatWithinDistanceTests(TestCase):
         )
 
     @given(floats(allow_nan=False), integers(min_value=0, max_value=100), booleans())
-    def test_within_distance(self, reference, distance, negative):
+    def test_within_distance(
+        self, reference: float, distance: int, negative: bool
+    ) -> None:
         """
         If the distance from the reference to the goal is within the distance
         constraint then the match is successful.
@@ -223,7 +227,9 @@ class MatchFloatWithinDistanceTests(TestCase):
         )
 
     @given(floats(allow_nan=False), integers(min_value=0, max_value=100), booleans())
-    def test_not_within_distance(self, reference, distance, negative):
+    def test_not_within_distance(
+        self, reference: float, distance: int, negative: bool
+    ) -> None:
         """
         If the distance from the reference to the goal is greater than the
         distance constraint then the match fails.
@@ -247,7 +253,7 @@ class MatchFloatWithinDistanceTests(TestCase):
         )
 
 
-def _float_example(fs):
+def _float_example(fs: Sequence[float]) -> Callable[["TestFunc"], "TestFunc"]:
     """
     Help create Hypothesis examples for certain floating point cases.
     """
@@ -284,11 +290,11 @@ class EqualsDatabase(TestCase):
     Tests for the ``equals_database`` matcher.
     """
 
-    def setup_example(self):
+    def setup_example(self) -> None:
         self.original = connect(":memory:")
 
     @given(sql_schemas())
-    def test_same_schema(self, tables):
+    def test_same_schema(self, tables: dict[str, Table]) -> None:
         """
         Two databases with the same schema match.
         """
@@ -303,7 +309,9 @@ class EqualsDatabase(TestCase):
         )
 
     @given(sql_schemas(), sql_schemas())
-    def test_different_schema(self, schema_a, schema_b):
+    def test_different_schema(
+        self, schema_a: dict[str, Table], schema_b: dict[str, Table]
+    ) -> None:
         """
         Two databases with different schemas do not match.
         """
@@ -343,7 +351,12 @@ class EqualsDatabase(TestCase):
             ),
         )
     )
-    def test_different_rows(self, schema_and_common_and_different):
+    def test_different_rows(
+        self,
+        schema_and_common_and_different: tuple[
+            dict[str, Table], dict[str, list[Statement]], Statement
+        ],
+    ) -> None:
         """
         Two databases with the same schema but different rows in their tables do
         not match.
@@ -422,7 +435,9 @@ class EqualsDatabase(TestCase):
             8.32116e55,
         ]
     )
-    def test_same_rows(self, schema_and_common):
+    def test_same_rows(
+        self, schema_and_common: tuple[dict[str, Table], dict[str, list[Statement]]]
+    ) -> None:
         """
         Two databases with the same schema and the same rows in their tables
         match.
