@@ -950,7 +950,7 @@ class PassValidationTests(TestCase):
     def test_add_lease_metrics_on_failure(
         self,
         storage_index: bytes,
-        renew_secrets: bytes,
+        renew_secrets: tuple[bytes, bytes],
         cancel_secret: bytes,
         sharenums: set[int],
         allocated_size: int,
