@@ -41,17 +41,19 @@ class PriceCalculatorTests(TestCase):
         integers(min_value=1),
         file_sizes,
     )
-    def test_pass_value(self, pass_value, more_value, file_sizes):
+    def test_pass_value(
+        self, pass_value: int, more_value: int, file_sizes: list[int]
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` increases or remains the same
         as pass value decreases.
         """
         calculator = partial(PriceCalculator, shares_needed=1, shares_total=1)
-        less_value = calculator(pass_value=pass_value)
-        more_value = calculator(pass_value=pass_value + more_value)
+        less_value_calc = calculator(pass_value=pass_value)
+        more_value_calc = calculator(pass_value=pass_value + more_value)
 
-        less_value_price = less_value.calculate(file_sizes)
-        more_value_price = more_value.calculate(file_sizes)
+        less_value_price = less_value_calc.calculate(file_sizes)
+        more_value_price = more_value_calc.calculate(file_sizes)
 
         self.assertThat(
             less_value_price,
@@ -63,17 +65,19 @@ class PriceCalculatorTests(TestCase):
         integers(min_value=1, max_value=127),
         file_sizes,
     )
-    def test_shares_needed(self, shares_needed, more_needed, file_sizes):
+    def test_shares_needed(
+        self, shares_needed: int, more_needed: int, file_sizes: list[int]
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` never increases as
         ``shares_needed`` increases.
         """
         calculator = partial(PriceCalculator, pass_value=100, shares_total=255)
-        fewer_needed = calculator(shares_needed=shares_needed)
-        more_needed = calculator(shares_needed=shares_needed + more_needed)
+        fewer_needed_calc = calculator(shares_needed=shares_needed)
+        more_needed_calc = calculator(shares_needed=shares_needed + more_needed)
 
-        fewer_needed_price = fewer_needed.calculate(file_sizes)
-        more_needed_price = more_needed.calculate(file_sizes)
+        fewer_needed_price = fewer_needed_calc.calculate(file_sizes)
+        more_needed_price = more_needed_calc.calculate(file_sizes)
 
         self.assertThat(
             fewer_needed_price,
@@ -85,17 +89,19 @@ class PriceCalculatorTests(TestCase):
         integers(min_value=1, max_value=127),
         file_sizes,
     )
-    def test_shares_total(self, shares_total, more_total, file_sizes):
+    def test_shares_total(
+        self, shares_total: int, more_total: int, file_sizes: list[int]
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` always increases as
         ``shares_total`` increases.
         """
         calculator = partial(PriceCalculator, pass_value=100, shares_needed=1)
-        fewer_total = calculator(shares_total=shares_total)
-        more_total = calculator(shares_total=shares_total + more_total)
+        fewer_total_calc = calculator(shares_total=shares_total)
+        more_total_calc = calculator(shares_total=shares_total + more_total)
 
-        fewer_total_price = fewer_total.calculate(file_sizes)
-        more_total_price = more_total.calculate(file_sizes)
+        fewer_total_price = fewer_total_calc.calculate(file_sizes)
+        more_total_price = more_total_calc.calculate(file_sizes)
 
         self.assertThat(
             more_total_price,
@@ -112,7 +118,12 @@ class PriceCalculatorTests(TestCase):
         integers(min_value=1),
         encoding_parameters(),
     )
-    def test_file_sizes(self, file_sizes, pass_value, parameters):
+    def test_file_sizes(
+        self,
+        file_sizes: tuple[list[int], list[int]],
+        pass_value: int,
+        parameters: tuple[int, int, int],
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` never decreases as the values
         of ``file_sizes`` increase.
@@ -140,7 +151,12 @@ class PriceCalculatorTests(TestCase):
         encoding_parameters(),
         file_sizes,
     )
-    def test_positive_integer_price(self, pass_value, parameters, file_sizes):
+    def test_positive_integer_price(
+        self,
+        pass_value: int,
+        parameters: tuple[int, int, int],
+        file_sizes: list[int],
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` for a non-empty size list is
         always a positive integer.
@@ -165,7 +181,12 @@ class PriceCalculatorTests(TestCase):
         encoding_parameters(),
         file_sizes,
     )
-    def test_linear_increase(self, pass_value, parameters, file_sizes):
+    def test_linear_increase(
+        self,
+        pass_value: int,
+        parameters: tuple[int, int, int],
+        file_sizes: list[int],
+    ) -> None:
         """
         The result of ``PriceCalculator.calculate`` doubles if the file size list
         is doubled.
@@ -186,7 +207,7 @@ class PriceCalculatorTests(TestCase):
     @given(
         integers(min_value=1),
     )
-    def test_one_pass(self, pass_value):
+    def test_one_pass(self, pass_value: int) -> None:
         """
         The result of ``PriceCalculator.calculate`` is exactly ``1`` if the amount
         of data to be stored equals the value of a pass.
