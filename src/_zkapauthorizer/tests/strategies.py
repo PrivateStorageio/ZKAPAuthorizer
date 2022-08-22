@@ -976,7 +976,7 @@ def slot_test_vectors() -> SearchStrategy[list[Optional[object]]]:
 
 
 def to_server_test_vector(v: ClientTestVector) -> ServerTestVector:
-    return (v[0], v[1], b"eq", v[2])
+    return [(x[0], x[1], b"eq", x[2]) for x in v]
 
 
 @frozen
