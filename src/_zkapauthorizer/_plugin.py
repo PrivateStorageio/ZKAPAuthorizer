@@ -251,11 +251,10 @@ class ZKAPAuthorizer(object):
         get_anonymous_storage_server: Callable[[], StorageServer],
     ) -> Deferred[AnnounceableStorageServer]:
         registry = CollectorRegistry()
-        kwargs = configuration.copy()
 
         # If metrics are desired, schedule their writing to disk.
-        metrics_interval = kwargs.pop("prometheus-metrics-interval", None)
-        metrics_pathname = kwargs.pop("prometheus-metrics-path", None)
+        metrics_interval = configuration.get("prometheus-metrics-interval", None)
+        metrics_pathname = configuration.get("prometheus-metrics-path", None)
         if metrics_interval is not None and metrics_pathname is not None:
             metrics_path = FilePath(metrics_pathname)  # type: ignore[no-untyped-call]
             metrics_path.parent().makedirs(ignoreExistingDirectory=True)  # type: ignore[no-untyped-call]
@@ -263,9 +262,9 @@ class ZKAPAuthorizer(object):
             t.clock = self.reactor
             t.start(int(metrics_interval))
 
-        root_url = kwargs.pop("ristretto-issuer-root-url")
-        pass_value = int(kwargs.pop("pass-value", BYTES_PER_PASS))
-        key_path = FilePath(kwargs.pop("ristretto-signing-key-path"))  # type: ignore[no-untyped-call]
+        root_url = configuration["ristretto-issuer-root-url"]
+        pass_value = int(configuration.get("pass-value", BYTES_PER_PASS))
+        key_path = FilePath(configuration["ristretto-signing-key-path"])  # type: ignore[no-untyped-call]
         signing_key = load_signing_key(key_path)
         public_key = PublicKey.from_signing_key(signing_key)
         announcement = {
@@ -274,7 +273,6 @@ class ZKAPAuthorizer(object):
         }
         anonymous_storage_server = get_anonymous_storage_server()
         spender = get_spender(
-            config=kwargs,
             reactor=self.reactor,
             registry=registry,
         )
@@ -284,7 +282,7 @@ class ZKAPAuthorizer(object):
             signing_key=signing_key,
             spender=spender,
             registry=registry,
-            **kwargs,
+            clock=self.reactor,
         )
         return succeed(
             AnnounceableStorageServer(
