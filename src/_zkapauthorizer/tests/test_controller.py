@@ -19,14 +19,16 @@ Tests for ``_zkapauthorizer.controller``.
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import loads
-from typing import Callable
+from random import Random
+from typing import Callable, Container, Iterable, Optional, TypeVar
 
-import attr
+from attrs import define
 from challenge_bypass_ristretto import (
     BatchDLEQProof,
     BlindedToken,
     PublicKey,
     SecurityException,
+    SigningKey,
     TokenPreimage,
     VerificationSignature,
     random_signing_key,
@@ -41,7 +43,6 @@ from testtools.matchers import (
     Always,
     Equals,
     HasLength,
-    Is,
     IsInstance,
     MatchesAll,
     MatchesStructure,
@@ -55,11 +56,12 @@ from twisted.internet.task import Clock
 from twisted.python.url import URL
 from twisted.web.http import BAD_REQUEST, INTERNAL_SERVER_ERROR, UNSUPPORTED_MEDIA_TYPE
 from twisted.web.http_headers import Headers
-from twisted.web.iweb import IAgent
-from twisted.web.resource import ErrorPage, Resource
+from twisted.web.iweb import IAgent, IBodyProducer, IRequest, IResponse
+from twisted.web.resource import ErrorPage, IResource, Resource
 from zope.interface import implementer
 
 from .._json import dumps_utf8
+from .._types import JSON
 from ..controller import (
     AlreadySpent,
     DoubleSpendRedeemer,
@@ -70,12 +72,12 @@ from ..controller import (
     NonRedeemer,
     PaymentController,
     RecordingRedeemer,
+    RedemptionResult,
     RistrettoRedeemer,
     UnexpectedResponse,
     Unpaid,
     UnpaidRedeemer,
     UnrecognizedFailureReason,
-    bracket,
     token_count_for_group,
 )
 from ..model import DoubleSpend as model_DoubleSpend
@@ -86,6 +88,7 @@ from ..model import Redeemed as model_Redeemed
 from ..model import Redeeming as model_Redeeming
 from ..model import UnblindedToken
 from ..model import Unpaid as model_Unpaid
+from ..model import Voucher
 from .common import GetConfig
 from .fixtures import TemporaryVoucherStore
 from .matchers import Provides, between, raises
@@ -100,6 +103,8 @@ from .strategies import (
     vouchers,
 )
 
+T = TypeVar("T")
+
 
 def clock_to_now(clock: IReactorTime) -> Callable[[], datetime]:
     """
@@ -107,7 +112,7 @@ def clock_to_now(clock: IReactorTime) -> Callable[[], datetime]:
         representing the time of ``clock`` at the time of each call.
     """
 
-    def now():
+    def now() -> datetime:
         s = clock.seconds()
         d = datetime.utcfromtimestamp(s)
         return d.replace(tzinfo=timezone.utc)
@@ -613,7 +618,9 @@ class PaymentControllerTests(TestCase):
         clocks(),
         vouchers(),
     )
-    def test_redeem_error_after_delay(self, get_config, clock, voucher):
+    def test_redeem_error_after_delay(
+        self, get_config: GetConfig, clock: Clock, voucher: bytes
+    ) -> None:
         """
         When ``PaymentController`` receives a non-terminal error trying to redeem
         a voucher, after some time passes it tries to redeem the voucher
@@ -697,8 +704,13 @@ class PaymentControllerTests(TestCase):
         integers(min_value=0, max_value=32),
     )
     def test_sequester_tokens_for_untrusted_key(
-        self, random, clock, voucher, public_keys, extra_token_count
-    ):
+        self,
+        random: Random,
+        clock: Clock,
+        voucher: bytes,
+        public_keys: tuple[list[str], list[str]],
+        extra_token_count: int,
+    ) -> None:
         """
         All unblinded tokens which are returned from the redemption process
         associated with a public key that the controller has not been
@@ -745,7 +757,7 @@ class PaymentControllerTests(TestCase):
             succeeded(Always()),
         )
 
-        def count_in_group(public_keys, key_group):
+        def count_in_group(public_keys: Iterable[T], key_group: Container[T]) -> int:
             return sum(
                 (
                     token_count_for_group(num_redemption_groups, token_count, n)
@@ -824,7 +836,7 @@ class RistrettoRedeemerTests(TestCase):
     Tests for ``RistrettoRedeemer``.
     """
 
-    def test_interface(self):
+    def test_interface(self) -> None:
         """
         An ``RistrettoRedeemer`` instance provides ``IRedeemer``.
         """
@@ -835,7 +847,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=1, max_value=100))
-    def test_good_ristretto_redemption(self, voucher, counter, num_tokens):
+    def test_good_ristretto_redemption(
+        self, voucher: Voucher, counter: int, num_tokens: int
+    ) -> None:
         """
         If the issuer returns a successful result then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
@@ -871,7 +885,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_non_json_response(self, voucher, counter, num_tokens):
+    def test_non_json_response(
+        self, voucher: Voucher, counter: int, num_tokens: int
+    ) -> None:
         """
         If the issuer responds with something that isn't JSON then the response is
         logged and the ``Deferred`` fires with a ``Failure`` wrapping
@@ -904,7 +920,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_redemption_denied_alreadyspent(self, voucher, counter, extra_tokens):
+    def test_redemption_denied_alreadyspent(
+        self, voucher: Voucher, counter: int, extra_tokens: int
+    ) -> None:
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has already been spent, ``RistrettoRedeem``
@@ -932,7 +950,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_redemption_denied_unpaid(self, voucher, counter, extra_tokens):
+    def test_redemption_denied_unpaid(
+        self, voucher: Voucher, counter: int, extra_tokens: int
+    ) -> None:
         """
         If the issuer declines to allow the voucher to be redeemed and gives a
         reason that the voucher has not been paid for, ``RistrettoRedeem``
@@ -960,7 +980,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_redemption_unknown_response(self, voucher, counter, extra_tokens):
+    def test_redemption_unknown_response(
+        self, voucher: Voucher, counter: int, extra_tokens: int
+    ) -> None:
         """
         If the issuer returns a failure without a recognizable reason then
         ``RistrettoRedeemer.redeemWithCounter`` returns a ``Deferred`` that
@@ -995,7 +1017,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_bad_ristretto_redemption(self, voucher, counter, extra_tokens):
+    def test_bad_ristretto_redemption(
+        self, voucher: Voucher, counter: int, extra_tokens: int
+    ) -> None:
         """
         If the issuer returns a successful result with an invalid proof then
         ``RistrettoRedeemer.redeem`` returns a ``Deferred`` that fires with a
@@ -1030,7 +1054,9 @@ class RistrettoRedeemerTests(TestCase):
         )
 
     @given(voucher_objects(), voucher_counters(), integers(min_value=0, max_value=100))
-    def test_ristretto_pass_construction(self, voucher, counter, extra_tokens):
+    def test_ristretto_pass_construction(
+        self, voucher: Voucher, counter: int, extra_tokens: int
+    ) -> None:
         """
         The passes constructed using unblinded tokens and messages pass the
         Ristretto verification check.
@@ -1051,7 +1077,7 @@ class RistrettoRedeemerTests(TestCase):
             )
         )
 
-        def unblinded_tokens_to_passes(result):
+        def unblinded_tokens_to_passes(result: RedemptionResult) -> list[Pass]:
             passes = redeemer.tokens_to_passes(message, result.unblinded_tokens)
             return passes
 
@@ -1068,38 +1094,36 @@ class RistrettoRedeemerTests(TestCase):
         )
 
 
-def ristretto_verify(signing_key, message, marshaled_passes):
+def ristretto_verify(
+    signing_key: SigningKey, message: bytes, marshaled_passes: list[Pass]
+) -> bool:
     """
     Verify that the given passes were generated in a process that involved a
     signature from the given signing key and using the given message.
 
-    :param SigningKey signing_key: A signing key which should have signed some
-        random blinded tokens earlier in the lifecycle of the passes to
-        verify.
+    :param signing_key: A signing key which should have signed some random
+        blinded tokens earlier in the lifecycle of the passes to verify.
 
-    :param bytes message: Request binding data which is involved in the
-        generation of the passes to verify.
+    :param message: Request binding data which is involved in the generation
+        of the passes to verify.
 
-    :param list[bytes] marshaled_passes: Token preimages and corresponding
-        message signatures to verify.  Each element contains two
-        space-separated base64 encoded values, the first representing the
-        preimage and the second representing the signature.
+    :param marshaled_passes: Token preimages and corresponding message
+        signatures to verify.  Each element contains two space-separated
+        base64 encoded values, the first representing the preimage and the
+        second representing the signature.
 
-    :return bool: ``True`` if and only if all of the passes represented by
+    :return: ``True`` if and only if all of the passes represented by
         ``marshaled_passes`` pass the Ristretto-defined verification for an
         exchange using the given signing key and message.
     """
 
-    def decode(marshaled_pass):
-        pass_ = Pass.from_bytes(marshaled_pass)
+    def decode(pass_: Pass) -> tuple[TokenPreimage, VerificationSignature]:
         return (
             TokenPreimage.decode_base64(pass_.preimage),
             VerificationSignature.decode_base64(pass_.signature),
         )
 
-    servers_passes = list(
-        decode(marshaled_pass.pass_bytes) for marshaled_pass in marshaled_passes
-    )
+    servers_passes = list(map(decode, marshaled_passes))
     servers_unblinded_tokens = list(
         signing_key.rederive_unblinded_token(token_preimage)
         for (token_preimage, sig) in servers_passes
@@ -1120,7 +1144,7 @@ def ristretto_verify(signing_key, message, marshaled_passes):
     return not any(invalid_passes)
 
 
-def treq_for_loopback_ristretto(local_issuer):
+def treq_for_loopback_ristretto(local_issuer: IResource) -> StubTreq:
     """
     Create a ``treq``-alike which can dispatch to a local issuer.
     """
@@ -1133,11 +1157,17 @@ def treq_for_loopback_ristretto(local_issuer):
 
 @implementer(IAgent)
 class _StubAgent(object):
-    def request(self, method, uri, headers=None, bodyProducer=None):
+    def request(
+        self,
+        method: bytes,
+        uri: bytes,
+        headers: Optional[Headers] = None,
+        bodyProducer: Optional[IBodyProducer] = None,
+    ) -> Deferred[IResponse]:
         return fail(Exception("It's only a model."))
 
 
-def stub_agent():
+def stub_agent() -> _StubAgent:
     return _StubAgent()
 
 
@@ -1147,12 +1177,12 @@ class UnexpectedResponseRedemption(Resource):
     server but always returns a non-JSON error response.
     """
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> bytes:
         request.setResponseCode(INTERNAL_SERVER_ERROR)
         return b"Sorry, this server does not behave well."
 
 
-@attr.s
+@define
 class UnsuccessfulRedemption(Resource, object):
     """
     A fake redemption server which always returns an unsuccessful response.
@@ -1160,12 +1190,12 @@ class UnsuccessfulRedemption(Resource, object):
     :ivar unicode reason: The value for the ``reason`` field of the result.
     """
 
-    reason = attr.ib()
+    reason: str
 
-    def __attrs_post_init__(self):
+    def __attrs_post_init__(self) -> None:
         Resource.__init__(self)
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> bytes:
         request_error = check_redemption_request(request)
         if request_error is not None:
             return request_error
@@ -1173,7 +1203,7 @@ class UnsuccessfulRedemption(Resource, object):
         return bad_request(request, {"success": False, "reason": self.reason})
 
 
-def unpaid_redemption():
+def unpaid_redemption() -> UnsuccessfulRedemption:
     """
     Return a fake Ristretto redemption server which always refuses to allow
     vouchers to be redeemed and reports an error that the voucher has not been
@@ -1182,7 +1212,7 @@ def unpaid_redemption():
     return UnsuccessfulRedemption("unpaid")
 
 
-def already_spent_redemption():
+def already_spent_redemption() -> UnsuccessfulRedemption:
     """
     Return a fake Ristretto redemption server which always refuses to allow
     vouchers to be redeemed and reports an error that the voucher has already
@@ -1192,12 +1222,15 @@ def already_spent_redemption():
 
 
 class RistrettoRedemption(Resource):
-    def __init__(self, signing_key):
+    signing_key: SigningKey
+    public_key: PublicKey
+
+    def __init__(self, signing_key: SigningKey) -> None:
         Resource.__init__(self)
         self.signing_key = signing_key
         self.public_key = PublicKey.from_signing_key(signing_key)
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> bytes:
         request_error = check_redemption_request(request)
         if request_error is not None:
             return request_error
@@ -1240,7 +1273,7 @@ class CheckRedemptionRequestTests(TestCase):
     Tests for ``check_redemption_request``.
     """
 
-    def test_content_type(self):
+    def test_content_type(self) -> None:
         """
         If the request content-type is not application/json, the response is
         **Unsupported Media Type**.
@@ -1261,7 +1294,7 @@ class CheckRedemptionRequestTests(TestCase):
             ),
         )
 
-    def test_not_json(self):
+    def test_not_json(self) -> None:
         """
         If the request body cannot be decoded as json, the response is **Bad
         Request**.
@@ -1294,7 +1327,7 @@ class CheckRedemptionRequestTests(TestCase):
             unique=True,
         ),
     )
-    def test_missing_properties(self, properties):
+    def test_missing_properties(self, properties: list[str]) -> None:
         """
         If the JSON object in the request body does not include all the necessary
         properties, the response is **Bad Request**.
@@ -1317,7 +1350,7 @@ class CheckRedemptionRequestTests(TestCase):
         )
 
 
-def check_redemption_request(request):
+def check_redemption_request(request: IRequest) -> Optional[bytes]:
     """
     Verify that the given request conforms to the redemption server's public
     interface.
@@ -1350,197 +1383,16 @@ def check_redemption_request(request):
     return None
 
 
-def bad_request(request, body_object):
+def bad_request(request: IRequest, body_object: JSON) -> bytes:
     request.setResponseCode(BAD_REQUEST)
     request.setHeader(b"content-type", b"application/json")
     request.write(dumps_utf8(body_object))
     return b""
 
 
-def bad_content_type(request):
-    return ErrorPage(
+def bad_content_type(request: IRequest) -> bytes:
+    return ErrorPage(  # type: ignore[no-any-return]
         UNSUPPORTED_MEDIA_TYPE,
         b"Unsupported media type",
         b"Unsupported media type",
     ).render(request)
-
-
-class _BracketTestMixin:
-    """
-    Tests for ``bracket``.
-    """
-
-    def wrap_success(self, result):
-        raise NotImplementedError()
-
-    def wrap_failure(self, result):
-        raise NotImplementedError()
-
-    def test_success(self: TestCase) -> None:
-        """
-        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
-        ``Deferred`` that fires with the result of ``between``.
-        """
-        result = object()
-        actions: list[str] = []
-        first = partial(actions.append, "first")
-
-        def between():
-            actions.append("between")
-            return self.wrap_success(result)
-
-        last = partial(actions.append, "last")
-        self.assertThat(
-            Deferred.fromCoroutine(bracket(first, last, between)),
-            succeeded(
-                Is(result),
-            ),
-        )
-        self.assertThat(
-            actions,
-            Equals(["first", "between", "last"]),
-        )
-
-    def test_failure(self: TestCase) -> None:
-        """
-        ``bracket`` calls ``first`` then ``between`` then ``last`` and returns a
-        ``Deferred`` that fires with the failure result of ``between``.
-        """
-
-        class SomeException(Exception):
-            pass
-
-        actions: list[str] = []
-        first = partial(actions.append, "first")
-
-        def between():
-            actions.append("between")
-            return self.wrap_failure(SomeException())
-
-        last = partial(actions.append, "last")
-        self.assertThat(
-            Deferred.fromCoroutine(bracket(first, last, between)),
-            failed(
-                AfterPreprocessing(
-                    lambda failure: failure.value,
-                    IsInstance(SomeException),
-                ),
-            ),
-        )
-        self.assertThat(
-            actions,
-            Equals(["first", "between", "last"]),
-        )
-
-    def test_success_with_failing_last(self: TestCase) -> None:
-        """
-        If the ``between`` action succeeds and the ``last`` action fails then
-        ``bracket`` fails the same way as the ``last`` action.
-        """
-
-        class SomeException(Exception):
-            pass
-
-        actions: list[str] = []
-        first = partial(actions.append, "first")
-
-        def between():
-            actions.append("between")
-            return self.wrap_success(None)
-
-        def last():
-            actions.append("last")
-            return self.wrap_failure(SomeException())
-
-        self.assertThat(
-            Deferred.fromCoroutine(bracket(first, last, between)),
-            failed(
-                AfterPreprocessing(
-                    lambda failure: failure.value,
-                    IsInstance(SomeException),
-                ),
-            ),
-        )
-        self.assertThat(
-            actions,
-            Equals(["first", "between", "last"]),
-        )
-
-    def test_failure_with_failing_last(self: TestCase) -> None:
-        """
-        If both the ``between`` and ``last`` actions fail then ``bracket`` fails
-        the same way as the ``last`` action.
-        """
-
-        class SomeException(Exception):
-            pass
-
-        class AnotherException(Exception):
-            pass
-
-        actions: list[str] = []
-        first = partial(actions.append, "first")
-
-        def between():
-            actions.append("between")
-            return self.wrap_failure(SomeException())
-
-        def last():
-            actions.append("last")
-            return self.wrap_failure(AnotherException())
-
-        self.assertThat(
-            Deferred.fromCoroutine(bracket(first, last, between)),
-            failed(
-                AfterPreprocessing(
-                    lambda failure: failure.value,
-                    IsInstance(AnotherException),
-                ),
-            ),
-        )
-        self.assertThat(
-            actions,
-            Equals(["first", "between", "last"]),
-        )
-
-    def test_first_failure(self: TestCase) -> None:
-        """
-        If the ``first`` action fails then ``bracket`` fails the same way and
-        runs neither the ``between`` nor ``last`` actions.
-        """
-
-        class SomeException(Exception):
-            pass
-
-        actions: list[str] = []
-
-        def first():
-            actions.append("first")
-            return self.wrap_failure(SomeException())
-
-        async def between() -> None:
-            actions.append("between")
-
-        last = partial(actions.append, "last")
-
-        self.assertThat(
-            Deferred.fromCoroutine(bracket(first, last, between)),
-            failed(
-                AfterPreprocessing(
-                    lambda failure: failure.value,
-                    IsInstance(SomeException),
-                ),
-            ),
-        )
-        self.assertThat(
-            actions,
-            Equals(["first"]),
-        )
-
-
-class BracketTests(_BracketTestMixin, TestCase):
-    async def wrap_success(self, result):
-        return result
-
-    async def wrap_failure(self, exception):
-        raise exception

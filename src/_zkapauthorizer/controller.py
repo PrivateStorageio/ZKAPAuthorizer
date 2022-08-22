@@ -21,7 +21,7 @@ from base64 import b64decode, b64encode
 from datetime import datetime, timedelta
 from hashlib import sha256
 from json import loads
-from typing import Any, Awaitable, Callable, Optional, Sequence, TypeVar
+from typing import Any, Callable, Optional, Sequence
 
 import attr
 import challenge_bypass_ristretto
@@ -1125,46 +1125,3 @@ _REDEEMERS: dict[str, Callable[[str, Config, StorageAnnouncement, Any], IRedeeme
     "error": ErrorRedeemer.make,
     "ristretto": RistrettoRedeemer.make,
 }
-
-A = TypeVar("A")
-B = TypeVar("B")
-C = TypeVar("C")
-
-
-async def bracket(
-    first: Callable[[], Optional[Awaitable[A]]],
-    last: Callable[[], Optional[Awaitable[C]]],
-    between: Callable[[], Awaitable[B]],
-) -> B:
-    """
-    Invoke an action between two other actions.
-
-    :param first: A no-argument function that may return a Deferred.  It is
-        called first.
-
-    :param last: A no-argument function that may return a Deferred.  It is
-        called last.
-
-    :param between: A no-argument function that may return a Deferred.  It is
-        called after ``first`` is done and completes before ``last`` is called.
-
-    :return Deferred: A ``Deferred`` which fires with the result of
-        ``between``.
-    """
-    f = first()
-    if f is not None:
-        await f
-    try:
-        result = await between()
-    except GeneratorExit:
-        raise
-    except:
-        l = last()
-        if l is not None:
-            await l
-        raise
-    else:
-        l = last()
-        if l is not None:
-            await l
-        return result

@@ -56,7 +56,6 @@ from typing_extensions import TypeAlias
 from zope.interface import implementer
 
 from .config import Config, read_duration
-from .controller import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
 
@@ -454,18 +453,18 @@ def lease_maintenance_service(
     def get_lease_maint_config() -> LeaseMaintenanceConfig:
         return lease_maint_config
 
+    async def maintain_and_record_last_run() -> None:
+        try:
+            await maintain_leases()
+        finally:
+            write_time_to_path(
+                last_run_path,
+                datetime.utcfromtimestamp(reactor.seconds()),
+            )
+
     return _FuzzyTimerService(
         SERVICE_NAME,
-        lambda: Deferred.fromCoroutine(
-            bracket(
-                lambda: None,
-                lambda: write_time_to_path(
-                    last_run_path,
-                    datetime.utcfromtimestamp(reactor.seconds()),
-                ),
-                maintain_leases,
-            )
-        ),
+        lambda: Deferred.fromCoroutine(maintain_and_record_last_run),
         initial_interval,
         sample_interval_distribution,
         get_lease_maint_config,
