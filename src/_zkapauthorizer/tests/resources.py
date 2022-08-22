@@ -6,7 +6,7 @@ from subprocess import Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
 from time import sleep
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from allmydata.client import config_from_string
 from attrs import define
@@ -28,10 +28,10 @@ RETRY_DELAY = [0.3] * 100
 
 
 class TemporaryDirectoryResource(TestResourceManager):
-    def make(self, dependency_resources):
+    def make(self, dependency_resources: dict[str, object]) -> FilePath:
         return FilePath(mkdtemp())
 
-    def isDirty(self):
+    def isDirty(self) -> bool:
         # Can't detect when the directory is written to, so assume it
         # can never be reused.  We could list the directory, but that might
         # not catch it being open as a cwd etc.
@@ -106,14 +106,14 @@ class TahoeStorage:
     storage_furl: Optional[str] = None
     node_pubkey: Optional[str] = None
 
-    def run(self):
+    def run(self) -> None:
         """
         Create and start the node in a child process.
         """
         self.create()
         self.start()
 
-    def create(self):
+    def create(self) -> None:
         """
         Create the node directory.
         """
@@ -130,7 +130,7 @@ class TahoeStorage:
         )
         setup_exit_trigger(self.node_dir)
 
-    def start(self):
+    def start(self) -> None:
         """
         Start the node child process.
         """
@@ -185,14 +185,16 @@ class TahoeStorageManager(TestResourceManager):
     # runtime environment in which that resource was created - by destroying
     # anything associated with it which Python will not automatically clean up
     # when the Python objects are garbage collected.
-    def clean(self, storage):
+    def clean(self, storage: TahoeStorage) -> None:
         """
         Kill the storage node child process.
         """
-        storage.process.kill()
-        storage.process.wait()
+        process = storage.process
+        assert process is not None
+        process.kill()
+        process.wait()
 
-    def make(self, dependency_resources):
+    def make(self, dependency_resources: dict[str, Any]) -> TahoeStorage:
         """
         Create and run a brand new Tahoe-LAFS storage node.
         """
@@ -234,14 +236,14 @@ class TahoeClient:
             self.node_dir.child("tahoe.cfg").getContent(),
         )
 
-    def run(self):
+    def run(self) -> None:
         """
         Create and start the node in a child process.
         """
         self.create()
         self.start()
 
-    def create(self):
+    def create(self) -> None:
         """
         Create the node directory and write the necessary configuration to it.
         """
@@ -267,7 +269,7 @@ class TahoeClient:
                 safe_dump({"storage": self.storage.servers_yaml_entry()}),
             )
 
-    def start(self):
+    def start(self) -> None:
         """
         Start the node child process.
         """
@@ -300,14 +302,16 @@ class TahoeClientManager(TestResourceManager):
     ]
 
     # See note on TahoeStorageManager.clean
-    def clean(self, client):
+    def clean(self, client: TahoeClient) -> None:
         """
         Kill the client node child process.
         """
-        client.process.kill()
-        client.process.wait()
+        process = client.process
+        assert process is not None
+        process.kill()
+        process.wait()
 
-    def make(self, dependency_resources):
+    def make(self, dependency_resources: dict[str, Any]) -> TahoeClient:
         """
         Create and run a brand new Tahoe-LAFS client node.
         """
