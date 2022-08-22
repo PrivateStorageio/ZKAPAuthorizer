@@ -133,8 +133,8 @@ class PassGroupTests(TestCase):
         being re-used by a future ``get`` call.
         """
 
-        def matches_tokens(num_passes, group):
-            return AfterPreprocessing(
+        def matches_tokens(num_passes: int, group: IPassGroup) -> Matcher[VoucherStore]:
+            return AfterPreprocessing(  # type: ignore[no-any-return]
                 lambda store: store.count_unblinded_tokens(),
                 Equals(num_passes - len(group.passes)),
             )
@@ -152,15 +152,22 @@ class PassGroupTests(TestCase):
         )
 
     @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
-    def test_invalid(self, voucher, num_passes, now, random, data):
+    def test_invalid(
+        self,
+        voucher: bytes,
+        num_passes: int,
+        now: datetime,
+        random: Random,
+        data: DataObject,
+    ) -> None:
         """
         Passes in a group can be marked as invalid to prevent them from being
         re-used by a future ``get`` call.
         """
 
-        def matches_tokens(num_passes, group):
+        def matches_tokens(num_passes: int, group: IPassGroup) -> Matcher[VoucherStore]:
             expected = num_passes - len(group.passes)
-            return AfterPreprocessing(
+            return AfterPreprocessing(  # type: ignore[no-any-return]
                 lambda store: store.count_unblinded_tokens(),
                 Equals(expected),
             )
@@ -178,14 +185,21 @@ class PassGroupTests(TestCase):
         )
 
     @given(vouchers(), pass_counts(), posix_safe_datetimes(), randoms(), data())
-    def test_reset(self, voucher, num_passes, now, random, data):
+    def test_reset(
+        self,
+        voucher: bytes,
+        num_passes: int,
+        now: datetime,
+        random: Random,
+        data: DataObject,
+    ) -> None:
         """
         Passes in a group can be reset to allow them to be re-used by a future
         ``get`` call.
         """
 
-        def matches_tokens(num_passes, group):
-            return AfterPreprocessing(
+        def matches_tokens(num_passes: int, group: IPassGroup) -> Matcher[VoucherStore]:
+            return AfterPreprocessing(  # type: ignore[no-any-return]
                 # They've been reset so we should be able to re-get them.
                 lambda store: store.get_unblinded_tokens(len(group.passes)),
                 Equals(group.unblinded_tokens),
