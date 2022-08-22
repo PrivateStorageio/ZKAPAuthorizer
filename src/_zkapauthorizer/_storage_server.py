@@ -79,7 +79,7 @@ from .storage_common import (
     MorePassesRequired,
     ReadVector,
     Secrets,
-    TestWriteVectors,
+    ServerTestWriteVector,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
@@ -482,7 +482,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         passes: list[bytes],
         storage_index: bytes,
         secrets: Secrets,
-        tw_vectors: dict[int, TestWriteVectors],
+        tw_vectors: dict[int, ServerTestWriteVector],
         r_vector: ReadVector,
     ) -> Any:
         """
@@ -528,7 +528,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         passes: list[bytes],
         storage_index: bytes,
         secrets: Secrets,
-        tw_vectors: dict[int, TestWriteVectors],
+        tw_vectors: dict[int, ServerTestWriteVector],
         r_vector: ReadVector,
     ) -> Any:
         # Get a stable time to use for all lease expiration checks that are
@@ -942,7 +942,7 @@ def add_leases_for_writev(
     storage_server: StorageServer,
     storage_index: bytes,
     secrets: Secrets,
-    tw_vectors: dict[int, TestWriteVectors],
+    tw_vectors: dict[int, ServerTestWriteVector],
     now: float,
 ) -> None:
     """

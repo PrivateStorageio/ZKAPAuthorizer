@@ -37,9 +37,11 @@ from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED, log_call_coroutine
 from .foolscap import ShareStat
 from .spending import IPassGroup
 from .storage_common import (
+    ClientTestWriteVector,
     MorePassesRequired,
     ReadVector,
     Secrets,
+    ServerTestWriteVector,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
@@ -51,32 +53,6 @@ from .validators import positive_integer
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
-
-OldTestWriteVectors = dict[
-    int,
-    tuple[
-        list[
-            tuple[int, int, bytes, bytes],
-        ],
-        list[
-            tuple[int, bytes],
-        ],
-        Optional[int],
-    ],
-]
-# XXX There's a related type by the same name in storage_common.py
-TestWriteVectors = dict[
-    int,
-    tuple[
-        list[
-            tuple[int, int, bytes],
-        ],
-        list[
-            tuple[int, bytes],
-        ],
-        Optional[int],
-    ],
-]
 
 
 @define(auto_exc=False, str=True)
@@ -318,7 +294,7 @@ async def slot_testv_and_readv_and_writev(
     passes: IPassGroup,
     storage_index: bytes,
     secrets: Secrets,
-    old_tw_vectors: OldTestWriteVectors,
+    old_tw_vectors: dict[int, ServerTestWriteVector],
     r_vector: ReadVector,
 ) -> tuple[bool, dict[int, list[bytes]]]:
     unknown = await rref.callRemote(  # type: ignore[no-untyped-call]
@@ -593,7 +569,7 @@ class ZKAPAuthorizerStorageClient(object):
         rref: IRemoteReference,
         storage_index: bytes,
         secrets: Secrets,
-        tw_vectors: TestWriteVectors,
+        tw_vectors: dict[int, ClientTestWriteVector],
         r_vector: ReadVector,
     ) -> tuple[bool, dict[int, list[bytes]]]:
         # Read operations are free.

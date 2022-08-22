@@ -17,7 +17,7 @@ Functionality shared between the storage client and server.
 """
 
 from base64 import b64encode
-from typing import Callable, Dict, List, Set, Tuple, TypedDict, Union, ValuesView, cast
+from typing import Callable, TypedDict, Union, ValuesView, cast
 
 from attrs import define
 from pyutil.mathutil import div_ceil
@@ -120,7 +120,7 @@ def get_configured_pass_value(node_config: Config) -> int:
     )
 
 
-def get_configured_allowed_public_keys(node_config: Config) -> Set[str]:
+def get_configured_allowed_public_keys(node_config: Config) -> set[str]:
     """
     Read the set of allowed issuer public keys from the given configuration.
     """
@@ -167,10 +167,9 @@ def required_passes(
 
 
 Secrets = tuple[bytes, bytes, bytes]
-TestVector = List[Tuple[int, int, bytes, bytes]]
-DataVector = List[Tuple[int, bytes]]
-# XXX There's a related type by the same name in _storage_client.py
-TestWriteVectors = Tuple[TestVector, DataVector, Union[None, int]]
+ServerTestVector = list[tuple[int, int, bytes, bytes]]
+DataVector = list[tuple[int, bytes]]
+ServerTestWriteVector = tuple[ServerTestVector, DataVector, Union[None, int]]
 ReadVector = list[tuple[int, int]]
 
 # ClientTestVector is like TestVector but it drops the "operator" bytes field.
@@ -178,6 +177,7 @@ ReadVector = list[tuple[int, int]]
 # TestVector is what is transmitted over the network and operated on by the
 # storage server.
 ClientTestVector = list[tuple[int, int, bytes]]
+ClientTestWriteVector = tuple[ClientTestVector, DataVector, Union[None, int]]
 
 _div_ceil = cast(Callable[[int, int], int], div_ceil)
 
@@ -198,7 +198,7 @@ def share_size_for_data(shares_needed: int, datasize: int) -> int:
     return _div_ceil(datasize, shares_needed)
 
 
-def has_writes(tw_vectors: Dict[int, TestWriteVectors]) -> bool:
+def has_writes(tw_vectors: dict[int, ServerTestWriteVector]) -> bool:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
@@ -211,7 +211,7 @@ def has_writes(tw_vectors: Dict[int, TestWriteVectors]) -> bool:
     )
 
 
-def get_write_sharenums(tw_vectors: Dict[int, TestWriteVectors]) -> Set[int]:
+def get_write_sharenums(tw_vectors: dict[int, ServerTestWriteVector]) -> set[int]:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
@@ -229,7 +229,7 @@ def get_write_sharenums(tw_vectors: Dict[int, TestWriteVectors]) -> Set[int]:
     )
 
 
-def get_allocated_size(tw_vectors: Dict[int, TestWriteVectors]) -> int:
+def get_allocated_size(tw_vectors: dict[int, ServerTestWriteVector]) -> int:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
@@ -268,8 +268,8 @@ def get_implied_data_length(
 
 def get_required_new_passes_for_mutable_write(
     pass_value: int,
-    current_sizes: Dict[int, int],
-    tw_vectors: Dict[int, TestWriteVectors],
+    current_sizes: dict[int, int],
+    tw_vectors: dict[int, ServerTestWriteVector],
 ) -> int:
     """
     Get the number of new passes required to authorize a given write to a
@@ -314,14 +314,14 @@ def get_required_new_passes_for_mutable_write(
 
 
 class TestWriteVectorSummary(TypedDict):
-    testv: List[Tuple[int, int, bytes, int]]
-    datav: List[Tuple[int, int]]
+    testv: list[tuple[int, int, bytes, int]]
+    datav: list[tuple[int, int]]
     new_length: Union[None, int]
 
 
 def summarize(
-    tw_vectors: Dict[int, TestWriteVectors]
-) -> Dict[int, TestWriteVectorSummary]:
+    tw_vectors: dict[int, ServerTestWriteVector]
+) -> dict[int, TestWriteVectorSummary]:
     return {
         sharenum: {
             "testv": list(

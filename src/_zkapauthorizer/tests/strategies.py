@@ -78,6 +78,13 @@ from ..sql import (
     Table,
     Update,
 )
+from ..storage_common import (
+    ClientTestVector,
+    ClientTestWriteVector,
+    DataVector,
+    ServerTestVector,
+    ServerTestWriteVector,
+)
 from ..validators import non_negative_integer, positive_integer
 from .common import GetConfig
 
@@ -968,6 +975,10 @@ def slot_test_vectors() -> SearchStrategy[list[Optional[object]]]:
     )
 
 
+def to_server_test_vector(v: ClientTestVector) -> ServerTestVector:
+    return (v[0], v[1], b"eq", v[2])
+
+
 @frozen
 class TestAndWriteVectors:
     """
@@ -976,16 +987,27 @@ class TestAndWriteVectors:
     ``RIStorageServer.slot_testv_and_readv_and_writev``.
     """
 
-    test_vector: list[tuple[int, int, bytes]]
-    write_vector: list[tuple[int, bytes]]
+    test_vector: ClientTestVector
+    write_vector: DataVector
     new_length: Optional[int]
 
-    def for_call(
-        self,
-    ) -> tuple[list[tuple[int, int, bytes]], list[tuple[int, bytes]], Optional[int],]:
+    def for_server(self) -> ServerTestWriteVector:
         """
-        Construct a value suitable to be passed as ``tw_vectors`` to
-        ``slot_testv_and_readv_and_writev``.
+        Construct a value suitable to be passed as ``tw_vectors`` to the
+        server ``slot_testv_and_readv_and_writev``.
+        """
+        return (
+            to_server_test_vector(self.test_vector),
+            self.write_vector,
+            self.new_length,
+        )
+
+    def for_client(
+        self,
+    ) -> ClientTestWriteVector:
+        """
+        Construct a value suitable to be passed as ``tw_vectors`` to the
+        client ``slot_testv_and_readv_and_writev``.
         """
         return (self.test_vector, self.write_vector, self.new_length)
 

@@ -49,7 +49,6 @@ from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
 
-from .._storage_client import TestWriteVectors
 from ..api import (
     MorePassesRequired,
     ZKAPAuthorizerStorageClient,
@@ -59,6 +58,7 @@ from ..foolscap import ShareStat
 from ..server.spending import RecordingSpender, _SpendingData
 from ..storage_common import (
     ClientTestVector,
+    ClientTestWriteVector,
     DataVector,
     Secrets,
     allocate_buckets_message,
@@ -866,7 +866,7 @@ class ShareTests(TestCase):
                     storage_index,
                     secrets=secrets,
                     tw_vectors={
-                        k: v.for_call()
+                        k: v.for_client()
                         for (k, v) in test_and_write_vectors_for_shares.items()
                     },
                     r_vector=[],
@@ -980,7 +980,7 @@ class ShareTests(TestCase):
                 self.client.slot_testv_and_readv_and_writev(
                     storage_index,
                     secrets=secrets,
-                    tw_vectors={k: v.for_call() for (k, v) in vector.items()},
+                    tw_vectors={k: v.for_client() for (k, v) in vector.items()},
                     r_vector=[],
                 )
             )
@@ -1088,7 +1088,7 @@ class ShareTests(TestCase):
                     storage_index,
                     secrets=secrets,
                     tw_vectors={
-                        k: v.for_call()
+                        k: v.for_client()
                         for (k, v) in test_and_write_vectors_for_shares.items()
                     },
                     r_vector=[],
@@ -1153,7 +1153,7 @@ class ShareTests(TestCase):
                     storage_index,
                     secrets=secrets,
                     tw_vectors={
-                        k: v.for_call()
+                        k: v.for_client()
                         for (k, v) in test_and_write_vectors_for_shares.items()
                     },
                     r_vector=[],
@@ -1224,7 +1224,7 @@ class ShareTests(TestCase):
         empty_test_vector: ClientTestVector = []
 
         def write(
-            tw_vectors: TestWriteVectors,
+            tw_vectors: dict[int, ClientTestWriteVector],
         ) -> Deferred[tuple[bool, dict[int, list[bytes]]]]:
             return from_awaitable(
                 self.client.slot_testv_and_readv_and_writev(

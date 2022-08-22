@@ -464,7 +464,7 @@ def lease_maintenance_service(
 
     return _FuzzyTimerService(
         SERVICE_NAME,
-        lambda: Deferred.fromCoroutine(maintain_and_record_last_run),
+        lambda: Deferred.fromCoroutine(maintain_and_record_last_run()),
         initial_interval,
         sample_interval_distribution,
         get_lease_maint_config,
