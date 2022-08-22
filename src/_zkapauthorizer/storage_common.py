@@ -169,8 +169,15 @@ def required_passes(
 Secrets = tuple[bytes, bytes, bytes]
 TestVector = List[Tuple[int, int, bytes, bytes]]
 DataVector = List[Tuple[int, bytes]]
+# XXX There's a related type by the same name in _storage_client.py
 TestWriteVectors = Tuple[TestVector, DataVector, Union[None, int]]
 ReadVector = list[tuple[int, int]]
+
+# ClientTestVector is like TestVector but it drops the "operator" bytes field.
+# This is the data structure Tahoe-LAFS storage clients work with locally.
+# TestVector is what is transmitted over the network and operated on by the
+# storage server.
+ClientTestVector = list[tuple[int, int, bytes]]
 
 _div_ceil = cast(Callable[[int, int], int], div_ceil)
 

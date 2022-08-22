@@ -976,13 +976,13 @@ class TestAndWriteVectors:
     ``RIStorageServer.slot_testv_and_readv_and_writev``.
     """
 
-    test_vector: list[Optional[object]]
+    test_vector: list[tuple[int, int, bytes]]
     write_vector: list[tuple[int, bytes]]
     new_length: Optional[int]
 
     def for_call(
         self,
-    ) -> tuple[list[Optional[object]], list[tuple[int, bytes]], Optional[int],]:
+    ) -> tuple[list[tuple[int, int, bytes]], list[tuple[int, bytes]], Optional[int],]:
         """
         Construct a value suitable to be passed as ``tw_vectors`` to
         ``slot_testv_and_readv_and_writev``.

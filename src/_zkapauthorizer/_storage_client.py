@@ -64,6 +64,7 @@ OldTestWriteVectors = dict[
         Optional[int],
     ],
 ]
+# XXX There's a related type by the same name in storage_common.py
 TestWriteVectors = dict[
     int,
     tuple[
