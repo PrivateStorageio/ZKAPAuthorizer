@@ -262,7 +262,7 @@ def proxyForObject(
 
     [iface] = ifaces
 
-    def __init__(self, original):
+    def __init__(self: _I, original: _I) -> None:
         setattr(self, originalAttribute, original)
 
     # It usually doesn't make sense to proxy `__init__` (the wrapped object
@@ -361,10 +361,10 @@ class DummyStorageServer(object):
     ) -> Deferred[list[dict[int, ShareStat]]]:
         return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
 
-    def get_lease_seed(self):
+    def get_lease_seed(self) -> bytes:
         return self.lease_seed
 
-    def add_lease(self, storage_index, renew_secret, cancel_secret):
+    def add_lease(self, storage_index: bytes, renew_secret: bytes, cancel_secret: bytes) -> None:
         for stat in self.buckets.get(storage_index, {}).values():
             stat.lease_expiration = int(
                 self.clock.seconds() + timedelta(days=31).total_seconds()
