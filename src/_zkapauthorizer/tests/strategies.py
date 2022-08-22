@@ -23,9 +23,9 @@ from typing import Any, Callable, Optional, TypeVar, cast
 from urllib.parse import quote
 
 import attr
-from attrs import frozen
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
+from attrs import frozen
 from hypothesis.strategies import SearchStrategy, binary, builds, characters
 from hypothesis.strategies import datetimes as naive_datetimes
 from hypothesis.strategies import (
@@ -49,12 +49,11 @@ from twisted.python.filepath import FilePath
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
-from .common import GetConfig
 from .. import NAME
-from ..configutil import config_string_from_sections
+from .._types import ClientConfig, ServerConfig
 from ..config import Config
+from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
-from .._types import ServerConfig, ClientConfig
 from ..model import (
     DoubleSpend,
     Error,
@@ -80,6 +79,7 @@ from ..sql import (
     Update,
 )
 from ..validators import non_negative_integer, positive_integer
+from .common import GetConfig
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
@@ -336,7 +336,7 @@ def dummy_ristretto_keys_sets() -> SearchStrategy[set[str]]:
 
 def zkapauthz_configuration(
     extra_configurations: SearchStrategy[dict[str, str]],
-    allowed_public_keys: SearchStrategy[set[str]]=dummy_ristretto_keys_sets(),
+    allowed_public_keys: SearchStrategy[set[str]] = dummy_ristretto_keys_sets(),
 ) -> SearchStrategy[Config]:
     """
     Build ZKAPAuthorizer client plugin configuration dictionaries.
@@ -385,15 +385,21 @@ def client_ristrettoredeemer_configurations() -> SearchStrategy[ClientConfig]:
 
 
 def client_dummyredeemer_configurations(
-    crawl_means:SearchStrategy[Optional[float]]=one_of(none(), posix_timestamps()),
-    crawl_ranges: SearchStrategy[Optional[float]]=one_of(none(), posix_timestamps()),
-    min_times_remaining:SearchStrategy[Optional[float]]=one_of(none(), posix_timestamps()),
+    crawl_means: SearchStrategy[Optional[float]] = one_of(none(), posix_timestamps()),
+    crawl_ranges: SearchStrategy[Optional[float]] = one_of(none(), posix_timestamps()),
+    min_times_remaining: SearchStrategy[Optional[float]] = one_of(
+        none(), posix_timestamps()
+    ),
 ) -> SearchStrategy[ClientConfig]:
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
 
-    def make_lease_config(crawl_mean: Optional[float], crawl_range: Optional[float], min_time_remaining: Optional[float]) -> Config:
+    def make_lease_config(
+        crawl_mean: Optional[float],
+        crawl_range: Optional[float],
+        min_time_remaining: Optional[float],
+    ) -> Config:
         config = {}
         if crawl_mean is not None:
             # Don't allow the mean to be 0
@@ -494,11 +500,11 @@ def client_errorredeemer_configurations(details: str) -> SearchStrategy[ClientCo
 
 def integer_seconds_timedeltas(
     # Our intervals mostly want to be non-negative.
-    min_value:int=0,
+    min_value: int = 0,
     # We can't make this value too large or it isn't convertable to a
     # timedelta.  Also, even values as large as this one are of
     # questionable value for the durations we measure.
-    max_value:int=60 * 60 * 24 * 365,
+    max_value: int = 60 * 60 * 24 * 365,
 ) -> SearchStrategy[timedelta]:
     """
     Build ``timedelta`` instances without a fractional seconds part.
@@ -530,7 +536,7 @@ def lease_maintenance_configurations() -> SearchStrategy[LeaseMaintenanceConfig]
 
 
 def client_lease_maintenance_configurations(
-        maint_configs: Optional[SearchStrategy[LeaseMaintenanceConfig]]=None
+    maint_configs: Optional[SearchStrategy[LeaseMaintenanceConfig]] = None,
 ) -> SearchStrategy[dict[str, str]]:
     """
     Build dictionaries representing the lease maintenance options that go into
@@ -544,8 +550,12 @@ def client_lease_maintenance_configurations(
 
 
 def direct_tahoe_configs(
-    zkapauthz_v2_configuration: SearchStrategy[dict[str, str]]=client_dummyredeemer_configurations(),
-    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]]=just((None, None, None)),
+    zkapauthz_v2_configuration: SearchStrategy[
+        dict[str, str]
+    ] = client_dummyredeemer_configurations(),
+    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
+        (None, None, None)
+    ),
 ) -> SearchStrategy[Config]:
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
@@ -571,8 +581,12 @@ def direct_tahoe_configs(
 
 
 def tahoe_configs(
-    zkapauthz_v2_configuration: SearchStrategy[dict[str, str]]=client_dummyredeemer_configurations(),
-    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]]=just((None, None, None)),
+    zkapauthz_v2_configuration: SearchStrategy[
+        dict[str, str]
+    ] = client_dummyredeemer_configurations(),
+    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
+        (None, None, None)
+    ),
 ) -> SearchStrategy[GetConfig]:
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
@@ -665,7 +679,9 @@ def voucher_states() -> SearchStrategy[VoucherState]:
     )
 
 
-def voucher_objects(states: SearchStrategy[VoucherState]=voucher_states()) -> SearchStrategy[Voucher]:
+def voucher_objects(
+    states: SearchStrategy[VoucherState] = voucher_states(),
+) -> SearchStrategy[Voucher]:
     """
     Build ``Voucher`` instances.
     """
@@ -790,7 +806,9 @@ def request_paths() -> SearchStrategy[list[bytes]]:
     return lists(text().map(quote_segment))
 
 
-def requests(paths: SearchStrategy[list[bytes]]=request_paths()) -> SearchStrategy[DummyRequest]:
+def requests(
+    paths: SearchStrategy[list[bytes]] = request_paths(),
+) -> SearchStrategy[DummyRequest]:
     """
     Build objects providing ``twisted.web.iweb.IRequest``.
     """
@@ -873,10 +891,10 @@ def sharenum_sets() -> SearchStrategy[set[int]]:
 
 def sizes(
     # Size 0 data isn't data, it's nothing.
-    min_value:int=1,
+    min_value: int = 1,
     # Let this be larger than a single segment (2 ** 17) in case that matters
     # to Tahoe-LAFS storage at all.  I don't think it does, though.
-    max_value:int=2**18,
+    max_value: int = 2**18,
 ) -> SearchStrategy[int]:
     """
     Build Tahoe-LAFS share sizes.
@@ -962,11 +980,9 @@ class TestAndWriteVectors:
     write_vector: list[tuple[int, bytes]]
     new_length: Optional[int]
 
-    def for_call(self) -> tuple[
-            list[Optional[object]],
-            list[tuple[int, bytes]],
-            Optional[int],
-    ]:
+    def for_call(
+        self,
+    ) -> tuple[list[Optional[object]], list[tuple[int, bytes]], Optional[int],]:
         """
         Construct a value suitable to be passed as ``tw_vectors`` to
         ``slot_testv_and_readv_and_writev``.
@@ -992,7 +1008,9 @@ def slot_test_and_write_vectors() -> SearchStrategy[TestAndWriteVectors]:
     )
 
 
-def slot_test_and_write_vectors_for_shares() -> SearchStrategy[dict[int, TestAndWriteVectors]]:
+def slot_test_and_write_vectors_for_shares() -> SearchStrategy[
+    dict[int, TestAndWriteVectors]
+]:
     """
     Build Tahoe-LAFS test and write vectors for a number of shares.
     """
@@ -1056,7 +1074,9 @@ class _DirectoryNode(object):
         return succeed(self._children)
 
 
-def directory_nodes(child_strategy: SearchStrategy[IFilesystemNode]) -> SearchStrategy[_DirectoryNode]:
+def directory_nodes(
+    child_strategy: SearchStrategy[IFilesystemNode],
+) -> SearchStrategy[_DirectoryNode]:
     """
     Build directory nodes with children drawn from the given strategy.
     """
@@ -1188,7 +1208,9 @@ def existing_states(
         integers(min_value=1, max_value=128),
     )
 
-    def build_vouchers_and_tokens(num_vouchers_and_tokens: tuple[int, int]) -> SearchStrategy[tuple[list[bytes], list[RandomToken]]]:
+    def build_vouchers_and_tokens(
+        num_vouchers_and_tokens: tuple[int, int]
+    ) -> SearchStrategy[tuple[list[bytes], list[RandomToken]]]:
         num_vouchers, tokens_per_voucher = num_vouchers_and_tokens
         # Now build enough tokens to spread across all of the vouchers.
         tokens = lists(
@@ -1403,15 +1425,13 @@ def mutations() -> SearchStrategy[Statement]:
     Build statements that make changes to data.
     """
 
-    def make(x: tuple[Callable[[str, Table], SearchStrategy[Statement]], str, Table]) -> SearchStrategy[Statement]:
+    def make(
+        x: tuple[Callable[[str, Table], SearchStrategy[Statement]], str, Table]
+    ) -> SearchStrategy[Statement]:
         return x[0](x[1], x[2])
 
     stmts: SearchStrategy[Callable[[str, Table], SearchStrategy[Statement]]]
     stmts = sampled_from([inserts, deletes, updates])
-    return tuples(
-        stmts,
-        sql_identifiers(),
-        tables(),
-    ).flatmap(
+    return tuples(stmts, sql_identifiers(), tables(),).flatmap(
         make,
     )

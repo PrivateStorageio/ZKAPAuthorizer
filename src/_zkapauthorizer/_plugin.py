@@ -48,7 +48,7 @@ from twisted.web.guard import HTTPAuthSessionWrapper
 from zope.interface import implementer
 
 from . import NAME
-from ._types import GetTime
+from ._types import GetTime, ServerConfig
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
 from .controller import IRedeemer, get_redeemer
@@ -247,7 +247,7 @@ class ZKAPAuthorizer(object):
 
     def get_storage_server(
         self,
-        configuration: dict[str, Any],
+        configuration: ServerConfig,
         get_anonymous_storage_server: Callable[[], StorageServer],
     ) -> Deferred[AnnounceableStorageServer]:
         registry = CollectorRegistry()

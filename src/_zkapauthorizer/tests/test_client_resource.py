@@ -157,10 +157,10 @@ from .strategies import (
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    encoding_parameters,
     existing_states,
     posix_timestamps,
     request_paths,
-    encoding_parameters,
     tahoe_configs,
     vouchers,
 )

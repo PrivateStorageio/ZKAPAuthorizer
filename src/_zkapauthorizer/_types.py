@@ -17,7 +17,15 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, Generic, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Generic,
+    TypeAlias,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 
 from attrs import Attribute as _Attribute
 
@@ -40,14 +48,16 @@ else:
 # the containers here.
 JSON = Union[None, int, float, str, list, dict]
 
-ServerConfig: TypeAlias = TypedDict(
+ServerConfig = TypedDict(
     "ServerConfig",
     {
         "pass-value": int,
         "ristretto-issuer-root-url": str,
         "ristretto-signing-key-path": str,
+        "prometheus-metrics-path": str,
+        "prometheus-metrics-interval": str,
     },
     total=False,
 )
 
-ClientConfig: TypeAlias = dict[str, Any]
+ClientConfig: TypeAlias = dict[str, str]

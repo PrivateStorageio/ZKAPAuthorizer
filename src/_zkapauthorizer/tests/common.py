@@ -22,11 +22,21 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, Generic, Optional, TypeVar, Union, cast, Generator, Coroutine
+from typing import (
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Generic,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from attrs import Factory, define, field
 from testtools import TestCase
-from twisted.internet.defer import Deferred, succeed, inlineCallbacks
+from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
 from typing_extensions import Concatenate, ParamSpec, TypeAlias
@@ -364,11 +374,14 @@ class DummyStorageServer(object):
     def get_lease_seed(self) -> bytes:
         return self.lease_seed
 
-    def add_lease(self, storage_index: bytes, renew_secret: bytes, cancel_secret: bytes) -> None:
+    def add_lease(
+        self, storage_index: bytes, renew_secret: bytes, cancel_secret: bytes
+    ) -> None:
         for stat in self.buckets.get(storage_index, {}).values():
             stat.lease_expiration = int(
                 self.clock.seconds() + timedelta(days=31).total_seconds()
             )
+
 
 def async_test(
     f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]

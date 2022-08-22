@@ -16,12 +16,17 @@
 Tests for Foolscap-related test helpers.
 """
 
-from fixtures import Fixture
 from typing import Optional, cast
+
+from fixtures import Fixture
 from foolscap.api import Any, RemoteInterface, Violation  # type: ignore[attr-defined]
 from foolscap.furl import decode_furl
 from foolscap.pb import Tub
-from foolscap.referenceable import RemoteReference, RemoteReferenceOnly, RemoteReferenceTracker
+from foolscap.referenceable import (
+    RemoteReference,
+    RemoteReferenceOnly,
+    RemoteReferenceTracker,
+)
 from hypothesis import given
 from hypothesis.strategies import just, one_of
 from testtools import TestCase
@@ -37,8 +42,9 @@ from twisted.internet.defer import Deferred
 from twisted.trial.unittest import TestCase as TrialTestCase
 
 from ..foolscap import ShareStat
-from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, RIStub
 from .common import async_test
+from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, RIStub
+
 
 class IHasSchema(RemoteInterface):
     def method(arg=int):  # type: ignore[assignment,no-untyped-def]
@@ -47,7 +53,7 @@ class IHasSchema(RemoteInterface):
     def good_method(arg=int):  # type: ignore[assignment,no-untyped-def]
         return None
 
-    def whatever_method(arg=Any()): # type: ignore[no-untyped-def]
+    def whatever_method(arg=Any()):  # type: ignore[no-untyped-def]
         return Any()
 
 

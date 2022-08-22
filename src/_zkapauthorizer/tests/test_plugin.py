@@ -21,9 +21,9 @@ from functools import partial
 from io import StringIO
 from os import mkdir
 from sqlite3 import connect
-from typing import Any, Awaitable
+from typing import Awaitable, Optional, Type, cast
 
-from allmydata.client import config_from_string, create_client_from_config
+from allmydata.client import _Client, config_from_string, create_client_from_config
 from allmydata.interfaces import (
     IAnnounceableStorageServer,
     IFilesystemNode,
@@ -43,10 +43,11 @@ from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference
 from foolscap.referenceable import LocalReferenceable
+from foolscap.remoteinterface import RemoteInterface
 from hyperlink import DecodedURL
 from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
-from prometheus_client import Gauge
+from prometheus_client import Gauge, Metric
 from prometheus_client.parser import text_string_to_metric_families
 from testtools import TestCase
 from testtools.content import text_content
@@ -60,7 +61,6 @@ from testtools.matchers import (
     Equals,
     HasLength,
     IsInstance,
-    Matcher,
     MatchesAll,
     MatchesListwise,
     MatchesPredicate,
@@ -71,6 +71,7 @@ from testtools.matchers import (
 from testtools.twistedsupport import succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import RequestTraversalAgent
+from twisted.application.service import MultiService
 from twisted.internet.address import IPv4Address
 from twisted.internet.defer import Deferred
 from twisted.internet.testing import MemoryReactorClock
@@ -95,11 +96,12 @@ from .._plugin import (
     storage_server_plugin,
 )
 from .._storage_client import IncorrectStorageServerReference
-from ..config import CONFIG_DB_NAME
+from .._types import ClientConfig, ServerConfig
+from ..config import CONFIG_DB_NAME, Config
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..eliot import GET_PASSES, capture_logging
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
-from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig
+from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig, _FuzzyTimerService
 from ..model import (
     NotEnoughTokens,
     StoreOpenError,
@@ -118,7 +120,7 @@ from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
 from .common import GetConfig, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
-from .matchers import Provides, matches_response, raises
+from .matchers import Matcher, Provides, matches_response, raises
 from .strategies import (
     announcements,
     aware_datetimes,
@@ -147,21 +149,25 @@ from .strategies import (
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
 
-def get_rref(interface=None):
-    if interface is None:
-        interface = RIPrivacyPassAuthorizedStorageServer
-    return LocalRemote(DummyReferenceable(interface))
+def get_some_rref(interface: Type[RemoteInterface]) -> IRemoteReference:
+    return cast(IRemoteReference, LocalRemote(DummyReferenceable(interface)))
+
+
+def get_rref() -> IRemoteReference:
+    return get_some_rref(RIPrivacyPassAuthorizedStorageServer)
 
 
 class OpenStoreTests(TestCase):
     @skipIf(platform.isWindows(), "Hard to prevent directory creation on Windows")
     @given(tahoe_configs(), aware_datetimes())
-    def test_uncreateable_store_directory(self, get_config, now):
+    def test_uncreateable_store_directory(
+        self, get_config: GetConfig, now: datetime
+    ) -> None:
         """
         If the underlying directory in the node configuration cannot be created
         then ``open_store`` raises ``StoreOpenError``.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
 
         # Create the node directory without permission to create the
         # underlying directory.
@@ -183,12 +189,12 @@ class OpenStoreTests(TestCase):
     @skipIf(
         platform.isWindows(), "Hard to prevent database from being opened on Windows"
     )
-    def test_unopenable_database(self):
+    def test_unopenable_database(self) -> None:
         """
         If the underlying database file cannot be opened then ``open_database``
         raises ``StoreOpenError``.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
 
         # Prevent further access to it.
@@ -206,7 +212,7 @@ class GetRRefTests(TestCase):
     Tests for ``get_rref``.
     """
 
-    def test_localremote(self):
+    def test_localremote(self) -> None:
         """
         ``get_rref`` returns an instance of ``LocalRemote``.
         """
@@ -216,7 +222,7 @@ class GetRRefTests(TestCase):
             IsInstance(LocalRemote),
         )
 
-    def test_remote_interface(self):
+    def test_remote_interface(self) -> None:
         """
         ``get_rref`` returns an object which declares a remote interface matching
         the one given.
@@ -234,13 +240,13 @@ class GetRRefTests(TestCase):
             ),
         )
 
-    def test_default_remote_interface(self):
+    def test_default_remote_interface(self) -> None:
         """
         ``get_rref`` returns an object which declares a
         ``RIPrivacyPassAuthorizedStorageServer`` as the remote interface if no
         other interface is given.
         """
-        rref = get_rref(RIStorageServer)
+        rref = get_some_rref(RIStorageServer)
         self.assertThat(
             rref,
             AfterPreprocessing(
@@ -257,7 +263,7 @@ class PluginTests(TestCase):
     Tests for ``twisted.plugins.zkapauthorizer.storage_server_plugin``.
     """
 
-    def test_discoverable(self):
+    def test_discoverable(self) -> None:
         """
         The plugin can be discovered.
         """
@@ -266,7 +272,7 @@ class PluginTests(TestCase):
             Contains(storage_server_plugin),
         )
 
-    def test_provides_interface(self):
+    def test_provides_interface(self) -> None:
         """
         ``storage_server_plugin`` provides ``IFoolscapStoragePlugin``.
         """
@@ -290,12 +296,12 @@ class ServerPluginTests(TestCase):
     ``IFoolscapStoragePlugin.get_storage_server``.
     """
 
-    def setup_example(self):
+    def setup_example(self) -> None:
         self.reactor = MemoryReactorClock()
         self.plugin = ZKAPAuthorizer(NAME, self.reactor, no_tahoe_client)
 
     @given(server_configurations(SIGNING_KEY_PATH))
-    def test_returns_announceable(self, configuration):
+    def test_returns_announceable(self, configuration: ServerConfig) -> None:
         """
         ``ZKAPAuthorizer.get_storage_server`` returns an instance which provides
         ``IAnnounceableStorageServer``.
@@ -310,7 +316,7 @@ class ServerPluginTests(TestCase):
         )
 
     @given(server_configurations(SIGNING_KEY_PATH))
-    def test_returns_referenceable(self, configuration):
+    def test_returns_referenceable(self, configuration: ServerConfig) -> None:
         """
         The storage server attached to the result of
         ``ZKAPAuthorizer.get_storage_server`` provides ``IReferenceable`` and
@@ -331,7 +337,7 @@ class ServerPluginTests(TestCase):
         )
 
     @given(server_configurations(SIGNING_KEY_PATH))
-    def test_returns_serializable(self, configuration):
+    def test_returns_serializable(self, configuration: ServerConfig) -> None:
         """
         The storage server attached to the result of
         ``ZKAPAuthorizer.get_storage_server`` can be serialized by a banana
@@ -354,7 +360,7 @@ class ServerPluginTests(TestCase):
         )
 
     @given(server_configurations(SIGNING_KEY_PATH))
-    def test_returns_hashable(self, configuration):
+    def test_returns_hashable(self, configuration: ServerConfig) -> None:
         """
         The storage server attached to the result of
         ``ZKAPAuthorizer.get_storage_server`` is hashable for use as a
@@ -379,7 +385,7 @@ class ServerPluginTests(TestCase):
         )
 
     @given(timedeltas(min_value=timedelta(seconds=1)), posix_timestamps())
-    def test_metrics_written(self, metrics_interval, when):
+    def test_metrics_written(self, metrics_interval: timedelta, when: float) -> None:
         """
         When the configuration tells us where to put a metrics .prom file
         and an interval how often to do so, test that metrics are actually
@@ -388,7 +394,7 @@ class ServerPluginTests(TestCase):
         self.reactor.advance(when)
 
         metrics_path = self.useFixture(TempDir()).join("metrics")
-        configuration = {
+        configuration: ServerConfig = {
             "prometheus-metrics-path": metrics_path,
             "prometheus-metrics-interval": str(int(metrics_interval.total_seconds())),
             "ristretto-issuer-root-url": "foo",
@@ -418,7 +424,7 @@ class ServiceTests(TestCase):
     Tests for the plugin's handling of a Twisted ``IServiceCollection``.
     """
 
-    def test_started_and_stopped(self):
+    def test_started_and_stopped(self) -> None:
         """
         Children of ``ZKAPAuthorizer._service`` are started when the reactor
         starts and stopped when the reactor stops.
@@ -440,7 +446,7 @@ class ServiceTests(TestCase):
             Equals({"before": {"shutdown": [(plugin._service.stopService, (), {})]}}),
         )
 
-    @given(tahoe_configs().flatmap(just))
+    @given(tahoe_configs())
     def test_replicating(self, get_config: GetConfig) -> None:
         """
         There is a replication service for a database which has been placed into
@@ -511,18 +517,18 @@ def service_matches(store: VoucherStore, svc: object) -> bool:
     )
 
 
-def has_metric(name_matcher, value_matcher):
+def has_metric(name_matcher: Matcher[str], value_matcher: Matcher[int]) -> Matcher[str]:
     """
     Create a matcher that matches a path that contains serialized metrics that
     include at least a single metric that is matched by the given
     ``name_matcher`` and ``value_matcher``.
     """
 
-    def read_metrics(path):
+    def read_metrics(path: str) -> list[Metric]:
         with open(path) as f:
             return list(text_string_to_metric_families(f.read()))
 
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         read_metrics,
         AnyMatch(
             MatchesStructure(
@@ -557,12 +563,12 @@ class ClientPluginTests(TestCase):
     ``IFoolscapStoragePlugin.get_storage_client``.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.useFixture(DetectLeakedDescriptors())
 
     @given(tahoe_configs(), announcements())
-    def test_interface(self, get_config, announcement):
+    def test_interface(self, get_config: GetConfig, announcement: ClientConfig) -> None:
         """
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
@@ -570,7 +576,7 @@ class ClientPluginTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
 
         node_config = get_config(nodedir.path, "tub.port")
@@ -587,7 +593,9 @@ class ClientPluginTests(TestCase):
         )
 
     @given(tahoe_configs_with_mismatched_issuer, announcements())
-    def test_mismatched_ristretto_issuer(self, config_text, announcement):
+    def test_mismatched_ristretto_issuer(
+        self, config_text: str, announcement: ClientConfig
+    ) -> None:
         """
         ``get_storage_client`` raises an exception when called with an
         announcement and local configuration which specify different issuers.
@@ -595,7 +603,7 @@ class ClientPluginTests(TestCase):
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
 
         node_config = config_from_string(
@@ -603,9 +611,9 @@ class ClientPluginTests(TestCase):
             "tub.port",
             config_text.encode("utf-8"),
         )
-        config_text = StringIO()
-        node_config.config.write(config_text)
-        self.addDetail("config", text_content(config_text.getvalue()))
+        actual_config_io = StringIO()
+        node_config.config.write(actual_config_io)
+        self.addDetail("config", text_content(actual_config_io.getvalue()))
         self.addDetail("announcement", text_content(str(announcement)))
         self.assertThat(
             lambda: plugin.get_storage_client(
@@ -628,7 +636,7 @@ class ClientPluginTests(TestCase):
     def test_mismatch_storage_server_furl(
         self,
         get_config: GetConfig,
-        announcement: dict[str, Any],
+        announcement: ClientConfig,
         storage_index: bytes,
         renew_secret: bytes,
         cancel_secret: bytes,
@@ -651,7 +659,7 @@ class ClientPluginTests(TestCase):
         storage_client = plugin.get_storage_client(
             node_config,
             announcement,
-            partial(get_rref, RIStorageServer),
+            partial(get_some_rref, RIStorageServer),
         )
 
         def use_it() -> Awaitable[object]:
@@ -685,7 +693,7 @@ class ClientPluginTests(TestCase):
         logger: ILogger,
         get_config: GetConfig,
         now: datetime,
-        announcement: dict[str, str],
+        announcement: ClientConfig,
         voucher: bytes,
         num_passes: int,
         public_key: PublicKey,
@@ -702,7 +710,7 @@ class ClientPluginTests(TestCase):
         node_config = get_config(nodedir.path, "tub.port")
 
         # Populate the database with unspent tokens.
-        async def redeem():
+        async def redeem() -> None:
             db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
             store = open_store(
                 lambda: now, with_replication(connect(db_path.path), False), node_config
@@ -717,7 +725,7 @@ class ClientPluginTests(TestCase):
                 allowed_public_keys={public_key},
             )
             # Get a token inserted into the store.
-            return await controller.redeem(voucher)
+            await controller.redeem(voucher)
 
         self.assertThat(Deferred.fromCoroutine(redeem()), succeeded(Always()))
 
@@ -768,22 +776,22 @@ class ClientResourceTests(TestCase):
     ``IFoolscapStoragePlugin.get_client_resource``.
     """
 
-    def setup_example(self):
+    def setup_example(self) -> None:
         self.reactor = MemoryReactorClock()
         self.grid = MemoryGrid()
         self.plugin = ZKAPAuthorizer(
             NAME, self.reactor, self.get_tahoe_client, memory_connect
         )
 
-    def get_tahoe_client(self, reactor, node_config):
+    def get_tahoe_client(self, reactor: object, node_config: Config) -> ITahoeClient:
         return self.grid.client(FilePath(node_config._basedir))
 
     @given(tahoe_configs())
-    def test_interface(self, get_config):
+    def test_interface(self, get_config: GetConfig) -> None:
         """
         ``get_client_resource`` returns an object that provides ``IResource``.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
         self.assertThat(
@@ -794,13 +802,13 @@ class ClientResourceTests(TestCase):
         )
 
     @given(tahoe_configs())
-    def test_replication_service_created(self, get_config):
+    def test_replication_service_created(self, get_config: GetConfig) -> None:
         """
         If replication is enabled using the ``IResource`` returned by
         ``get_client_resource`` then the plugin has a ``_ReplicationService``
         added to it.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
         token = "hello world"
@@ -952,11 +960,13 @@ class LeaseMaintenanceServiceTests(TestCase):
     Tests for the plugin's initialization of the lease maintenance service.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.useFixture(DetectLeakedDescriptors())
 
-    def _create(self, get_config, servers_yaml, rootcap):
+    def _create(
+        self, get_config: GetConfig, servers_yaml: Optional[str], rootcap: bool
+    ) -> _Client:
         """
         Create a client node using ``create_client_from_config``.
 
@@ -969,14 +979,14 @@ class LeaseMaintenanceServiceTests(TestCase):
         :param rootcap: ``True`` to write some bytes to the node's ``rootcap``
             file, ``False`` otherwise.
         """
-        nodedir = FilePath(self.useFixture(TempDir()).join("node"))
+        nodedir = FilePath(self.useFixture(TempDir()).join("node")).asTextMode()
         nodedir.child("private").makedirs()
         config = get_config(nodedir.path, "tub.port")
 
         # In Tahoe-LAFS 1.17 write_private_config is broken.  It mixes bytes
         # and unicode in an os.path.join() call that always fails with a
         # TypeError.
-        def write_private_config(name, value):
+        def write_private_config(name: str, value: str) -> None:
             privpath = FilePath(config._basedir).descendant(["private", name])
             privpath.setContent(value)
 
@@ -995,13 +1005,13 @@ class LeaseMaintenanceServiceTests(TestCase):
         return create_client_from_config(config)
 
     @given(minimal_tahoe_configs())
-    def test_plugin_not_enabled(self, minimal_config):
+    def test_plugin_not_enabled(self, minimal_config: str) -> None:
         """
         If ZKAPAuthorizer storage client plugin isn't enabled then no lease
         maintenance service is created.
         """
 
-        def get_config(basedir, portnumfile):
+        def get_config(basedir: str, portnumfile: str) -> Config:
             return config_from_string(
                 basedir, portnumfile, minimal_config.encode("utf-8")
             )
@@ -1010,7 +1020,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         self.assertThat(d, succeeded(Not(has_lease_maintenance_service())))
 
     @given(tahoe_configs())
-    def test_get_root_nodes_rootcap_present(self, get_config):
+    def test_get_root_nodes_rootcap_present(self, get_config: GetConfig) -> None:
         """
         ``get_root_nodes`` returns a ``list`` of one ``IFilesystemNode`` provider
         derived from the contents of the *rootcap* private configuration.
@@ -1027,7 +1037,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         )
 
     @given(tahoe_configs())
-    def test_get_root_nodes_rootcap_missing(self, get_config):
+    def test_get_root_nodes_rootcap_missing(self, get_config: GetConfig) -> None:
         """
         ``get_root_nodes`` returns an empty ``list`` if there is no private
         *rootcap* configuration.
@@ -1047,7 +1057,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         tahoe_configs_with_dummy_redeemer,
         sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),
     )
-    def test_created(self, get_config, servers_yaml):
+    def test_created(self, get_config: GetConfig, servers_yaml: str) -> None:
         """
         A client created from a configuration with the plugin enabled has a lease
         maintenance service after it has at least one storage server to
@@ -1063,7 +1073,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         tahoe_configs_with_dummy_redeemer,
         sampled_from([SERVERS_YAML, TWO_SERVERS_YAML]),
     )
-    def test_created_without_rootcap(self, get_config, servers_yaml):
+    def test_created_without_rootcap(
+        self, get_config: GetConfig, servers_yaml: str
+    ) -> None:
         """
         The lease maintenance service can be created even if no rootcap has yet
         been written to the client's configuration directory.
@@ -1092,7 +1104,9 @@ class LeaseMaintenanceServiceTests(TestCase):
             ),
         ),
     )
-    def test_values_from_configuration(self, config_objs):
+    def test_values_from_configuration(
+        self, config_objs: tuple[LeaseMaintenanceConfig, GetConfig]
+    ) -> None:
         """
         If values for lease maintenance parameters are supplied in the
         configuration file then the lease maintenance service is created with
@@ -1106,12 +1120,12 @@ class LeaseMaintenanceServiceTests(TestCase):
         )
 
 
-def has_lease_maintenance_service() -> Matcher:
+def has_lease_maintenance_service() -> Matcher[MultiService]:
     """
     Return a matcher for a Tahoe-LAFS client object that has a lease
     maintenance service.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda client: [service.name for service in client],
         Contains(SERVICE_NAME),
     )
@@ -1119,16 +1133,18 @@ def has_lease_maintenance_service() -> Matcher:
 
 def has_lease_maintenance_configuration(
     lease_maint_config: LeaseMaintenanceConfig,
-) -> Matcher:
+) -> Matcher[_FuzzyTimerService[LeaseMaintenanceConfig]]:
     """
     Return a matcher for a Tahoe-LAFS client object that has a lease
     maintenance service with the given configuration.
     """
 
-    def get_lease_maintenance_config(lease_maint_service):
+    def get_lease_maintenance_config(
+        lease_maint_service: _FuzzyTimerService[LeaseMaintenanceConfig],
+    ) -> LeaseMaintenanceConfig:
         return lease_maint_service.get_config()
 
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda client: get_lease_maintenance_config(
             client.getServiceNamed(SERVICE_NAME),
         ),
@@ -1142,7 +1158,7 @@ class LoadSigningKeyTests(TestCase):
     """
 
     @given(ristretto_signing_keys())
-    def test_valid(self, key_bytes):
+    def test_valid(self, key_bytes: bytes) -> None:
         """
         A base64-encoded byte string representing a valid Ristretto signing key
         can be loaded from a file into a ``SigningKey`` object using
@@ -1150,7 +1166,7 @@ class LoadSigningKeyTests(TestCase):
 
         :param bytes key: A base64-encoded Ristretto signing key.
         """
-        p = FilePath(self.useFixture(TempDir()).join("key"))
+        p = FilePath(self.useFixture(TempDir()).join("key")).asTextMode()
         p.setContent(key_bytes)
         key = load_signing_key(p)
         self.assertThat(key, IsInstance(SigningKey))
@@ -1167,7 +1183,13 @@ class CostBasedPolicyTests(TestCase):
         snapshot_size=integers(min_value=1),
         parameters=encoding_parameters(),
     )
-    def test_should_snapshot(self, bytes_per_pass, factor, snapshot_size, parameters):
+    def test_should_snapshot(
+        self,
+        bytes_per_pass: int,
+        factor: float,
+        snapshot_size: int,
+        parameters: tuple[int, int, int],
+    ) -> None:
         """ """
         # Create a replica that has a storage cost that is more than the given
         # factor greater than the storage cost of the given snapshot.
@@ -1191,8 +1213,12 @@ class CostBasedPolicyTests(TestCase):
         parameters=encoding_parameters(),
     )
     def test_should_not_snapshot(
-        self, bytes_per_pass, factor, snapshot_size, parameters
-    ):
+        self,
+        bytes_per_pass: int,
+        factor: float,
+        snapshot_size: int,
+        parameters: tuple[int, int, int],
+    ) -> None:
         """ """
         # Create a replica that has a storage cost that is less than the given
         # factor greater than the storage cost of the given snapshot.

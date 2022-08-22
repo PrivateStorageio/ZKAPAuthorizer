@@ -16,7 +16,7 @@ from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
-from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
+from twisted.internet.defer import Deferred, gatherResults
 from twisted.python.filepath import FilePath
 
 from .._types import CapStr
@@ -37,7 +37,7 @@ from ..tahoe import (
     download_child,
     required_passes_for_data,
 )
-from .common import from_awaitable, async_test
+from .common import async_test, from_awaitable
 from .fixtures import Treq
 from .resources import client_manager
 from .strategies import encoding_parameters, minimal_tahoe_configs
