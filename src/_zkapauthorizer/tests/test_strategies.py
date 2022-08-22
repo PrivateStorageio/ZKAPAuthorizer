@@ -22,7 +22,7 @@ from hypothesis import given, note
 from hypothesis.strategies import data, just, one_of
 from testtools import TestCase
 
-from .strategies import share_parameters, tahoe_config_texts
+from .strategies import encoding_parameters, tahoe_config_texts
 
 
 class TahoeConfigsTests(TestCase):
@@ -41,7 +41,7 @@ class TahoeConfigsTests(TestCase):
                 storage_client_plugins={},
                 shares=one_of(
                     just((None, None, None)),
-                    share_parameters(),
+                    encoding_parameters(),
                 ),
             ),
         )

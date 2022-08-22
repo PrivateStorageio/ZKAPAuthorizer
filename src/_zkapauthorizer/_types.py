@@ -39,3 +39,15 @@ else:
 # mypy does not support recursive types so we can't say much about what's in
 # the containers here.
 JSON = Union[None, int, float, str, list, dict]
+
+ServerConfig: TypeAlias = TypedDict(
+    "ServerConfig",
+    {
+        "pass-value": int,
+        "ristretto-issuer-root-url": str,
+        "ristretto-signing-key-path": str,
+    },
+    total=False,
+)
+
+ClientConfig: TypeAlias = dict[str, Any]

@@ -160,7 +160,7 @@ from .strategies import (
     existing_states,
     posix_timestamps,
     request_paths,
-    share_parameters,
+    encoding_parameters,
     tahoe_configs,
     vouchers,
 )
@@ -1834,7 +1834,7 @@ class CalculatePriceTests(TestCase):
         tuples(
             # Make the share encoding parameters easily accessible without
             # going through the Tahoe-LAFS configuration.
-            share_parameters(),
+            encoding_parameters(),
             # Same goes for the minimum lease time remaining configuration.
             posix_timestamps().map(int),
         ).flatmap(

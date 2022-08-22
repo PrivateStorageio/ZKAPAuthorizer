@@ -26,7 +26,7 @@ from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 
 from ..pricecalculator import PriceCalculator
 from .matchers import greater_or_equal
-from .strategies import share_parameters, sizes
+from .strategies import encoding_parameters, sizes
 
 file_sizes = lists(sizes(), min_size=1)
 
@@ -110,7 +110,7 @@ class PriceCalculatorTests(TestCase):
             ),
         ),
         integers(min_value=1),
-        share_parameters(),
+        encoding_parameters(),
     )
     def test_file_sizes(self, file_sizes, pass_value, parameters):
         """
@@ -137,7 +137,7 @@ class PriceCalculatorTests(TestCase):
 
     @given(
         integers(min_value=1),
-        share_parameters(),
+        encoding_parameters(),
         file_sizes,
     )
     def test_positive_integer_price(self, pass_value, parameters, file_sizes):
@@ -162,7 +162,7 @@ class PriceCalculatorTests(TestCase):
 
     @given(
         integers(min_value=1),
-        share_parameters(),
+        encoding_parameters(),
         file_sizes,
     )
     def test_linear_increase(self, pass_value, parameters, file_sizes):
