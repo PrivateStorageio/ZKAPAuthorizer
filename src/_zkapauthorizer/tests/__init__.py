@@ -17,7 +17,7 @@ The automated unit test suite.
 """
 
 
-def _configure_hypothesis():
+def _configure_hypothesis() -> None:
     """
     Select define Hypothesis profiles and select one based on environment
     variables.
@@ -75,13 +75,14 @@ def _configure_hypothesis():
 _configure_hypothesis()
 
 
-def _monkeypatch_tahoe_3874():
+def _monkeypatch_tahoe_3874() -> None:
     # Fix https://tahoe-lafs.org/trac/tahoe-lafs/ticket/3874
     from allmydata.testing.web import _FakeTahoeUriHandler
     from hyperlink import DecodedURL
     from twisted.web import http
+    from twisted.web.iweb import IRequest
 
-    def render_GET(self, request):
+    def render_GET(self: _FakeTahoeUriHandler, request: IRequest) -> bytes:
         uri = DecodedURL.from_text(request.uri.decode("utf8"))
         capability = None
         for arg, value in uri.query:
@@ -100,9 +101,9 @@ def _monkeypatch_tahoe_3874():
         # data for it, that's an error.
         if capability not in self.data:
             request.setResponseCode(http.BAD_REQUEST)
-            return "No data for '{}'".format(capability.decode("ascii"))
+            return "No data for '{}'".format(capability.decode("ascii")).encode("ascii")
 
-        return self.data[capability]
+        return self.data[capability]  # type: ignore[no-any-return]
 
     _FakeTahoeUriHandler.render_GET = render_GET
 
