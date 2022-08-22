@@ -6,7 +6,7 @@ from io import BytesIO
 from itertools import count
 from random import Random
 from sqlite3 import connect
-from typing import Callable, TypeVar
+from typing import IO, Callable, TypeVar
 
 import attrs
 import cbor2
@@ -32,6 +32,7 @@ from hypothesis.strategies import (
     text,
 )
 from tahoe_capabilities import (
+    DirectoryReadCapability,
     danger_real_capability_string,
     digested_capability_string,
     is_directory,
@@ -435,7 +436,7 @@ class TahoeLAFSDownloaderTests(TestCase):
         download = get_downloader(replica_dir_cap.reader)
 
         def read_replica_data(replica: Replica) -> tuple[bytes, list[bytes]]:
-            def read(p):
+            def read(p: Callable[[], IO[bytes]]) -> bytes:
                 with p() as f:
                     return f.read()
 
@@ -525,10 +526,10 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        results = []
+        results: list[DirectoryReadCapability] = []
         d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
 
-        def save_and_passthrough(x):
+        def save_and_passthrough(x: DirectoryReadCapability) -> DirectoryReadCapability:
             results.append(x)
             return x
 
