@@ -29,8 +29,18 @@ __all__ = [
 
 from datetime import datetime, timedelta
 from json import loads
-from typing import Callable, Container, Generic, Iterable, Optional, TypeVar, Union
+from typing import (
+    Callable,
+    Container,
+    Generic,
+    Iterable,
+    Iterator,
+    Optional,
+    TypeVar,
+    Union,
+)
 
+from allmydata.storage.server import StorageServer
 from attrs import field, frozen, validators
 from testtools.matchers import (
     AfterPreprocessing,
@@ -56,6 +66,7 @@ from treq.response import IResponse
 from twisted.web.http_headers import Headers
 from zope.interface.interface import InterfaceClass
 
+from ..foolscap import ShareStat
 from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
@@ -166,7 +177,7 @@ def leases_current(
     before ``min_lease_remaining``.
     """
 
-    def get_relevant_stats(storage_server):
+    def get_relevant_stats(storage_server: StorageServer) -> Iterator[ShareStat]:
         for (storage_index, shares) in storage_server.buckets.items():
             if storage_index in relevant_storage_indexes:
                 for (sharenum, stat) in shares.items():
