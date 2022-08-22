@@ -122,7 +122,7 @@ class UpgradeTests(TestCase):
             )
             actual_start, actual_finished, actual_count = cursor.fetchone()
 
-            def expected_datetime(value):
+            def expected_datetime(value: datetime) -> str:
                 return (
                     value.replace(
                         # The schema upgrade throws away sub-second precision.
