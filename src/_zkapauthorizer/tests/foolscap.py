@@ -16,10 +16,9 @@
 Testing helpers related to Foolscap.
 """
 
-from typing import Awaitable, NoReturn
+from typing import Awaitable, Iterable, NoReturn, Type, TypeVar
 
-import attr
-from attrs import define, field
+from attrs import define, field, frozen
 from foolscap.api import (  # type: ignore[attr-defined]
     Any,
     Copyable,
@@ -29,7 +28,7 @@ from foolscap.api import (  # type: ignore[attr-defined]
 from foolscap.copyable import CopyableSlicer, ICopyable
 from foolscap.referenceable import RemoteReference
 from twisted.internet.defer import fail, succeed
-from zope.interface import implementer
+from zope.interface import Interface, implementer
 
 
 class RIStub(RemoteInterface):
@@ -37,16 +36,16 @@ class RIStub(RemoteInterface):
 
 
 class RIEcho(RemoteInterface):
-    def echo(argument=Any()):
+    def echo(argument=Any()):  # type: ignore[no-untyped-def]
         return Any()
 
 
 class StubStorageServer(object):
-    def register_bucket_writer_close_handler(self, handler):
+    def register_bucket_writer_close_handler(self, handler: object) -> None:
         pass
 
 
-def get_anonymous_storage_server():
+def get_anonymous_storage_server() -> StubStorageServer:
     return StubStorageServer()
 
 
@@ -56,38 +55,42 @@ class BrokenCopyable(Copyable):
     """
 
 
+T = TypeVar("T")
+
+
 @implementer(
     RIEcho  # type: ignore # zope.interface.implementer accepts interface, not ...
 )
 class Echoer(Referenceable):
-    def remote_echo(self, argument):
+    def remote_echo(self, argument: T) -> T:
         return argument
 
 
-@attr.s
+@frozen
 class DummyReferenceable(object):
-    _interface = attr.ib()
+    _interface: Type[Interface]
 
-    def getInterface(self):
+    def getInterface(self) -> Type[Interface]:
         return self._interface
 
-    def doRemoteCall(self, *a, **kw):
+    def doRemoteCall(self, *a: object, **kw: object) -> object:
         return None
 
 
-@attr.s
+@define
 class LocalTracker(object):
     """
     Pretend to be a tracker for a ``LocalRemote``.
     """
 
-    interface = attr.ib()
-    interfaceName = attr.ib(default=None)
+    interface: Type[RemoteInterface]
+    interfaceName: str = field(init=False)
 
-    def __attrs_post_init__(self):
-        self.interfaceName = self.interface.__remote_name__
+    @interfaceName.default
+    def _interfaceName_default(self) -> str:
+        return self.interface.__remote_name__  # type: ignore[no-any-return]
 
-    def getURL(self):
+    def getURL(self) -> str:
         return "pb://abcd@127.0.0.1:12345/efgh"
 
 
@@ -109,7 +112,7 @@ class LocalRemote(RemoteReference):
     tracker: LocalTracker = field()
 
     @tracker.default
-    def _tracker_default(self):
+    def _tracker_default(self) -> LocalTracker:
         return LocalTracker(
             self._referenceable.getInterface(),
         )
@@ -151,7 +154,7 @@ class LocalRemote(RemoteReference):
             return fail()
 
 
-def _check_copyables(copyables):
+def _check_copyables(copyables: Iterable[object]) -> None:
     """
     Check each object to see if it is a copyable and if it is make sure it can
     be sliced.
