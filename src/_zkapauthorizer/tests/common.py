@@ -22,15 +22,7 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import (
-    Awaitable,
-    Callable,
-    Generic,
-    Optional,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Awaitable, Callable, Generic, Optional, TypeVar, Union, cast
 
 from attrs import Factory, define, field
 from testtools import TestCase

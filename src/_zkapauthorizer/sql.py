@@ -11,10 +11,10 @@ from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import Cursor as _SQLite3Cursor
 from typing import TYPE_CHECKING, Any, Iterable, Optional, Protocol, Union
-from typing_extensions import TypeAlias
 
 from attrs import frozen
 from sqlparse import parse
+from typing_extensions import TypeAlias
 
 SQLType: TypeAlias = Union[int, float, str, bytes, datetime, None]
 SQLRuntimeType: tuple[type, ...] = (int, float, str, bytes, datetime, type(None))
