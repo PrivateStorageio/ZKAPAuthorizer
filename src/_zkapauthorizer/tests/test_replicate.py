@@ -726,7 +726,7 @@ class ReplicationServiceTests(TestCase):
             ),
         )
 
-    def test_snapshot_again(self):
+    def test_snapshot_again(self) -> None:
         """
         A new snapshot is uploaded and existing event streams are pruned if the
         cost to maintain the current replica snapshot and event streams is
