@@ -22,11 +22,11 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, Generic, Optional, TypeVar, Union, cast
+from typing import Awaitable, Callable, Generic, Optional, TypeVar, Union, cast, Generator, Coroutine
 
 from attrs import Factory, define, field
 from testtools import TestCase
-from twisted.internet.defer import Deferred, succeed
+from twisted.internet.defer import Deferred, succeed, inlineCallbacks
 from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
 from typing_extensions import Concatenate, ParamSpec, TypeAlias
@@ -369,3 +369,18 @@ class DummyStorageServer(object):
             stat.lease_expiration = int(
                 self.clock.seconds() + timedelta(days=31).total_seconds()
             )
+
+def async_test(
+    f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]
+) -> Callable[[TestCase], Deferred[None]]:
+    """
+    Decorate a coroutine function to adapt it into a function that can be used
+    as a test method.
+    """
+
+    @inlineCallbacks
+    def g(self: object) -> Generator[Deferred[object], object, None]:
+        d: Deferred[object] = Deferred.fromCoroutine(f(self))
+        yield d
+
+    return g

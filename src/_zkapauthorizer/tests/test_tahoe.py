@@ -3,7 +3,6 @@ Tests for ``_zkapauthorizer.tahoe``.
 """
 
 from io import BytesIO
-from typing import Callable, Coroutine, Generator
 
 from allmydata.client import config_from_string
 from allmydata.test.strategies import write_capabilities
@@ -38,26 +37,10 @@ from ..tahoe import (
     download_child,
     required_passes_for_data,
 )
-from .common import from_awaitable
+from .common import from_awaitable, async_test
 from .fixtures import Treq
 from .resources import client_manager
 from .strategies import encoding_parameters, minimal_tahoe_configs
-
-
-def async_test(
-    f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]
-) -> Callable[[TestCase], Deferred[None]]:
-    """
-    Decorate a coroutine function to adapt it into a function that can be used
-    as a test method.
-    """
-
-    @inlineCallbacks
-    def g(self: object) -> Generator[Deferred[object], object, None]:
-        d: Deferred[object] = Deferred.fromCoroutine(f(self))
-        yield d
-
-    return g
 
 
 class IntegrationMixin:
