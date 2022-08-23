@@ -7,8 +7,6 @@ from prometheus_client import CollectorRegistry
 from twisted.internet.interfaces import IReactorTime
 from zope.interface import Interface, implementer
 
-from .._types import ServerConfig
-
 
 class ISpender(Interface):
     """
@@ -58,9 +56,7 @@ class RecordingSpender(object):
         )
 
 
-def get_spender(
-    reactor: IReactorTime, registry: CollectorRegistry
-) -> ISpender:
+def get_spender(reactor: IReactorTime, registry: CollectorRegistry) -> ISpender:
     """
     Return an :py:`ISpender` to be used with the given storage server configuration.
     """
