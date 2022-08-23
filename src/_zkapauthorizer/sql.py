@@ -310,11 +310,3 @@ def statement_mutates(statement: str) -> bool:
         return False
     (parsed,) = parse(statement)
     return parsed.get_type() not in {"SELECT"}
-
-
-def f(c: Connection, c2: Cursor) -> None:
-    pass
-
-
-def g(c: _SQLite3Connection, c2: _SQLite3Cursor) -> None:
-    f(c, c2)

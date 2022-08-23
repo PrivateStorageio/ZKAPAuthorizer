@@ -203,8 +203,13 @@ async def call_with_passes(
 
 
 class RRefHaver(Protocol):
+    """
+    Something that has a Foolscap remote reference.
+    """
     def _rref(self) -> IRemoteReference:
-        ...
+        """
+        Get the Foolscap remote reference.
+        """
 
 
 _S = TypeVar("_S", bound=RRefHaver)

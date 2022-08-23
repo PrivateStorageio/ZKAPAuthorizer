@@ -297,7 +297,6 @@ def path_to_memory_uri(path: FilePath) -> str:
     )
 
 
-# def (database: Union[builtins.str, builtins.bytes, os.PathLike[builtins.str], os.PathLike[builtins.bytes]], timeout: builtins.float =, detect_types: builtins.int =, isolation_level: Union[builtins.str, None] =, check_same_thread: builtins.bool =, factory: Union[Type[sqlite3.dbapi2.Connection], None] =, cached_statements: builtins.int =, uri: builtins.bool =) -> sqlite3.dbapi2.Connection
 def memory_connect(
     path: str, isolation_level: Optional[str] = None
 ) -> _SQLite3Connection:
