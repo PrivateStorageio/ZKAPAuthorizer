@@ -9,7 +9,6 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from sqlite3 import Cursor as _SQLite3Cursor
 from typing import TYPE_CHECKING, Any, Iterable, Optional, Protocol, Union
 
 from attrs import frozen
