@@ -16,11 +16,17 @@
 Tests for Foolscap-related test helpers.
 """
 
+from typing import Optional, cast
+
 from fixtures import Fixture
-from foolscap.api import Any, RemoteInterface, Violation
+from foolscap.api import Any, RemoteInterface, Violation  # type: ignore[attr-defined]
 from foolscap.furl import decode_furl
 from foolscap.pb import Tub
-from foolscap.referenceable import RemoteReferenceOnly, RemoteReferenceTracker
+from foolscap.referenceable import (
+    RemoteReference,
+    RemoteReferenceOnly,
+    RemoteReferenceTracker,
+)
 from hypothesis import given
 from hypothesis.strategies import just, one_of
 from testtools import TestCase
@@ -32,25 +38,26 @@ from testtools.matchers import (
     MatchesAll,
 )
 from testtools.twistedsupport import failed, succeeded
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import Deferred
 from twisted.trial.unittest import TestCase as TrialTestCase
 
 from ..foolscap import ShareStat
+from .common import async_test
 from .foolscap import BrokenCopyable, DummyReferenceable, Echoer, LocalRemote, RIStub
 
 
 class IHasSchema(RemoteInterface):
-    def method(arg=int):
+    def method(arg=int):  # type: ignore[assignment,no-untyped-def]
         return bytes
 
-    def good_method(arg=int):
+    def good_method(arg=int):  # type: ignore[assignment,no-untyped-def]
         return None
 
-    def whatever_method(arg=Any()):
+    def whatever_method(arg=Any()):  # type: ignore[no-untyped-def]
         return Any()
 
 
-def remote_reference():
+def remote_reference() -> RemoteReferenceOnly:
     tub = Tub()
     tub.setLocation("127.0.0.1:12345")
     url = tub.buildURL("efgh")
@@ -76,7 +83,7 @@ class LocalRemoteTests(TestCase):
             just(LocalRemote(DummyReferenceable(RIStub))),
         ),
     )
-    def test_tracker_url(self, ref):
+    def test_tracker_url(self, ref: RemoteReference) -> None:
         """
         The URL of a remote reference can be retrieved using the tracker
         attribute.
@@ -92,7 +99,7 @@ class LocalRemoteTests(TestCase):
             ),
         )
 
-    def test_arg_schema(self):
+    def test_arg_schema(self) -> None:
         """
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fails with a
         ``Violation`` if an parameter receives an argument which doesn't
@@ -109,7 +116,7 @@ class LocalRemoteTests(TestCase):
             ),
         )
 
-    def test_result_schema(self):
+    def test_result_schema(self) -> None:
         """
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fails with a
         ``Violation`` if a method returns an object which doesn't conform to
@@ -126,7 +133,7 @@ class LocalRemoteTests(TestCase):
             ),
         )
 
-    def test_successful_method(self):
+    def test_successful_method(self) -> None:
         """
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fires with the
         remote method's result if the arguments and result conform to their
@@ -138,7 +145,7 @@ class LocalRemoteTests(TestCase):
             succeeded(Equals(None)),
         )
 
-    def test_argument_serialization_failure(self):
+    def test_argument_serialization_failure(self) -> None:
         """
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fires with a
         failure if an argument cannot be serialized.
@@ -149,14 +156,14 @@ class LocalRemoteTests(TestCase):
             failed(Always()),
         )
 
-    def test_result_serialization_failure(self):
+    def test_result_serialization_failure(self) -> None:
         """
         ``LocalRemote.callRemote`` returns a ``Deferred`` that fires with a
         failure if the method's result cannot be serialized.
         """
 
         class BrokenResultReferenceable(DummyReferenceable):
-            def doRemoteCall(self, *a, **kw):
+            def doRemoteCall(self, *a: object, **kw: object) -> BrokenCopyable:
                 return BrokenCopyable()
 
         ref = LocalRemote(BrokenResultReferenceable(IHasSchema))
@@ -167,17 +174,19 @@ class LocalRemoteTests(TestCase):
 
 
 class EchoerFixture(Fixture):
-    def __init__(self, reactor, tub_path):
-        self.reactor = reactor
+    tub: Tub
+    furl: bytes
+
+    def __init__(self) -> None:
         self.tub = Tub()
         self.tub.setLocation(b"tcp:0")
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         self.tub.startService()
         self.furl = self.tub.registerReference(Echoer())
 
-    def _cleanUp(self):
-        return self.tub.stopService()
+    def _cleanUp(self) -> Optional[Deferred[object]]:
+        return cast(Optional[Deferred[object]], self.tub.stopService())
 
 
 class SerializationTests(TrialTestCase):
@@ -185,27 +194,24 @@ class SerializationTests(TrialTestCase):
     Tests for the serialization of types used in the Foolscap API.
     """
 
-    def test_sharestat(self):
+    @async_test
+    async def test_sharestat(self) -> None:
         """
         A ``ShareStat`` instance can be sent as an argument to and received in a
         response from a Foolscap remote method call.
         """
-        return self._roundtrip_test(ShareStat(1, 2))
+        await self._roundtrip_test(ShareStat(1, 2))
 
-    @inlineCallbacks
-    def _roundtrip_test(self, obj):
+    async def _roundtrip_test(self, obj: object) -> None:
         """
         Send ``obj`` over Foolscap and receive it back again, equal to itself.
         """
-        # Foolscap Tub implementation just uses the global reactor...
-        from twisted.internet import reactor
-
         # So sad.  No Deferred support in testtools.TestCase or
         # fixture.Fixture, no fixture support in
         # twisted.trial.unittest.TestCase.
-        fx = EchoerFixture(reactor, self.mktemp())
+        fx = EchoerFixture()
         fx.setUp()
         self.addCleanup(fx._cleanUp)
-        echoer = yield fx.tub.getReference(fx.furl)
-        received = yield echoer.callRemote("echo", obj)
+        echoer = await fx.tub.getReference(fx.furl)
+        received = await echoer.callRemote("echo", obj)
         self.assertEqual(obj, received)

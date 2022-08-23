@@ -27,11 +27,21 @@ __all__ = [
     "matches_float_within_distance",
 ]
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from json import loads
-from typing import Generic, TypeVar, Union
+from typing import (
+    Callable,
+    Container,
+    Generic,
+    Iterable,
+    Iterator,
+    Optional,
+    TypeVar,
+    Union,
+)
 
-import attr
+from allmydata.storage.server import StorageServer
+from attrs import field, frozen, validators
 from testtools.matchers import (
     AfterPreprocessing,
     AllMatch,
@@ -52,13 +62,17 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import succeeded
 from treq import content
+from treq.response import IResponse
 from twisted.web.http_headers import Headers
+from zope.interface.interface import InterfaceClass
 
+from ..foolscap import ShareStat
 from ..model import Pass
 from ..server.spending import _SpendingData
 from ._exception import raises
 from ._float_matchers import matches_float_within_distance
 from ._sql_matchers import equals_database
+from .common import DummyStorageServer
 
 _T = TypeVar("_T")
 
@@ -69,35 +83,37 @@ class Matcher(_Matcher, Generic[_T]):
     """
 
 
-@attr.s
+@frozen
 class Provides(object):
     """
     Match objects that provide all of a list of Zope Interface interfaces.
     """
 
-    interfaces = attr.ib(validator=attr.validators.instance_of(list))
+    interfaces: list[InterfaceClass] = field(validator=validators.instance_of(list))
 
-    def match(self, obj):
+    def match(self, obj: object) -> Optional[Mismatch]:
         missing = set()
         for iface in self.interfaces:
             if not iface.providedBy(obj):
                 missing.add(iface)
-        if missing:
-            return Mismatch(
-                "{} does not provide expected {}".format(
-                    obj,
-                    ", ".join(str(iface) for iface in missing),
-                )
+        if missing == set():
+            return None
+
+        return Mismatch(
+            "{} does not provide expected {}".format(
+                obj,
+                ", ".join(str(iface) for iface in missing),
             )
+        )
 
 
-def matches_version_dictionary():
+def matches_version_dictionary() -> Matcher[dict[str, Matcher[object]]]:
     """
     Match the dictionary returned by Tahoe-LAFS'
     ``RIStorageServer.get_version`` which is also the dictionary returned by
     our own ``RIPrivacyPassAuthorizedStorageServer.get_version``.
     """
-    return ContainsDict(
+    return ContainsDict(  # type: ignore[no-any-return]
         {
             # It has these two top-level keys, at least.  Try not to be too
             # fragile by asserting much more than that they are present.
@@ -107,7 +123,7 @@ def matches_version_dictionary():
     )
 
 
-def returns(matcher):
+def returns(matcher: Matcher[_T]) -> Matcher[Callable[[], _T]]:
     """
     Matches a no-argument callable that returns a value matched by the given
     matcher.
@@ -115,55 +131,59 @@ def returns(matcher):
     return _Returns(matcher)
 
 
-class _Returns(_Matcher):
-    def __init__(self, result_matcher):
+class _Returns(Matcher[_T]):
+    def __init__(self, result_matcher: Matcher[Callable[[], _T]]):
         self.result_matcher = result_matcher
 
-    def match(self, matchee):
+    def match(self, matchee: Callable[[], _T]) -> Optional[Mismatch]:
         return self.result_matcher.match(matchee())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Returns({})".format(self.result_matcher)
 
 
-def greater_or_equal(v):
+def greater_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value greater than or equal to ``v``.
     """
-    return MatchesAny(GreaterThan(v), Equals(v))
+    return MatchesAny(GreaterThan(v), Equals(v))  # type: ignore[no-any-return]
 
 
-def lesser_or_equal(v):
+def lesser_or_equal(v: _T) -> Matcher[_T]:
     """
     Matches a value less than or equal to ``v``.
     """
-    return MatchesAny(LessThan(v), Equals(v))
+    return MatchesAny(LessThan(v), Equals(v))  # type: ignore[no-any-return]
 
 
-def between(low, high):
+def between(low: _T, high: _T) -> Matcher[_T]:
     """
     Matches a value in the range [low, high].
     """
-    return MatchesAll(
+    return MatchesAll(  # type: ignore[no-any-return]
         greater_or_equal(low),
         lesser_or_equal(high),
     )
 
 
-def leases_current(relevant_storage_indexes, now, min_lease_remaining):
+def leases_current(
+    relevant_storage_indexes: Container[bytes],
+    now: datetime,
+    min_lease_remaining: timedelta,
+) -> Matcher[DummyStorageServer]:
     """
     Return a matcher on a ``DummyStorageServer`` instance which matches
     servers for which the leases on the given storage indexes do not expire
     before ``min_lease_remaining``.
     """
 
-    def get_relevant_stats(storage_server):
+    def get_relevant_stats(storage_server: StorageServer) -> Iterator[ShareStat]:
         for (storage_index, shares) in storage_server.buckets.items():
             if storage_index in relevant_storage_indexes:
                 for (sharenum, stat) in shares.items():
                     yield stat
 
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         # Get share stats for storage indexes we should have
         # visited and maintained.
         lambda storage_server: list(get_relevant_stats(storage_server)),
@@ -182,21 +202,21 @@ def leases_current(relevant_storage_indexes, now, min_lease_remaining):
     )
 
 
-def even():
+def even() -> Matcher[int]:
     """
     Matches even integers.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda n: n % 2,
         Equals(0),
     )
 
 
-def odd():
+def odd() -> Matcher[int]:
     """
     Matches odd integers.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda n: n % 2,
         Equals(1),
     )
@@ -206,7 +226,7 @@ def matches_response(
     code_matcher: Matcher[int] = Always(),
     headers_matcher: Matcher[Headers] = Always(),
     body_matcher: Matcher[bytes] = Always(),
-):
+) -> Matcher[IResponse]:
     """
     Match a Treq response object with certain code and body.
 
@@ -219,7 +239,7 @@ def matches_response(
 
     :return: A matcher.
     """
-    return MatchesAll(
+    return MatchesAll(  # type: ignore[no-any-return]
         MatchesStructure(
             code=code_matcher,
             headers=headers_matcher,
@@ -232,13 +252,13 @@ def matches_response(
 
 
 def matches_spent_passes(
-    public_key_hash: bytes, spent_passes: list[Pass]
+    public_key_hash: bytes, spent_passes: Iterable[Pass]
 ) -> Matcher[_SpendingData]:
     """
     Returns a matcher for _SpendingData that checks whether the
     spent pass match the given public key and passes.
     """
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda spending_recorder: spending_recorder.spent_tokens,
         MatchesDict(
             {
@@ -250,14 +270,14 @@ def matches_spent_passes(
     )
 
 
-def matches_json(matcher=Always()):
+def matches_json(matcher: Matcher[object] = Always()) -> Matcher[bytes]:
     """
     Return a matcher for a JSON string which can be decoded to an object
     matched by the given matcher.
     """
 
-    class Matcher:
-        def match(self, s):
+    class JSONMatcher(Matcher[bytes]):
+        def match(self, s: bytes) -> Optional[Mismatch]:
             try:
                 value = loads(s)
             except Exception as e:
@@ -265,10 +285,10 @@ def matches_json(matcher=Always()):
 
             return matcher.match(value)
 
-    return Matcher()
+    return JSONMatcher()
 
 
-def matches_capability(type_matcher):
+def matches_capability(type_matcher: Matcher[str]) -> Matcher[str]:
     """
     Return a matcher for a unicode string representing a Tahoe-LAFS capability
     that has a type matched by ``type_matcher``.
@@ -282,7 +302,7 @@ def matches_capability(type_matcher):
             return pieces[1]
         return None
 
-    return AfterPreprocessing(
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         get_cap_type,
         type_matcher,
     )

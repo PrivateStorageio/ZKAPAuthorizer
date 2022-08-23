@@ -18,9 +18,19 @@ This module implements validators for ``attrs``-defined attributes.
 
 from base64 import b64decode
 from datetime import datetime
+from typing import Callable, Protocol, Sequence, TypeVar
+
+from ._base64 import urlsafe_b64decode
+from ._types import Attribute
+
+_T = TypeVar("_T")
+
+ValidatorType = Callable[[object, Attribute[_T], _T], None]
 
 
-def returns_aware_datetime_validator(inst, attr, value) -> None:
+def returns_aware_datetime_validator(
+    inst: object, attr: Attribute[Callable[[], datetime]], value: Callable[[], datetime]
+) -> None:
     """
     An attrs validator that verifies the attribute value is a function that
     returns a timezone-aware datetime instance for at least one call.
@@ -42,7 +52,9 @@ def is_aware_datetime(value: datetime) -> bool:
     return isinstance(value, datetime) and value.tzinfo is not None
 
 
-def aware_datetime_validator(inst, attr, value) -> None:
+def aware_datetime_validator(
+    inst: object, attr: Attribute[datetime], value: datetime
+) -> None:
     """
     An attrs validator that verifies the attribute value is a timezone-aware
     datetime instance.
@@ -52,13 +64,17 @@ def aware_datetime_validator(inst, attr, value) -> None:
     raise TypeError(f"{attr.name!r} must be an aware datetime instance (got {value!r})")
 
 
-def is_base64_encoded(b64decode=b64decode):
+def is_base64_encoded(
+    b64decode: Callable[[bytes], bytes] = b64decode
+) -> ValidatorType[bytes]:
     """
     Return an attrs validator that verifies that the attributes is a base64
     encoded byte string.
     """
 
-    def validate_is_base64_encoded(inst, attr, value):
+    def validate_is_base64_encoded(
+        inst: object, attr: Attribute[bytes], value: bytes
+    ) -> None:
         try:
             b64decode(value)
         except TypeError:
@@ -72,8 +88,10 @@ def is_base64_encoded(b64decode=b64decode):
     return validate_is_base64_encoded
 
 
-def has_length(expected):
-    def validate_has_length(inst, attr, value):
+def has_length(expected: int) -> ValidatorType[Sequence[_T]]:
+    def validate_has_length(
+        inst: object, attr: Attribute[Sequence[_T]], value: Sequence[_T]
+    ) -> None:
         if len(value) != expected:
             raise ValueError(
                 "{name!r} must have length {expected}, instead has length {actual}".format(
@@ -86,8 +104,15 @@ def has_length(expected):
     return validate_has_length
 
 
-def greater_than(expected):
-    def validate_relation(inst, attr, value):
+class Ordered(Protocol):
+    def __gt__(self: _T, other: _T) -> bool:
+        ...
+
+
+def greater_than(expected: Ordered) -> ValidatorType[Ordered]:
+    def validate_relation(
+        inst: object, attr: Attribute[Ordered], value: Ordered
+    ) -> None:
         if value > expected:
             return None
 
@@ -100,3 +125,48 @@ def greater_than(expected):
         )
 
     return validate_relation
+
+
+def bounded_integer(min_bound: int) -> ValidatorType[int]:
+    def validator(inst: object, attr: Attribute[int], value: int) -> None:
+        """
+        An attrs validator which checks an integer value to make sure it
+        greater than some minimum bound.
+        """
+        if not isinstance(value, int):
+            raise ValueError(
+                f"{attr.name} must be an integer, instead it was {type(value)}",
+            )
+        if not (value > min_bound):
+            raise ValueError(
+                f"{attr.name} must be greater than {min_bound}, instead it was {value}",
+            )
+
+        return None
+
+    return validator
+
+
+positive_integer = bounded_integer(0)
+non_negative_integer = bounded_integer(-1)
+
+
+def base64_bytes(length: int) -> ValidatorType[bytes]:
+    def validator(inst: object, attr: Attribute[bytes], value: bytes) -> None:
+        if not isinstance(value, bytes):
+            raise ValueError(
+                f"{attr.name} must be bytes, instead it was {type(value)}",
+            )
+        if not is_base64_encoded(urlsafe_b64decode):
+            raise ValueError(
+                f"{attr.name} must be base64 encoded data",
+            )
+
+        if len(value) != length:
+            raise ValueError(
+                f"{attr.name} value must have length {length}, not {len(value)}",
+            )
+
+        return None
+
+    return validator

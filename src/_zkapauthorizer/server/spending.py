@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Sequence
 
 import attr
+from attrs import Factory, define, field
 from challenge_bypass_ristretto import PublicKey
 from prometheus_client import CollectorRegistry
 from twisted.internet.interfaces import IReactorTime
@@ -12,7 +13,7 @@ class ISpender(Interface):
     An ``ISpender`` can records spent ZKAPs and reports double spends.
     """
 
-    def mark_as_spent(public_key: PublicKey, passes: list[bytes]) -> None:
+    def mark_as_spent(public_key: PublicKey, passes: Sequence[bytes]) -> None:
         """
         Record the given ZKAPs (associated to the given public key as having
         been spent.
@@ -24,11 +25,11 @@ class ISpender(Interface):
         """
 
 
-@attr.s
+@define
 class _SpendingData(object):
-    spent_tokens = attr.ib(init=False, factory=dict)
+    spent_tokens: dict[bytes, list[bytes]] = field(init=False, default=Factory(dict))
 
-    def reset(self):
+    def reset(self) -> None:
         self.spent_tokens.clear()
 
 
@@ -40,22 +41,22 @@ class RecordingSpender(object):
     for testing purposes.
     """
 
-    _recorder = attr.ib(validator=attr.validators.instance_of(_SpendingData))
+    _recorder: _SpendingData = field(
+        validator=attr.validators.instance_of(_SpendingData)
+    )
 
     @classmethod
     def make(cls) -> tuple[_SpendingData, ISpender]:
         recorder = _SpendingData()
         return recorder, cls(recorder)
 
-    def mark_as_spent(self, public_key, passes):
+    def mark_as_spent(self, public_key: PublicKey, passes: Sequence[bytes]) -> None:
         self._recorder.spent_tokens.setdefault(public_key.encode_base64(), []).extend(
             passes
         )
 
 
-def get_spender(
-    config: dict[str, Any], reactor: IReactorTime, registry: CollectorRegistry
-) -> ISpender:
+def get_spender(reactor: IReactorTime, registry: CollectorRegistry) -> ISpender:
     """
     Return an :py:`ISpender` to be used with the given storage server configuration.
     """

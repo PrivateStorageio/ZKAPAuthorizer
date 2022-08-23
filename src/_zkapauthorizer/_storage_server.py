@@ -27,7 +27,17 @@ from functools import partial
 from os import listdir, stat
 from os.path import join
 from struct import calcsize, unpack
-from typing import Any, Optional
+from typing import (
+    Any,
+    Callable,
+    Container,
+    Iterator,
+    NoReturn,
+    Optional,
+    Sequence,
+    Union,
+    ValuesView,
+)
 
 import attr
 from allmydata.interfaces import TestAndWriteVectorsForShares
@@ -44,16 +54,16 @@ from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
 from attr.validators import instance_of, provides
-from attrs import frozen
+from attrs import field, frozen
 from challenge_bypass_ristretto import (
     PublicKey,
     SigningKey,
     TokenPreimage,
     VerificationSignature,
 )
-from eliot import log_call, start_action
-from foolscap.api import Referenceable
+from eliot import start_action
 from foolscap.ipb import IRemoteReference
+from foolscap.referenceable import Referenceable
 from prometheus_client import CollectorRegistry, Histogram
 from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
@@ -61,19 +71,23 @@ from twisted.python.filepath import FilePath
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
+from .eliot import log_call
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
 from .server.spending import ISpender
 from .storage_common import (
     MorePassesRequired,
+    ReadVector,
+    Secrets,
+    ServerTestWriteVector,
     add_lease_message,
     allocate_buckets_message,
     get_required_new_passes_for_mutable_write,
     get_write_sharenums,
-    pass_value_attribute,
     required_passes,
     slot_testv_and_readv_and_writev_message,
 )
+from .validators import positive_integer
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
@@ -102,19 +116,21 @@ class _ValidationResult(object):
         of passes which did not have a correct signature.
     """
 
-    valid: list[bytes]
-    signature_check_failed: list[int]
+    valid: Sequence[bytes]
+    signature_check_failed: Sequence[int]
 
     @classmethod
-    def _is_invalid_pass(cls, message, pass_, signing_key):
+    def _is_invalid_pass(
+        cls, message: bytes, pass_: Pass, signing_key: SigningKey
+    ) -> bool:
         """
         Cryptographically check the validity of a single pass.
 
-        :param bytes message: The shared message for pass validation.
-        :param Pass pass_: The pass to validate.
+        :param message: The shared message for pass validation.
+        :param pass_: The pass to validate.
 
-        :return bool: ``False`` (invalid) if the pass includes a valid
-            signature, ``True`` (valid) otherwise.
+        :return: ``False`` (invalid) if the pass includes a valid signature,
+            ``True`` (valid) otherwise.
         """
         assert isinstance(message, bytes), "message %r not bytes" % (message,)
         assert isinstance(pass_, Pass), "pass %r not a Pass" % (pass_,)
@@ -127,19 +143,22 @@ class _ValidationResult(object):
                 proposed_signature,
                 message,
             )
+            assert isinstance(invalid_pass, bool)
             return invalid_pass
         except Exception:
             # It would be pretty nice to log something here, sometimes, I guess?
             return True
 
     @classmethod
-    def validate_passes(cls, message, passes, signing_key):
+    def validate_passes(
+        cls, message: bytes, passes: list[bytes], signing_key: SigningKey
+    ) -> "_ValidationResult":
         """
         Check all of the given passes for validity.
 
-        :param bytes message: The shared message for pass validation.
-        :param list[bytes] passes: The encoded passes to validate.
-        :param SigningKey signing_key: The signing key to use to check the passes.
+        :param message: The shared message for pass validation.
+        :param passes: The encoded passes to validate.
+        :param signing_key: The signing key to use to check the passes.
 
         :return: An instance of this class describing the validation result
             for all passes given.
@@ -147,17 +166,17 @@ class _ValidationResult(object):
         valid = []
         signature_check_failed = []
         for idx, pass_ in enumerate(passes):
-            pass_ = Pass.from_bytes(pass_)
-            if cls._is_invalid_pass(message, pass_, signing_key):
+            pass_obj = Pass.from_bytes(pass_)
+            if cls._is_invalid_pass(message, pass_obj, signing_key):
                 signature_check_failed.append(idx)
             else:
-                valid.append(pass_.preimage)
+                valid.append(pass_obj.preimage)
         return cls(
             valid=valid,
             signature_check_failed=signature_check_failed,
         )
 
-    def raise_for(self, required_pass_count):
+    def raise_for(self, required_pass_count: int) -> NoReturn:
         """
         :raise MorePassesRequired: Always raised with fields populated from this
             instance and the given ``required_pass_count``.
@@ -165,7 +184,7 @@ class _ValidationResult(object):
         raise MorePassesRequired(
             len(self.valid),
             required_pass_count,
-            self.signature_check_failed,
+            frozenset(self.signature_check_failed),
         )
 
 
@@ -200,36 +219,36 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     # A StorageServer instance, but not validated because of the fake used in
     # the test suite.
-    _original = attr.ib()
+    _original: StorageServer = field()
 
-    _pass_value = pass_value_attribute()
-    _signing_key = attr.ib(validator=instance_of(SigningKey))
-    _spender = attr.ib(validator=provides(ISpender))
-    _registry = attr.ib(
+    _pass_value: int = field(validator=positive_integer)
+    _signing_key: SigningKey = field(validator=instance_of(SigningKey))
+    _spender: ISpender = field(validator=provides(ISpender))
+    _registry: CollectorRegistry = field(
         default=attr.Factory(CollectorRegistry),
         validator=attr.validators.instance_of(CollectorRegistry),
     )
-    _clock = attr.ib(
+    _clock: IReactorTime = field(
         validator=provides(IReactorTime),
         default=attr.Factory(partial(namedAny, "twisted.internet.reactor")),
     )
-    _public_key = attr.ib(init=False)
-    _metric_spending_successes = attr.ib(init=False)
+    _public_key: PublicKey = field(init=False)
+    _metric_spending_successes: Histogram = field(init=False)
     _bucket_writer_disconnect_markers: dict[
         BucketWriter, tuple[IRemoteReference, Any]
-    ] = attr.ib(
+    ] = field(
         init=False,
         default=attr.Factory(dict),
     )
 
     @_public_key.default
-    def _get_public_key(self):
+    def _get_public_key(self) -> PublicKey:
         # attrs evaluates defaults (whether specified inline or via decorator)
         # in the order the attributes were defined in the class definition,
         # so that `self._signing_key` will be assigned when this runs.
         return PublicKey.from_signing_key(self._signing_key)
 
-    def _bucket_writer_closed(self, bw: BucketWriter):
+    def _bucket_writer_closed(self, bw: BucketWriter) -> None:
         """
         This is registered as a callback with the storage backend and receives
         notification when a bucket writer is closed.  It removes the
@@ -241,16 +260,16 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # writer bookkeeping ourselves.
         if bw in self._bucket_writer_disconnect_markers:
             canary, disconnect_marker = self._bucket_writer_disconnect_markers.pop(bw)
-            canary.dontNotifyOnDisconnect(disconnect_marker)
+            canary.dontNotifyOnDisconnect(disconnect_marker)  # type: ignore[no-untyped-call]
 
-    def __attrs_post_init__(self):
+    def __attrs_post_init__(self) -> None:
         """
         Finish initialization after attrs does its job.  This consists of
         registering a cleanup handler with the storage backend.
         """
         self._original.register_bucket_writer_close_handler(self._bucket_writer_closed)
 
-    def _get_spending_histogram_buckets(self):
+    def _get_spending_histogram_buckets(self) -> list[int]:
         """
         Create the upper bounds for the ZKAP spending histogram.
         """
@@ -271,7 +290,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         return list(2**n for n in range(11)) + [float("inf")]
 
     @_metric_spending_successes.default
-    def _make_histogram(self):
+    def _make_histogram(self) -> Histogram:
         return Histogram(
             "zkapauthorizer_server_spending_successes",
             "ZKAP Spending Successes histogram",
@@ -279,7 +298,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             buckets=self._get_spending_histogram_buckets(),
         )
 
-    def _clear_metrics(self):
+    def _clear_metrics(self) -> None:
         """
         Forget all recorded metrics.
         """
@@ -287,23 +306,25 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # https://github.com/prometheus/client_python/issues/707
         self._metric_spending_successes._metric_init()
 
-    def remote_get_version(self):
+    def remote_get_version(self) -> dict[int, Any]:
         """
         Pass-through without pass check to allow clients to learn about our
         version and configuration in case it helps them decide how to behave.
         """
-        return self._original.get_version()
+        result = self._original.get_version()
+        assert isinstance(result, dict)
+        return result
 
     def remote_allocate_buckets(
         self,
-        passes,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        allocated_size,
-        canary,
-    ):
+        passes: list[bytes],
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+        sharenums: set[int],
+        allocated_size: int,
+        canary: IRemoteReference,
+    ) -> tuple[set[int], dict[int, FoolscapBucketWriter]]:
         """
         Pass-through after a pass check to ensure that clients can only allocate
         storage for immutable shares if they present valid passes.
@@ -368,7 +389,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Copy/paste the disconnection handling logic from
         # StorageServer.remote_allocate_buckets.
         for bw in bucketwriters.values():
-            disconnect_marker = canary.notifyOnDisconnect(bw.disconnected)
+            disconnect_marker = canary.notifyOnDisconnect(bw.disconnected)  # type: ignore[no-untyped-call]
             self._bucket_writer_disconnect_markers[bw] = (
                 canary,
                 disconnect_marker,
@@ -381,7 +402,9 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             k: FoolscapBucketWriter(bw) for (k, bw) in bucketwriters.items()
         }
 
-    def remote_get_buckets(self, storage_index):
+    def remote_get_buckets(
+        self, storage_index: bytes
+    ) -> dict[int, FoolscapBucketWriter]:
         """
         Pass-through without pass check to let clients read immutable shares as
         long as those shares exist.
@@ -391,7 +414,13 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             for (k, bucket) in self._original.get_buckets(storage_index).items()
         }
 
-    def remote_add_lease(self, passes, storage_index, *a, **kw):
+    def remote_add_lease(
+        self,
+        passes: list[bytes],
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+    ) -> None:
         """
         Pass-through after a pass check to ensure clients can only extend the
         duration of share storage if they present valid passes.
@@ -407,22 +436,31 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             validation,
             self._original,
         )
-        result = self._original.add_lease(storage_index, *a, **kw)
+        result = self._original.add_lease(storage_index, renew_secret, cancel_secret)
+        assert result is None
         self._spender.mark_as_spent(
             self._public_key,
             validation.valid,
         )
         self._metric_spending_successes.observe(len(validation.valid))
-        return result
+        return None
 
-    def remote_advise_corrupt_share(self, *a, **kw):
+    def remote_advise_corrupt_share(
+        self, share_type: bytes, storage_index: bytes, shnum: int, reason: bytes
+    ) -> None:
         """
         Pass-through without a pass check to let clients inform us of possible
         issues with the system without incurring any cost to themselves.
         """
-        return self._original.advise_corrupt_share(*a, **kw)
+        result = self._original.advise_corrupt_share(
+            share_type, storage_index, shnum, reason
+        )
+        assert result is None
+        return None
 
-    def remote_share_sizes(self, storage_index_or_slot, sharenums):
+    def remote_share_sizes(
+        self, storage_index_or_slot: bytes, sharenums: Container[int]
+    ) -> dict[int, int]:
         with start_action(
             action_type="zkapauthorizer:storage-server:remote:share-sizes",
             storage_index_or_slot=storage_index_or_slot,
@@ -441,12 +479,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_slot_testv_and_readv_and_writev(
         self,
-        passes,
-        storage_index,
-        secrets,
-        tw_vectors,
-        r_vector,
-    ):
+        passes: list[bytes],
+        storage_index: bytes,
+        secrets: Secrets,
+        tw_vectors: dict[int, ServerTestWriteVector],
+        r_vector: ReadVector,
+    ) -> Any:
         """
         Perform a test-and-set on a number of shares in a given slot.
 
@@ -487,12 +525,12 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def _slot_testv_and_readv_and_writev(
         self,
-        passes,
-        storage_index,
-        secrets,
-        tw_vectors,
-        r_vector,
-    ):
+        passes: list[bytes],
+        storage_index: bytes,
+        secrets: Secrets,
+        tw_vectors: dict[int, ServerTestWriteVector],
+        r_vector: ReadVector,
+    ) -> Any:
         # Get a stable time to use for all lease expiration checks that are
         # part of this call.
         now = self._clock.seconds()
@@ -536,6 +574,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             # We'll add or renew leases based on our billing model.
             renew_leases=False,
         )
+        assert isinstance(result, tuple)
 
         # Add the leases that we charged the client for.  This includes:
         #
@@ -561,25 +600,33 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # Propagate the result of the operation.
         return result
 
-    def remote_slot_readv(self, *a, **kw):
+    def remote_slot_readv(
+        self, storage_index: bytes, shares: Optional[Container[int]], readv: ReadVector
+    ) -> Deferred[bytes]:
         """
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        return self._original.slot_readv(*a, **kw)
+        result = self._original.slot_readv(storage_index, shares, readv)
+        assert isinstance(result, Deferred)
+        return result
 
 
-def check_pass_quantity(pass_value, validation, share_sizes):
+def check_pass_quantity(
+    pass_value: int,
+    validation: _ValidationResult,
+    share_sizes: Union[ValuesView[int], list[int]],
+) -> None:
     """
-    Check that the given number of passes is sufficient to cover leases for
-    one period for shares of the given sizes.
+    Check that the given number of passes is sufficient to cover leases
+    for one period for shares of the given sizes.
 
-    :param int pass_value: The value of a single pass in bytes × lease periods.
+    :param pass_value: The value of a single pass in bytes × lease periods.
 
-    :param _ValidationResult validation: The validating results for a list of passes.
+    :param validation: The validating results for a list of passes.
 
-    :param list[int] share_sizes: The sizes of the shares for which the lease
-        is being created.
+    :param share_sizes: The sizes of the shares for which the lease is being
+        created.
 
     :raise MorePassesRequired: If the given number of passes is too few for
         the given share sizes.
@@ -622,18 +669,23 @@ def check_pass_quantity_for_lease(
     return allocated_sizes
 
 
-def check_pass_quantity_for_write(pass_value, validation, sharenums, allocated_size):
+def check_pass_quantity_for_write(
+    pass_value: int,
+    validation: _ValidationResult,
+    sharenums: set[int],
+    allocated_size: int,
+) -> None:
     """
     Determine if the given number of valid passes is sufficient for an
     attempted write.
 
-    :param int pass_value: The value of a single pass in bytes × lease periods.
+    :param pass_value: The value of a single pass in bytes × lease periods.
 
-    :param _ValidationResult validation: The validating results for a list of passes.
+    :param validation: The validating results for a list of passes.
 
-    :param set[int] sharenums: The shares being written to.
+    :param sharenums: The shares being written to.
 
-    :param int allocated_size: The size of each share.
+    :param allocated_size: The size of each share.
 
     :raise MorePassedRequired: If the number of valid passes given is too
         small.
@@ -643,7 +695,9 @@ def check_pass_quantity_for_write(pass_value, validation, sharenums, allocated_s
     check_pass_quantity(pass_value, validation, [allocated_size] * len(sharenums))
 
 
-def get_all_share_paths(storage_server, storage_index):
+def get_all_share_paths(
+    storage_server: StorageServer, storage_index: bytes
+) -> Iterator[tuple[int, bytes]]:
     """
     Get the paths of all shares in the given storage index (or slot).
 
@@ -673,14 +727,15 @@ def get_all_share_paths(storage_server, storage_index):
             yield sharenum, join(bucket, candidate)
 
 
-def get_all_share_numbers(storage_server, storage_index):
+def get_all_share_numbers(
+    storage_server: StorageServer, storage_index: bytes
+) -> Iterator[int]:
     """
     Get all share numbers in the given storage index (or slot).
 
-    :param allmydata.storage.server.StorageServer storage_server: The storage
-        server which owns the storage index.
+    :param The storage server which owns the storage index.
 
-    :param bytes storage_index: The storage index (or slot) in which to look
+    :param storage_index: The storage index (or slot) in which to look
         up share numbers.
 
     :return: A generator of int giving share numbers.
@@ -693,7 +748,11 @@ def get_all_share_numbers(storage_server, storage_index):
     action_type="zkapauthorizer:storage-server:get-share-sizes",
     include_args=["storage_index_or_slot", "sharenums"],
 )
-def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
+def get_share_sizes(
+    storage_server: StorageServer,
+    storage_index_or_slot: bytes,
+    sharenums: Optional[Container[int]],
+) -> list[tuple[int, int]]:
     """
     Get sizes of the given share numbers for the given storage index *or*
     slot.
@@ -711,15 +770,18 @@ def get_share_sizes(storage_server, storage_index_or_slot, sharenums):
     )
 
 
-def get_share_stats(storage_server, storage_index_or_slot, sharenums):
+def get_share_stats(
+    storage_server: StorageServer,
+    storage_index_or_slot: bytes,
+    sharenums: Optional[Container[int]],
+) -> Iterator[tuple[int, ShareStat]]:
     """
     Get the stats for the given share numbers for the given storage index *or*
     slot.
 
-    :param allmydata.storage.server.StorageServer storage_server: The storage
-        server which owns the storage index.
+    :param storage_server: The storage server which owns the storage index.
 
-    :param bytes storage_index_or_slot: The storage index (or slot) in which
+    :param storage_index_or_slot: The storage index (or slot) in which
         to look up share numbers.
 
     :param sharenums: A container of share numbers to use to filter the
@@ -741,13 +803,13 @@ def get_share_stats(storage_server, storage_index_or_slot, sharenums):
             yield sharenum, info
 
 
-def get_storage_index_share_size(sharepath):
+def get_storage_index_share_size(sharepath: bytes) -> int:
     """
     Get the size of a share belonging to a storage index (an immutable share).
 
-    :param bytes sharepath: The path to the share file.
+    :param sharepath: The path to the share file.
 
-    :return int: The data size of the share in bytes.
+    :return: The data size of the share in bytes.
     """
     # From src/allmydata/storage/immutable.py
     #
@@ -786,6 +848,7 @@ def get_storage_index_share_size(sharepath):
         )
 
     version, _, number_of_leases = unpack(header_format, header)
+    assert isinstance(number_of_leases, int)
 
     if version in (1, 2):
         # Version 1 and 2 don't differ in a way that changes the size
@@ -797,42 +860,48 @@ def get_storage_index_share_size(sharepath):
     )
 
 
-def stat_bucket(storage_server, storage_index, sharepath):
+def stat_bucket(
+    storage_server: StorageServer, storage_index: bytes, sharepath: bytes
+) -> ShareStat:
     """
     Get a ``ShareStat`` for the shares in a bucket.
     """
     return ShareStat(
         size=get_storage_index_share_size(sharepath),
-        lease_expiration=get_lease_expiration(sharepath),
+        lease_expiration=get_lease_expiration(sharepath) or 0,
     )
 
 
-def stat_slot(storage_server, slot, sharepath):
+def stat_slot(
+    storage_server: StorageServer, slot: bytes, sharepath: bytes
+) -> ShareStat:
     """
     Get a ``ShareStat`` for the shares in a slot.
     """
     return ShareStat(
         size=get_slot_share_size(sharepath),
-        lease_expiration=get_lease_expiration(sharepath),
+        lease_expiration=get_lease_expiration(sharepath) or 0,
     )
 
 
-def get_lease_expiration(sharepath: str) -> Optional[int]:
+def get_lease_expiration(sharepath: bytes) -> Optional[int]:
     """
     Get the latest lease expiration time for the share at the given path, or
     ``None`` if there are no leases on it.
 
     :param sharepath: The path to the share file to inspect.
     """
-    leases = list(
-        lease.get_expiration_time() for lease in get_share_file(sharepath).get_leases()
-    )
+    leases: list[int] = []
+    for lease in get_share_file(sharepath).get_leases():
+        expiration_time = lease.get_expiration_time()
+        assert isinstance(expiration_time, int)
+        leases.append(expiration_time)
     if leases:
         return max(leases)
     return None
 
 
-def get_slot_share_size(sharepath):
+def get_slot_share_size(sharepath: bytes) -> int:
     """
     Get the size of a share belonging to a slot (a mutable share).
 
@@ -843,10 +912,11 @@ def get_slot_share_size(sharepath):
     with open(sharepath, "rb") as share_file:
         share_data_length_bytes = share_file.read(92)[-8:]
         (share_data_length,) = unpack(">Q", share_data_length_bytes)
+        assert isinstance(share_data_length, int)
         return share_data_length
 
 
-def get_stat(sharepath):
+def get_stat(sharepath: bytes) -> Callable[[StorageServer, bytes, bytes], ShareStat]:
     """
     Get a function that can retrieve the metadata from the share at the given
     path.
@@ -868,7 +938,13 @@ def get_stat(sharepath):
             raise ValueError("Cannot interpret share header {!r}".format(magic))
 
 
-def add_leases_for_writev(storage_server, storage_index, secrets, tw_vectors, now):
+def add_leases_for_writev(
+    storage_server: StorageServer,
+    storage_index: bytes,
+    secrets: Secrets,
+    tw_vectors: dict[int, ServerTestWriteVector],
+    now: float,
+) -> None:
     """
     Add a new lease using the given secrets to all shares written by
     ``tw_vectors``.
@@ -903,11 +979,13 @@ def get_share_path(
     """
     Get the path to the given storage server's storage for the given share.
     """
-    return (
-        FilePath(storage_server.sharedir)
+    result = (
+        FilePath(storage_server.sharedir)  # type: ignore[no-untyped-call]
         .preauthChild(storage_index_to_dir(storage_index))
         .child("{}".format(sharenum))
     )
+    assert isinstance(result, FilePath)
+    return result
 
 
 def share_has_active_leases(

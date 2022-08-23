@@ -17,9 +17,40 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Generic, TypedDict, TypeVar, Union
+
+from attrs import Attribute as _Attribute
+from typing_extensions import TypeAlias
 
 # A Tahoe-LAFS capability string
 CapStr = str
 
 GetTime = Callable[[], datetime]
+
+_T = TypeVar("_T")
+
+if TYPE_CHECKING:
+    Attribute = _Attribute
+else:
+
+    class Attribute(_Attribute, Generic[_T]):
+        pass
+
+
+# mypy does not support recursive types so we can't say much about what's in
+# the containers here.
+JSON = Union[None, int, float, str, list, dict]
+
+ServerConfig = TypedDict(
+    "ServerConfig",
+    {
+        "pass-value": int,
+        "ristretto-issuer-root-url": str,
+        "ristretto-signing-key-path": str,
+        "prometheus-metrics-path": str,
+        "prometheus-metrics-interval": str,
+    },
+    total=False,
+)
+
+ClientConfig: TypeAlias = dict[str, str]

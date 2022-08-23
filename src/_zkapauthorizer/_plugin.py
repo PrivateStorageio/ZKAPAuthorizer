@@ -21,7 +21,7 @@ import random
 from datetime import datetime
 from functools import partial
 from sqlite3 import connect as _sqlite3_connect
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from weakref import WeakValueDictionary
 
 from allmydata.client import _Client
@@ -31,25 +31,27 @@ from allmydata.interfaces import (
     IFoolscapStoragePlugin,
 )
 from allmydata.node import MissingConfigEntry
+from allmydata.storage.server import StorageServer
 from attrs import Factory, define, field, frozen
 from autobahn.twisted.resource import WebSocketResource
 from challenge_bypass_ristretto import PublicKey, SigningKey
 from eliot import start_action
+from foolscap.ipb import IRemoteReference
 from prometheus_client import CollectorRegistry, write_to_textfile
 from tahoe_capabilities import DirectoryReadCapability
 from twisted.application.service import IService, MultiService
 from twisted.internet import task
-from twisted.internet.defer import succeed
+from twisted.internet.defer import Deferred, succeed
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.web.guard import HTTPAuthSessionWrapper
 from zope.interface import implementer
 
 from . import NAME
-from ._types import GetTime
+from ._types import GetTime, ServerConfig
 from .api import ZKAPAuthorizerStorageClient, ZKAPAuthorizerStorageServer
 from .config import CONFIG_DB_NAME, Config
-from .controller import get_redeemer
+from .controller import IRedeemer, get_redeemer
 from .lease_maintenance import SERVICE_NAME as MAINTENANCE_SERVICE_NAME
 from .lease_maintenance import (
     LeaseMaintenanceConfig,
@@ -68,6 +70,7 @@ from .replicate import (
     setup_tahoe_lafs_replication,
     with_replication,
 )
+from .resource import IZKAPRoot
 from .resource import from_configuration as resource_from_configuration
 from .server.spending import get_spender
 from .spending import SpendingController
@@ -86,8 +89,8 @@ _log = Logger()
 @implementer(IAnnounceableStorageServer)
 @define
 class AnnounceableStorageServer(object):
-    announcement = field()
-    storage_server = field()
+    announcement: dict[str, Any] = field()
+    storage_server: StorageServer = field()
 
 
 def open_store(
@@ -173,12 +176,12 @@ class ZKAPAuthorizer(object):
     # moment.  Can't be bothered to fix it right now.
     _connect: UnboundConnect = _sqlite3_connect  # type: ignore
 
-    _stores: WeakValueDictionary = Factory(WeakValueDictionary)
+    _stores: WeakValueDictionary[bytes, VoucherStore] = Factory(WeakValueDictionary)
     _service: MultiService = field()
 
     @_service.default
-    def _service_default(self):
-        svc = MultiService()
+    def _service_default(self) -> MultiService:
+        svc = MultiService()  # type: ignore[no-untyped-call]
         # There doesn't seem to be an API in Twisted to hook a service up to
         # the reactor.  There are pieces of it but they're spread out and
         # mixed with other stuff.  So, just do it ourselves.  See
@@ -202,7 +205,7 @@ class ZKAPAuthorizer(object):
         try:
             store = self._stores[key]
         except KeyError:
-            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))
+            db_path = FilePath(node_config.get_private_path(CONFIG_DB_NAME))  # type: ignore[no-untyped-call]
             unreplicated_conn = _open_database(partial(self._connect, db_path.path))
             replicated_conn = with_replication(
                 unreplicated_conn, is_replication_setup(node_config)
@@ -229,38 +232,40 @@ class ZKAPAuthorizer(object):
             client.get_config().encoding,
             10,
         )
-        replication_service(replicated_conn, replica, cost).setServiceParent(
-            self._service
-        )
+        svc = replication_service(replicated_conn, replica, cost)
+        svc.setServiceParent(self._service)  # type: ignore[no-untyped-call]
 
-    def _get_redeemer(self, node_config, announcement):
+    def _get_redeemer(
+        self, node_config: Config, announcement: Optional[dict[str, Any]]
+    ) -> IRedeemer:
         """
-        :return IRedeemer: The voucher redeemer indicated by the given
-            configuration.  A new instance is returned on every call because
-            the redeemer interface is stateless.
+        :return: The voucher redeemer indicated by the given configuration.  A
+            new instance is returned on every call because the redeemer
+            interface is stateless.
         """
         return get_redeemer(self.name, node_config, announcement, self.reactor)
 
-    def get_storage_server(self, configuration, get_anonymous_storage_server):
+    def get_storage_server(
+        self,
+        configuration: ServerConfig,
+        get_anonymous_storage_server: Callable[[], StorageServer],
+    ) -> Deferred[AnnounceableStorageServer]:
         registry = CollectorRegistry()
-        kwargs = configuration.copy()
 
         # If metrics are desired, schedule their writing to disk.
-        metrics_interval = kwargs.pop("prometheus-metrics-interval", None)
-        metrics_path = kwargs.pop("prometheus-metrics-path", None)
-        if metrics_interval is not None and metrics_path is not None:
-            FilePath(metrics_path).parent().makedirs(ignoreExistingDirectory=True)
-            t = task.LoopingCall(make_safe_writer(metrics_path, registry))
+        metrics_interval = configuration.get("prometheus-metrics-interval", None)
+        metrics_pathname = configuration.get("prometheus-metrics-path", None)
+        if metrics_interval is not None and metrics_pathname is not None:
+            metrics_path = FilePath(metrics_pathname)  # type: ignore[no-untyped-call]
+            metrics_path.parent().makedirs(ignoreExistingDirectory=True)  # type: ignore[no-untyped-call]
+            t = task.LoopingCall(make_safe_writer(metrics_pathname, registry))
             t.clock = self.reactor
             t.start(int(metrics_interval))
 
-        root_url = kwargs.pop("ristretto-issuer-root-url")
-        pass_value = int(kwargs.pop("pass-value", BYTES_PER_PASS))
-        signing_key = load_signing_key(
-            FilePath(
-                kwargs.pop("ristretto-signing-key-path"),
-            ),
-        )
+        root_url = configuration["ristretto-issuer-root-url"]
+        pass_value = int(configuration.get("pass-value", BYTES_PER_PASS))
+        key_path = FilePath(configuration["ristretto-signing-key-path"])  # type: ignore[no-untyped-call]
+        signing_key = load_signing_key(key_path)
         public_key = PublicKey.from_signing_key(signing_key)
         announcement = {
             "ristretto-issuer-root-url": root_url,
@@ -268,7 +273,6 @@ class ZKAPAuthorizer(object):
         }
         anonymous_storage_server = get_anonymous_storage_server()
         spender = get_spender(
-            config=kwargs,
             reactor=self.reactor,
             registry=registry,
         )
@@ -278,7 +282,7 @@ class ZKAPAuthorizer(object):
             signing_key=signing_key,
             spender=spender,
             registry=registry,
-            **kwargs,
+            clock=self.reactor,
         )
         return succeed(
             AnnounceableStorageServer(
@@ -287,7 +291,12 @@ class ZKAPAuthorizer(object):
             ),
         )
 
-    def get_storage_client(self, node_config, announcement, get_rref):
+    def get_storage_client(
+        self,
+        node_config: Config,
+        announcement: dict[str, Any],
+        get_rref: Callable[[], IRemoteReference],
+    ) -> ZKAPAuthorizerStorageClient:
         """
         Create an ``IStorageClient`` that submits ZKAPs with certain requests in
         order to authorize them.  The ZKAPs are extracted from the database
@@ -306,12 +315,11 @@ class ZKAPAuthorizer(object):
             controller.get,
         )
 
-    def get_client_resource(self, node_config):
+    def get_client_resource(self, node_config: Config) -> IZKAPRoot:
         """
         Get an ``IZKAPRoot`` for the given node configuration.
 
-        :param allmydata.node._Config node_config: The configuration object
-            for the relevant node.
+        :param node_config: The configuration object for the relevant node.
         """
         store = self._get_store(node_config)
         tahoe = self._get_tahoe_client(self.reactor, node_config)
@@ -343,7 +351,7 @@ def make_safe_writer(
     raise exceptions.
     """
 
-    def safe_writer():
+    def safe_writer() -> None:
         try:
             with start_action(
                 action_type="zkapauthorizer:metrics:write-to-textfile",
@@ -359,7 +367,9 @@ def make_safe_writer(
 _init_storage = _Client.__dict__["init_storage"]
 
 
-def _attach_zkapauthorizer_services(self, announceable_storage_servers):
+def _attach_zkapauthorizer_services(
+    self: _Client, announceable_storage_servers: list[IAnnounceableStorageServer]
+) -> None:
     """
     A monkey-patched version of ``_Client.init_storage`` which also
     initializes ZKAPAuthorizer's services.
@@ -368,6 +378,7 @@ def _attach_zkapauthorizer_services(self, announceable_storage_servers):
 
     # Make sure the original work happens.
     result = _init_storage(self, announceable_storage_servers)
+    assert result is None
 
     # Find the database relevant to this node.  The global state, the weakref
     # lookup... these things are not great.
@@ -384,14 +395,18 @@ def _attach_zkapauthorizer_services(self, announceable_storage_servers):
                 create,
             )
 
-    return result
+    return None
 
 
 _Client.init_storage = _attach_zkapauthorizer_services
 
 
 def _maybe_attach_service(
-    reactor, client_node, store: VoucherStore, name: str, make_service
+    reactor: Any,
+    client_node: _Client,
+    store: VoucherStore,
+    name: str,
+    make_service: Callable[[Any, _Client, VoucherStore], IService],
 ) -> None:
     """
     Check for an existing service and if one is not found create one and
@@ -416,22 +431,24 @@ def _maybe_attach_service(
         except:
             _log.failure(f"Attaching {name} service to client node")
         else:
-            service.setServiceParent(client_node)
+            service.setServiceParent(client_node)  # type: ignore[no-untyped-call]
     else:
         _log.info(f"Found existing {name} service")
 
 
-def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IService:
+def _create_maintenance_service(
+    reactor: Any, client_node: _Client, store: VoucherStore
+) -> IService:
     """
     Create a lease maintenance service to be attached to the given client
     node.
 
-    :param allmydata.client._Client client_node: The client node the lease
-        maintenance service will be attached to.
+    :param client_node: The client node the lease maintenance service will be
+        attached to.
     """
     node_config = client_node.config
 
-    def get_now():
+    def get_now() -> datetime:
         return datetime.utcfromtimestamp(reactor.seconds())
 
     maint_config = LeaseMaintenanceConfig.from_node_config(node_config)
@@ -446,13 +463,13 @@ def _create_maintenance_service(reactor, client_node, store: VoucherStore) -> IS
         progress=store.start_lease_maintenance,
         get_now=get_now,
     )
-    last_run_path = FilePath(node_config.get_private_path("last-lease-maintenance-run"))
+    last_run_path = FilePath(node_config.get_private_path("last-lease-maintenance-run"))  # type: ignore[no-untyped-call]
     # Create the service to periodically run the lease maintenance operation.
     return lease_maintenance_service(
         maintain_leases,
         reactor,
         last_run_path,
-        random,
+        random.Random(),
         lease_maint_config=maint_config,
     )
 
@@ -474,7 +491,7 @@ _SERVICES = [
 ]
 
 
-def get_root_nodes(client_node, node_config) -> list[IFilesystemNode]:
+def get_root_nodes(client_node: _Client, node_config: Config) -> list[IFilesystemNode]:
     """
     Get the configured starting points for lease maintenance traversal.
     """
@@ -486,7 +503,7 @@ def get_root_nodes(client_node, node_config) -> list[IFilesystemNode]:
         return [client_node.create_node_from_uri(rootcap.encode("utf-8"))]
 
 
-def load_signing_key(path):
+def load_signing_key(path: FilePath) -> SigningKey:
     """
     Read a serialized Ristretto signing key from the given path and return it
     as a ``challenge_bypass_ristretto.SigningKey``.
@@ -494,22 +511,22 @@ def load_signing_key(path):
     Unlike ``challenge_bypass_ristretto.SigningKey.decode_base64`` this
     function will clean up any whitespace around the key.
 
-    :param FilePath path: The path from which to read the key.
+    :param path: The path from which to read the key.
 
     :raise challenge_bypass_ristretto.DecodeException: If
         ``SigningKey.decode_base64`` raises this exception it will be passed
         through.
 
-    :return challenge_bypass_ristretto.SigningKey: An object representing the
-        key read.
+    :return: An object representing the key read.
     """
-    return SigningKey.decode_base64(path.getContent().strip())
+    key_bytes = path.getContent()  # type: ignore[no-untyped-call]
+    return SigningKey.decode_base64(key_bytes.strip())
 
 
 # Create the global plugin object, re-exported elsewhere so Twisted can
 # discover it.  We'll also use it here since it carries some state that we
 # sometimes need to dig up and can't easily get otherwise.
-def _create_plugin():
+def _create_plugin() -> ZKAPAuthorizer:
     # Do not leak the global reactor into the module scope!
     from twisted.internet import reactor
 

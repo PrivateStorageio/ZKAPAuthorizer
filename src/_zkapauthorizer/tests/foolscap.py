@@ -16,11 +16,19 @@
 Testing helpers related to Foolscap.
 """
 
-import attr
-from foolscap.api import Any, Copyable, Referenceable, RemoteInterface
+from typing import Awaitable, Iterable, NoReturn, Type, TypeVar
+
+from attrs import define, field, frozen
+from foolscap.api import (  # type: ignore[attr-defined]
+    Any,
+    Copyable,
+    Referenceable,
+    RemoteInterface,
+)
 from foolscap.copyable import CopyableSlicer, ICopyable
+from foolscap.referenceable import RemoteReference
 from twisted.internet.defer import fail, succeed
-from zope.interface import implementer
+from zope.interface import Interface, implementer
 
 
 class RIStub(RemoteInterface):
@@ -28,16 +36,16 @@ class RIStub(RemoteInterface):
 
 
 class RIEcho(RemoteInterface):
-    def echo(argument=Any()):
+    def echo(argument=Any()):  # type: ignore[no-untyped-def]
         return Any()
 
 
 class StubStorageServer(object):
-    def register_bucket_writer_close_handler(self, handler):
+    def register_bucket_writer_close_handler(self, handler: object) -> None:
         pass
 
 
-def get_anonymous_storage_server():
+def get_anonymous_storage_server() -> StubStorageServer:
     return StubStorageServer()
 
 
@@ -47,67 +55,80 @@ class BrokenCopyable(Copyable):
     """
 
 
+T = TypeVar("T")
+
+
 @implementer(
     RIEcho  # type: ignore # zope.interface.implementer accepts interface, not ...
 )
 class Echoer(Referenceable):
-    def remote_echo(self, argument):
+    def remote_echo(self, argument: T) -> T:
         return argument
 
 
-@attr.s
+@frozen
 class DummyReferenceable(object):
-    _interface = attr.ib()
+    _interface: Type[Interface]
 
-    def getInterface(self):
+    def getInterface(self) -> Type[Interface]:
         return self._interface
 
-    def doRemoteCall(self, *a, **kw):
+    def doRemoteCall(self, *a: object, **kw: object) -> object:
         return None
 
 
-@attr.s
+@define
 class LocalTracker(object):
     """
     Pretend to be a tracker for a ``LocalRemote``.
     """
 
-    interface = attr.ib()
-    interfaceName = attr.ib(default=None)
+    interface: Type[RemoteInterface]
+    interfaceName: str = field(init=False)
 
-    def __attrs_post_init__(self):
-        self.interfaceName = self.interface.__remote_name__
+    @interfaceName.default
+    def _interfaceName_default(self) -> str:
+        return self.interface.__remote_name__  # type: ignore[no-any-return]
 
-    def getURL(self):
+    def getURL(self) -> str:
         return "pb://abcd@127.0.0.1:12345/efgh"
 
 
-@attr.s
-class LocalRemote(object):
+@define
+class LocalRemote(RemoteReference):
     """
     Adapt a referenceable to behave as if it were a remote reference instead.
-
-    This is only a partial implementation of ``IRemoteReference`` so it
-    doesn't declare the interface.
 
     ``foolscap.referenceable.LocalReferenceable`` is in many ways a better
     adapter between these interfaces but it also uses ``eventually`` which
     complicates matters immensely for testing.
 
-    :ivar foolscap.ipb.IReferenceable _referenceable: The object to which this
-        provides a simulated remote interface.
+    :ivar _referenceable: The object to which this provides a simulated remote
+        interface.
     """
 
-    _referenceable = attr.ib()
-    check_args = attr.ib(default=True)
-    tracker = attr.ib(default=None)
+    _referenceable: Referenceable
+    check_args: bool = True
+    tracker: LocalTracker = field()
 
-    def __attrs_post_init__(self):
-        self.tracker = LocalTracker(
+    @tracker.default
+    def _tracker_default(self) -> LocalTracker:
+        return LocalTracker(
             self._referenceable.getInterface(),
         )
 
-    def callRemote(self, methname, *args, **kwargs):
+    def notifyOnDisconnect(
+        self, callback: object, *args: object, **kwargs: object
+    ) -> NoReturn:
+        raise NotImplementedError()
+
+    def dontNotifyOnDisconnect(self, cookie: object) -> NoReturn:
+        raise NotImplementedError()
+
+    def callRemoteOnly(self, _name: Any, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError()
+
+    def callRemote(self, _name: Any, *args: Any, **kwargs: Any) -> Awaitable[object]:
         """
         Call the given method on the wrapped object, passing the given arguments.
 
@@ -117,12 +138,12 @@ class LocalRemote(object):
         :return Deferred: The result of the call on the wrapped object.
         """
         try:
-            schema = self._referenceable.getInterface()[methname]
+            schema = self._referenceable.getInterface()[_name]
             if self.check_args:
                 schema.checkAllArgs(args, kwargs, inbound=True)
             _check_copyables(list(args) + list(kwargs.values()))
             result = self._referenceable.doRemoteCall(
-                methname,
+                _name,
                 args,
                 kwargs,
             )
@@ -133,7 +154,7 @@ class LocalRemote(object):
             return fail()
 
 
-def _check_copyables(copyables):
+def _check_copyables(copyables: Iterable[object]) -> None:
     """
     Check each object to see if it is a copyable and if it is make sure it can
     be sliced.

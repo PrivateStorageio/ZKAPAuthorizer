@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from contextlib import contextmanager
+from typing import Generator
 
 try:
     from resource import RLIMIT_STACK, getrlimit, setrlimit
@@ -28,7 +29,7 @@ except ImportError:
 
 
 @contextmanager
-def less_limited_stack():
+def less_limited_stack() -> Generator[None, None, None]:
     """
     A context manager which removes the resource limit on stack size, to the
     extent possible, for execution of the context.

@@ -22,6 +22,7 @@ from struct import pack
 from typing import Callable, Optional
 
 import attr
+from allmydata.storage.server import StorageServer
 from challenge_bypass_ristretto import RandomToken, SigningKey
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
@@ -35,7 +36,7 @@ from .strategies import bytes_for_share  # Not really a strategy...
 LEASE_INTERVAL = 60 * 60 * 24 * 31
 
 
-def reset_storage_server(storage_server):
+def reset_storage_server(storage_server: StorageServer) -> None:
     """
     Restore a storage server to a default state.  This includes
     deleting all of the shares it holds.
@@ -57,22 +58,22 @@ def reset_storage_server(storage_server):
 
 
 def write_toy_shares(
-    storage_server,
-    storage_index,
-    renew_secret,
-    cancel_secret,
-    sharenums,
-    size,
-):
+    storage_server: StorageServer,
+    storage_index: bytes,
+    renew_secret: bytes,
+    cancel_secret: bytes,
+    sharenums: set[int],
+    size: int,
+) -> None:
     """
     Write some immutable shares to the given storage server.
 
-    :param allmydata.storage.server.StorageServer storage_server:
-    :param bytes storage_index:
-    :param bytes renew_secret:
-    :param bytes cancel_secret:
-    :param set[int] sharenums:
-    :param int size:
+    :param storage_server:
+    :param storage_index:
+    :param renew_secret:
+    :param cancel_secret:
+    :param sharenums:
+    :param size:
     """
     _, allocated = storage_server.allocate_buckets(
         storage_index,
@@ -86,18 +87,20 @@ def write_toy_shares(
         writer.close()
 
 
-def whitebox_write_sparse_share(sharepath, version, size, leases, now):
+def whitebox_write_sparse_share(
+    sharepath: FilePath, version: int, size: int, leases: list[bytes], now: float
+) -> None:
     """
     Write a zero-filled sparse (if the filesystem supports it) immutable share
     to the given path.
 
     This assumes knowledge of the Tahoe-LAFS share file format.
 
-    :param FilePath sharepath: The path to which to write the share file.
-    :param int version: The share version to write to the file.
-    :param int size: The share data size to write.
-    :param list leases: Renewal secrets for leases to write to the share file.
-    :param float now: The current time as a POSIX timestamp.
+    :param sharepath: The path to which to write the share file.
+    :param version: The share version to write to the file.
+    :param size: The share data size to write.
+    :param leases: Renewal secrets for leases to write to the share file.
+    :param now: The current time as a POSIX timestamp.
     """
     # Maybe-saturated size (what at least one Tahoe-LAFS comment claims is
     # appropriate for large files)
@@ -172,7 +175,7 @@ def privacypass_passes(
     """
     remaining = limit
 
-    def limited_get_passes(message, count):
+    def limited_get_passes(message: bytes, count: int) -> list[Pass]:
         nonlocal remaining
 
         if remaining is not None:
@@ -185,7 +188,7 @@ def privacypass_passes(
     return limited_get_passes
 
 
-def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]):
+def pass_factory(get_passes: Callable[[bytes, int], list[Pass]]) -> "_PassFactory":
     """
     Get a new factory for passes.
 
@@ -283,7 +286,7 @@ class _PassFactory(object):
         self.in_use.update(tokens)
         return PassGroup(message, self, pass_info)
 
-    def _clear(self):
+    def _clear(self) -> None:
         """
         Forget about all passes: returned, in use, spent, invalid, issued.
         """
@@ -310,7 +313,7 @@ class _PassFactory(object):
         self.spent.update(unblinded_tokens)
         self.in_use.difference_update(unblinded_tokens)
 
-    def mark_invalid(self, reason, unblinded_tokens: list[UnblindedToken]) -> None:
+    def mark_invalid(self, reason: str, unblinded_tokens: list[UnblindedToken]) -> None:
         """
         Check the operation for consistency and update internal book-keeping
         related to the given tokens.

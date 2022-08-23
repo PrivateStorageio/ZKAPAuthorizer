@@ -27,12 +27,14 @@ storing it "again" is essentially free but this will not be reflected by this
 calculator).
 """
 
-import attr
+from typing import Iterable
+
+from attrs import frozen
 
 from .storage_common import required_passes, share_size_for_data
 
 
-@attr.s
+@frozen
 class PriceCalculator(object):
     """
     :ivar int _shares_needed: The number of shares which are required to
@@ -45,11 +47,11 @@ class PriceCalculator(object):
         single pass.
     """
 
-    _shares_needed = attr.ib()
-    _shares_total = attr.ib()
-    _pass_value = attr.ib()
+    _shares_needed: int
+    _shares_total: int
+    _pass_value: int
 
-    def calculate(self, sizes):
+    def calculate(self, sizes: Iterable[int]) -> int:
         """
         Calculate the price to store data of the given sizes for one lease
         period.

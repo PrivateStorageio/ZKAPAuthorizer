@@ -18,13 +18,23 @@ plugin.
 """
 
 from base64 import b32encode
+from datetime import datetime
 from io import BytesIO
-from typing import Container
+from typing import (
+    Awaitable,
+    BinaryIO,
+    Callable,
+    Container,
+    NoReturn,
+    Optional,
+    TypeVar,
+    cast,
+)
 from urllib.parse import quote
 
-import attr
 from allmydata.client import config_from_string
 from aniso8601 import parse_datetime
+from attrs import Factory, frozen
 from autobahn.twisted.testing import (
     MemoryReactorClockResolver,
     create_memory_agent,
@@ -74,10 +84,9 @@ from testtools.matchers import (
     MatchesAll,
     MatchesAny,
     MatchesDict,
-    MatchesListwise,
     MatchesStructure,
+    Mismatch,
     Not,
-    StartsWith,
 )
 from testtools.twistedsupport import (
     AsynchronousDeferredRunTest,
@@ -85,8 +94,10 @@ from testtools.twistedsupport import (
     flush_logged_errors,
     succeeded,
 )
+from treq.response import IResponse
 from treq.testing import RequestTraversalAgent
 from twisted.internet.address import IPv4Address
+from twisted.internet.base import DelayedCall
 from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock, Cooperator
 from twisted.python.filepath import FilePath
@@ -102,14 +113,16 @@ from twisted.web.http import (
     UNAUTHORIZED,
 )
 from twisted.web.http_headers import Headers
+from twisted.web.iweb import IAgent
 
 from .. import NAME
 from .. import __file__ as package_init_file
 from .. import __version__ as zkapauthorizer_version
 from .._base64 import urlsafe_b64decode
-from .._json import dumps_utf8
+from .._json import dumps_utf8, loads
 from .._plugin import open_store
-from ..config import CONFIG_DB_NAME
+from .._types import JSON, GetTime
+from ..config import CONFIG_DB_NAME, Config
 from ..configutil import config_string_from_sections
 from ..model import (
     DoubleSpend,
@@ -119,11 +132,18 @@ from ..model import (
     Redeeming,
     Unpaid,
     Voucher,
+    VoucherStore,
     aware_now,
     memory_connect,
 )
 from ..pricecalculator import PriceCalculator
-from ..recover import make_fail_downloader, noop_downloader
+from ..recover import (
+    Downloader,
+    Replica,
+    SetState,
+    make_fail_downloader,
+    noop_downloader,
+)
 from ..replicate import (
     ReplicationAlreadySetup,
     fail_setup_replication,
@@ -132,6 +152,7 @@ from ..replicate import (
 )
 from ..resource import (
     NUM_TOKENS,
+    IZKAPRoot,
     RecoverFactory,
     RecoverProtocol,
     from_configuration,
@@ -143,11 +164,11 @@ from ..storage_common import (
     get_configured_pass_value,
     required_passes,
 )
-from .common import flushErrors
+from .common import GetConfig, flushErrors
 from .fixtures import TemporaryVoucherStore
-from .json import loads
-from .matchers import between, matches_json, matches_response
+from .matchers import Matcher, between, matches_json, matches_response
 from .strategies import (
+    ExistingState,
     api_auth_tokens,
     aware_datetimes,
     client_doublespendredeemer_configurations,
@@ -156,10 +177,10 @@ from .strategies import (
     client_nonredeemer_configurations,
     client_unpaidredeemer_configurations,
     direct_tahoe_configs,
+    encoding_parameters,
     existing_states,
     posix_timestamps,
     request_paths,
-    share_parameters,
     tahoe_configs,
     vouchers,
 )
@@ -177,16 +198,28 @@ def directory_writes() -> SearchStrategy[DirectoryWriteCapability]:
 TRANSIENT_ERROR = "something went wrong, who knows what"
 
 # Helper to work-around https://github.com/twisted/treq/issues/161
-def uncooperator(started=True):
+def uncooperator(started: bool = True) -> Cooperator:
+    def schedule(f: Callable[[], object]) -> DelayedCall:
+        f()
+        return DelayedCall(
+            time=0,
+            func=f,
+            args=(),
+            kw={},
+            cancel=lambda dc: None,
+            reset=lambda dc: None,
+            seconds=lambda: 0,
+        )
+
     return Cooperator(
         # Don't stop consuming the iterator until it's done.
         terminationPredicateFactory=lambda: lambda: False,
-        scheduler=lambda what: (what(), object())[1],
+        scheduler=schedule,
         started=started,
     )
 
 
-def is_not_json(bytestring):
+def is_not_json(bytestring: bytes) -> bool:
     """
     :param bytes bytestring: A candidate byte string to inspect.
 
@@ -199,7 +232,7 @@ def is_not_json(bytestring):
     return False
 
 
-def not_vouchers():
+def not_vouchers() -> SearchStrategy[bytes]:
     """
     Builds byte strings which are not legal vouchers.
     """
@@ -219,20 +252,20 @@ def not_vouchers():
     )
 
 
-def is_urlsafe_base64(text):
+def is_urlsafe_base64(text: str) -> bool:
     """
-    :param str text: A candidate text string to inspect.
+    :param text: A candidate text string to inspect.
 
     :return bool: ``True`` if and only if ``text`` is urlsafe-base64 encoded
     """
     try:
-        urlsafe_b64decode(text)
+        urlsafe_b64decode(text.encode("utf-8"))
     except:
         return False
     return True
 
 
-def invalid_bodies():
+def invalid_bodies() -> SearchStrategy[bytes]:
     """
     Build byte strings that ``PUT /voucher`` considers invalid.
     """
@@ -263,22 +296,26 @@ get_noop_downloader = lambda cap: noop_downloader
 
 
 def root_from_config(
-    config,
-    now,
-    get_downloader=get_fail_downloader,
-    setup_replication=fail_setup_replication,
-):
+    config: Config,
+    now: GetTime,
+    get_downloader: Callable[
+        [DirectoryReadCapability], Downloader
+    ] = get_fail_downloader,
+    setup_replication: Callable[
+        [], Awaitable[DirectoryReadCapability]
+    ] = fail_setup_replication,
+) -> IZKAPRoot:
     """
     Create a client root resource from a Tahoe-LAFS configuration.
 
-    :param _Config config: The Tahoe-LAFS configuration.
+    :param config: The Tahoe-LAFS configuration.
 
     :param now: A no-argument callable that returns the time of the call as a
         ``datetime`` instance.
 
     :return IResource: The root client resource.
     """
-    db_path = FilePath(config.get_private_path(CONFIG_DB_NAME))
+    db_path = FilePath(config.get_private_path(CONFIG_DB_NAME)).asTextMode()
     return from_configuration(
         config,
         open_store(
@@ -292,23 +329,29 @@ def root_from_config(
     )
 
 
-def authorized_request(api_auth_token, agent, method, uri, headers=None, data=None):
+def authorized_request(
+    api_auth_token: bytes,
+    agent: IAgent,
+    method: bytes,
+    uri: bytes,
+    headers: Optional[dict[bytes, list[bytes]]] = None,
+    data: Optional[BinaryIO] = None,
+) -> Deferred[IResponse]:
     """
     Issue a request with the required token-based authorization header value.
 
-    :param bytes api_auth_token: The API authorization token to include.
+    :param api_auth_token: The API authorization token to include.
 
-    :param IAgent agent: The agent to use to issue the request.
+    :param agent: The agent to use to issue the request.
 
-    :param bytes method: The HTTP method for the request.
+    :param method: The HTTP method for the request.
 
-    :param bytes uri: The URI for the request.
+    :param uri: The URI for the request.
 
-    :param ({bytes: [bytes]})|None headers: If not ``None``, extra request
-        headers to include.  The **Authorization** header will be overwritten
-        if it is present.
+    :param headers: If not ``None``, extra request headers to include.  The
+        **Authorization** header will be overwritten if it is present.
 
-    :param BytesIO|None data: If not ``None``, the request body.
+    :param data: If not ``None``, the request body.
 
     :return: A ``Deferred`` like the one returned by ``IAgent.request``.
     """
@@ -317,34 +360,33 @@ def authorized_request(api_auth_token, agent, method, uri, headers=None, data=No
     else:
         bodyProducer = FileBodyProducer(data, cooperator=uncooperator())
     if headers is None:
-        headers = Headers()
+        header_obj = Headers()
     else:
-        headers = Headers(headers)
-    headers.setRawHeaders(
-        "authorization",
-        [b"tahoe-lafs " + api_auth_token],
-    )
+        header_obj = Headers(headers)
+    authorization: list[bytes] = [b"tahoe-lafs " + api_auth_token]
+    header_obj.setRawHeaders(b"authorization", authorization)
     return agent.request(
         method,
         uri,
-        headers=headers,
+        headers=header_obj,
         bodyProducer=bodyProducer,
     )
 
 
-def get_config_with_api_token(tempdir, get_config, api_auth_token):
+def get_config_with_api_token(
+    tempdir: TempDir, get_config: GetConfig, api_auth_token: bytes
+) -> Config:
     """
     Get a ``_Config`` object.
 
-    :param TempDir tempdir: A temporary directory in which to create the
-        Tahoe-LAFS node associated with the configuration.
+    :param tempdir: A temporary directory in which to create the Tahoe-LAFS
+        node associated with the configuration.
 
-    :param (bytes -> bytes -> _Config) get_config: A function which takes a
-        node directory and a Foolscap "portnum" filename and returns the
-        configuration object.
+    :param get_config: A function which takes a node directory and a Foolscap
+        "portnum" filename and returns the configuration object.
 
-    :param bytes api_auth_token: The HTTP API authorization token to write to
-        the node directory.
+    :param api_auth_token: The HTTP API authorization token to write to the
+        node directory.
     """
     basedir = tempdir.join("tahoe")
     config = get_config(basedir, "tub.port")
@@ -356,7 +398,9 @@ def get_config_with_api_token(tempdir, get_config, api_auth_token):
     return config
 
 
-def add_api_token_to_config(basedir, config, api_auth_token):
+def add_api_token_to_config(
+    basedir: str, config: Config, api_auth_token: bytes
+) -> None:
     """
     Create a private directory beneath the given base directory, point the
     given config at it, and write the given API auth token to it.
@@ -366,12 +410,22 @@ def add_api_token_to_config(basedir, config, api_auth_token):
     config.write_private_config("api_auth_token", api_auth_token)
 
 
+T = TypeVar("T")
+
+
+def const(v: T) -> Callable[[], T]:
+    def f() -> T:
+        return v
+
+    return f
+
+
 class OpenAPITests(TestCase):
     """
     Tests for the OpenAPI specification for the HTTP API.
     """
 
-    def test_backup_recovery_valid(self):
+    def test_backup_recovery_valid(self) -> None:
         """
         The specification document is valid OpenAPI 3.0.
         """
@@ -387,7 +441,7 @@ class FromConfigurationTests(TestCase):
     """
 
     @given(tahoe_configs())
-    def test_allowed_public_keys(self, get_config):
+    def test_allowed_public_keys(self, get_config: GetConfig) -> None:
         """
         The controller created by ``from_configuration`` is configured to allow
         the public keys found in the configuration.
@@ -412,7 +466,7 @@ class GetTokenCountTests(TestCase):
     """
 
     @given(one_of(none(), integers(min_value=16)))
-    def test_get_token_count(self, token_count):
+    def test_get_token_count(self, token_count: Optional[int]) -> None:
         """
         ``get_token_count`` returns the integer value of the
         ``default-token-count`` item from the given configuration object.
@@ -452,7 +506,7 @@ class ResourceTests(TestCase):
         tahoe_configs(),
         request_paths(),
     )
-    def test_unauthorized(self, get_config, path):
+    def test_unauthorized(self, get_config: GetConfig, path: list[bytes]) -> None:
         """
         A request for any resource without the required authorization token
         receives a 401 response.
@@ -465,7 +519,7 @@ class ResourceTests(TestCase):
             b"GET",
             b"http://127.0.0.1/" + b"/".join(path),
         )
-        responses = []
+        responses: list[IResponse] = []
         requesting.addCallback(responses.append)
         self.assertThat(
             requesting,
@@ -492,7 +546,9 @@ class ResourceTests(TestCase):
         ),
         api_auth_tokens(),
     )
-    def test_reachable(self, get_config, request_path, api_auth_token):
+    def test_reachable(
+        self, get_config: GetConfig, request_path: list[bytes], api_auth_token: bytes
+    ) -> None:
         """
         A resource is reachable at a child of the resource returned by
         ``from_configuration``.
@@ -528,7 +584,7 @@ class ResourceTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_version(self, get_config, api_auth_token):
+    def test_version(self, get_config: GetConfig, api_auth_token: bytes) -> None:
         """
         The ZKAPAuthorizer package version is available in a JSON response to a
         **GET** to ``/version``.
@@ -574,7 +630,10 @@ class ReplicateTests(TestCase):
         directory_writes().map(lambda rw: rw.reader),
     )
     def test_already_configured(
-        self, get_config, api_auth_token, dir_ro: DirectoryReadCapability
+        self,
+        get_config: GetConfig,
+        api_auth_token: bytes,
+        dir_ro: DirectoryReadCapability,
     ) -> None:
         """
         If replication has already been configured then the endpoint returns a
@@ -586,7 +645,7 @@ class ReplicateTests(TestCase):
             api_auth_token,
         )
 
-        async def setup_replication():
+        async def setup_replication() -> NoReturn:
             raise ReplicationAlreadySetup(danger_real_capability_string(dir_ro))
 
         root = root_from_config(config, aware_now, setup_replication=setup_replication)
@@ -610,7 +669,9 @@ class ReplicateTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config, api_auth_token):
+    def test_internal_server_error(
+        self, get_config: GetConfig, api_auth_token: bytes
+    ) -> None:
         """
         If there is an unexpected exception setting up replication then the
         endpoint returns a response with a 500 status code.
@@ -621,7 +682,7 @@ class ReplicateTests(TestCase):
             api_auth_token,
         )
 
-        async def setup_replication():
+        async def setup_replication() -> NoReturn:
             raise SurpriseBug("surprise")
 
         root = root_from_config(config, aware_now, setup_replication=setup_replication)
@@ -657,7 +718,12 @@ class ReplicateTests(TestCase):
         api_auth_tokens(),
         directory_writes().map(lambda rw: rw.reader),
     )
-    def test_created(self, get_config, api_auth_token, cap_ro) -> None:
+    def test_created(
+        self,
+        get_config: GetConfig,
+        api_auth_token: bytes,
+        cap_ro: DirectoryReadCapability,
+    ) -> None:
         """
         On successful replica configuration, the endpoint returns a response with
         a 201 status code and an application/json-encoded body containing a
@@ -733,7 +799,9 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_internal_server_error(self, get_config, api_auth_token) -> None:
+    def test_internal_server_error(
+        self, get_config: GetConfig, api_auth_token: bytes
+    ) -> None:
         """
         If recovery fails for some unrecognized reason we receive an error
         update over the WebSocket.
@@ -742,7 +810,7 @@ class RecoverTests(TestCase):
         class DownloaderBroken(Exception):
             pass
 
-        def broken_get_downloader(cap):
+        def broken_get_downloader(cap: object) -> NoReturn:
             raise DownloaderBroken("Downloader is broken")
 
         clock = MemoryReactorClockResolver()
@@ -750,9 +818,9 @@ class RecoverTests(TestCase):
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 
-        def create_proto():
+        def create_proto() -> RecoverProtocol:
             factory = RecoverFactory(store, broken_get_downloader)
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -763,7 +831,7 @@ class RecoverTests(TestCase):
             recover(
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
-                api_auth_token,
+                api_auth_token.decode("ascii"),
                 self.GOOD_CAPABILITY,
             )
         )
@@ -792,13 +860,18 @@ class RecoverTests(TestCase):
         api_auth_tokens(),
         existing_states(min_vouchers=1),
     )
-    def test_conflict(self, get_config, api_auth_token, existing_state) -> None:
+    def test_conflict(
+        self,
+        get_config: GetConfig,
+        api_auth_token: bytes,
+        existing_state: ExistingState,
+    ) -> None:
         """
         If there is state in the local database the websocket streams an
         error and disconnects.
         """
 
-        def create(store, state):
+        def create(store: VoucherStore, state: ExistingState) -> None:
             for ins in state.vouchers:
                 store.add(
                     ins.voucher, ins.expected_tokens, ins.counter, lambda: ins.tokens
@@ -815,9 +888,9 @@ class RecoverTests(TestCase):
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 
-        def create_proto():
+        def create_proto() -> RecoverProtocol:
             factory = RecoverFactory(store, get_fail_downloader)
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -828,7 +901,7 @@ class RecoverTests(TestCase):
             recover(
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
-                api_auth_token,
+                api_auth_token.decode("ascii"),
                 self.GOOD_CAPABILITY,
             )
         )
@@ -903,7 +976,7 @@ class RecoverTests(TestCase):
             ),
         )
 
-    def _request_error_test(self, message) -> list[tuple[tuple, dict]]:
+    def _request_error_test(self, message: bytes) -> list[tuple[bytes, bool]]:
         """
         Generic test of the server protocol's error-handling for incoming
         WebSocket messages.
@@ -914,34 +987,22 @@ class RecoverTests(TestCase):
         # hook into the protocol's error-handling methods
         messages = []
         closes = []
-        proto.sendClose = lambda *args, **kw: closes.append((args, kw))
-        proto.sendMessage = lambda *args, **kw: messages.append((args, kw))
+        proto.sendClose = lambda code=None, reason=None: closes.append((code, reason))
+        proto.sendMessage = lambda msg, isBinary: messages.append((msg, isBinary))
 
         # run test by sending the initial message
         proto.onMessage(message, False)
 
-        # all errors should result in a close message
-        self.assertThat(
-            closes,
-            MatchesListwise(
-                [
-                    AfterPreprocessing(
-                        lambda args_kwargs: args_kwargs[1],
-                        MatchesDict(
-                            {
-                                "code": Equals(4000),
-                                "reason": StartsWith(
-                                    "Failed to parse recovery request: "
-                                ),
-                            }
-                        ),
-                    ),
-                ]
-            ),
-        )
+        # The parse error gets logged.
         self.assertThat(
             flush_logged_errors(ValueError, TypeError),
             HasLength(1),
+        )
+
+        # all errors should result in a close message
+        self.assertThat(
+            closes,
+            Equals([(4000, "Failed to parse recovery request")]),
         )
         return messages
 
@@ -949,7 +1010,7 @@ class RecoverTests(TestCase):
         tahoe_configs(),
         api_auth_tokens(),
     )
-    def test_status(self, get_config, api_auth_token) -> None:
+    def test_status(self, get_config: GetConfig, api_auth_token: bytes) -> None:
         """
         A first websocket that initiates a recovery sees the same messages
         as a second client (that uses the same dircap).
@@ -957,12 +1018,14 @@ class RecoverTests(TestCase):
         downloads = []
         downloading_d: Deferred[None] = Deferred()
 
-        def get_success_downloader(cap):
-            async def do_download(set_state):
+        def get_success_downloader(
+            cap: DirectoryReadCapability,
+        ) -> Downloader:
+            async def do_download(set_state: SetState) -> Replica:
                 await downloading_d
                 downloads.append(set_state)
                 return (
-                    lambda: BytesIO(statements_to_snapshot([])),
+                    lambda: BytesIO(statements_to_snapshot(iter([]))),
                     [],  # no event-streams
                 )
 
@@ -974,8 +1037,8 @@ class RecoverTests(TestCase):
         pumper = create_pumper()
         self.addCleanup(pumper.stop)
 
-        def create_proto():
-            addr = IPv4Address("TCP", "127.0.0.1", "0")
+        def create_proto() -> RecoverProtocol:
+            addr = IPv4Address("TCP", "127.0.0.1", 0)
             proto = factory.buildProtocol(addr)
             return proto
 
@@ -988,7 +1051,7 @@ class RecoverTests(TestCase):
                 recover(
                     agent,
                     DecodedURL.from_text("ws://127.0.0.1:1/"),
-                    api_auth_token,
+                    api_auth_token.decode("ascii"),
                     self.GOOD_CAPABILITY,
                 )
             )
@@ -1024,7 +1087,7 @@ class RecoverTests(TestCase):
         )
 
 
-def maybe_extra_tokens():
+def maybe_extra_tokens() -> SearchStrategy[Optional[int]]:
     """
     Build either ``None`` or a small integer for use in determining a number
     of additional tokens to create in some tests.
@@ -1045,7 +1108,7 @@ class UnblindedTokenTests(TestCase):
     ``_zkapauthorizer.resource`` module.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super(UnblindedTokenTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
@@ -1061,8 +1124,12 @@ class UnblindedTokenTests(TestCase):
         aware_datetimes(),
     )
     def test_latest_lease_maintenance_spending(
-        self, get_config, api_auth_token, size_observations, now
-    ):
+        self,
+        get_config: GetConfig,
+        api_auth_token: bytes,
+        size_observations: list[list[int]],
+        now: datetime,
+    ) -> None:
         """
         The most recently completed record of lease maintenance spending activity
         is reported in the response to a **GET** request.
@@ -1090,9 +1157,14 @@ class UnblindedTokenTests(TestCase):
             b"http://127.0.0.1/lease-maintenance",
         )
         d.addCallback(readBody)
-        d.addCallback(
-            lambda body: loads(body)["spending"],
-        )
+
+        def get_spending(body: bytes) -> dict[str, object]:
+            b = loads(body)
+            assert isinstance(b, dict)
+            # TODO: cattrs
+            return cast(dict[str, object], b["spending"])
+
+        d.addCallback(get_spending)
         self.assertThat(
             d,
             succeeded(
@@ -1106,12 +1178,12 @@ class UnblindedTokenTests(TestCase):
         )
 
 
-def matches_lease_maintenance_spending():
+def matches_lease_maintenance_spending() -> Matcher[Optional[dict[str, object]]]:
     """
     :return: A matcher which matches the value of the *spending* key in the
       ``lease-maintenance`` endpoint response.
     """
-    return MatchesAny(
+    return MatchesAny(  # type: ignore[no-any-return]
         Is(None),
         ContainsDict(
             {
@@ -1122,19 +1194,19 @@ def matches_lease_maintenance_spending():
     )
 
 
-def matches_positive_integer():
-    return MatchesAll(
+def matches_positive_integer() -> Matcher[int]:
+    return MatchesAll(  # type: ignore[no-any-return]
         IsInstance(int),
         GreaterThan(0),
     )
 
 
-def matches_iso8601_datetime():
+def matches_iso8601_datetime() -> Matcher[str]:
     """
     :return: A matcher which matches text strings which can be parsed as an
         ISO8601 datetime string.
     """
-    return MatchesAll(
+    return MatchesAll(  # type: ignore[no-any-return]
         IsInstance(str),
         AfterPreprocessing(
             parse_datetime,
@@ -1150,12 +1222,14 @@ class VoucherTests(TestCase):
     vouchers.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super(VoucherTests, self).setUp()
         self.useFixture(CaptureTwistedLogs())
 
     @given(tahoe_configs(), api_auth_tokens(), vouchers())
-    def test_put_voucher(self, get_config, api_auth_token, voucher):
+    def test_put_voucher(
+        self, get_config: GetConfig, api_auth_token: bytes, voucher: bytes
+    ) -> None:
         """
         When a voucher is ``PUT`` to ``VoucherCollection`` it is passed in to the
         redemption model object for handling and an ``OK`` response is
@@ -1188,7 +1262,9 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs(), api_auth_tokens(), invalid_bodies())
-    def test_put_invalid_body(self, get_config, api_auth_token, body):
+    def test_put_invalid_body(
+        self, get_config: GetConfig, api_auth_token: bytes, body: bytes
+    ) -> None:
         """
         If the body of a ``PUT`` to ``VoucherCollection`` does not consist of an
         object with a single *voucher* property then the response is *BAD
@@ -1220,7 +1296,9 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs(), api_auth_tokens(), not_vouchers())
-    def test_get_invalid_voucher(self, get_config, api_auth_token, not_voucher):
+    def test_get_invalid_voucher(
+        self, get_config: GetConfig, api_auth_token: bytes, not_voucher: bytes
+    ) -> None:
         """
         When a syntactically invalid voucher is requested with a ``GET`` to a
         child of ``VoucherCollection`` the response is **BAD REQUEST**.
@@ -1252,7 +1330,9 @@ class VoucherTests(TestCase):
         )
 
     @given(tahoe_configs(), api_auth_tokens(), vouchers())
-    def test_get_unknown_voucher(self, get_config, api_auth_token, voucher):
+    def test_get_unknown_voucher(
+        self, get_config: GetConfig, api_auth_token: bytes, voucher: bytes
+    ) -> None:
         """
         When a voucher is requested with a ``GET`` to a child of
         ``VoucherCollection`` the response is **NOT FOUND** if the voucher
@@ -1284,7 +1364,9 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_redeeming(self, config, api_auth_token, now, voucher):
+    def test_get_known_voucher_redeeming(
+        self, config: Config, api_auth_token: bytes, now: datetime, voucher: bytes
+    ) -> None:
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1316,7 +1398,9 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_redeemed(self, config, api_auth_token, now, voucher):
+    def test_get_known_voucher_redeemed(
+        self, config: Config, api_auth_token: bytes, now: datetime, voucher: bytes
+    ) -> None:
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1348,7 +1432,9 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_doublespend(self, config, api_auth_token, now, voucher):
+    def test_get_known_voucher_doublespend(
+        self, config: Config, api_auth_token: bytes, now: datetime, voucher: bytes
+    ) -> None:
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1380,7 +1466,9 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_unpaid(self, config, api_auth_token, now, voucher):
+    def test_get_known_voucher_unpaid(
+        self, config: Config, api_auth_token: bytes, now: datetime, voucher: bytes
+    ) -> None:
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1412,7 +1500,9 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         vouchers(),
     )
-    def test_get_known_voucher_error(self, config, api_auth_token, now, voucher):
+    def test_get_known_voucher_error(
+        self, config: Config, api_auth_token: bytes, now: datetime, voucher: bytes
+    ) -> None:
         """
         When a voucher is first ``PUT`` and then later a ``GET`` is issued for the
         same voucher then the response code is **OK** and details, including
@@ -1440,8 +1530,13 @@ class VoucherTests(TestCase):
         )
 
     def _test_get_known_voucher(
-        self, config, api_auth_token, now, voucher, voucher_matcher
-    ):
+        self,
+        config: Config,
+        api_auth_token: bytes,
+        now: datetime,
+        voucher: bytes,
+        voucher_matcher: Matcher[bytes],
+    ) -> None:
         """
         Assert that a voucher that is ``PUT`` and then ``GET`` is represented in
         the JSON response.
@@ -1505,7 +1600,13 @@ class VoucherTests(TestCase):
         aware_datetimes(),
         lists(vouchers(), unique=True),
     )
-    def test_list_vouchers(self, config, api_auth_token, now, vouchers):
+    def test_list_vouchers(
+        self,
+        config: Config,
+        api_auth_token: bytes,
+        now: datetime,
+        vouchers: list[bytes],
+    ) -> None:
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers.
@@ -1541,8 +1642,12 @@ class VoucherTests(TestCase):
         lists(vouchers(), unique=True),
     )
     def test_list_vouchers_transient_states(
-        self, config, api_auth_token, now, vouchers
-    ):
+        self,
+        config: Config,
+        api_auth_token: bytes,
+        now: datetime,
+        vouchers: list[bytes],
+    ) -> None:
         """
         A ``GET`` to the ``VoucherCollection`` itself returns a list of existing
         vouchers including state information that reflects transient states.
@@ -1571,8 +1676,13 @@ class VoucherTests(TestCase):
         )
 
     def _test_list_vouchers(
-        self, config, api_auth_token, now, vouchers, match_response_object
-    ):
+        self,
+        config: Config,
+        api_auth_token: bytes,
+        now: datetime,
+        vouchers: list[bytes],
+        match_response_object: Matcher[IResponse],
+    ) -> None:
         add_api_token_to_config(
             # Hypothesis causes our test case instances to be re-used many
             # times between setUp and tearDown.  Avoid re-using the same
@@ -1582,7 +1692,7 @@ class VoucherTests(TestCase):
             config,
             api_auth_token,
         )
-        root = root_from_config(config, lambda: now)
+        root = root_from_config(config, const(now))
         agent = RequestTraversalAgent(root)
 
         note("{} vouchers".format(len(vouchers)))
@@ -1646,18 +1756,18 @@ def mime_types(blacklist: Container[str] = ()) -> SearchStrategy[str]:
     )
 
 
-@attr.s
+@frozen
 class Request(object):
     """
     Represent some of the parameters of an HTTP request.
     """
 
-    method = attr.ib()
-    headers = attr.ib()
-    data = attr.ib()
+    method: bytes
+    headers: dict[bytes, list[bytes]]
+    data: bytes
 
 
-def bad_calculate_price_requests():
+def bad_calculate_price_requests() -> SearchStrategy[Request]:
     """
     Build Request instances describing requests which are not allowed at the
     ``/calculate-price`` endpoint.
@@ -1677,7 +1787,7 @@ def bad_calculate_price_requests():
     good_headers = just({b"content-type": [b"application/json"]})
     bad_headers = fixed_dictionaries(
         {
-            b"content-type": mime_types(blacklist={b"application/json"},).map(
+            b"content-type": mime_types(blacklist={"application/json"},).map(
                 lambda content_type: [content_type.encode("utf-8")],
             ),
         }
@@ -1734,23 +1844,32 @@ def bad_calculate_price_requests():
         "data": good_data,
     }
 
-    bad_choices = [
-        ("method", bad_methods),
-        ("headers", bad_headers),
-        ("data", bad_data_version),
-        ("data", bad_data_sizes),
-        ("data", bad_data_other),
-        ("data", bad_data_junk),
-    ]
+    bad_choices = {
+        "method": bad_methods,
+        "headers": bad_headers,
+        "data": one_of(bad_data_version, bad_data_sizes, bad_data_other, bad_data_junk),
+    }
 
-    def merge(fields, key, value):
-        fields = fields.copy()
-        fields[key] = value
-        return fields
+    def pick_field(
+        candidate_name: str,
+        match_name: str,
+        if_match: dict[str, T],
+        if_mismatch: dict[str, T],
+    ) -> T:
+        return (if_match if candidate_name == match_name else if_mismatch)[
+            candidate_name
+        ]
 
-    return sampled_from(bad_choices,).flatmap(
-        lambda bad_choice: builds(Request, **merge(good_fields, *bad_choice)),
-    )
+    bad_field_name = sampled_from(list(bad_choices.keys()))
+
+    def build_request(bad_field_name: str) -> SearchStrategy[Request]:
+        method = pick_field("method", bad_field_name, good_fields, bad_choices)
+        headers = pick_field("headers", bad_field_name, good_fields, bad_choices)
+        data = pick_field("data", bad_field_name, good_fields, bad_choices)
+
+        return builds(Request, method, headers, data)
+
+    return bad_field_name.flatmap(build_request)
 
 
 class CalculatePriceTests(TestCase):
@@ -1766,7 +1885,9 @@ class CalculatePriceTests(TestCase):
         api_auth_tokens(),
         bad_calculate_price_requests(),
     )
-    def test_bad_request(self, get_config, api_auth_token, bad_request):
+    def test_bad_request(
+        self, get_config: GetConfig, api_auth_token: bytes, bad_request: Request
+    ) -> None:
         """
         When approached with:
 
@@ -1816,7 +1937,7 @@ class CalculatePriceTests(TestCase):
         tuples(
             # Make the share encoding parameters easily accessible without
             # going through the Tahoe-LAFS configuration.
-            share_parameters(),
+            encoding_parameters(),
             # Same goes for the minimum lease time remaining configuration.
             posix_timestamps().map(int),
         ).flatmap(
@@ -1833,7 +1954,18 @@ class CalculatePriceTests(TestCase):
         api_auth_tokens(),
         lists(integers(min_value=0)),
     )
-    def test_calculated_price(self, encoding_params_and_config, api_auth_token, sizes):
+    def test_calculated_price(
+        self,
+        encoding_params_and_config: tuple[
+            tuple[
+                tuple[int, int, int],
+                int,
+            ],
+            Config,
+        ],
+        api_auth_token: bytes,
+        sizes: list[int],
+    ) -> None:
         """
         A well-formed request returns the price in ZKAPs as an integer and the
         storage period (the minimum allowed) that they pay for.
@@ -1880,32 +2012,38 @@ class CalculatePriceTests(TestCase):
         )
 
 
-def application_json():
-    return AfterPreprocessing(
+def application_json() -> Matcher[Headers]:
+    return AfterPreprocessing(  # type: ignore[no-any-return]
         lambda h: h.getRawHeaders("content-type"),
         Equals(["application/json"]),
     )
 
 
-def json_content(response):
+def json_content(response: IResponse) -> Deferred[JSON]:
     reading = readBody(response)
-    reading.addCallback(loads)
-    return reading
+    loading = reading.addCallback(loads)
+    return loading
 
 
-def ok_response(headers=None):
+def ok_response(headers: Optional[Matcher[Headers]] = None) -> Matcher[IResponse]:
     return match_response(OK, headers, phrase=Equals(b"OK"))
 
 
-def not_found_response(headers=None):
+def not_found_response(
+    headers: Optional[Matcher[Headers]] = None,
+) -> Matcher[IResponse]:
     return match_response(NOT_FOUND, headers)
 
 
-def bad_request_response(headers=None):
+def bad_request_response(
+    headers: Optional[Matcher[Headers]] = None,
+) -> Matcher[IResponse]:
     return match_response(BAD_REQUEST, headers)
 
 
-def match_response(code, headers, phrase=Always()):
+def match_response(
+    code: int, headers: Optional[Matcher[Headers]], phrase: Matcher[str] = Always()
+) -> Matcher[IResponse]:
     if headers is None:
         headers = Always()
     return _MatchResponse(
@@ -1915,14 +2053,14 @@ def match_response(code, headers, phrase=Always()):
     )
 
 
-@attr.s
-class _MatchResponse(object):
-    code = attr.ib()
-    headers = attr.ib()
-    phrase = attr.ib()
-    _details = attr.ib(default=attr.Factory(dict))
+@frozen
+class _MatchResponse(Matcher[IResponse]):
+    code: int
+    headers: Headers
+    phrase: str
+    _details: dict[str, object] = Factory(dict)
 
-    def match(self, response):
+    def match(self, response: IResponse) -> Optional[Mismatch]:
         self._details.update(
             {
                 "code": response.code,
@@ -1935,5 +2073,5 @@ class _MatchResponse(object):
             phrase=self.phrase,
         ).match(response)
 
-    def get_details(self):
+    def get_details(self) -> dict[str, object]:
         return self._details

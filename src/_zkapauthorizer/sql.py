@@ -5,18 +5,26 @@ This is focused on SQLite3 and no doubt nevertheless incomplete.  The goal is
 to support testing the replication/recovery system.
 """
 
-from __future__ import annotations
-
+from contextlib import AbstractContextManager
 from datetime import datetime
 from enum import Enum, auto
 from sqlite3 import Connection as _SQLite3Connection
-from typing import Any, ContextManager, Iterable, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Protocol, Union
 
 from attrs import frozen
 from sqlparse import parse
+from typing_extensions import TypeAlias
 
-SQLType = Union[int, float, str, bytes, datetime, None]
-SQLRuntimeType = (int, float, str, bytes, datetime, type(None))
+SQLType: TypeAlias = Union[int, float, str, bytes, datetime, None]
+SQLRuntimeType: tuple[type, ...] = (int, float, str, bytes, datetime, type(None))
+
+if TYPE_CHECKING:
+    # _Parameters only exists in the typeshed sqlite3 pyi files.  We can only
+    # import from pyi files when we're type checking.
+    #
+    # Also, yes, it's private.  However, it expands to a ~30 term expression.
+    # This is the lesser of two evils.
+    from sqlite3.dbapi2 import _Parameters as Parameters
 
 
 class AbstractCursor(Protocol):
@@ -32,10 +40,12 @@ class AbstractCursor(Protocol):
     def rowcount(self) -> Optional[int]:
         ...
 
-    def execute(self, statement: str, args: Iterable[Any]) -> AbstractCursor:
+    def execute(self, statement: str, args: "Parameters", /) -> "AbstractCursor":
         ...
 
-    def executemany(self, statement, args: Iterable[Iterable[Any]]) -> AbstractCursor:
+    def executemany(
+        self, statement: str, args: Iterable["Parameters"]
+    ) -> "AbstractCursor":
         ...
 
     def close(self) -> None:
@@ -59,10 +69,10 @@ class AbstractConnection(Protocol):
     def iterdump(self) -> Iterable[str]:
         ...
 
-    def cursor(self, cursorClass: Optional[type] = None) -> AbstractCursor:
+    def cursor(self, cursorClass: None = None) -> AbstractCursor:
         ...
 
-    def __enter__(self) -> ContextManager:
+    def __enter__(self) -> AbstractContextManager["AbstractConnection"]:
         ...
 
     def __exit__(
@@ -86,12 +96,7 @@ class UnboundConnect(Protocol):
     def __call__(
         self,
         path: str,
-        timeout: int = None,
-        detect_types: bool = None,
-        isolation_level: str = None,
-        check_same_thread: bool = False,
-        factory: Any = None,
-        cached_statements: Any = None,
+        isolation_level: Optional[str] = None,
     ) -> _SQLite3Connection:
         """
         Get a new database connection.
@@ -105,12 +110,7 @@ class BoundConnect(Protocol):
 
     def __call__(
         self,
-        timeout: int = None,
-        detect_types: bool = None,
-        isolation_level: str = None,
-        check_same_thread: bool = False,
-        factory: Any = None,
-        cached_statements: Any = None,
+        isolation_level: Optional[str] = None,
     ) -> _SQLite3Connection:
         """
         Get a new database connection.
@@ -153,6 +153,18 @@ class Table:
     columns: list[tuple[str, Column]]
 
 
+class Statement(Protocol):
+    @property
+    def table_name(self) -> str:
+        ...
+
+    def statement(self) -> str:
+        ...
+
+    def arguments(self) -> tuple[SQLType, ...]:
+        ...
+
+
 @frozen
 class Insert:
     """
@@ -169,7 +181,7 @@ class Insert:
     table: Table
     fields: tuple[SQLType, ...]
 
-    def statement(self):
+    def statement(self) -> str:
         names = ", ".join((escape_identifier(name) for (name, _) in self.table.columns))
         placeholders = ", ".join("?" * len(self.table.columns))
         return (
@@ -218,7 +230,7 @@ class Update:
     table: Table
     fields: tuple[SQLType, ...]
 
-    def statement(self):
+    def statement(self) -> str:
         field_names = list(name for (name, _) in self.table.columns)
         assignments = ", ".join(
             f"{escape_identifier(name)} = ?" for name in field_names
@@ -239,7 +251,7 @@ class Select:
 
     table_name: str
 
-    def statement(self):
+    def statement(self) -> str:
         return f"SELECT * FROM {escape_identifier(self.table_name)}"
 
     def arguments(self) -> tuple[()]:
@@ -258,7 +270,7 @@ class Delete:
 
     table_name: str
 
-    def statement(self):
+    def statement(self) -> str:
         return f"DELETE FROM {escape_identifier(self.table_name)}"
 
     def arguments(self) -> tuple[()]:

@@ -21,16 +21,17 @@ __all__ = [
 ]
 
 import sys
+from typing import Any, Callable, Optional
 
 from testtools.content import TracebackContent
 from testtools.matchers import Matcher, Mismatch
 
 
-def _is_exception(exc):
+def _is_exception(exc: BaseException) -> bool:
     return isinstance(exc, BaseException)
 
 
-def _is_user_exception(exc):
+def _is_user_exception(exc: BaseException) -> bool:
     return isinstance(exc, Exception)
 
 
@@ -39,7 +40,7 @@ class MatchesExceptionType(Matcher):
     Match an exc_info tuple against an exception type.
     """
 
-    def __init__(self, exception_type):
+    def __init__(self, exception_type: type) -> None:
         """
         Create a MatchesException that will match exc_info's for exception.
 
@@ -48,7 +49,7 @@ class MatchesExceptionType(Matcher):
         Matcher.__init__(self)
         self.expected = exception_type
 
-    def match(self, other):
+    def match(self, other: tuple[type, BaseException, Any]) -> Optional[Mismatch]:
         if type(other) != tuple:
             return Mismatch("{!r} is not an exc_info tuple".format(other))
         expected_class = self.expected
@@ -64,9 +65,10 @@ class MatchesExceptionType(Matcher):
                     traceback=TracebackContent(other, None),
                 ),
             )
+        return None
 
-    def __str__(self):
-        return "MatchesExceptionType({!r})".format(self.expected)
+    def __str__(self) -> str:
+        return f"MatchesExceptionType({self.expected!r})"
 
 
 class Raises(Matcher):
@@ -76,7 +78,7 @@ class Raises(Matcher):
     Raises.match call unless they are explicitly matched.
     """
 
-    def __init__(self, exception_matcher):
+    def __init__(self, exception_matcher: Matcher):
         """
         Create a Raises matcher.
 
@@ -86,7 +88,7 @@ class Raises(Matcher):
         """
         self.exception_matcher = exception_matcher
 
-    def match(self, matchee):
+    def match(self, matchee: Callable[[], object]) -> Optional[Mismatch]:
         try:
             result = matchee()
             return Mismatch("%r returned %r" % (matchee, result))
@@ -96,6 +98,7 @@ class Raises(Matcher):
             exc_info = sys.exc_info()
             mismatch = self.exception_matcher.match(exc_info)
             exc_type = exc_info[1]
+            assert exc_type is not None
             # It's safer not to keep the traceback around.
             del exc_info
             if mismatch:
@@ -107,11 +110,11 @@ class Raises(Matcher):
                 return mismatch
         return None
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Raises()"
 
 
-def raises(exception_type):
+def raises(exception_type: type) -> Raises:
     """Make a matcher that checks that a callable raises an exception.
 
     This is a convenience function, exactly equivalent to::

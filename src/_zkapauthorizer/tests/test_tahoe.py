@@ -3,7 +3,7 @@ Tests for ``_zkapauthorizer.tahoe``.
 """
 
 from io import BytesIO
-from typing import Callable, Coroutine, Generator
+from typing import BinaryIO, NoReturn
 
 from allmydata.client import config_from_string
 from allmydata.test.strategies import write_capabilities
@@ -15,21 +15,16 @@ from pyutil.mathutil import div_ceil
 from tahoe_capabilities import readable_from_string, writeable_directory_from_string
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
-from testtools.matchers import (
-    AfterPreprocessing,
-    ContainsDict,
-    Equals,
-    Is,
-    IsInstance,
-    Not,
-)
+from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
 from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succeeded
-from twisted.internet.defer import Deferred, gatherResults, inlineCallbacks
+from twisted.internet.defer import Deferred, gatherResults
 from twisted.python.filepath import FilePath
 
+from .._types import CapStr
 from ..storage_common import required_passes
 from ..tahoe import (
-    CapStr,
+    DirectoryNode,
+    FileNode,
     ITahoeClient,
     MemoryGrid,
     NotADirectoryError,
@@ -43,25 +38,10 @@ from ..tahoe import (
     download_child,
     required_passes_for_data,
 )
+from .common import async_test, from_awaitable
 from .fixtures import Treq
 from .resources import client_manager
 from .strategies import encoding_parameters, minimal_tahoe_configs
-
-
-def async_test(
-    f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]
-) -> Callable[[TestCase], Deferred[None]]:
-    """
-    Decorate a coroutine function to adapt it into a function that can be used
-    as a test method.
-    """
-
-    @inlineCallbacks
-    def g(self) -> Generator[Deferred[object], object, None]:
-        d: Deferred[object] = Deferred.fromCoroutine(f(self))
-        yield d
-
-    return g
 
 
 class IntegrationMixin:
@@ -73,12 +53,12 @@ class IntegrationMixin:
     # Get a Tahoe-LAFS client node connected to a storage node.
     resources = [("client", client_manager)]
 
-    def setUp(self):
-        super().setUp()
+    def setUp(self: TestCase) -> None:
+        super().setUp()  # type: ignore[misc]
         setUpResources(self, self.resources, None)
         self.addCleanup(lambda: tearDownResources(self, self.resources, None))
 
-    def get_client(self):
+    def get_client(self: TestCase) -> Tahoe:
         """
         Create a new ``Tahoe`` instance talking to the Tahoe client node managed
         by our ``client`` resource manager.
@@ -94,11 +74,11 @@ class MemoryMixin:
     ``MemoryGrid``.
     """
 
-    def setUp(self):
-        super().setUp()
+    def setUp(self) -> None:
+        super().setUp()  # type: ignore[misc]
         self.grid = MemoryGrid()
 
-    def get_client(self):
+    def get_client(self) -> ITahoeClient:
         """
         Create a new Tahoe client object pointed at the ``MemoryGrid`` created in
         set up.
@@ -112,7 +92,7 @@ class TahoeAPIErrorTests(TestCase):
     """
 
     @given(cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")))
-    def test_scrub_cap(self, cap):
+    def test_scrub_cap(self, cap: str) -> None:
         """
         ``_scrub_cap`` returns a different string than it is called with.
         """
@@ -129,7 +109,15 @@ class TahoeAPIErrorTests(TestCase):
         path_extra=lists(text()),
         cap=write_capabilities().map(lambda uri: uri.to_string().decode("ascii")),
     )
-    def test_scrubbed_url(self, scheme, host, port, query, path_extra, cap):
+    def test_scrubbed_url(
+        self,
+        scheme: str,
+        host: str,
+        port: int,
+        query: list[tuple[str, str]],
+        path_extra: list[str],
+        cap: str,
+    ) -> None:
         """
         ``TahoeAPIError.url`` has capability strings scrubbed from it to avoid
         accidentally leaking secrets in logs.
@@ -200,7 +188,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
         content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        def get_content():
+        def get_content() -> BinaryIO:
             return BytesIO(content)
 
         dircap = await client.make_directory()
@@ -208,7 +196,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
         await client.link(dircap, "foo", filecap)
 
         try:
-            result = await download_child(
+            await download_child(
                 outpath,
                 client,
                 writeable_directory_from_string(dircap).reader,
@@ -217,7 +205,9 @@ class DownloadChildTests(MemoryMixin, TestCase):
         except NotADirectoryError:
             pass
         else:
-            self.fail(f"Expected NotADirectoryError, got {result!r}")  # pragma: nocover
+            self.fail(
+                "Expected NotADirectoryError, got return value instead"
+            )  # pragma: nocover
 
 
 class UploadDownloadIntegrationTests(
@@ -251,14 +241,14 @@ class DirectoryTestsMixin:
         """
         raise NotImplementedError()
 
-    @inlineCallbacks
-    def test_list_directory(self):
+    @async_test
+    async def test_list_directory(self: TestCase) -> None:
         """
         ``make_directory`` creates a directory the children of which can be listed
         using ``list_directory``.
         """
         tahoe = self.get_client()
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         entry_names = list(map(str, range(5)))
 
         def file_content(name: str) -> bytes:
@@ -272,48 +262,43 @@ class DirectoryTestsMixin:
         # Populate it a little
         expected_entry_caps = dict(
             (
-                yield gatherResults(
+                await gatherResults(
                     [Deferred.fromCoroutine(upload(n)) for n in entry_names]
                 )
             )
         )
         # Put another directory in it too.
-        inner_dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
-        yield Deferred.fromCoroutine(tahoe.link(dir_cap, "directory", inner_dir_cap))
+        inner_dir_cap = await tahoe.make_directory()
+        await tahoe.link(dir_cap, "directory", inner_dir_cap)
 
         # Read it back
-        children = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        children = await tahoe.list_directory(dir_cap)
 
-        self.expectThat(set(children), Equals({"directory"} | set(entry_names)))
+        self.assertThat(set(children), Equals({"directory"} | set(entry_names)))
         for name in entry_names:
-            kind, details = children[name]
-            self.expectThat(
-                kind,
-                Equals("filenode"),
-            )
-            self.expectThat(
-                details["size"],
-                Equals(len(file_content(name))),
-                f"child {name} has unexpected size",
-            )
-            self.expectThat(
-                details["ro_uri"],
-                Equals(expected_entry_caps[name]),
+            details = children[name]
+            self.assertThat(
+                details,
+                Equals(
+                    FileNode(
+                        size=len(file_content(name)),
+                        ro_uri=readable_from_string(expected_entry_caps[name]),
+                    )
+                ),
             )
 
-        kind, details = children["directory"]
-        self.expectThat(kind, Equals("dirnode"))
-        self.expectThat(
+        details = children["directory"]
+        self.assertThat(
             details,
-            ContainsDict(
-                {
-                    "rw_uri": Equals(inner_dir_cap),
-                }
+            Equals(
+                DirectoryNode(
+                    ro_uri=writeable_directory_from_string(inner_dir_cap).reader
+                )
             ),
         )
 
-    @inlineCallbacks
-    def test_list_not_a_directory(self):
+    @async_test
+    async def test_list_not_a_directory(self: TestCase) -> None:
         """
         ``list_directory`` returns a coroutine that raises ``ValueError`` when
         called with a capability that is not a directory capability.
@@ -321,24 +306,21 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # Upload not-a-directory
-        filecap = yield Deferred.fromCoroutine(
-            tahoe.upload(lambda: BytesIO(b"hello world"))
-        )
+        filecap = await tahoe.upload(lambda: BytesIO(b"hello world"))
 
-        d = Deferred.fromCoroutine(tahoe.list_directory(filecap))
         try:
-            result = yield d
+            result = await tahoe.list_directory(filecap)
         except ValueError:
             pass
         else:
             self.fail(f"expected ValueError, got {result!r}")  # pragma: nocover
 
     @async_test
-    async def test_link(self) -> None:
+    async def test_link(self: TestCase) -> None:
         """
         ``link`` adds an entry to a directory.
         """
-        tmp = FilePath(self.useFixture(TempDir()).path)  # type: ignore[attr-defined]
+        tmp = FilePath(self.useFixture(TempDir()).path)
         content = b"some content"
         tahoe = self.get_client()
 
@@ -359,24 +341,23 @@ class DirectoryTestsMixin:
             child_path=[entry_name],
         )
 
-        self.assertThat(  # type: ignore[attr-defined]
+        self.assertThat(
             outpath.getContent(),
             Equals(content),
         )
 
-    @inlineCallbacks
-    def test_link_readonly(self):
+    @async_test
+    async def test_link_readonly(self: TestCase) -> None:
         """
         If ``link`` is passed a read-only directory capability then it returns a
         coroutine that raises ``NotWriteableError``.
         """
         tahoe = self.get_client()
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         ro_dir_cap = attenuate_writecap(dir_cap)
 
-        d = Deferred.fromCoroutine(tahoe.link(ro_dir_cap, "self", dir_cap))
         try:
-            result = yield d
+            result = await tahoe.link(ro_dir_cap, "self", dir_cap)
         except NotWriteableError:
             pass
         else:
@@ -384,8 +365,8 @@ class DirectoryTestsMixin:
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
             )  # pragma: nocover
 
-    @inlineCallbacks
-    def test_unlink(self):
+    @async_test
+    async def test_unlink(self: TestCase) -> None:
         """
         ``unlink`` removes an entry from a directory.
         """
@@ -393,28 +374,26 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # create a directory and put one entry in it
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
-        yield Deferred.fromCoroutine(
-            tahoe.link(
-                dir_cap,
-                entry_name,
-                entry_cap,
-            ),
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        await tahoe.link(
+            dir_cap,
+            entry_name,
+            entry_cap,
         )
 
         # ensure the file is in the directory
-        entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        entries_before = await tahoe.list_directory(dir_cap)
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # unlink the file, leaving the directory empty again
-        yield Deferred.fromCoroutine(tahoe.unlink(dir_cap, entry_name))
-        entries_after = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        await tahoe.unlink(dir_cap, entry_name)
+        entries_after = await tahoe.list_directory(dir_cap)
         self.assertThat(list(entries_after.keys()), Equals([]))
 
-    @inlineCallbacks
-    def test_unlink_readonly(self):
+    @async_test
+    async def test_unlink_readonly(self: TestCase) -> None:
         """
         ``unlink`` fails to remove an entry from a read-only directory.
         """
@@ -422,19 +401,17 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # create a directory and put one entry in it
-        dir_cap = yield Deferred.fromCoroutine(tahoe.make_directory())
+        dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = yield Deferred.fromCoroutine(tahoe.upload(lambda: BytesIO(content)))
-        yield Deferred.fromCoroutine(
-            tahoe.link(
-                dir_cap,
-                entry_name,
-                entry_cap,
-            ),
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        await tahoe.link(
+            dir_cap,
+            entry_name,
+            entry_cap,
         )
 
         # ensure the file is in the directory
-        entries_before = yield Deferred.fromCoroutine(tahoe.list_directory(dir_cap))
+        entries_before = await tahoe.list_directory(dir_cap)
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # try to unlink the file but pass only the read-only cap so we
@@ -442,7 +419,7 @@ class DirectoryTestsMixin:
         ro_dir_cap = attenuate_writecap(dir_cap)
 
         try:
-            result = yield Deferred.fromCoroutine(tahoe.unlink(ro_dir_cap, entry_name))
+            result = await tahoe.unlink(ro_dir_cap, entry_name)
         except NotWriteableError:
             pass
         else:
@@ -450,8 +427,8 @@ class DirectoryTestsMixin:
                 f"Expected link to fail with NotWriteableError, got {result!r} instead"
             )  # pragma: nocover
 
-    @inlineCallbacks
-    def test_unlink_non_directory(self):
+    @async_test
+    async def test_unlink_non_directory(self: TestCase) -> None:
         """
         ``unlink`` fails to remove an entry from "directory capability"
         that isn't actually a directory
@@ -461,14 +438,12 @@ class DirectoryTestsMixin:
 
         # create a non-directory
         content = b"some content"
-        non_dir_cap = yield Deferred.fromCoroutine(
-            tahoe.upload(lambda: BytesIO(content))
-        )
+        non_dir_cap = await tahoe.upload(lambda: BytesIO(content))
 
         # try to unlink some file from the non-directory (expecting
         # failure)
         try:
-            result = yield Deferred.fromCoroutine(tahoe.unlink(non_dir_cap, "foo"))
+            result = await tahoe.unlink(non_dir_cap, "foo")
         except (NotADirectoryError, NotWriteableError):
             # The real implementation and the memory implementation differ in
             # their behavior. :/ We need a create-mutable-non-directory API to
@@ -524,7 +499,7 @@ class AsyncRetryTests(TestCase):
     Tests for ``async_retry``.
     """
 
-    def test_success(self):
+    def test_success(self) -> None:
         """
         If the decorated function returns a coroutine that returns a value then
         the coroutine returned by the decorator function returns the same
@@ -533,15 +508,15 @@ class AsyncRetryTests(TestCase):
         result = object()
 
         @async_retry([lambda exc: True])
-        async def decorated():
+        async def decorated() -> object:
             return result
 
         self.assertThat(
-            Deferred.fromCoroutine(decorated()),
+            from_awaitable(decorated()),
             succeeded(Is(result)),
         )
 
-    def test_not_matched_failure(self):
+    def test_not_matched_failure(self) -> None:
         """
         If the decorated function returns a coroutine that raises an exception not
         matched by any of the matchers then the coroutine returned by the
@@ -552,11 +527,11 @@ class AsyncRetryTests(TestCase):
             pass
 
         @async_retry([lambda exc: False])
-        async def decorated():
+        async def decorated() -> NoReturn:
             raise Exc()
 
         self.assertThat(
-            Deferred.fromCoroutine(decorated()),
+            from_awaitable(decorated()),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -565,7 +540,7 @@ class AsyncRetryTests(TestCase):
             ),
         )
 
-    def test_matched_failure(self):
+    def test_matched_failure(self) -> None:
         """
         If the decorated function returns a coroutine that raises an exception
         that is matched by one of the matchers then function is called again
@@ -576,7 +551,7 @@ class AsyncRetryTests(TestCase):
         result = object()
 
         @async_retry([lambda exc: True])
-        async def decorated():
+        async def decorated() -> object:
             nonlocal fail
             if fail:
                 fail = False
@@ -584,7 +559,7 @@ class AsyncRetryTests(TestCase):
             return result
 
         self.assertThat(
-            Deferred.fromCoroutine(decorated()),
+            from_awaitable(decorated()),
             succeeded(Is(result)),
         )
 
@@ -601,7 +576,7 @@ class RequiredPassesForDataTests(TestCase):
         bytes_per_pass=integers(min_value=1),
     )
     def test_required_passes_for_data(
-        self, needed, extra, ciphertext_length, bytes_per_pass
+        self, needed: int, extra: int, ciphertext_length: int, bytes_per_pass: int
     ) -> None:
         """
         ``required_passes_for_data`` computes a price based on the share sizes FEC

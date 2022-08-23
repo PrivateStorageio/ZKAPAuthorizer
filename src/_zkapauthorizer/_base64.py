@@ -23,7 +23,7 @@ from re import compile as _compile
 _b64decode_validator = _compile(b"^[A-Za-z0-9-_]*={0,2}$")
 
 
-def urlsafe_b64decode(s):
+def urlsafe_b64decode(s: bytes) -> bytes:
     """
     Like ``base64.b64decode`` but with validation.
     """

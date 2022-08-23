@@ -17,17 +17,17 @@ Functionality shared between the storage client and server.
 """
 
 from base64 import b64encode
-from typing import Callable, Union, ValuesView
+from typing import Callable, TypedDict, Union, ValuesView, cast
 
-import attr
+from attrs import define
 from pyutil.mathutil import div_ceil
 
 from . import NAME
+from .config import Config
 from .eliot import MUTABLE_PASSES_REQUIRED
-from .validators import greater_than
 
 
-@attr.s(str=True)
+@define(auto_exc=False, str=True)
 class MorePassesRequired(Exception):
     """
     Storage operations fail with ``MorePassesRequired`` when they are not
@@ -35,20 +35,20 @@ class MorePassesRequired(Exception):
 
     :ivar valid_count: The number of valid passes presented in the operation.
 
-    ivar required_count: The number of valid passes which must be presented
+    :ivar required_count: The number of valid passes which must be presented
         for the operation to be authorized.
 
     :ivar signature_check_failed: Indices into the supplied list of passes
         indicating passes which failed the signature check.
     """
 
-    valid_count: int = attr.ib(validator=attr.validators.instance_of(int))
-    required_count: int = attr.ib(validator=attr.validators.instance_of(int))
-    signature_check_failed: frozenset[int] = attr.ib(converter=frozenset)
+    valid_count: int
+    required_count: int
+    signature_check_failed: frozenset[int]
 
 
 def _message_maker(label: str) -> Callable[[bytes], bytes]:
-    def make_message(storage_index):
+    def make_message(storage_index: bytes) -> bytes:
         return "{label} {storage_index}".format(
             label=label,
             storage_index=b64encode(storage_index).decode("ascii"),
@@ -70,7 +70,7 @@ slot_testv_and_readv_and_writev_message = _message_maker(
 BYTES_PER_PASS = 1024 * 1024
 
 
-def get_configured_shares_needed(node_config):
+def get_configured_shares_needed(node_config: Config) -> int:
     """
     Determine the configured-specified value of "needed" shares (``k``).
 
@@ -86,7 +86,7 @@ def get_configured_shares_needed(node_config):
     )
 
 
-def get_configured_shares_total(node_config):
+def get_configured_shares_total(node_config: Config) -> int:
     """
     Determine the configured-specified value of "total" shares (``N``).
 
@@ -102,7 +102,7 @@ def get_configured_shares_total(node_config):
     )
 
 
-def get_configured_pass_value(node_config):
+def get_configured_pass_value(node_config: Config) -> int:
     """
     Determine the configuration-specified value of a single ZKAP.
 
@@ -120,7 +120,7 @@ def get_configured_pass_value(node_config):
     )
 
 
-def get_configured_allowed_public_keys(node_config):
+def get_configured_allowed_public_keys(node_config: Config) -> set[str]:
     """
     Read the set of allowed issuer public keys from the given configuration.
     """
@@ -166,29 +166,44 @@ def required_passes(
     return result
 
 
-def share_size_for_data(shares_needed, datasize):
+Secrets = tuple[bytes, bytes, bytes]
+ServerTestVector = list[tuple[int, int, bytes, bytes]]
+DataVector = list[tuple[int, bytes]]
+ServerTestWriteVector = tuple[ServerTestVector, DataVector, Union[None, int]]
+ReadVector = list[tuple[int, int]]
+
+# ClientTestVector is like TestVector but it drops the "operator" bytes field.
+# This is the data structure Tahoe-LAFS storage clients work with locally.
+# TestVector is what is transmitted over the network and operated on by the
+# storage server.
+ClientTestVector = list[tuple[int, int, bytes]]
+ClientTestWriteVector = tuple[ClientTestVector, DataVector, Union[None, int]]
+
+_div_ceil = cast(Callable[[int, int], int], div_ceil)
+
+
+def share_size_for_data(shares_needed: int, datasize: int) -> int:
     """
     Calculate the size of a single erasure encoding share for data of the
     given size and with the given level of redundancy.
 
-    :param int shares_needed: The number of shares (``k``) from the erasure
+    :param shares_needed: The number of shares (``k``) from the erasure
         encoding process which are required to reconstruct original data of
         the indicated size.
 
-    :param int datasize: The size of the data to consider, in bytes.
+    :param datasize: The size of the data to consider, in bytes.
 
-    :return int: The size of a single erasure encoding share for the given
-        inputs.
+    :return: The size of a single erasure encoding share for the given inputs.
     """
-    return div_ceil(datasize, shares_needed)
+    return _div_ceil(datasize, shares_needed)
 
 
-def has_writes(tw_vectors):
+def has_writes(tw_vectors: dict[int, ServerTestWriteVector]) -> bool:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
 
-    :return bool: ``True`` if any only if there are writes in ``tw_vectors``.
+    :return: ``True`` if any only if there are writes in ``tw_vectors``.
     """
     return any(
         data or (new_length is not None)
@@ -196,7 +211,7 @@ def has_writes(tw_vectors):
     )
 
 
-def get_write_sharenums(tw_vectors):
+def get_write_sharenums(tw_vectors: dict[int, ServerTestWriteVector]) -> set[int]:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
@@ -214,12 +229,12 @@ def get_write_sharenums(tw_vectors):
     )
 
 
-def get_allocated_size(tw_vectors):
+def get_allocated_size(tw_vectors: dict[int, ServerTestWriteVector]) -> int:
     """
     :param tw_vectors: See
         ``allmydata.interfaces.TestAndWriteVectorsForShares``.
 
-    :return int: The largest position ``tw_vectors`` writes in any share.
+    :return: The largest position ``tw_vectors`` writes in any share.
     """
     return max(
         list(
@@ -230,7 +245,9 @@ def get_allocated_size(tw_vectors):
     )
 
 
-def get_implied_data_length(data_vector, new_length):
+def get_implied_data_length(
+    data_vector: DataVector, new_length: Union[None, int]
+) -> int:
     """
     :param data_vector: See ``allmydata.interfaces.DataVector``.
 
@@ -249,11 +266,22 @@ def get_implied_data_length(data_vector, new_length):
     return min(new_length, data_based_size)
 
 
-def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vectors):
+def get_required_new_passes_for_mutable_write(
+    pass_value: int,
+    current_sizes: dict[int, int],
+    tw_vectors: dict[int, ServerTestWriteVector],
+) -> int:
     """
-    :param int pass_value: The value of a single pass in byte-months.
+    Get the number of new passes required to authorize a given write to a
+    mutable.
 
-    :param current_sizes:
+    :param pass_value: The value of a single pass in byte-months.
+
+    :param current_sizes: The current size of the mutable's shares.
+
+    :param tw_vectors: The test-and-write vectors that make up the write.
+
+    :return: The number of new passes which must be spent.
     """
     current_passes = required_passes(
         pass_value,
@@ -285,7 +313,15 @@ def get_required_new_passes_for_mutable_write(pass_value, current_sizes, tw_vect
     return required_new_passes
 
 
-def summarize(tw_vectors):
+class TestWriteVectorSummary(TypedDict):
+    testv: list[tuple[int, int, bytes, int]]
+    datav: list[tuple[int, int]]
+    new_length: Union[None, int]
+
+
+def summarize(
+    tw_vectors: dict[int, ServerTestWriteVector]
+) -> dict[int, TestWriteVectorSummary]:
     return {
         sharenum: {
             "testv": list(
@@ -297,15 +333,3 @@ def summarize(tw_vectors):
         }
         for (sharenum, (test_vector, data_vectors, new_length)) in tw_vectors.items()
     }
-
-
-def pass_value_attribute():
-    """
-    Define an attribute for an attrs-based object which can hold a pass value.
-    """
-    return attr.ib(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(int),
-            greater_than(0),
-        ),
-    )

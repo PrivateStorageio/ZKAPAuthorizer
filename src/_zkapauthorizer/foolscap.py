@@ -17,14 +17,13 @@ Definitions related to the Foolscap-based protocol used by ZKAPAuthorizer
 to communicate between storage clients and servers.
 """
 
-import attr
 from allmydata.interfaces import Offset, RIStorageServer, StorageIndex
-from foolscap.api import Any, Copyable, DictOf, ListOf, RemoteCopy
-from foolscap.constraint import ByteStringConstraint
+from foolscap.constraint import Any, ByteStringConstraint, IConstraint
+from foolscap.copyable import Copyable, RemoteCopy
 from foolscap.remoteinterface import RemoteInterface, RemoteMethodSchema
+from foolscap.schema import DictOf, ListOf
 
 
-@attr.s
 class ShareStat(Copyable, RemoteCopy):
     """
     Represent some metadata about a share.
@@ -39,12 +38,24 @@ class ShareStat(Copyable, RemoteCopy):
 
     # To be a RemoteCopy it must be possible to instantiate this with no
     # arguments. :/ So supply defaults for these attributes.
-    size = attr.ib(default=0)
-    lease_expiration = attr.ib(default=0)
+    #
+    # Also, using attrs.define here completely breaks some internal Foolscap
+    # registration mechanism so do it the hard way.
+    def __init__(self, size: int = 0, lease_expiration: int = 0) -> None:
+        self.size = size
+        self.lease_expiration = lease_expiration
 
     # The RemoteCopy interface
-    def setCopyableState(self, state):
+    def setCopyableState(self, state: dict[str, Any]) -> None:
         self.__dict__ = state
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ShareStat):
+            return (self.size, self.lease_expiration) == (
+                other.size,
+                other.lease_expiration,
+            )
+        return NotImplemented
 
 
 # The Foolscap convention seems to be to try to constrain inputs to valid
@@ -74,40 +85,38 @@ _PASS_LENGTH = 177
 # Take those values and turn them into the appropriate Foolscap constraint
 # objects.  Foolscap seems to have a convention of representing these as
 # CamelCase module-level values so I replicate that here.
-_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH)
-_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL)
+_Pass = ByteStringConstraint(maxLength=_PASS_LENGTH, minLength=_PASS_LENGTH)  # type: ignore[no-untyped-call]
+_PassList = ListOf(_Pass, maxLength=_MAXIMUM_PASSES_PER_CALL)  # type: ignore[no-untyped-call]
 
 
-def add_passes(schema):
+def add_passes(schema: RemoteMethodSchema) -> RemoteMethodSchema:
     """
     Add a ``passes`` parameter to the given method schema.
 
-    :param foolscap.remoteinterface.RemoteMethodSchema schema: An existing
-        method schema to modify.
+    :param schema: An existing method schema to modify.
 
-    :return foolscap.remoteinterface.RemoteMethodSchema: A schema like
-        ``schema`` but with one additional required argument.
+    :return: A schema like ``schema`` but with one additional required
+        argument.
     """
     return add_arguments(schema, [("passes", _PassList)])
 
 
-def add_arguments(schema, kwargs):
+def add_arguments(
+    schema: RemoteMethodSchema, kwargs: list[tuple[str, IConstraint]]
+) -> RemoteMethodSchema:
     """
     Create a new schema like ``schema`` but with the arguments given by
     ``kwargs`` prepended to the signature.
 
-    :param foolscap.remoteinterface.RemoteMethodSchema schema: The existing
-        schema.
+    :param schema: The existing schema.
 
-    :param list[(bytes, foolscap.IConstraint)] kwargs: The arguments to
-        prepend to the signature of ``schema``.
+    :param kwargs: The arguments to prepend to the signature of ``schema``.
 
-    :return foolscap.remoteinterface.RemoteMethodSchema: The new schema
-        object.
+    :return: The new schema object.
     """
     new_kwargs = dict(schema.argConstraints)
     new_kwargs.update(kwargs)
-    modified_schema = RemoteMethodSchema(**new_kwargs)
+    modified_schema = RemoteMethodSchema(**new_kwargs)  # type: ignore[no-untyped-call]
     # Initialized from **new_kwargs, RemoteMethodSchema.argumentNames is in
     # some arbitrary, probably-incorrect order.  This breaks user code which
     # tries to use positional arguments.  Put them back in the order they were
@@ -144,7 +153,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
 
     get_buckets = RIStorageServer["get_buckets"]
 
-    def share_sizes(
+    def share_sizes(  # type: ignore[no-untyped-def]
         storage_index_or_slot=StorageIndex,
         # Notionally, ChoiceOf(None, SetOf(int, maxLength=MAX_BUCKETS)).
         # However, support for such a construction appears to be
@@ -155,10 +164,10 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
         Get the size of the given shares in the given storage index or slot.  If a
         share has no stored state, its size is reported as 0.
         """
-        return DictOf(int, Offset)
+        return DictOf(int, Offset)  # type: ignore[no-untyped-call]
 
-    def stat_shares(
-        storage_indexes_or_slots=ListOf(StorageIndex),
+    def stat_shares(  # type: ignore[no-untyped-def]
+        storage_indexes_or_slots=ListOf(StorageIndex),  # type: ignore[no-untyped-call,assignment]
     ):
         """
         Get various metadata about shares in the given storage index or slot.
@@ -171,7 +180,7 @@ class RIPrivacyPassAuthorizedStorageServer(RemoteInterface):
             Keys are share numbers and values are the stats.
         """
         # Any() should be ShareStat but I don't know how to spell that.
-        return ListOf(DictOf(int, Any()))
+        return ListOf(DictOf(int, Any()))  # type: ignore[no-untyped-call]
 
     slot_readv = RIStorageServer["slot_readv"]
 

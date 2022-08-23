@@ -19,11 +19,13 @@ Hypothesis strategies for property testing.
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import Any, Callable, Optional, TypeVar, cast
 from urllib.parse import quote
 
 import attr
 from allmydata.client import config_from_string
 from allmydata.interfaces import HASH_SIZE, IDirectoryNode, IFilesystemNode
+from attrs import frozen
 from hypothesis.strategies import SearchStrategy, binary, builds, characters
 from hypothesis.strategies import datetimes as naive_datetimes
 from hypothesis.strategies import (
@@ -41,12 +43,15 @@ from hypothesis.strategies import (
     text,
     tuples,
 )
-from twisted.internet.defer import succeed
+from twisted.internet.defer import Deferred, succeed
 from twisted.internet.task import Clock
+from twisted.python.filepath import FilePath
 from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
 from .. import NAME
+from .._types import ClientConfig, ServerConfig
+from ..config import Config
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
 from ..model import (
@@ -60,6 +65,7 @@ from ..model import (
     UnblindedToken,
     Unpaid,
     Voucher,
+    VoucherState,
 )
 from ..sql import (
     Column,
@@ -67,22 +73,36 @@ from ..sql import (
     Insert,
     Select,
     SQLType,
+    Statement,
     StorageAffinity,
     Table,
     Update,
 )
+from ..storage_common import (
+    ClientTestVector,
+    ClientTestWriteVector,
+    DataVector,
+    ServerTestVector,
+    ServerTestWriteVector,
+)
+from ..validators import non_negative_integer, positive_integer
+from .common import GetConfig
 
 _POSIX_EPOCH = datetime.utcfromtimestamp(0).replace(tzinfo=timezone.utc)
 
 
-def aware_datetimes(**kwargs) -> SearchStrategy[datetime]:
+def aware_datetimes(
+    allow_imaginary: bool = True, **kwargs: datetime
+) -> SearchStrategy[datetime]:
     """
     Build timezone-aware (UTC) datetime instances.
     """
-    return naive_datetimes(timezones=just(timezone.utc), **kwargs)
+    return naive_datetimes(
+        timezones=just(timezone.utc), allow_imaginary=allow_imaginary, **kwargs
+    )
 
 
-def posix_safe_datetimes():
+def posix_safe_datetimes() -> SearchStrategy[datetime]:
     """
     Build datetime instances in a range that can be represented as floats
     without losing microsecond precision.
@@ -104,7 +124,7 @@ def posix_safe_datetimes():
     )
 
 
-def posix_timestamps():
+def posix_timestamps() -> SearchStrategy[float]:
     """
     Build floats in a range that can represent time without losing microsecond
     precision.
@@ -114,7 +134,7 @@ def posix_timestamps():
     )
 
 
-def clocks(now=posix_timestamps()):
+def clocks(now: SearchStrategy[float] = posix_timestamps()) -> SearchStrategy[Clock]:
     """
     Build ``twisted.internet.task.Clock`` instances set to a time built by
     ``now``.
@@ -123,7 +143,7 @@ def clocks(now=posix_timestamps()):
         the range of time_t).
     """
 
-    def clock_at_time(when):
+    def clock_at_time(when: float) -> Clock:
         c = Clock()
         c.advance(when)
         return c
@@ -152,7 +172,7 @@ def encoding_parameters() -> SearchStrategy[tuple[int, int, int]]:
     :return: (n, h, k) such that 1 <= n <= h <= k <= 255
     """
 
-    def order(xs):
+    def order(xs: list[int]) -> tuple[int, int, int]:
         xs.sort()
         return (xs[0], xs[1], xs[2])
 
@@ -163,7 +183,13 @@ def encoding_parameters() -> SearchStrategy[tuple[int, int, int]]:
     ).map(order)
 
 
-def tahoe_config_texts(storage_client_plugins, shares):
+EncodingParameters = tuple[Optional[int], Optional[int], Optional[int]]
+
+
+def tahoe_config_texts(
+    storage_client_plugins: dict[str, SearchStrategy[object]],
+    shares: SearchStrategy[EncodingParameters],
+) -> SearchStrategy[str]:
     """
     Build the text of complete Tahoe-LAFS configurations for a node.
 
@@ -176,7 +202,9 @@ def tahoe_config_texts(storage_client_plugins, shares):
         default).
     """
 
-    def merge_shares(shares, the_rest):
+    def merge_shares(
+        shares: tuple[int, int, int], the_rest: dict[str, object]
+    ) -> dict[str, object]:
         for (k, v) in zip(("needed", "happy", "total"), shares):
             if v is not None:
                 the_rest["shares." + k] = f"{v}"
@@ -217,7 +245,10 @@ def tahoe_config_texts(storage_client_plugins, shares):
     )
 
 
-def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, None))):
+def minimal_tahoe_configs(
+    storage_client_plugins: Optional[dict[str, SearchStrategy[object]]] = None,
+    shares: SearchStrategy[EncodingParameters] = just((None, None, None)),
+) -> SearchStrategy[str]:
     """
     Build complete Tahoe-LAFS configurations for a node.
 
@@ -234,7 +265,7 @@ def minimal_tahoe_configs(storage_client_plugins=None, shares=just((None, None, 
     )
 
 
-def node_nicknames():
+def node_nicknames() -> SearchStrategy[str]:
     """
     Builds Tahoe-LAFS node nicknames.
     """
@@ -242,17 +273,17 @@ def node_nicknames():
         min_size=0,
         max_size=16,
         alphabet=characters(
-            blacklist_categories={
+            blacklist_categories=(
                 # Surrogates
                 "Cs",
                 # Unnamed and control characters
                 "Cc",
-            },
+            ),
         ),
     )
 
 
-def dummy_ristretto_keys():
+def dummy_ristretto_keys() -> SearchStrategy[str]:
     """
     Build string values which one could imagine might be Ristretto-flavored
     PrivacyPass signing or public keys.
@@ -274,13 +305,23 @@ def dummy_ristretto_keys():
     )
 
 
-def server_configurations(signing_key_path):
+def server_configurations(signing_key_path: FilePath) -> SearchStrategy[ServerConfig]:
     """
     Build configuration values for the server-side plugin.
 
-    :param str signing_key_path: A value to insert for the
+    :param signing_key_path: A value to insert for the
         **ristretto-signing-key-path** item.
     """
+
+    def add_more(config: dict[Any, Any]) -> ServerConfig:
+        config.update(
+            {
+                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
+                "ristretto-signing-key-path": signing_key_path.asTextMode().path,
+            }
+        )
+        return cast(ServerConfig, config)
+
     return one_of(
         fixed_dictionaries(
             {
@@ -290,18 +331,10 @@ def server_configurations(signing_key_path):
             }
         ),
         just({}),
-    ).map(
-        lambda config: config.update(
-            {
-                "ristretto-issuer-root-url": "https://issuer.example.invalid/",
-                "ristretto-signing-key-path": signing_key_path.path,
-            }
-        )
-        or config,
-    )
+    ).map(add_more)
 
 
-def dummy_ristretto_keys_sets():
+def dummy_ristretto_keys_sets() -> SearchStrategy[set[str]]:
     """
     Build small sets of "dummy" Ristretto keys.  See ``dummy_ristretto_keys``.
     """
@@ -309,9 +342,9 @@ def dummy_ristretto_keys_sets():
 
 
 def zkapauthz_configuration(
-    extra_configurations,
-    allowed_public_keys=dummy_ristretto_keys_sets(),
-):
+    extra_configurations: SearchStrategy[dict[str, str]],
+    allowed_public_keys: SearchStrategy[set[str]] = dummy_ristretto_keys_sets(),
+) -> SearchStrategy[Config]:
     """
     Build ZKAPAuthorizer client plugin configuration dictionaries.
 
@@ -327,9 +360,9 @@ def zkapauthz_configuration(
     """
 
     def merge(
-        extra_configuration,
-        allowed_public_keys,
-    ):
+        extra_configuration: dict[str, str],
+        allowed_public_keys: set[str],
+    ) -> Config:
         config = {
             "default-token-count": "32",
             "allowed-public-keys": ",".join(allowed_public_keys),
@@ -344,7 +377,7 @@ def zkapauthz_configuration(
     )
 
 
-def client_ristrettoredeemer_configurations():
+def client_ristrettoredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build Ristretto-using configuration values for the client-side plugin.
     """
@@ -359,15 +392,21 @@ def client_ristrettoredeemer_configurations():
 
 
 def client_dummyredeemer_configurations(
-    crawl_means=one_of(none(), posix_timestamps()),
-    crawl_ranges=one_of(none(), posix_timestamps()),
-    min_times_remaining=one_of(none(), posix_timestamps()),
-):
+    crawl_means: SearchStrategy[Optional[float]] = one_of(none(), posix_timestamps()),
+    crawl_ranges: SearchStrategy[Optional[float]] = one_of(none(), posix_timestamps()),
+    min_times_remaining: SearchStrategy[Optional[float]] = one_of(
+        none(), posix_timestamps()
+    ),
+) -> SearchStrategy[ClientConfig]:
     """
     Build DummyRedeemer-using configuration values for the client-side plugin.
     """
 
-    def make_lease_config(crawl_mean, crawl_range, min_time_remaining):
+    def make_lease_config(
+        crawl_mean: Optional[float],
+        crawl_range: Optional[float],
+        min_time_remaining: Optional[float],
+    ) -> Config:
         config = {}
         if crawl_mean is not None:
             # Don't allow the mean to be 0
@@ -378,15 +417,9 @@ def client_dummyredeemer_configurations(
             config["lease.min-time-remaining"] = str(int(min_time_remaining))
         return config
 
-    def share_a_key(allowed_keys):
-        lease_configs = builds(
-            make_lease_config,
-            crawl_means,
-            crawl_ranges,
-            min_times_remaining,
-        )
-        extra_config = lease_configs.map(
-            lambda config: config.update(
+    def share_a_key(allowed_keys: set[str]) -> SearchStrategy[Config]:
+        def add_redeemer(config: dict[str, str]) -> dict[str, str]:
+            config.update(
                 {
                     "redeemer": "dummy",
                     # Pick out one of the allowed public keys so that the dummy
@@ -394,8 +427,15 @@ def client_dummyredeemer_configurations(
                     "issuer-public-key": next(iter(allowed_keys)),
                 }
             )
-            or config,
+            return config
+
+        lease_configs = builds(
+            make_lease_config,
+            crawl_means,
+            crawl_ranges,
+            min_times_remaining,
         )
+        extra_config = lease_configs.map(add_redeemer)
         return zkapauthz_configuration(
             extra_config,
             allowed_public_keys=just(allowed_keys),
@@ -404,7 +444,7 @@ def client_dummyredeemer_configurations(
     return dummy_ristretto_keys_sets().flatmap(share_a_key)
 
 
-def token_counts():
+def token_counts() -> SearchStrategy[int]:
     """
     Build integers that are plausible as a number of tokens to receive in
     exchange for a voucher.
@@ -412,7 +452,7 @@ def token_counts():
     return integers(min_value=16, max_value=2**16)
 
 
-def client_doublespendredeemer_configurations(default_token_counts=token_counts()):
+def client_doublespendredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
     """
@@ -425,7 +465,7 @@ def client_doublespendredeemer_configurations(default_token_counts=token_counts(
     )
 
 
-def client_unpaidredeemer_configurations():
+def client_unpaidredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build UnpaidRedeemer-using configuration values for the client-side plugin.
     """
@@ -438,7 +478,7 @@ def client_unpaidredeemer_configurations():
     )
 
 
-def client_nonredeemer_configurations():
+def client_nonredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build NonRedeemer-using configuration values for the client-side plugin.
     """
@@ -451,7 +491,7 @@ def client_nonredeemer_configurations():
     )
 
 
-def client_errorredeemer_configurations(details):
+def client_errorredeemer_configurations(details: str) -> SearchStrategy[ClientConfig]:
     """
     Build ErrorRedeemer-using configuration values for the client-side plugin.
     """
@@ -467,12 +507,12 @@ def client_errorredeemer_configurations(details):
 
 def integer_seconds_timedeltas(
     # Our intervals mostly want to be non-negative.
-    min_value=0,
+    min_value: int = 0,
     # We can't make this value too large or it isn't convertable to a
     # timedelta.  Also, even values as large as this one are of
     # questionable value for the durations we measure.
-    max_value=60 * 60 * 24 * 365,
-):
+    max_value: int = 60 * 60 * 24 * 365,
+) -> SearchStrategy[timedelta]:
     """
     Build ``timedelta`` instances without a fractional seconds part.
     """
@@ -482,7 +522,7 @@ def integer_seconds_timedeltas(
     ).map(lambda n: timedelta(seconds=n))
 
 
-def interval_means():
+def interval_means() -> SearchStrategy[timedelta]:
     """
     Build timedeltas representing the mean time between lease maintenance
     runs.
@@ -490,7 +530,7 @@ def interval_means():
     return integer_seconds_timedeltas()
 
 
-def lease_maintenance_configurations():
+def lease_maintenance_configurations() -> SearchStrategy[LeaseMaintenanceConfig]:
     """
     Build LeaseMaintenanceConfig instances.
     """
@@ -502,7 +542,9 @@ def lease_maintenance_configurations():
     )
 
 
-def client_lease_maintenance_configurations(maint_configs=None):
+def client_lease_maintenance_configurations(
+    maint_configs: Optional[SearchStrategy[LeaseMaintenanceConfig]] = None,
+) -> SearchStrategy[dict[str, str]]:
     """
     Build dictionaries representing the lease maintenance options that go into
     the ZKAPAuthorizer client plugin section.
@@ -515,17 +557,20 @@ def client_lease_maintenance_configurations(maint_configs=None):
 
 
 def direct_tahoe_configs(
-    zkapauthz_v2_configuration=client_dummyredeemer_configurations(),
-    shares=just((None, None, None)),
-):
+    zkapauthz_v2_configuration: SearchStrategy[
+        dict[str, str]
+    ] = client_dummyredeemer_configurations(),
+    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
+        (None, None, None)
+    ),
+) -> SearchStrategy[Config]:
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
     client plugin section.
 
     :param shares: See ``tahoe_config_texts``.
 
-    :return SearchStrategy[_Config]: A strategy that builds Tahoe config
-        objects.
+    :return: A strategy that builds Tahoe config objects.
     """
     config_texts = minimal_tahoe_configs(
         {
@@ -543,9 +588,13 @@ def direct_tahoe_configs(
 
 
 def tahoe_configs(
-    zkapauthz_v2_configuration=client_dummyredeemer_configurations(),
-    shares=just((None, None, None)),
-):
+    zkapauthz_v2_configuration: SearchStrategy[
+        dict[str, str]
+    ] = client_dummyredeemer_configurations(),
+    shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
+        (None, None, None)
+    ),
+) -> SearchStrategy[GetConfig]:
     """
     Build complete Tahoe-LAFS configurations including the zkapauthorizer
     client plugin section.
@@ -560,8 +609,8 @@ def tahoe_configs(
         ``config_from_string.``
     """
 
-    def path_setter(config):
-        def set_paths(basedir, portnumfile):
+    def path_setter(config: Config) -> Callable[[str, str], Config]:
+        def set_paths(basedir: str, portnumfile: str) -> Config:
             config._basedir = basedir
             config.portnum_fname = portnumfile
             return config
@@ -573,17 +622,7 @@ def tahoe_configs(
     )
 
 
-def share_parameters():
-    """
-    Build three-tuples of integers giving usable k, happy, N parameters to
-    Tahoe-LAFS' erasure encoding process.
-    """
-    return lists(integers(min_value=1, max_value=255), min_size=3, max_size=3,).map(
-        sorted,
-    )
-
-
-def vouchers():
+def vouchers() -> SearchStrategy[bytes]:
     """
     Build byte strings in the format of vouchers.
     """
@@ -592,7 +631,7 @@ def vouchers():
     )
 
 
-def redeemed_states():
+def redeemed_states() -> SearchStrategy[Redeemed]:
     """
     Build ``Redeemed`` instances.
     """
@@ -603,7 +642,7 @@ def redeemed_states():
     )
 
 
-def voucher_counters():
+def voucher_counters() -> SearchStrategy[int]:
     """
     Build integers usable as counters in the voucher redemption process.
     """
@@ -616,7 +655,7 @@ def voucher_counters():
     )
 
 
-def voucher_states():
+def voucher_states() -> SearchStrategy[VoucherState]:
     """
     Build Python objects representing states a Voucher can be in.
     """
@@ -647,7 +686,9 @@ def voucher_states():
     )
 
 
-def voucher_objects(states=voucher_states()):
+def voucher_objects(
+    states: SearchStrategy[VoucherState] = voucher_states(),
+) -> SearchStrategy[Voucher]:
     """
     Build ``Voucher`` instances.
     """
@@ -660,7 +701,7 @@ def voucher_objects(states=voucher_states()):
     )
 
 
-def redemption_group_counts():
+def redemption_group_counts() -> SearchStrategy[int]:
     """
     Build integers which can represent the number of groups in the redemption
     process.
@@ -673,7 +714,7 @@ def redemption_group_counts():
     )
 
 
-def byte_strings(label, length, entropy):
+def byte_strings(label: bytes, length: int, entropy: int) -> SearchStrategy[bytes]:
     """
     Build byte strings of the given length with at most the given amount of
     entropy.
@@ -692,7 +733,7 @@ def byte_strings(label, length, entropy):
     )
 
 
-def random_tokens():
+def random_tokens() -> SearchStrategy[RandomToken]:
     """
     Build ``RandomToken`` instances.
     """
@@ -707,7 +748,7 @@ def random_tokens():
     )
 
 
-def token_preimages():
+def token_preimages() -> SearchStrategy[bytes]:
     """
     Build ``bytes`` strings representing base64-encoded token preimages.
     """
@@ -718,7 +759,7 @@ def token_preimages():
     ).map(b64encode)
 
 
-def verification_signatures():
+def verification_signatures() -> SearchStrategy[bytes]:
     """
     Build ``bytes`` strings representing base64-encoded verification
     signatures.
@@ -730,7 +771,7 @@ def verification_signatures():
     ).map(b64encode)
 
 
-def zkaps():
+def zkaps() -> SearchStrategy[Pass]:
     """
     Build random ZKAPs as ``Pass`` instances.
     """
@@ -741,7 +782,7 @@ def zkaps():
     )
 
 
-def unblinded_tokens():
+def unblinded_tokens() -> SearchStrategy[UnblindedToken]:
     """
     Builds random ``_zkapauthorizer.model.UnblindedToken`` wrapping invalid
     base64 encode data.  You cannot use these in the PrivacyPass cryptographic
@@ -758,7 +799,7 @@ def unblinded_tokens():
     )
 
 
-def request_paths():
+def request_paths() -> SearchStrategy[list[bytes]]:
     """
     Build lists of byte strings that represent the path component of an HTTP
     request.
@@ -766,13 +807,15 @@ def request_paths():
     :see: ``requests``
     """
 
-    def quote_segment(seg):
+    def quote_segment(seg: str) -> bytes:
         return quote(seg, safe="").encode("utf-8")
 
     return lists(text().map(quote_segment))
 
 
-def requests(paths=request_paths()):
+def requests(
+    paths: SearchStrategy[list[bytes]] = request_paths(),
+) -> SearchStrategy[DummyRequest]:
     """
     Build objects providing ``twisted.web.iweb.IRequest``.
     """
@@ -782,7 +825,7 @@ def requests(paths=request_paths()):
     )
 
 
-def storage_indexes():
+def storage_indexes() -> SearchStrategy[bytes]:
     """
     Build Tahoe-LAFS storage indexes.
     """
@@ -795,7 +838,7 @@ def storage_indexes():
     )
 
 
-def lease_renew_secrets():
+def lease_renew_secrets() -> SearchStrategy[bytes]:
     """
     Build Tahoe-LAFS lease renewal secrets.
     """
@@ -805,7 +848,7 @@ def lease_renew_secrets():
     )
 
 
-def lease_cancel_secrets():
+def lease_cancel_secrets() -> SearchStrategy[bytes]:
     """
     Build Tahoe-LAFS lease cancellation secrets.
     """
@@ -815,7 +858,7 @@ def lease_cancel_secrets():
     )
 
 
-def write_enabler_secrets():
+def write_enabler_secrets() -> SearchStrategy[bytes]:
     """
     Build Tahoe-LAFS write enabler secrets.
     """
@@ -825,14 +868,14 @@ def write_enabler_secrets():
     )
 
 
-def share_versions():
+def share_versions() -> SearchStrategy[int]:
     """
     Build integers which could be Tahoe-LAFS share file version numbers.
     """
     return integers(min_value=0, max_value=2**32 - 1)
 
 
-def sharenums():
+def sharenums() -> SearchStrategy[int]:
     """
     Build Tahoe-LAFS share numbers.
     """
@@ -842,7 +885,7 @@ def sharenums():
     )
 
 
-def sharenum_sets():
+def sharenum_sets() -> SearchStrategy[set[int]]:
     """
     Build sets of Tahoe-LAFS share numbers.
     """
@@ -855,11 +898,11 @@ def sharenum_sets():
 
 def sizes(
     # Size 0 data isn't data, it's nothing.
-    min_value=1,
+    min_value: int = 1,
     # Let this be larger than a single segment (2 ** 17) in case that matters
     # to Tahoe-LAFS storage at all.  I don't think it does, though.
-    max_value=2**18,
-):
+    max_value: int = 2**18,
+) -> SearchStrategy[int]:
     """
     Build Tahoe-LAFS share sizes.
     """
@@ -869,7 +912,7 @@ def sizes(
     )
 
 
-def offsets():
+def offsets() -> SearchStrategy[int]:
     """
     Build Tahoe-LAFS share offsets.
     """
@@ -880,26 +923,28 @@ def offsets():
     )
 
 
-def bytes_for_share(sharenum, size):
+def bytes_for_share(sharenum: int, size: int) -> bytes:
     """
-    :return bytes: marginally distinctive bytes of a certain length for the
-        given share number
+    :return: marginally distinctive bytes of a certain length for the given
+        share number
     """
     if 0 <= sharenum <= 255:
         return (chr(sharenum) * size).encode("latin-1")
     raise ValueError("Sharenum must be between 0 and 255 inclusive.")
 
 
-def shares():
+def shares() -> SearchStrategy[bytes]:
     """
     Build Tahoe-LAFS share data.
     """
-    return tuples(sharenums(), sizes()).map(
-        lambda num_and_size: bytes_for_share(*num_and_size),
+    return builds(
+        bytes_for_share,
+        sharenum=sharenums(),
+        size=sizes(),
     )
 
 
-def slot_data_vectors():
+def slot_data_vectors() -> SearchStrategy[list[tuple[int, bytes]]]:
     """
     Build Tahoe-LAFS data vectors.
     """
@@ -918,7 +963,7 @@ def slot_data_vectors():
     )
 
 
-def slot_test_vectors():
+def slot_test_vectors() -> SearchStrategy[list[Optional[object]]]:
     """
     Build Tahoe-LAFS test vectors.
     """
@@ -930,27 +975,44 @@ def slot_test_vectors():
     )
 
 
-@attr.s(frozen=True)
-class TestAndWriteVectors(object):
+def to_server_test_vector(v: ClientTestVector) -> ServerTestVector:
+    return [(x[0], x[1], b"eq", x[2]) for x in v]
+
+
+@frozen
+class TestAndWriteVectors:
     """
     Provide an alternate structure for the values required by the
     ``tw_vectors`` parameter accepted by
     ``RIStorageServer.slot_testv_and_readv_and_writev``.
     """
 
-    test_vector = attr.ib()
-    write_vector = attr.ib()
-    new_length = attr.ib()
+    test_vector: ClientTestVector
+    write_vector: DataVector
+    new_length: Optional[int]
 
-    def for_call(self):
+    def for_server(self) -> ServerTestWriteVector:
         """
-        Construct a value suitable to be passed as ``tw_vectors`` to
-        ``slot_testv_and_readv_and_writev``.
+        Construct a value suitable to be passed as ``tw_vectors`` to the
+        server ``slot_testv_and_readv_and_writev``.
+        """
+        return (
+            to_server_test_vector(self.test_vector),
+            self.write_vector,
+            self.new_length,
+        )
+
+    def for_client(
+        self,
+    ) -> ClientTestWriteVector:
+        """
+        Construct a value suitable to be passed as ``tw_vectors`` to the
+        client ``slot_testv_and_readv_and_writev``.
         """
         return (self.test_vector, self.write_vector, self.new_length)
 
 
-def slot_test_and_write_vectors():
+def slot_test_and_write_vectors() -> SearchStrategy[TestAndWriteVectors]:
     """
     Build Tahoe-LAFS test and write vectors for a single share.
     """
@@ -968,7 +1030,9 @@ def slot_test_and_write_vectors():
     )
 
 
-def slot_test_and_write_vectors_for_shares():
+def slot_test_and_write_vectors_for_shares() -> SearchStrategy[
+    dict[int, TestAndWriteVectors]
+]:
     """
     Build Tahoe-LAFS test and write vectors for a number of shares.
     """
@@ -984,7 +1048,7 @@ def slot_test_and_write_vectors_for_shares():
     )
 
 
-def announcements():
+def announcements() -> SearchStrategy[dict[str, str]]:
     """
     Build announcements for the ZKAPAuthorizer plugin.
     """
@@ -996,43 +1060,45 @@ def announcements():
 
 
 @implementer(IFilesystemNode)
-@attr.s(frozen=True)
+@frozen
 class _LeafNode(object):
-    _storage_index = attr.ib()
+    _storage_index: bytes
 
-    def get_storage_index(self):
+    def get_storage_index(self) -> bytes:
         return self._storage_index
 
     # For testing
-    def flatten(self):
+    def flatten(self) -> list[IFilesystemNode]:
         return [self]
 
 
-def leaf_nodes():
+def leaf_nodes() -> SearchStrategy[_LeafNode]:
     return storage_indexes().map(_LeafNode)
 
 
 @implementer(IDirectoryNode)
-@attr.s
+@frozen
 class _DirectoryNode(object):
-    _storage_index = attr.ib()
-    _children = attr.ib()
+    _storage_index: bytes
+    _children: dict[str, IFilesystemNode]
 
-    def list(self):  # noqa: F811
-        return succeed(self._children)
-
-    def get_storage_index(self):
+    def get_storage_index(self) -> bytes:
         return self._storage_index
 
     # For testing
-    def flatten(self):
+    def flatten(self) -> list[IFilesystemNode]:
         result = [self]
         for (node, _) in self._children.values():
             result.extend(node.flatten())
         return result
 
+    def list(self) -> Deferred[dict[str, IFilesystemNode]]:  # noqa: F811
+        return succeed(self._children)
 
-def directory_nodes(child_strategy):
+
+def directory_nodes(
+    child_strategy: SearchStrategy[IFilesystemNode],
+) -> SearchStrategy[_DirectoryNode]:
     """
     Build directory nodes with children drawn from the given strategy.
     """
@@ -1050,13 +1116,13 @@ def directory_nodes(child_strategy):
     )
 
 
-def node_hierarchies():
+def node_hierarchies() -> SearchStrategy[IFilesystemNode]:
     """
     Build hierarchies of ``IDirectoryNode`` and other ``IFilesystemNode``
     (incomplete) providers.
     """
 
-    def storage_indexes_are_distinct(nodes):
+    def storage_indexes_are_distinct(nodes: IFilesystemNode) -> bool:
         seen = set()
         for n in nodes.flatten():
             si = n.get_storage_index()
@@ -1070,7 +1136,7 @@ def node_hierarchies():
     )
 
 
-def pass_counts():
+def pass_counts() -> SearchStrategy[int]:
     """
     Build integers usable as a number of passes to work on.  There is always
     at least one pass in a group and there are never "too many", whatever that
@@ -1079,7 +1145,7 @@ def pass_counts():
     return integers(min_value=1, max_value=2**8)
 
 
-def api_auth_tokens():
+def api_auth_tokens() -> SearchStrategy[bytes]:
     """
     Build byte strings like those generated by Tahoe-LAFS for use as HTTP API
     authorization tokens.
@@ -1087,7 +1153,7 @@ def api_auth_tokens():
     return binary(min_size=32, max_size=32).map(b64encode)
 
 
-def ristretto_signing_keys():
+def ristretto_signing_keys() -> SearchStrategy[bytes]:
     """
     Build byte strings holding base64-encoded Ristretto signing keys, perhaps
     with leading or trailing whitespace.
@@ -1113,8 +1179,11 @@ def ristretto_signing_keys():
         ]
     )
 
+    def concat(leading: bytes, key: bytes, trailing: bytes) -> bytes:
+        return leading + key + trailing
+
     return builds(
-        lambda leading, key, trailing: leading + key + trailing,
+        concat,
         whitespace,
         keys,
         whitespace,
@@ -1128,13 +1197,13 @@ class _VoucherInsert(object):
     """
 
     voucher: bytes = attr.ib()
-    expected_tokens: int = attr.ib(validator=attr.validators.gt(0))
-    counter: int = attr.ib(validator=attr.validators.ge(0))
+    expected_tokens: int = attr.ib(validator=positive_integer)
+    counter: int = attr.ib(validator=non_negative_integer)
     tokens: list[RandomToken] = attr.ib()
 
 
 @attr.s(frozen=True)
-class _ExistingState(object):
+class ExistingState(object):
     """
     Represent some state which could already exist in a ``VoucherStore``.
     """
@@ -1142,7 +1211,9 @@ class _ExistingState(object):
     vouchers: list[_VoucherInsert] = attr.ib()
 
 
-def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
+def existing_states(
+    min_vouchers: int = 0, max_vouchers: int = 4
+) -> SearchStrategy[ExistingState]:
     """
     Build possible existing states of a ``VoucherStore``.
 
@@ -1159,7 +1230,9 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
         integers(min_value=1, max_value=128),
     )
 
-    def build_vouchers_and_tokens(num_vouchers_and_tokens):
+    def build_vouchers_and_tokens(
+        num_vouchers_and_tokens: tuple[int, int]
+    ) -> SearchStrategy[tuple[list[bytes], list[RandomToken]]]:
         num_vouchers, tokens_per_voucher = num_vouchers_and_tokens
         # Now build enough tokens to spread across all of the vouchers.
         tokens = lists(
@@ -1184,7 +1257,9 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
         build_vouchers_and_tokens
     )
 
-    def build_voucher_inserts(vouchers_and_tokens):
+    def build_voucher_inserts(
+        vouchers_and_tokens: tuple[list[bytes], list[RandomToken]]
+    ) -> SearchStrategy[tuple[_VoucherInsert, ...]]:
         vouchers, tokens = vouchers_and_tokens
         tokens_per_voucher = len(tokens) // len(vouchers)
 
@@ -1209,7 +1284,7 @@ def existing_states(min_vouchers: int = 0, max_vouchers: int = 4):
     voucher_inserts = vouchers_and_tokens.flatmap(build_voucher_inserts)
 
     return builds(
-        _ExistingState,
+        ExistingState,
         vouchers=voucher_inserts,
     )
 
@@ -1238,6 +1313,10 @@ def tables() -> SearchStrategy[Table]:
     """
     Build objects describing tables in a SQLite3 database.
     """
+
+    def first(x: tuple[str, Column]) -> str:
+        return x[0]
+
     return builds(
         Table,
         columns=lists(
@@ -1246,12 +1325,14 @@ def tables() -> SearchStrategy[Table]:
                 builds(Column, affinity=sampled_from(StorageAffinity)),
             ),
             min_size=1,
-            unique_by=lambda x: x[0],
+            unique_by=first,
         ),
     )
 
 
-def sql_schemas(dict_kwargs=None) -> SearchStrategy[dict[str, Table]]:
+def sql_schemas(
+    dict_kwargs: Optional[dict[Any, Any]] = None
+) -> SearchStrategy[dict[str, Table]]:
     """
     Build objects describing multiple tables in a SQLite3 database.
     """
@@ -1351,8 +1432,28 @@ def selects(name: str) -> SearchStrategy[Select]:
     return just(Select(table_name=name))
 
 
-def deletes(name, table):
+def deletes(name: str, table: Table) -> SearchStrategy[Delete]:
     """
     Build objects describing row deletions from the given table.
     """
     return just(Delete(table_name=name))
+
+
+T = TypeVar("T")
+
+
+def mutations() -> SearchStrategy[Statement]:
+    """
+    Build statements that make changes to data.
+    """
+
+    def make(
+        x: tuple[Callable[[str, Table], SearchStrategy[Statement]], str, Table]
+    ) -> SearchStrategy[Statement]:
+        return x[0](x[1], x[2])
+
+    stmts: SearchStrategy[Callable[[str, Table], SearchStrategy[Statement]]]
+    stmts = sampled_from([inserts, deletes, updates])
+    return tuples(stmts, sql_identifiers(), tables(),).flatmap(
+        make,
+    )

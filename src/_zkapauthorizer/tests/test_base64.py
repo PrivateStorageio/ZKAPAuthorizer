@@ -32,7 +32,7 @@ class Base64Tests(TestCase):
     """
 
     @given(binary())
-    def test_roundtrip(self, bytestring):
+    def test_roundtrip(self, bytestring: bytes) -> None:
         """
         Byte strings round-trip through ``base64.urlsafe_b64encode`` and
         ``urlsafe_b64decode``.

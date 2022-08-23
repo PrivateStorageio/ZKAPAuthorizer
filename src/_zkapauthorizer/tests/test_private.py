@@ -27,14 +27,14 @@ class PrivacyTests(TestCase):
     Tests for the privacy features of the resources created by ``create_private_tree``.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.token = b"abcdef"
         self.resource = create_private_tree(lambda: self.token, Resource())
         self.agent = RequestTraversalAgent(self.resource)
         self.client = HTTPClient(self.agent)
-        return super(PrivacyTests, self).setUp()
+        super(PrivacyTests, self).setUp()
 
-    def _authorization(self, scheme, value):
+    def _authorization(self, scheme: bytes, value: bytes) -> Headers:
         return Headers(
             {
                 "authorization": [
@@ -43,7 +43,7 @@ class PrivacyTests(TestCase):
             }
         )
 
-    def test_unauthorized(self):
+    def test_unauthorized(self) -> None:
         """
         A request without an *Authorization* header receives an *Unauthorized* response.
         """
@@ -52,7 +52,7 @@ class PrivacyTests(TestCase):
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )
 
-    def test_wrong_scheme(self):
+    def test_wrong_scheme(self) -> None:
         """
         A request with an *Authorization* header not containing the Tahoe-LAFS
         scheme receives an *Unauthorized* response.
@@ -65,7 +65,7 @@ class PrivacyTests(TestCase):
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )
 
-    def test_wrong_token(self):
+    def test_wrong_token(self) -> None:
         """
         A request with an *Authorization* header not containing the expected token
         receives an *Unauthorized* response.
@@ -78,7 +78,7 @@ class PrivacyTests(TestCase):
             succeeded(has_response_code(Equals(UNAUTHORIZED))),
         )
 
-    def test_authorized(self):
+    def test_authorized(self) -> None:
         """
         A request with an *Authorization* header containing the expected scheme
         and token does not receive an *Unauthorized* response.

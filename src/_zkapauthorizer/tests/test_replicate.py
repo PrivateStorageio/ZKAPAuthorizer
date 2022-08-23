@@ -5,21 +5,26 @@ Tests for the replication system in ``_zkapauthorizer.replicate``.
 from base64 import b64encode, urlsafe_b64encode
 from functools import partial
 from io import BytesIO
+from operator import attrgetter
 from os import urandom
 from sqlite3 import OperationalError, ProgrammingError, connect
-from typing import Callable, Optional
+from typing import IO, Callable, Optional
 
 from attrs import frozen
-from eliot import log_call, start_action
+from compose import compose
+from eliot import start_action
+from fixtures import TempDir
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import readable_from_string
+from tahoe_capabilities import ReadCapability
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
+    Always,
     Contains,
     Equals,
     HasLength,
+    IsInstance,
     MatchesAll,
     MatchesDict,
     MatchesStructure,
@@ -32,7 +37,9 @@ from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
+from .._types import CapStr
 from ..config import REPLICA_RWCAP_BASENAME
+from ..eliot import log_call
 from ..model import RandomToken, VoucherStore, aware_now
 from ..replicate import (
     EventStream,
@@ -46,10 +53,10 @@ from ..replicate import (
 )
 from ..spending import SpendingController
 from ..sql import Cursor
-from ..tahoe import CapStr, DataProvider, DirectoryEntry, ITahoeClient, MemoryGrid
+from ..tahoe import DataProvider, DirectoryEntry, FileNode, ITahoeClient, MemoryGrid
 from .common import delayedProxy, from_awaitable
-from .fixtures import TempDir, TemporaryVoucherStore
-from .matchers import Always, Matcher, returns
+from .fixtures import TemporaryVoucherStore
+from .matchers import Matcher, returns
 
 # Helper to construct the replication wrapper without immediately enabling
 # replication.
@@ -285,11 +292,11 @@ def match_upload(
 
 
 @frozen
-class _MatchUpload(Matcher):
+class _MatchUpload(Matcher[tuple[str, DataProvider]]):
     """
-    Match a two-tuple where the first element is the name of an upload and the
-    second element is a function that returns a ``BinaryIO`` that has contents
-    that can be parsed as an ``EventStream``.
+    Match a two-tuple where the first element is the name of an upload and
+    the second element is a function that returns an ``IO[bytes]`` that has
+    contents that can be parsed as an ``EventStream``.
 
     :ivar name_matcher: A matcher for the upload name.
 
@@ -321,11 +328,11 @@ class _MatchUpload(Matcher):
         return None
 
 
-async def noop_upload(name, get_bytes) -> None:
+async def noop_upload(name: str, get_bytes: Callable[[], IO[bytes]]) -> None:
     pass
 
 
-async def noop_prune(predicate) -> None:
+async def noop_prune(predicate: object) -> None:
     pass
 
 
@@ -357,23 +364,25 @@ def repeat_until(condition: Callable[[], bool], action: Callable[[], object]) ->
             break
 
 
-def is_event_stream(grid: MemoryGrid, **kwargs: Matcher) -> Matcher[tuple[str, dict]]:
+def is_event_stream(
+    grid: MemoryGrid, **kwargs: Matcher[object]
+) -> Matcher[tuple[str, dict[str, object]]]:
     """
     Match a Tahoe-LAFS directory entry representing a file which can be
     retrieved from the given grid and which contains an ``EventStream`` with a
     structure matched by the given keyword arguments.
     """
 
-    def is_filenode() -> Matcher[object]:
-        return AfterPreprocessing(lambda item: item[0], Equals("filenode"))
+    def is_filenode() -> Matcher[FileNode]:
+        return IsInstance(FileNode)  # type: ignore[no-any-return]
 
-    def download_event_stream(cap: str) -> EventStream:
-        return EventStream.from_bytes(BytesIO(grid.download(readable_from_string(cap))))
+    def download_event_stream(cap: ReadCapability) -> EventStream:
+        return EventStream.from_bytes(BytesIO(grid.download(cap)))
 
-    return MatchesAll(
+    return MatchesAll(  # type: ignore[no-any-return]
         is_filenode(),
         AfterPreprocessing(
-            lambda item: download_event_stream(item[1]["ro_uri"]),
+            compose(download_event_stream, attrgetter("ro_uri")),
             MatchesStructure(**kwargs),
         ),
     )
@@ -605,7 +614,7 @@ class ReplicationServiceTests(TestCase):
 
         # since we've uploaded everything, there should be no
         # events in the store
-        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        self.assertEqual([], get_events(tvs.store._connection).changes)
 
     def test_snapshot_prune(self) -> None:
         """
@@ -654,7 +663,10 @@ class ReplicationServiceTests(TestCase):
 
         # Add some tokens, which are considered important.
         voucher0 = urlsafe_b64encode(urandom(32))
-        tvs.redeem(voucher0, 20)
+        self.assertThat(
+            Deferred.fromCoroutine(tvs.redeem(voucher0, 20)),
+            succeeded(Always()),
+        )
 
         # Allow the resulting event-stream upload to complete.
         with start_action(action_type="zkapauthorizer:tests:wait-for-event-stream"):
@@ -700,7 +712,7 @@ class ReplicationServiceTests(TestCase):
         delay_controller.run()
 
         # now there should be no local changes
-        self.assertEqual(tuple(), get_events(tvs.store._connection).changes)
+        self.assertEqual([], get_events(tvs.store._connection).changes)
         # ...and we should have pruned the prior event-stream .. so we
         # interrogate the predicate we _were_ given to ensure it would
         # have said "yes" to the event-stream we did upload
@@ -714,7 +726,7 @@ class ReplicationServiceTests(TestCase):
             ),
         )
 
-    def test_snapshot_again(self):
+    def test_snapshot_again(self) -> None:
         """
         A new snapshot is uploaded and existing event streams are pruned if the
         cost to maintain the current replica snapshot and event streams is
@@ -776,7 +788,7 @@ class TahoeDirectoryListerTests(TestCase):
         directory_names=lists(text(max_size=100), max_size=3, unique=True),
         file_names=lists(text(max_size=100), max_size=3, unique=True),
     )
-    def test_list(self, directory_names, file_names) -> None:
+    def test_list(self, directory_names: list[str], file_names: list[str]) -> None:
         """
         ``get_tahoe_lafs_direntry_lister`` returns a callable that can read the
         entries details from a Tahoe-LAFS directory.

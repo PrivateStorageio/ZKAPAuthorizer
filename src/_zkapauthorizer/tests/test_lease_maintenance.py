@@ -17,17 +17,24 @@ Tests for ``_zkapauthorizer.lease_maintenance``.
 """
 
 from datetime import datetime, timedelta
+from random import Random
+from typing import Callable, Sequence, TypeVar
 
-import attr
 from allmydata.client import SecretHolder
-from allmydata.interfaces import IServer, IStorageBroker
+from allmydata.interfaces import (
+    IDirectoryNode,
+    IFilesystemNode,
+    IServer,
+    IStorageBroker,
+)
 from allmydata.util.hashutil import CRYPTO_VAL_SIZE
+from attrs import define
 from fixtures import TempDir
 from hypothesis import given, note
 from hypothesis.strategies import (
+    SearchStrategy,
     binary,
     builds,
-    composite,
     dictionaries,
     integers,
     just,
@@ -52,12 +59,14 @@ from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from zope.interface import implementer
 
-from ..config import empty_config
+from ..config import Config, empty_config
 from ..foolscap import ShareStat
 from ..lease_maintenance import (
     LeaseMaintenanceConfig,
     MemoryMaintenanceObserver,
     NoopMaintenanceObserver,
+    StorageIndex,
+    VisitAssets,
     lease_maintenance_config_from_dict,
     lease_maintenance_config_to_dict,
     lease_maintenance_service,
@@ -65,6 +74,7 @@ from ..lease_maintenance import (
     renew_leases,
     visit_storage_indexes_from_root,
 )
+from .common import DummyStorageServer
 from .matchers import Provides, between, leases_current
 from .strategies import (
     clocks,
@@ -79,36 +89,8 @@ from .strategies import (
 default_lease_maint_config = LeaseMaintenanceConfig.from_node_config(empty_config)
 
 
-def dummy_maintain_leases():
+async def dummy_maintain_leases() -> None:
     pass
-
-
-@attr.s
-class DummyStorageServer(object):
-    """
-    A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
-
-    :ivar buckets: A mapping from storage index to
-        metadata about shares at that storage index.
-    """
-
-    clock = attr.ib()
-    buckets: dict[bytes, dict[int, ShareStat]] = attr.ib()
-    lease_seed = attr.ib()
-
-    def stat_shares(
-        self, storage_indexes: list[bytes]
-    ) -> Deferred[list[dict[int, ShareStat]]]:
-        return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
-
-    def get_lease_seed(self):
-        return self.lease_seed
-
-    def add_lease(self, storage_index, renew_secret, cancel_secret):
-        for stat in self.buckets.get(storage_index, {}).values():
-            stat.lease_expiration = (
-                self.clock.seconds() + timedelta(days=31).total_seconds()
-            )
 
 
 class SharesAlreadyExist(Exception):
@@ -125,12 +107,12 @@ def create_share(
     """
     Add a share to a storage index ("bucket").
 
-    :param DummyServer storage_server: The server to populate with shares.
-    :param bytes storage_index: The storage index of the shares.
+    :param storage_server: The server to populate with shares.
+    :param storage_index: The storage index of the shares.
     :param sharenum: The share number to add.
-    :param int size: The application data size of the shares.
-    :param int lease_expiration: The expiration time for the lease to attach
-        to the shares.
+    :param size: The application data size of the shares.
+    :param lease_expiration: The expiration time for the lease to attach to
+        the shares.
 
     :raise SharesAlreadyExist: If there are already shares at the given
         storage index.
@@ -148,14 +130,14 @@ def create_share(
     )
 
 
-def lease_seeds():
+def lease_seeds() -> SearchStrategy[bytes]:
     return binary(
         min_size=20,
         max_size=20,
     )
 
 
-def share_stats():
+def share_stats() -> SearchStrategy[ShareStat]:
     return builds(
         ShareStat,
         size=integers(min_value=0),
@@ -163,7 +145,22 @@ def share_stats():
     )
 
 
-def storage_servers(clocks):
+@implementer(IServer)
+@define
+class DummyServer(object):
+    """
+    A partial implementation of a Tahoe-LAFS "native" storage server.
+    """
+
+    _storage_server: DummyStorageServer
+
+    def get_storage_server(self) -> DummyStorageServer:
+        return self._storage_server
+
+
+def storage_servers(
+    clocks: SearchStrategy[Clock],
+) -> SearchStrategy[DummyServer]:
     return builds(
         DummyStorageServer,
         clocks,
@@ -174,40 +171,30 @@ def storage_servers(clocks):
     )
 
 
-@implementer(IServer)
-@attr.s
-class DummyServer(object):
-    """
-    A partial implementation of a Tahoe-LAFS "native" storage server.
-    """
-
-    _storage_server = attr.ib()
-
-    def get_storage_server(self):
-        return self._storage_server
-
-
 @implementer(IStorageBroker)
-@attr.s
+@define
 class DummyStorageBroker(object):
     """
     A partial implementation of a Tahoe-LAFS storage broker.
     """
 
-    clock = attr.ib()
-    _storage_servers = attr.ib()
+    clock: Clock
+    _storage_servers: list[IServer]
 
-    def get_connected_servers(self):
+    def get_connected_servers(self) -> Sequence[IServer]:
         return self._storage_servers
 
 
-@composite
-def storage_brokers(draw, clocks):
-    clock = draw(clocks)
-    return DummyStorageBroker(
-        clock,
-        draw(lists(storage_servers(just(clock)))),
-    )
+def storage_brokers(
+    clocks: SearchStrategy[Clock],
+) -> SearchStrategy[DummyStorageBroker]:
+    def build_storage_servers(clock: Clock) -> SearchStrategy[DummyStorageBroker]:
+        def make_broker(servers: list[DummyServer]) -> DummyStorageBroker:
+            return DummyStorageBroker(clock, servers)
+
+        return lists(storage_servers(just(clock))).map(make_broker)
+
+    return clocks.flatmap(build_storage_servers)
 
 
 class LeaseMaintenanceConfigTests(TestCase):
@@ -216,7 +203,7 @@ class LeaseMaintenanceConfigTests(TestCase):
     """
 
     @given(lease_maintenance_configurations())
-    def test_config_roundtrip(self, config):
+    def test_config_roundtrip(self, config: Config) -> None:
         """
         ``LeaseMaintenanceConfig`` round-trips through
         ``lease_maintenance_config_to_dict`` and
@@ -233,7 +220,7 @@ class LeaseMaintenanceServiceTests(TestCase):
     """
 
     @given(randoms())
-    def test_interface(self, random):
+    def test_interface(self, random: Random) -> None:
         """
         The service provides ``IService``.
         """
@@ -254,7 +241,7 @@ class LeaseMaintenanceServiceTests(TestCase):
         randoms(),
         interval_means(),
     )
-    def test_initial_interval(self, random, mean):
+    def test_initial_interval(self, random: Random, mean: timedelta) -> None:
         """
         When constructed without a value for ``last_run``,
         ``lease_maintenance_service`` schedules its first run to take place
@@ -295,7 +282,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         interval_means(),
         interval_means(),
     )
-    def test_initial_interval_with_last_run(self, random, clock, mean, since_last_run):
+    def test_initial_interval_with_last_run(
+        self, random: Random, clock: Clock, mean: timedelta, since_last_run: timedelta
+    ) -> None:
         """
         When constructed with a value for ``last_run``,
         ``lease_maintenance_service`` schedules its first run to take place
@@ -359,12 +348,16 @@ class LeaseMaintenanceServiceTests(TestCase):
         randoms(),
         clocks(),
     )
-    def test_clean_up_when_stopped(self, random, clock):
+    def test_clean_up_when_stopped(self, random: Random, clock: Clock) -> None:
         """
         When the service is stopped, the delayed call in the reactor is removed.
         """
+
+        async def maintain_leases() -> None:
+            pass
+
         service = lease_maintenance_service(
-            lambda: None,
+            maintain_leases,
             clock,
             FilePath(self.useFixture(TempDir()).join("last-run")),
             random,
@@ -388,13 +381,13 @@ class LeaseMaintenanceServiceTests(TestCase):
         randoms(),
         clocks(),
     )
-    def test_nodes_visited(self, random, clock):
+    def test_nodes_visited(self, random: Random, clock: Clock) -> None:
         """
         When the service runs, it calls the ``maintain_leases`` object.
         """
         leases_maintained_at = []
 
-        def maintain_leases():
+        async def maintain_leases() -> None:
             leases_maintained_at.append(datetime.utcfromtimestamp(clock.seconds()))
 
         service = lease_maintenance_service(
@@ -420,15 +413,15 @@ class VisitStorageIndexesFromRootTests(TestCase):
     """
 
     @given(node_hierarchies(), clocks())
-    def test_visits_all_nodes(self, root_node, clock):
+    def test_visits_all_nodes(self, root_node: IDirectoryNode, clock: Clock) -> None:
         """
         The operation calls the specified visitor with every node from the root to
         its deepest children.
         """
-        visited = []
+        visited: list[bytes] = []
 
-        def perform_visit(visit_assets):
-            return visit_assets(visited.append)
+        async def perform_visit(visit_assets: VisitAssets) -> None:
+            return await visit_assets(visited.append)
 
         operation = visit_storage_indexes_from_root(
             perform_visit,
@@ -436,7 +429,7 @@ class VisitStorageIndexesFromRootTests(TestCase):
         )
 
         self.assertThat(
-            operation(),
+            Deferred.fromCoroutine(operation()),
             succeeded(Always()),
         )
         expected = root_node.flatten()
@@ -452,7 +445,11 @@ class VisitStorageIndexesFromRootTests(TestCase):
         )
 
 
-def lists_of_buckets():
+T = TypeVar("T")
+S = TypeVar("S")
+
+
+def lists_of_buckets() -> SearchStrategy[list[tuple[StorageIndex, dict[int, float]]]]:
     """
     Build lists of bucket descriptions.
 
@@ -461,7 +458,9 @@ def lists_of_buckets():
     storage index will appear only once in the overall result.
     """
 
-    def add_expiration_times(sharenums):
+    def add_expiration_times(
+        sharenums: set[int],
+    ) -> SearchStrategy[dict[int, list[float]]]:
         return builds(
             lambda nums, expires: dict(zip(nums, expires)),
             just(sharenums),
@@ -472,15 +471,29 @@ def lists_of_buckets():
             ),
         )
 
-    def buckets_strategy(count):
-        si_strategy = sets(storage_indexes(), min_size=count, max_size=count)
-        sharenum_strategy = lists(
-            sets(sharenums(), min_size=1).flatmap(add_expiration_times),
+    def buckets_strategy(
+        count: int,
+    ) -> SearchStrategy[list[tuple[StorageIndex, dict[int, float]]]]:
+
+        si_strategy: SearchStrategy[set[bytes]] = sets(
+            storage_indexes(),
             min_size=count,
             max_size=count,
         )
+
+        shares_with_expiration: SearchStrategy[dict[int, list[float]]] = sets(
+            sharenums(),
+            min_size=1,
+        ).flatmap(add_expiration_times)
+
+        sharenum_strategy: SearchStrategy[list[dict[int, list[float]]]] = lists(
+            shares_with_expiration,
+            min_size=count,
+            max_size=count,
+        )
+
         return builds(
-            zip,
+            zip,  # type: ignore[arg-type]
             si_strategy,
             sharenum_strategy,
         )
@@ -495,7 +508,11 @@ class RenewLeasesTests(TestCase):
     """
 
     @given(storage_brokers(clocks()), lists_of_buckets())
-    def test_renewed(self, storage_broker, buckets):
+    def test_renewed(
+        self,
+        storage_broker: DummyStorageBroker,
+        buckets: list[tuple[StorageIndex, dict[int, float]]],
+    ) -> None:
         """
         ``renew_leases`` renews the leases of shares on all storage servers which
         have no more than the specified amount of time remaining on their
@@ -524,12 +541,12 @@ class RenewLeasesTests(TestCase):
                         # share at this location, that's okay too.
                         pass
 
-        def get_now():
+        def get_now() -> datetime:
             return datetime.utcfromtimestamp(
                 storage_broker.clock.seconds(),
             )
 
-        def visit_assets(visit):
+        def visit_assets(visit: Callable[[StorageIndex], None]) -> Deferred[None]:
             for storage_index, ignored in buckets:
                 visit(storage_index)
             return succeed(None)
@@ -543,7 +560,7 @@ class RenewLeasesTests(TestCase):
             get_now,
         )
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 
@@ -568,7 +585,9 @@ class MaintainLeasesFromRootTests(TestCase):
     """
 
     @given(storage_brokers(clocks()), node_hierarchies())
-    def test_renewed(self, storage_broker, root_node):
+    def test_renewed(
+        self, storage_broker: DummyStorageBroker, root_node: IFilesystemNode
+    ) -> None:
         """
         ``maintain_leases_from_root`` creates an operation which renews the leases
         of shares on all storage servers which have no more than the specified
@@ -579,7 +598,7 @@ class MaintainLeasesFromRootTests(TestCase):
         secret_holder = SecretHolder(lease_secret, convergence_secret)
         min_lease_remaining = timedelta(days=3)
 
-        def get_now():
+        def get_now() -> datetime:
             return datetime.utcfromtimestamp(
                 storage_broker.clock.seconds(),
             )
@@ -594,7 +613,7 @@ class MaintainLeasesFromRootTests(TestCase):
         )
         d = operation()
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 
@@ -617,7 +636,9 @@ class MaintainLeasesFromRootTests(TestCase):
         )
 
     @given(storage_brokers(clocks()), node_hierarchies())
-    def test_activity_observed(self, storage_broker, root_node):
+    def test_activity_observed(
+        self, storage_broker: DummyStorageBroker, root_node: IFilesystemNode
+    ) -> None:
         """
         ``maintain_leases_from_root`` creates an operation which uses the given
         activity observer to report its progress.
@@ -627,7 +648,7 @@ class MaintainLeasesFromRootTests(TestCase):
         secret_holder = SecretHolder(lease_secret, convergence_secret)
         min_lease_remaining = timedelta(days=3)
 
-        def get_now():
+        def get_now() -> datetime:
             return datetime.utcfromtimestamp(
                 storage_broker.clock.seconds(),
             )
@@ -646,7 +667,7 @@ class MaintainLeasesFromRootTests(TestCase):
         )
         d = operation()
         self.assertThat(
-            d,
+            Deferred.fromCoroutine(d),
             succeeded(Always()),
         )
 

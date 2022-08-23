@@ -4,8 +4,9 @@ Tests for ``_zkapauthorizer.recover``, the replication recovery system.
 
 from io import BytesIO
 from itertools import count
+from random import Random
 from sqlite3 import connect
-from typing import TypeVar
+from typing import IO, Callable, TypeVar
 
 import attrs
 import cbor2
@@ -18,6 +19,8 @@ from hypothesis.stateful import (
     run_state_machine_as_test,
 )
 from hypothesis.strategies import (
+    DataObject,
+    SearchStrategy,
     binary,
     builds,
     data,
@@ -29,6 +32,7 @@ from hypothesis.strategies import (
     text,
 )
 from tahoe_capabilities import (
+    DirectoryReadCapability,
     danger_real_capability_string,
     digested_capability_string,
     is_directory,
@@ -49,7 +53,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, has_no_result, succeeded
 from twisted.internet.defer import Deferred
-from zope.interface import Interface
+from zope.interface import Interface, implementer
 
 from ..config import REPLICA_RWCAP_BASENAME
 from ..recover import (
@@ -78,9 +82,9 @@ from ..replicate import (
     snapshot,
     statements_to_snapshot,
 )
-from ..sql import Table, create_table
+from ..sql import Statement, Table, create_table
 from ..tahoe import ITahoeClient, MemoryGrid
-from .common import delayedProxy, from_awaitable
+from .common import GetConfig, delayedProxy, from_awaitable
 from .matchers import equals_database, raises
 from .strategies import (
     deletes,
@@ -100,7 +104,7 @@ class SnapshotEncodingTests(TestCase):
     """
 
     @given(lists(text()))
-    def test_roundtrip(self, statements) -> None:
+    def test_roundtrip(self, statements: list[str]) -> None:
         """
         Statements of a snapshot can be encoded to bytes and decoded to the same
         statements again using ``statements_to_snapshot`` and
@@ -108,7 +112,7 @@ class SnapshotEncodingTests(TestCase):
         """
         loaded = list(
             statements_from_snapshot(
-                lambda: BytesIO(statements_to_snapshot(statements))
+                lambda: BytesIO(statements_to_snapshot(iter(statements)))
             )
         )
         self.assertThat(
@@ -138,7 +142,7 @@ class SnapshotMachine(RuleBasedStateMachine):
     updates, row deletions, etc.
     """
 
-    def __init__(self, case) -> None:
+    def __init__(self, case: TestCase) -> None:
         super().__init__()
         self.case = case
         self.connection = connect(":memory:")
@@ -168,7 +172,7 @@ class SnapshotMachine(RuleBasedStateMachine):
         name=sql_identifiers(),
         table=tables(),
     )
-    def create_table(self, name, table) -> None:
+    def create_table(self, name: str, table: Table) -> None:
         """
         Create a new table in the database.
         """
@@ -184,7 +188,12 @@ class SnapshotMachine(RuleBasedStateMachine):
         random=randoms(),
         data=data(),
     )
-    def modify_rows(self, change_types, random, data) -> None:
+    def modify_rows(
+        self,
+        change_types: list[Callable[[str, Table], SearchStrategy[Statement]]],
+        random: Random,
+        data: DataObject,
+    ) -> None:
         """
         Change some rows in some tables.
         """
@@ -342,7 +351,7 @@ class StatefulRecovererTests(TestCase):
             self.assertThat(recoverer.state().stage, Equals(stage))
 
 
-def confusing_names():
+def confusing_names() -> SearchStrategy[str]:
     """
     Build names as ``str`` which do not belong in a replica directory.
     """
@@ -364,10 +373,10 @@ class TahoeLAFSDownloaderTests(TestCase):
     )
     def test_uploader_and_downloader(
         self,
-        expected_snapshot,
-        expected_event_streams,
-        confusing_directories,
-        confusing_filenodes,
+        expected_snapshot: bytes,
+        expected_event_streams: list[bytes],
+        confusing_directories: list[str],
+        confusing_filenodes: list[str],
     ) -> None:
         """
         ``get_tahoe_lafs_downloader`` returns a downloader factory that can be
@@ -420,14 +429,14 @@ class TahoeLAFSDownloaderTests(TestCase):
         for entry in confusing_directories:
             grid.link(replica_dir_cap_str, entry, grid.make_directory())
         for entry in confusing_filenodes:
-            grid.link(replica_dir_cap_str, entry, grid.upload(entry))
+            grid.link(replica_dir_cap_str, entry, grid.upload(entry.encode("utf-8")))
 
         # download it with the downloader
         get_downloader = get_tahoe_lafs_downloader(tahoeclient)
         download = get_downloader(replica_dir_cap.reader)
 
         def read_replica_data(replica: Replica) -> tuple[bytes, list[bytes]]:
-            def read(p):
+            def read(p: Callable[[], IO[bytes]]) -> bytes:
                 with p() as f:
                     return f.read()
 
@@ -456,7 +465,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setup(self, get_config) -> None:
+    def test_already_setup(self, get_config: GetConfig) -> None:
         """
         If replication is already set up, ``setup_tahoe_lafs_replication`` signals
         failure with ``ReplicationAlreadySetup``.
@@ -486,7 +495,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_already_setting_up(self, get_config) -> None:
+    def test_already_setting_up(self, get_config: GetConfig) -> None:
         """
         If ``setup_tahoe_lafs_replication`` is called a second time before a first
         call has finished then the second call fails with
@@ -507,7 +516,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
     @given(
         tahoe_configs(),
     )
-    def test_setup(self, get_config) -> None:
+    def test_setup(self, get_config: GetConfig) -> None:
         """
         If replication was not previously set up then
         ``setup_tahoe_lafs_replication`` signals success with a read-only
@@ -517,10 +526,10 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        results = []
+        results: list[DirectoryReadCapability] = []
         d = Deferred.fromCoroutine(setup_tahoe_lafs_replication(client))
 
-        def save_and_passthrough(x):
+        def save_and_passthrough(x: DirectoryReadCapability) -> DirectoryReadCapability:
             results.append(x)
             return x
 
@@ -558,18 +567,19 @@ class SetupTahoeLAFSReplicationTests(TestCase):
 
 
 class IFoo(Interface):
-    async def bar(a) -> None:
+    async def bar(a: T) -> tuple["IFoo", T]:
         pass
 
-    def baz(a) -> None:
+    def baz(a: T) -> tuple[T, "IFoo"]:
         pass
 
 
+@implementer(IFoo)
 class Foo:
     async def bar(self, a: T) -> tuple["Foo", T]:
         return (self, a)
 
-    def baz(self, a) -> tuple[T, "Foo"]:
+    def baz(self, a: T) -> tuple[T, "Foo"]:
         return (a, self)
 
 
@@ -632,11 +642,12 @@ class EventStreamRecoveryTests(TestCase):
         randoms(),
     )
     def test_by_highest_sequence(
-        self, change_groups: list[list[Change]], random
+        self, change_groups: list[list[Change]], random: Random
     ) -> None:
         """
-        ``sorted_event_streams`` returns a list of ``EventStream`` instances in
-        increasing order of their ``highest_sequence`` result with empty ``EventStream`` instances excluded.
+        ``sorted_event_streams`` returns a list of ``EventStream`` instances
+        in increasing order of their ``highest_sequence`` result with empty
+        ``EventStream`` instances excluded.
         """
         # Take the groups of Changes and build EventStreams from them,
         # renumbering the changes so they're monotonically increasing.  This
@@ -647,10 +658,9 @@ class EventStreamRecoveryTests(TestCase):
         def resequence(c: Change) -> Change:
             return attrs.evolve(c, sequence=next(seq))
 
-        # Generator has incompatible item type "Change"; expected "_T_co"
         expected = [
             EventStream(
-                changes=(resequence(change) for change in change_group),  # type: ignore
+                changes=list(resequence(change) for change in change_group),
             )
             for change_group in change_groups
         ]
@@ -672,7 +682,7 @@ class EventStreamRecoveryTests(TestCase):
                         Change,
                         sequence=integers(),
                         statement=text(),
-                        arguments=just(()),
+                        arguments=just([]),
                         important=just(False),
                     ),
                 ),
@@ -694,7 +704,7 @@ class EventStreamRecoveryTests(TestCase):
         """
         expected = "hello, world"
         create_table = Change(1, "CREATE TABLE [foo] ([a] TEXT)", (), False)
-        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)  # type: ignore
+        insert_row = Change(2, "INSERT INTO [foo] ([a]) VALUES (?)", (expected,), False)
 
         db = connect(":memory:")
         cursor = db.cursor()

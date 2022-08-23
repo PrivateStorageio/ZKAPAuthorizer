@@ -19,7 +19,7 @@ Common fixtures to let the test suite focus on application logic.
 import gc
 from base64 import b64encode
 from datetime import datetime
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Optional
 
 import attr
 from allmydata.storage.server import StorageServer
@@ -36,7 +36,7 @@ from twisted.web.client import Agent, HTTPConnectionPool
 from .._plugin import open_store
 from ..config import CONFIG_DB_NAME, EmptyConfig, TahoeConfig
 from ..controller import DummyRedeemer, IRedeemer, PaymentController
-from ..model import memory_connect
+from ..model import VoucherStore, memory_connect
 from ..replicate import with_replication
 
 
@@ -59,7 +59,7 @@ class AnonymousStorageServer(Fixture):
     tempdir: FilePath = attr.ib(default=None)
     storage_server: StorageServer = attr.ib(default=None)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         self.tempdir = FilePath(self.useFixture(TempDir()).join("storage"))
         self.storage_server = StorageServer(
             self.tempdir.path,
@@ -95,15 +95,16 @@ class TemporaryVoucherStore(Fixture):
     get_config: Callable[[str, str], TahoeConfig] = _get_empty_config
     _public_key: str = b64encode(b"A" * 32).decode("utf-8")
     redeemer: IRedeemer = field(init=False)
+    store: Optional[VoucherStore] = None
 
     @redeemer.default
-    def _redeemer_default(self):
+    def _redeemer_default(self) -> DummyRedeemer:
         return DummyRedeemer(self._public_key)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         self.tempdir = self.useFixture(TempDir())
         self.config = self.get_config(self.tempdir.join("node"), "tub.port")
-        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME))
+        db_path = FilePath(self.config.get_private_path(CONFIG_DB_NAME)).asTextMode()
         self.store = open_store(
             self.get_now,
             with_replication(memory_connect(db_path.path), False),
@@ -111,20 +112,23 @@ class TemporaryVoucherStore(Fixture):
         )
         self.addCleanup(self._cleanUp)
 
-    def _cleanUp(self):
+    def _cleanUp(self) -> None:
         """
         Drop the reference to the ``VoucherStore`` so the underlying SQLite3
         connection can close.
         """
         self.store = None
 
-    def redeem(self, voucher, num_passes):
+    async def redeem(self, voucher: bytes, num_passes: int) -> None:
         """
         Redeem a voucher for some passes.
 
         :return: A ``Deferred`` that fires with the redemption result.
         """
-        return PaymentController(
+        if self.store is None:
+            raise ValueError("Must be set up before redeem()")
+        return await PaymentController(
+            Clock(),
             self.store,
             self.redeemer,
             # Have to pass it here or to redeem, doesn't matter which.
@@ -135,7 +139,6 @@ class TemporaryVoucherStore(Fixture):
             # than groups).
             num_redemption_groups=1,
             allowed_public_keys={self._public_key},
-            clock=Clock(),
         ).redeem(
             voucher,
         )
@@ -157,10 +160,10 @@ class Treq(Fixture):
     pool: HTTPConnectionPool = field()
 
     @pool.default
-    def _pool(self):
+    def _pool(self) -> HTTPConnectionPool:
         return HTTPConnectionPool(self.reactor)
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         # Make sure connections from the connection pool are cleaned up at the
         # end of the test.
         self.case.addCleanup(self._cleanup)
@@ -203,7 +206,7 @@ class DetectLeakedDescriptors(Fixture):
         "privatestorageio-zkapauthz-v1.sqlite3 (deleted)",
     }
 
-    def _setUp(self):
+    def _setUp(self) -> None:
         fdpath = FilePath("/proc/self/fd")
         if fdpath.isdir():
             # If it exists, we can inspect it to learn about open file
@@ -212,8 +215,8 @@ class DetectLeakedDescriptors(Fixture):
             self._before = fdpath.children()
             self.addCleanup(self._cleanup)
 
-    def _cleanup(self):
-        def get_leaked():
+    def _cleanup(self) -> None:
+        def get_leaked() -> set[str]:
             after = FilePath("/proc/self/fd").children()
             return {
                 e.realpath()

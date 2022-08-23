@@ -18,6 +18,7 @@ Tests for ``_zkapauthorizer._storage_server``.
 
 from random import shuffle
 from time import time
+from typing import Callable, Optional
 
 from allmydata.interfaces import NoSpace
 from allmydata.storage.mutable import MutableShareFile
@@ -32,8 +33,11 @@ from twisted.python.runtime import platform
 
 from .._storage_server import NewLengthRejected, _ValidationResult
 from ..api import MorePassesRequired, ZKAPAuthorizerStorageServer
+from ..model import Pass
 from ..server.spending import RecordingSpender
 from ..storage_common import (
+    Secrets,
+    ServerTestWriteVector,
     add_lease_message,
     allocate_buckets_message,
     get_implied_data_length,
@@ -47,6 +51,7 @@ from .fixtures import AnonymousStorageServer
 from .matchers import matches_spent_passes, raises
 from .storage_common import get_passes, reset_storage_server, write_toy_shares
 from .strategies import (
+    TestAndWriteVectors,
     lease_cancel_secrets,
     lease_renew_secrets,
     sharenum_sets,
@@ -58,9 +63,9 @@ from .strategies import (
 )
 
 
-def _encode_passes(passes):
+def _encode_passes(passes: list[Pass]) -> list[bytes]:
     """
-    :return list[bytes]: The encoded form of the passes in the given group.
+    :return: The encoded form of the passes in the given group.
     """
     return list(t.pass_bytes for t in passes)
 
@@ -70,12 +75,14 @@ class ValidationResultTests(TestCase):
     Tests for ``_ValidationResult``.
     """
 
-    def setUp(self):
+    def setUp(self) -> None:
         super(ValidationResultTests, self).setUp()
         self.signing_key = random_signing_key()
 
     @given(integers(min_value=0, max_value=64), lists(zkaps(), max_size=64))
-    def test_validation_result(self, valid_count, invalid_passes):
+    def test_validation_result(
+        self, valid_count: int, invalid_passes: list[Pass]
+    ) -> None:
         """
         ``validate_passes`` returns a ``_ValidationResult`` instance which
         describes the valid and invalid passes.
@@ -109,13 +116,13 @@ class ValidationResultTests(TestCase):
             ),
         )
 
-    def test_raise_for(self):
+    def test_raise_for(self) -> None:
         """
         ``_ValidationResult.raise_for`` raises ``MorePassesRequired`` populated
         with details of the validation and how it fell short of what was
         required.
         """
-        good = [0, 1, 2, 3]
+        good = [b"0", b"1", b"2", b"3"]
         badsig = [4]
         required = 10
         result = _ValidationResult(good, badsig)
@@ -129,7 +136,7 @@ class ValidationResultTests(TestCase):
                         MorePassesRequired(
                             len(good),
                             required,
-                            set(badsig),
+                            frozenset(badsig),
                         ),
                     ),
                     AfterPreprocessing(
@@ -157,7 +164,7 @@ def read_spending_success_histogram_total(
 
 def read_spending_success_histogram_bucket(
     storage_server: ZKAPAuthorizerStorageServer, num_passes: int
-) -> int:
+) -> float:
     """
     Read the value of a single bucket of the spending success metric
     histogram.
@@ -177,7 +184,9 @@ def read_spending_success_histogram_bucket(
     note(
         "bucket counters: {}".format(list((n, b.get()) for n, b in enumerate(buckets)))
     )
-    return buckets[bucket_number].get()
+    result = buckets[bucket_number].get()
+    assert isinstance(result, float), result
+    return result
 
 
 class PassValidationTests(TestCase):
@@ -188,7 +197,7 @@ class PassValidationTests(TestCase):
     pass_value = 128 * 1024
 
     @skipIf(platform.isWindows(), "Storage server is not supported on Windows")
-    def setUp(self):
+    def setUp(self) -> None:
         super(PassValidationTests, self).setUp()
         self.clock = Clock()
         self.spending_recorder, spender = RecordingSpender.make()
@@ -211,7 +220,7 @@ class PassValidationTests(TestCase):
             clock=self.clock,
         )
 
-    def setup_example(self):
+    def setup_example(self) -> None:
         """
         Prepare the TestCase to run one example of one test.
         """
@@ -232,7 +241,7 @@ class PassValidationTests(TestCase):
         # simpler job (can compare values relative to 0).
         self.storage_server._clear_metrics()
 
-    def test_allocate_buckets_fails_without_enough_passes(self):
+    def test_allocate_buckets_fails_without_enough_passes(self) -> None:
         """
         ``remote_allocate_buckets`` fails with ``MorePassesRequired`` if it is
         passed fewer passes than it requires for the amount of data to be
@@ -277,7 +286,9 @@ class PassValidationTests(TestCase):
             lease_cancel_secrets(),
         ),
     )
-    def test_create_mutable_fails_without_passes(self, storage_index, secrets):
+    def test_create_mutable_fails_without_passes(
+        self, storage_index: bytes, secrets: Secrets
+    ) -> None:
         """
         If ``remote_slot_testv_and_readv_and_writev`` is invoked to perform
         initial writes on shares without supplying passes, the operation fails
@@ -310,7 +321,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=0,
                         required_count=1,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
@@ -319,11 +330,11 @@ class PassValidationTests(TestCase):
 
     def _test_extend_mutable_fails_without_passes(
         self,
-        storage_index,
-        secrets,
-        test_and_write_vectors_for_shares,
-        make_data_vector,
-    ):
+        storage_index: bytes,
+        secrets: Secrets,
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+        make_data_vector: Callable[[int], ServerTestWriteVector],
+    ) -> None:
         """
         Verify that increasing the storage requirements of a slot without
         supplying more passes fails.
@@ -334,7 +345,7 @@ class PassValidationTests(TestCase):
             share by at least ``self.pass_value``.
         """
         tw_vectors = {
-            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+            k: v.for_server() for (k, v) in test_and_write_vectors_for_shares.items()
         }
 
         note("tw_vectors summarized: {}".format(summarize(tw_vectors)))
@@ -407,7 +418,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=0,
                         required_count=1,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
@@ -429,8 +440,11 @@ class PassValidationTests(TestCase):
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_extend_mutable_with_write_fails_without_passes(
-        self, storage_index, secrets, test_and_write_vectors_for_shares
-    ):
+        self,
+        storage_index: bytes,
+        secrets: Secrets,
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+    ) -> None:
         """
         If ``remote_slot_testv_and_readv_and_writev`` is invoked to increase
         storage usage by performing a write past the end of a share without
@@ -442,7 +456,7 @@ class PassValidationTests(TestCase):
             test_and_write_vectors_for_shares,
             lambda current_length: (
                 [],
-                [(current_length, "x" * self.pass_value)],
+                [(current_length, b"x" * self.pass_value)],
                 None,
             ),
         )
@@ -460,18 +474,18 @@ class PassValidationTests(TestCase):
     )
     def test_mutable_new_length_rejected(
         self,
-        storage_index,
-        secrets,
-        sharenums,
-        test_and_write_vectors_for_shares,
-        new_length,
-    ):
+        storage_index: bytes,
+        secrets: Secrets,
+        sharenums: set[int],
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+        new_length: int,
+    ) -> None:
         """
         If ``new_length`` is not ``None`` then ``slot_testv_and_readv_and_writev``
         rejects the operation.
         """
         tw_vectors = {
-            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+            k: v.for_server() for (k, v) in test_and_write_vectors_for_shares.items()
         }
         # Change some tw_vector to have a non-None new_length.
         sharenum, (testv, writev, ignored) = tw_vectors.popitem()
@@ -517,8 +531,12 @@ class PassValidationTests(TestCase):
         allocated_size=sizes(),
     )
     def test_add_lease_fails_without_passes(
-        self, storage_index, secrets, sharenums, allocated_size
-    ):
+        self,
+        storage_index: bytes,
+        secrets: tuple[bytes, bytes],
+        sharenums: set[int],
+        allocated_size: int,
+    ) -> None:
         """
         If ``remote_add_lease`` is invoked without supplying enough passes to
         cover the storage for all shares on the given storage index, the
@@ -573,7 +591,7 @@ class PassValidationTests(TestCase):
                     MorePassesRequired(
                         valid_count=len(passes),
                         required_count=required_count,
-                        signature_check_failed=[],
+                        signature_check_failed=frozenset(),
                     ),
                 ),
             )
@@ -598,14 +616,18 @@ class PassValidationTests(TestCase):
         test_and_write_vectors_for_shares=slot_test_and_write_vectors_for_shares(),
     )
     def test_mutable_share_sizes(
-        self, slot, secrets, sharenums, test_and_write_vectors_for_shares
-    ):
+        self,
+        slot: bytes,
+        secrets: Secrets,
+        sharenums: Optional[set[int]],
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+    ) -> None:
         """
         ``share_sizes`` returns the size of the requested mutable shares in the
         requested slot.
         """
         tw_vectors = {
-            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+            k: v.for_server() for (k, v) in test_and_write_vectors_for_shares.items()
         }
 
         # Create an initial share to toy with.
@@ -666,12 +688,12 @@ class PassValidationTests(TestCase):
     )
     def test_mutable_spending_metrics(
         self,
-        storage_index,
-        secrets,
-        test_and_write_vectors_for_shares,
-    ):
+        storage_index: bytes,
+        secrets: Secrets,
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+    ) -> None:
         tw_vectors = {
-            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+            k: v.for_server() for (k, v) in test_and_write_vectors_for_shares.items()
         }
         num_passes = get_required_new_passes_for_mutable_write(
             self.pass_value,
@@ -723,16 +745,16 @@ class PassValidationTests(TestCase):
     )
     def test_mutable_failure_spending_metrics(
         self,
-        storage_index,
-        secrets,
-        test_and_write_vectors_for_shares,
-    ):
+        storage_index: bytes,
+        secrets: Secrets,
+        test_and_write_vectors_for_shares: dict[int, TestAndWriteVectors],
+    ) -> None:
         """
         If a mutable storage operation fails then the successful pass spending
         metric is not incremented.
         """
         tw_vectors = {
-            k: v.for_call() for (k, v) in test_and_write_vectors_for_shares.items()
+            k: v.for_server() for (k, v) in test_and_write_vectors_for_shares.items()
         }
         num_passes = get_required_new_passes_for_mutable_write(
             self.pass_value,
@@ -789,13 +811,13 @@ class PassValidationTests(TestCase):
     )
     def test_immutable_spending_metrics(
         self,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        existing_sharenums,
-        new_sharenums,
-        size,
-    ):
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+        existing_sharenums: set[int],
+        new_sharenums: set[int],
+        size: int,
+    ) -> None:
         """
         When ZKAPs are spent to call *allocate_buckets* the number of passes spent
         is recorded as a metric.
@@ -866,12 +888,12 @@ class PassValidationTests(TestCase):
     )
     def test_add_lease_metrics(
         self,
-        storage_index,
-        renew_secret,
-        cancel_secret,
-        sharenums,
-        allocated_size,
-    ):
+        storage_index: bytes,
+        renew_secret: bytes,
+        cancel_secret: bytes,
+        sharenums: set[int],
+        allocated_size: int,
+    ) -> None:
         # Create some shares at a slot which will require lease renewal.
         write_toy_shares(
             self.anonymous_storage_server,
@@ -926,8 +948,13 @@ class PassValidationTests(TestCase):
         allocated_size=sizes(),
     )
     def test_add_lease_metrics_on_failure(
-        self, storage_index, renew_secrets, cancel_secret, sharenums, allocated_size
-    ):
+        self,
+        storage_index: bytes,
+        renew_secrets: tuple[bytes, bytes],
+        cancel_secret: bytes,
+        sharenums: set[int],
+        allocated_size: int,
+    ) -> None:
         """
         If the ``add_lease`` operation fails then the successful pass spending
         metric is not incremented.

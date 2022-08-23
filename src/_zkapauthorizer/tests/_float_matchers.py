@@ -1,4 +1,5 @@
 from math import isnan, nextafter
+from typing import Optional
 
 from attrs import define
 from testtools.matchers import Mismatch
@@ -54,7 +55,7 @@ class _MatchFloatWithinDistance(object):
     distance: int
     max_distance: int
 
-    def match(self, actual):
+    def match(self, actual: float) -> Optional[Mismatch]:
         try:
             distance = unit_of_least_precision_distance(
                 self.reference, actual, self.max_distance
@@ -78,7 +79,7 @@ class _MatchFloatWithinDistance(object):
 
 def matches_float_within_distance(
     reference: float, distance: int, max_distance: int = 100
-):
+) -> _MatchFloatWithinDistance:
     """
     Matches a floating point value that is no more than a given distance in
     "unit of least precision" steps of a reference value.

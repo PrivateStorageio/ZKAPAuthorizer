@@ -22,11 +22,22 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from functools import wraps
-from json import loads
 from sqlite3 import Connection as _SQLite3Connection
 from sqlite3 import OperationalError
 from sqlite3 import connect as _connect
-from typing import Awaitable, Callable, List, Optional, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Awaitable,
+    Callable,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    Protocol,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import attr
 from aniso8601 import parse_datetime
@@ -34,11 +45,11 @@ from attrs import define, field, frozen
 from hyperlink import DecodedURL
 from twisted.logger import Logger
 from twisted.python.filepath import FilePath
+from typing_extensions import Concatenate, ParamSpec, TypeAlias
 from zope.interface import Interface, implementer
 
-from ._base64 import urlsafe_b64decode
-from ._json import dumps_utf8
-from ._types import GetTime
+from ._json import dumps_utf8, loads
+from ._types import JSON, GetTime
 from .replicate import (
     _ReplicationCapableConnection,
     _ReplicationCapableCursor,
@@ -49,14 +60,28 @@ from .sql import BoundConnect, Cursor
 from .storage_common import required_passes
 from .validators import (
     aware_datetime_validator,
-    greater_than,
-    has_length,
+    base64_bytes,
     is_aware_datetime,
-    is_base64_encoded,
+    non_negative_integer,
+    positive_integer,
     returns_aware_datetime_validator,
 )
 
+if TYPE_CHECKING:
+    from .sql import Parameters  # type: ignore[attr-defined]
+
+_S = TypeVar("_S", bound="ConnectionHaver")
 _T = TypeVar("_T")
+_P = ParamSpec("_P")
+
+
+class JSONAble(Protocol):
+    """
+    An object which can marshal itself to JSON-compatible types.
+    """
+
+    def to_json_v1(self) -> JSON:
+        ...
 
 
 def aware_now() -> datetime:
@@ -79,26 +104,26 @@ class ILeaseMaintenanceObserver(Interface):
     of lease maintenance activity.
     """
 
-    def observe(sizes):
+    def observe(sizes: list[int]) -> None:
         """
         Observe some shares encountered during lease maintenance.
 
-        :param list[int] sizes: The sizes of the shares encountered.
+        :param sizes: The sizes of the shares encountered.
         """
 
-    def finish():
+    def finish() -> None:
         """
         Observe that a run of lease maintenance has completed.
         """
 
 
+@define(auto_exc=False, str=True)
 class StoreOpenError(Exception):
     """
     There was a problem opening the underlying data store.
     """
 
-    def __init__(self, reason):
-        self.reason = reason
+    reason: Exception
 
 
 class NotEnoughTokens(Exception):
@@ -140,7 +165,7 @@ def initialize_database(conn: _ReplicationCapableConnection) -> None:
         # is the only schema the Python code will actually work against.
         actual_version = get_schema_version(cursor)
         schema_upgrades = list(get_schema_upgrades(actual_version))
-        run_schema_upgrades(schema_upgrades, cursor)
+        run_schema_upgrades(iter(schema_upgrades), cursor)
 
         # Create some tables that only exist (along with their contents) for
         # this connection.  These are outside of the schema because they are not
@@ -186,7 +211,13 @@ def initialize_database(conn: _ReplicationCapableConnection) -> None:
     cursor.close()
 
 
-def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
+class ConnectionHaver:
+    _connection: _ReplicationCapableConnection
+
+
+def with_cursor_async(
+    f: Callable[Concatenate[_S, _ReplicationCapableCursor, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_S, _P], Awaitable[_T]]:
     """
     Like ``with_cursor`` but support decorating async functions instead.
 
@@ -194,19 +225,22 @@ def with_cursor_async(f: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitabl
     """
 
     @wraps(f)
-    async def with_cursor_async(self, *a, **kw) -> _T:
+    async def with_cursor_async(self: _S, /, *a: _P.args, **kw: _P.kwargs) -> _T:
         with self._connection:
             cursor = self._connection.cursor()
             try:
                 cursor.execute("BEGIN IMMEDIATE TRANSACTION")
-                return await f(self, cursor, *a, **kw)
+                result = await f(self, cursor, *a, **kw)
             finally:
                 cursor.close()
+        return result
 
     return with_cursor_async
 
 
-def with_cursor(f: Callable[..., _T]) -> Callable[..., _T]:
+def with_cursor(
+    f: Callable[Concatenate[_S, _ReplicationCapableCursor, _P], _T],
+) -> Callable[Concatenate[_S, _P], _T]:
     """
     Decorate a function so it is automatically passed a cursor with an active
     transaction as the first positional argument.  If the function returns
@@ -215,14 +249,15 @@ def with_cursor(f: Callable[..., _T]) -> Callable[..., _T]:
     """
 
     @wraps(f)
-    def with_cursor(self, *a, **kw):
+    def with_cursor(self: _S, /, *a: _P.args, **kw: _P.kwargs) -> _T:
         with self._connection:
             cursor = self._connection.cursor()
             try:
                 cursor.execute("BEGIN IMMEDIATE TRANSACTION")
-                return f(self, cursor, *a, **kw)
+                result = f(self, cursor, *a, **kw)
             finally:
                 cursor.close()
+        return result
 
     # Callable has no attribute wrapped ... yea ... true.
     with_cursor.wrapped = f  # type: ignore
@@ -251,7 +286,7 @@ def path_to_memory_uri(path: FilePath) -> str:
             scheme="file",
             # segmentsFrom(FilePath("/")) is tempting but on Windows "/" is
             # not necessarily the root for every path.
-            path=path.asTextMode().path.split(os.sep),
+            path=path.asTextMode().path.split(os.sep),  # type: ignore[no-untyped-call]
         )
         .add("mode", "memory")
         # The shared cache mode is required for two connections to the same
@@ -262,12 +297,16 @@ def path_to_memory_uri(path: FilePath) -> str:
     )
 
 
-def memory_connect(path: str, *a, uri=None, **kw) -> _SQLite3Connection:
+def memory_connect(
+    path: str, isolation_level: Optional[str] = None
+) -> _SQLite3Connection:
     """
     Always connect to an in-memory SQLite3 database.
     """
-    kw["uri"] = True
-    conn = _connect(path_to_memory_uri(FilePath(path)), *a, **kw)
+    pseudo_path: FilePath = FilePath(path)  # type: ignore[no-untyped-call]
+    conn = _connect(
+        path_to_memory_uri(pseudo_path), isolation_level=isolation_level, uri=True
+    )
     return conn
 
 
@@ -295,7 +334,7 @@ def _require_aware_time(now: GetTime) -> Callable[[], datetime]:
 
 
 @frozen
-class VoucherStore(object):
+class VoucherStore(ConnectionHaver):
     """
     This class implements persistence for vouchers.
 
@@ -329,7 +368,9 @@ class VoucherStore(object):
         return snapshot(self._connection)
 
     @with_cursor_async
-    async def call_if_empty(self, cursor, f: Callable[[Cursor], Awaitable[_T]]) -> _T:
+    async def call_if_empty(
+        self, cursor: Cursor, f: Callable[[Cursor], Awaitable[_T]]
+    ) -> _T:
         """
         Transactionally determine that the database is empty and call the given
         function if it is or raise ``NotEmpty`` if it is not.
@@ -349,7 +390,7 @@ class VoucherStore(object):
             raise NotEmpty("there is existing local state")
 
     @with_cursor
-    def get(self, cursor: Cursor, voucher: bytes) -> Voucher:
+    def get(self, cursor: _ReplicationCapableCursor, /, voucher: bytes) -> Voucher:
         """
         :param voucher: The text value of a voucher to retrieve.
 
@@ -375,6 +416,7 @@ class VoucherStore(object):
     def add(
         self,
         cursor: _ReplicationCapableCursor,
+        /,
         voucher: bytes,
         expected_tokens: int,
         counter: int,
@@ -385,10 +427,10 @@ class VoucherStore(object):
         existing) to the database.  If the (voucher, counter) pair is already
         present, do nothing.
 
-        :param bytes voucher: The text value of a voucher with which to
-            associate the tokens.
+        :param voucher: The text value of a voucher with which to associate
+            the tokens.
 
-        :param int expected_tokens: The total number of tokens for which this
+        :param expected_tokens: The total number of tokens for which this
             voucher is expected to be redeemed.  This is only respected the
             first time a voucher is added.  Subsequent calls with the same
             voucher but a different count ignore the value because it is
@@ -398,10 +440,11 @@ class VoucherStore(object):
             This probably means ``add`` is a broken interface for doing these
             two things.  Maybe it should be fixed someday.
 
-        :param int counter: The redemption counter for the given voucher with
+        :param counter: The redemption counter for the given voucher with
             which to associate the tokens.
 
-        :param list[RandomToken]: The tokens to add alongside the voucher.
+        :param get_tokens: A function to get the tokens to add alongside the
+            voucher.
         """
         voucher_text = voucher.decode("ascii")
         cursor.execute(
@@ -420,9 +463,10 @@ class VoucherStore(object):
                 voucher=voucher_text,
                 counter=counter,
             )
-            tokens = list(
-                RandomToken(token_value.encode("ascii")) for (token_value,) in rows
-            )
+            tokens = []
+            for (token_value,) in rows:
+                assert isinstance(token_value, str)
+                tokens.append(RandomToken(token_value.encode("ascii")))
         else:
             tokens = get_tokens()
             self._log.info(
@@ -454,7 +498,7 @@ class VoucherStore(object):
         return tokens
 
     @with_cursor
-    def list(self, cursor: Cursor) -> list[Voucher]:
+    def list(self, cursor: _ReplicationCapableCursor, /) -> list[Voucher]:
         """
         Get all known vouchers.
 
@@ -476,7 +520,8 @@ class VoucherStore(object):
     @with_cursor
     def insert_unblinded_tokens_for_voucher(
         self,
-        cursor: Cursor,
+        cursor: _ReplicationCapableCursor,
+        /,
         voucher: bytes,
         public_key: str,
         unblinded_tokens: List[UnblindedToken],
@@ -561,6 +606,7 @@ class VoucherStore(object):
             (voucher_text,),
         )
         (new_counter,) = cursor.fetchone()
+        assert isinstance(new_counter, int)
 
         cursor.executemany(
             """
@@ -573,7 +619,9 @@ class VoucherStore(object):
         )
         self._delete_corresponding_tokens(cursor, voucher_text, new_counter - 1)
 
-    def _delete_corresponding_tokens(self, cursor, voucher: str, counter: int) -> None:
+    def _delete_corresponding_tokens(
+        self, cursor: Cursor, voucher: str, counter: int
+    ) -> None:
         """
         Delete rows from the [tokens] table corresponding to the given redemption
         group.
@@ -586,7 +634,9 @@ class VoucherStore(object):
         )
 
     @with_cursor
-    def mark_voucher_double_spent(self, cursor: Cursor, voucher: bytes) -> None:
+    def mark_voucher_double_spent(
+        self, cursor: _ReplicationCapableCursor, /, voucher: bytes
+    ) -> None:
         """
         Mark a voucher as having failed redemption because it has already been
         spent.
@@ -616,11 +666,13 @@ class VoucherStore(object):
                 raise ValueError(f"Voucher {voucher!r} not found")
             else:
                 raise ValueError(
-                    f"Voucher {voucher!r} in state {rows[0][0]} cannot transition to double-spend",
+                    f"Voucher {voucher!r} in state {rows[0][0]!r} cannot transition to double-spend",
                 )
 
     @with_cursor
-    def get_unblinded_tokens(self, cursor: Cursor, count: int) -> List[UnblindedToken]:
+    def get_unblinded_tokens(
+        self, cursor: _ReplicationCapableCursor, /, count: int
+    ) -> List[UnblindedToken]:
         """
         Get some unblinded tokens.
 
@@ -666,21 +718,26 @@ class VoucherStore(object):
             """,
             texts,
         )
-        return list(UnblindedToken(t.encode("ascii")) for (t,) in texts)
+        tokens = []
+        for (t,) in texts:
+            assert isinstance(t, str)
+            tokens.append(UnblindedToken(t.encode("ascii")))
+        return tokens
 
     @with_cursor
-    def count_random_tokens(self, cursor) -> int:
+    def count_random_tokens(self, cursor: _ReplicationCapableCursor, /) -> int:
         """
         :return: The number of random tokens present in the database.  This is
         usually not interesting but it is exposed so the test suite can check
         invariants related to it.
         """
-        cursor.execute("SELECT count(1) FROM [tokens]")
+        cursor.execute("SELECT count(1) FROM [tokens]", ())
         (count,) = cursor.fetchone()
+        assert isinstance(count, int)
         return count
 
     @with_cursor
-    def count_unblinded_tokens(self, cursor: Cursor) -> int:
+    def count_unblinded_tokens(self, cursor: _ReplicationCapableCursor, /) -> int:
         """
         Return the largest number of unblinded tokens that can be requested from
         ``get_unblinded_tokens`` without causing it to raise
@@ -697,11 +754,15 @@ class VoucherStore(object):
             (),
         )
         (count,) = cursor.fetchone()
+        assert isinstance(count, int)
         return count
 
     @with_cursor
     def discard_unblinded_tokens(
-        self, cursor: Cursor, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Get rid of some unblinded tokens.  The tokens will be completely removed
@@ -743,7 +804,11 @@ class VoucherStore(object):
 
     @with_cursor
     def invalidate_unblinded_tokens(
-        self, cursor: Cursor, reason: str, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        reason: str,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Mark some unblinded tokens as invalid and unusable.  Some record of the
@@ -782,7 +847,10 @@ class VoucherStore(object):
 
     @with_cursor
     def reset_unblinded_tokens(
-        self, cursor: Cursor, unblinded_tokens: List[UnblindedToken]
+        self,
+        cursor: _ReplicationCapableCursor,
+        /,
+        unblinded_tokens: List[UnblindedToken],
     ) -> None:
         """
         Make some unblinded tokens available to be retrieved from the store again.
@@ -824,7 +892,7 @@ class VoucherStore(object):
 
     @with_cursor
     def get_latest_lease_maintenance_activity(
-        self, cursor: Cursor
+        self, cursor: _ReplicationCapableCursor, /
     ) -> Optional[LeaseMaintenanceActivity]:
         """
         Get a description of the most recently completed lease maintenance
@@ -843,7 +911,7 @@ class VoucherStore(object):
             """,
             (),
         )
-        activity = cursor.fetchall()
+        activity = cast(list[tuple[str, int, str]], cursor.fetchall())
         if len(activity) == 0:
             return None
         [(started, count, finished)] = activity
@@ -856,7 +924,7 @@ class VoucherStore(object):
 
 @implementer(ILeaseMaintenanceObserver)
 @define
-class LeaseMaintenance(object):
+class LeaseMaintenance(ConnectionHaver):
     """
     A state-updating helper for recording pass usage during a lease
     maintenance run.
@@ -884,7 +952,7 @@ class LeaseMaintenance(object):
     _rowid: Optional[int] = None
 
     @with_cursor
-    def start(self, cursor: Cursor) -> None:
+    def start(self, cursor: _ReplicationCapableCursor, /) -> None:
         """
         Record the start of a lease maintenance run.
         """
@@ -901,7 +969,7 @@ class LeaseMaintenance(object):
         self._rowid = cursor.lastrowid
 
     @with_cursor
-    def observe(self, cursor: Cursor, sizes: list[int]) -> None:
+    def observe(self, cursor: _ReplicationCapableCursor, /, sizes: list[int]) -> None:
         """
         Record a storage shares of the given sizes.
         """
@@ -916,7 +984,7 @@ class LeaseMaintenance(object):
         )
 
     @with_cursor
-    def finish(self, cursor):
+    def finish(self, cursor: _ReplicationCapableCursor, /) -> None:
         """
         Record the completion of this lease maintenance run.
         """
@@ -952,13 +1020,7 @@ class UnblindedToken(object):
         ``decode_base64`` method.
     """
 
-    unblinded_token = field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(bytes),
-            is_base64_encoded(),
-            has_length(128),
-        ),
-    )
+    unblinded_token: bytes = field(validator=base64_bytes(128))
 
 
 @frozen
@@ -968,24 +1030,11 @@ class Pass(object):
 
     """
 
-    preimage = field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(bytes),
-            is_base64_encoded(),
-            has_length(88),
-        ),
-    )
-
-    signature = field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(bytes),
-            is_base64_encoded(),
-            has_length(88),
-        ),
-    )
+    preimage: bytes = field(validator=base64_bytes(length=88))
+    signature: bytes = field(validator=base64_bytes(length=88))
 
     @property
-    def pass_bytes(self):
+    def pass_bytes(self) -> bytes:
         """
         The byte string representation of the pass.
 
@@ -998,7 +1047,7 @@ class Pass(object):
         return b" ".join((self.preimage, self.signature))
 
     @classmethod
-    def from_bytes(cls, pass_):
+    def from_bytes(cls, pass_: bytes) -> "Pass":
         return cls(*pass_.split(b" "))
 
 
@@ -1009,22 +1058,7 @@ class RandomToken(object):
         token.
     """
 
-    token_value = field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(bytes),
-            is_base64_encoded(),
-            has_length(128),
-        ),
-    )
-
-
-def _counter_attribute():
-    return field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(int),
-            greater_than(-1),
-        ),
-    )
+    token_value: bytes = field(validator=base64_bytes(length=128))
 
 
 @frozen
@@ -1036,12 +1070,15 @@ class Pending(object):
         successfully performed for the voucher.
     """
 
-    counter: int = _counter_attribute()
+    counter: int = field(validator=non_negative_integer)
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[True]:
         return True
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> int:
+        return self.counter
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "pending",
             "counter": self.counter,
@@ -1057,12 +1094,15 @@ class Redeeming(object):
     """
 
     started: datetime = field(validator=aware_datetime_validator)
-    counter: int = _counter_attribute()
+    counter: int = field(validator=non_negative_integer)
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[False]:
         return False
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already redeeming")
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "redeeming",
             "started": self.started.isoformat(),
@@ -1084,10 +1124,13 @@ class Redeemed(object):
     finished: datetime = field(validator=aware_datetime_validator)
     token_count: int
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[False]:
         return False
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already redeemed")
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "redeemed",
             "finished": self.finished.isoformat(),
@@ -1099,10 +1142,13 @@ class Redeemed(object):
 class DoubleSpend(object):
     finished: datetime = field(validator=aware_datetime_validator)
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[False]:
         return False
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Voucher is already spent")
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "double-spend",
             "finished": self.finished.isoformat(),
@@ -1119,10 +1165,13 @@ class Unpaid(object):
 
     finished: datetime = field(validator=aware_datetime_validator)
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[True]:
         return True
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> Literal[0]:
+        return 0
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "unpaid",
             "finished": self.finished.isoformat(),
@@ -1140,15 +1189,28 @@ class Error(object):
     finished: datetime = field(validator=aware_datetime_validator)
     details: str
 
-    def should_start_redemption(self):
+    def should_start_redemption(self) -> Literal[True]:
         return True
 
-    def to_json_v1(self):
+    def start_at_counter(self) -> NoReturn:
+        raise ValueError("Not sure where to start redeeming error-state voucher")
+
+    def to_json_v1(self) -> JSON:
         return {
             "name": "error",
             "finished": self.finished.isoformat(),
             "details": self.details,
         }
+
+
+VoucherState: TypeAlias = Union[
+    Pending,
+    Redeeming,
+    Redeemed,
+    DoubleSpend,
+    Unpaid,
+    Error,
+]
 
 
 @frozen
@@ -1168,29 +1230,16 @@ class Voucher(object):
         ``DoubleSpend``, ``Unpaid``, or ``Error``.
     """
 
-    number: bytes = field(
-        validator=attr.validators.and_(
-            attr.validators.instance_of(bytes),
-            is_base64_encoded(urlsafe_b64decode),
-            has_length(44),
-        ),
-    )
+    number: bytes = field(validator=base64_bytes(44))
 
-    expected_tokens: Optional[int] = field(
-        validator=attr.validators.optional(
-            attr.validators.and_(
-                attr.validators.instance_of(int),
-                greater_than(0),
-            ),
-        ),
-    )
+    expected_tokens: int = field(validator=positive_integer)
 
     created: Optional[datetime] = field(
         default=None,
         validator=attr.validators.optional(aware_datetime_validator),
     )
 
-    state = field(
+    state: VoucherState = field(
         default=Pending(counter=0),
         validator=attr.validators.instance_of(
             (
@@ -1205,22 +1254,32 @@ class Voucher(object):
     )
 
     @classmethod
-    def from_row(cls, row):
-        def state_from_row(state, row):
+    def from_row(cls, row: Parameters) -> "Voucher":
+        def state_from_row(state: str, row: Parameters) -> VoucherState:
             if state == "pending":
-                return Pending(counter=row[3])
+                counter = row[3]
+                assert isinstance(counter, int)
+                return Pending(counter=counter)
             if state == "double-spend":
+                finished = row[0]
+                assert isinstance(finished, str)
                 return DoubleSpend(
-                    parse_datetime(row[0], delimiter=" "),
+                    parse_datetime(finished, delimiter=" "),
                 )
             if state == "redeemed":
+                token_count = row[1]
+                assert isinstance(token_count, int)
                 return Redeemed(
                     parse_datetime(row[0], delimiter=" "),
-                    row[1],
+                    token_count,
                 )
             raise ValueError("Unknown voucher state {}".format(state))
 
         number, created, expected_tokens, state = row[:4]
+        assert isinstance(number, str)
+        assert isinstance(expected_tokens, int)
+        assert isinstance(created, str)
+        assert isinstance(state, str)
 
         return cls(
             number=number.encode("ascii"),
@@ -1235,14 +1294,22 @@ class Voucher(object):
         )
 
     @classmethod
-    def from_json(cls, json):
+    def from_json(cls, json: bytes) -> "Voucher":
         values = loads(json)
+        if not isinstance(values, dict):
+            raise ValueError(f"expected dict, not {type(values)}")
         version = values.pop("version")
-        return getattr(cls, "from_json_v{}".format(version))(values)
+        voucher = getattr(cls, "from_json_v{}".format(version))(values)
+        assert isinstance(voucher, Voucher)
+        return voucher
 
     @classmethod
-    def from_json_v1(cls, values):
+    def from_json_v1(cls, values: dict[str, JSON]) -> "Voucher":
+        state: VoucherState
+
         state_json = values["state"]
+        assert isinstance(state_json, dict)
+
         state_name = state_json["name"]
         if state_name == "pending":
             state = Pending(counter=state_json["counter"])
@@ -1272,22 +1339,27 @@ class Voucher(object):
         else:
             raise ValueError("Unrecognized state {!r}".format(state_json))
 
+        number = values["number"]
+        assert isinstance(number, str)
+        expected_tokens = values["expected-tokens"]
+        assert isinstance(expected_tokens, int)
+
         return cls(
-            number=values["number"].encode("ascii"),
-            expected_tokens=values["expected-tokens"],
+            number=number.encode("ascii"),
+            expected_tokens=expected_tokens,
             created=None
             if values["created"] is None
             else parse_datetime(values["created"]),
             state=state,
         )
 
-    def to_json(self):
+    def to_json(self) -> bytes:
         return dumps_utf8(self.marshal())
 
-    def marshal(self):
+    def marshal(self) -> JSON:
         return self.to_json_v1()
 
-    def to_json_v1(self):
+    def to_json_v1(self) -> JSON:
         state = self.state.to_json_v1()
         return {
             "number": self.number.decode("ascii"),

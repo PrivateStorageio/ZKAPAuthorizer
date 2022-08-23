@@ -21,11 +21,23 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from errno import ENOENT
-from functools import partial
-from typing import Any, Callable, Iterable
+from random import Random
+from typing import (
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generic,
+    Iterable,
+    NewType,
+    Optional,
+    TypeVar,
+)
 
 import attr
+from allmydata.client import SecretHolder
 from allmydata.interfaces import IDirectoryNode, IFilesystemNode
+from allmydata.storage.server import StorageServer
+from allmydata.storage_client import StorageFarmBroker
 from allmydata.util.hashutil import (
     bucket_cancel_secret_hash,
     bucket_renewal_secret_hash,
@@ -33,32 +45,40 @@ from allmydata.util.hashutil import (
     file_renewal_secret_hash,
 )
 from aniso8601 import parse_datetime
-from twisted.application.service import Service
-from twisted.internet.defer import inlineCallbacks, maybeDeferred
+from attrs import Factory, define
+from twisted.application.service import IService, Service
+from twisted.internet.defer import Deferred
+from twisted.internet.interfaces import IDelayedCall, IReactorTime
+from twisted.python.failure import Failure
+from twisted.python.filepath import FilePath
 from twisted.python.log import err
+from typing_extensions import TypeAlias
 from zope.interface import implementer
 
 from .config import Config, read_duration
-from .controller import bracket
 from .foolscap import ShareStat
 from .model import ILeaseMaintenanceObserver
 
 SERVICE_NAME = "lease maintenance service"
 
+StorageIndex = NewType("StorageIndex", bytes)
+Visitor: TypeAlias = Callable[[StorageIndex], None]
+VisitAssets: TypeAlias = Callable[[Visitor], Awaitable[None]]
 
-@inlineCallbacks
-def visit_storage_indexes(root_nodes, visit):
+
+async def visit_storage_indexes(
+    root_nodes: list[IFilesystemNode], visit: Visitor
+) -> None:
     """
-    Call a visitor with the storage index of ``root_node`` and that of all
-    nodes reachable from it.
+    Call a visitor with the storage index of each of ``root_nodes`` and
+    that of all nodes reachable from them.
 
-    :param IFilesystemNode root_node: The node from which to start.
+    :param root_nodes: The nodes from which to start.
 
-    :param visit: A one-argument callable.  It will be called with the storage
-        index of all visited nodes.
+    :param visit: A function to call with the storage index of every visited
+        node.
 
-    :return Deferred: A Deferred which fires after all nodes have been
-        visited.
+    :return: A coroutine that completes after all nodes have been visited.
     """
     if not isinstance(root_nodes, list):
         raise TypeError(
@@ -79,7 +99,7 @@ def visit_storage_indexes(root_nodes, visit):
         elem = stack.pop()
         visit(elem.get_storage_index())
         if IDirectoryNode.providedBy(elem):
-            children = yield elem.list()
+            children = await elem.list()
             # Produce consistent results by forcing some consistent ordering
             # here.  This will sort by name.
             stable_children = sorted(children.items())
@@ -87,7 +107,7 @@ def visit_storage_indexes(root_nodes, visit):
                 stack.append(child_node)
 
 
-def iter_storage_indexes(visit_assets):
+async def iter_storage_indexes(visit_assets: VisitAssets) -> list[StorageIndex]:
     """
     Get an iterator over storage indexes of all nodes visited by
     ``visit_assets``.
@@ -95,28 +115,25 @@ def iter_storage_indexes(visit_assets):
     :param visit_assets: A one-argument function which takes a visit function
         and calls it with all nodes to visit.
 
-    :return Deferred[list[bytes]]: A Deferred that fires with a list of
-        storage indexes from the visited nodes.  The list is in an arbitrary
-        order and does not include duplicates if any nodes were visited more
-        than once.
+    :return: A coroutine that completes with a list of storage indexes from
+        the visited nodes.  The list is in an arbitrary order and does not
+        include duplicates if any nodes were visited more than once.
     """
-    storage_indexes = set()
+    storage_indexes: set[StorageIndex] = set()
     visit = storage_indexes.add
-    d = visit_assets(visit)
+    await visit_assets(visit)
     # Create some order now that we've ensured they're unique.
-    d.addCallback(lambda ignored: list(storage_indexes))
-    return d
+    return list(storage_indexes)
 
 
-@inlineCallbacks
-def renew_leases(
-    visit_assets,
-    storage_broker,
-    secret_holder,
-    min_lease_remaining,
-    get_activity_observer,
-    now,
-):
+async def renew_leases(
+    visit_assets: VisitAssets,
+    storage_broker: StorageFarmBroker,
+    secret_holder: SecretHolder,
+    min_lease_remaining: timedelta,
+    get_activity_observer: Callable[[], ILeaseMaintenanceObserver],
+    now: Callable[[], datetime],
+) -> None:
     """
     Check the leases on a group of nodes for those which are expired or close
     to expiring and renew such leases.
@@ -144,7 +161,7 @@ def renew_leases(
     """
     activity = get_activity_observer()
 
-    storage_indexes = yield iter_storage_indexes(visit_assets)
+    storage_indexes = await iter_storage_indexes(visit_assets)
 
     renewal_secret = secret_holder.get_renewal_secret()
     cancel_secret = secret_holder.get_cancel_secret()
@@ -154,7 +171,7 @@ def renew_leases(
 
     for server in servers:
         # Consider parallelizing this.
-        yield renew_leases_on_server(
+        await renew_leases_on_server(
             min_lease_remaining,
             renewal_secret,
             cancel_secret,
@@ -167,42 +184,41 @@ def renew_leases(
     activity.finish()
 
 
-@inlineCallbacks
-def renew_leases_on_server(
-    min_lease_remaining,
-    renewal_secret,
-    cancel_secret,
-    storage_indexes,
-    server,
-    activity,
-    now,
-):
+async def renew_leases_on_server(
+    min_lease_remaining: timedelta,
+    renewal_secret: bytes,
+    cancel_secret: bytes,
+    storage_indexes: list[StorageIndex],
+    server: StorageServer,
+    activity: ILeaseMaintenanceObserver,
+    now: datetime,
+) -> None:
     """
     Check leases on the shares for the given storage indexes on the given
     storage server for those which are expired or close to expiring and renew
     such leases.
 
-    :param timedelta min_lease_remaining: The minimum amount of time remaining
-        to allow on a lease without renewing it.
+    :param min_lease_remaining: The minimum amount of time remaining to allow
+        on a lease without renewing it.
 
     :param renewal_secret: See ``renew_lease``.
 
     :param cancel_secret: See ``renew_lease``.
 
-    :param list[bytes] storage_indexes: The storage indexes to check.
+    :param storage_indexes: The storage indexes to check.
 
-    :param StorageServer server: The storage server on which to check.
+    :param server: The storage server on which to check.
 
-    :param ILeaseMaintenanceObserver activity: An object which will receive
-        events allowing it to observe the lease maintenance activity.
+    :param activity: An object which will receive events allowing it to
+        observe the lease maintenance activity.
 
-    :param datetime now: The current time for comparison against the least
-        expiration time.
+    :param now: The current time for comparison against the least expiration
+        time.
 
-    :return Deferred: A Deferred which fires after all storage indexes have
-        been checked and any leases that need renewal have been renewed.
+    :return: A coroutine which completes after all storage indexes have been
+        checked and any leases that need renewal have been renewed.
     """
-    stats = yield server.stat_shares(storage_indexes)
+    stats = await server.stat_shares(storage_indexes)
     for storage_index, stat_dict in zip(storage_indexes, stats):
         if not stat_dict:
             # The server has no shares for this storage index.
@@ -221,7 +237,7 @@ def renew_leases_on_server(
         # whether to renew leases at this storage index or not based on that.
         most_endangered = soonest_expiration(stat_dict.values())
         if needs_lease_renew(min_lease_remaining, most_endangered, now):
-            yield renew_lease(renewal_secret, cancel_secret, storage_index, server)
+            await renew_lease(renewal_secret, cancel_secret, storage_index, server)
 
 
 def soonest_expiration(stats: Iterable[ShareStat]) -> ShareStat:
@@ -235,7 +251,12 @@ def soonest_expiration(stats: Iterable[ShareStat]) -> ShareStat:
     )
 
 
-def renew_lease(renewal_secret, cancel_secret, storage_index, server):
+async def renew_lease(
+    renewal_secret: bytes,
+    cancel_secret: bytes,
+    storage_index: StorageIndex,
+    server: StorageServer,
+) -> None:
     """
     Renew the lease on the shares in one storage index on one server.
 
@@ -245,11 +266,11 @@ def renew_lease(renewal_secret, cancel_secret, storage_index, server):
     :param cancel_secret: A seed for the cancel secret hash calculation for
         any leases which need to be renewed.
 
-    :param bytes storage_index: The storage index to operate on.
+    :param storage_index: The storage index to operate on.
 
-    :param StorageServer server: The storage server to operate on.
+    :param server: The storage server to operate on.
 
-    :return Deferred: A Deferred that fires when the lease has been renewed.
+    :return: A coroutine which completes when the lease has been renewed.
     """
     # See allmydata/immutable/checker.py, _get_renewal_secret
     renew_secret = bucket_renewal_secret_hash(
@@ -268,34 +289,38 @@ def renew_lease(renewal_secret, cancel_secret, storage_index, server):
     )
     # Use add_lease to add a new lease *or* renew an existing one with a
     # matching renew secret.
-    return server.add_lease(
+    await server.add_lease(
         storage_index,
         renew_secret,
         cancel_secret,
     )
 
 
-def needs_lease_renew(min_lease_remaining, stat, now):
+def needs_lease_renew(
+    min_lease_remaining: timedelta, stat: ShareStat, now: datetime
+) -> bool:
     """
     Determine if a lease needs renewal.
 
-    :param timedelta min_lease_remaining: The minimum amount of time remaining
-        to allow on a lease without renewing it.
+    :param min_lease_remaining: The minimum amount of time remaining to allow
+        on a lease without renewing it.
 
-    :param ShareStat stat: The metadata about a share to consider.
+    :param stat: The metadata about a share to consider.
 
-    :param datetime now: The current time for comparison against the lease
-        expiration time.
+    :param now: The current time for comparison against the lease expiration
+        time.
 
-    :return bool: ``True`` if the lease needs to be renewed, ``False``
-        otherwise.
+    :return: ``True`` if the lease needs to be renewed, ``False`` otherwise.
     """
     remaining = datetime.utcfromtimestamp(stat.lease_expiration) - now
     return remaining < min_lease_remaining
 
 
-@attr.s
-class _FuzzyTimerService(Service):
+_C = TypeVar("_C")
+
+
+@define
+class _FuzzyTimerService(Service, Generic[_C]):
     """
     A service to periodically, but not *too* periodically, run an operation.
 
@@ -306,10 +331,9 @@ class _FuzzyTimerService(Service):
     :ivar timedelta initial_interval: The amount of time to wait before the first
         run of the operation.
 
-    :ivar sample_interval_distribution: A no-argument callable which returns a
-       number of seconds as a float giving the amount of time to wait before
-       the next run of the operation.  It will be called each time the
-       operation completes.
+    :ivar sample_interval_distribution: A no-argument callable which returns
+       an amount of time to wait before the next run of the operation.  It
+       will be called each time the operation completes.
 
     :ivar IReactorTime reactor: A Twisted reactor to use to schedule runs of
         the operation.
@@ -319,34 +343,44 @@ class _FuzzyTimerService(Service):
         object.
     """
 
-    name = attr.ib()
-    operation = attr.ib()
-    initial_interval = attr.ib()
-    sample_interval_distribution = attr.ib()
-    get_config: Callable[[], Any] = attr.ib()
-    reactor = attr.ib()
+    name: str
+    operation: Callable[[], Awaitable[None]]
+    initial_interval: timedelta
+    sample_interval_distribution: Callable[[], timedelta]
+    get_config: Callable[[], _C]
+    reactor: IReactorTime
 
-    def startService(self):
-        Service.startService(self)
+    _call: Optional[IDelayedCall] = None
+
+    def startService(self) -> None:
+        Service.startService(self)  # type: ignore[no-untyped-call]
         self._call = self.reactor.callLater(
             self.initial_interval.total_seconds(),
             self._iterate,
         )
 
-    def stopService(self):
-        self._call.cancel()
-        self._call = None
-        return Service.stopService(self)
+    def stopService(self) -> None:
+        if self._call is not None:
+            self._call.cancel()
+            self._call = None
+        return Service.stopService(self)  # type: ignore[no-untyped-call,no-any-return]
 
-    def _iterate(self):
+    def _iterate(self) -> None:
         """
         Run the operation once and then schedule it to run again.
         """
-        d = maybeDeferred(self.operation)
-        d.addErrback(err, "Fuzzy timer service ({})".format(self.name))
-        d.addCallback(lambda ignored: self._schedule())
 
-    def _schedule(self):
+        async def go() -> None:
+            try:
+                await self.operation()
+            except:
+                f = Failure()  # type: ignore[no-untyped-call]
+                err(f, f"Fuzzy timer service ({self.name})")  # type: ignore[no-untyped-call]
+            self._schedule()
+
+        Deferred.fromCoroutine(go())
+
+    def _schedule(self) -> None:
         """
         Schedule the next run of the operation.
         """
@@ -357,25 +391,23 @@ class _FuzzyTimerService(Service):
 
 
 def lease_maintenance_service(
-    maintain_leases,
-    reactor,
-    last_run_path,
-    random,
-    lease_maint_config,
-):
+    maintain_leases: Callable[[], Awaitable[None]],
+    reactor: IReactorTime,
+    last_run_path: FilePath,
+    random: Random,
+    lease_maint_config: LeaseMaintenanceConfig,
+) -> IService:
     """
     Get an ``IService`` which will maintain leases on ``root_node`` and any
     nodes directly or transitively reachable from it.
 
-    :param IReactorClock reactor: A Twisted reactor for scheduling renewal
-        activity.
+    :param reactor: A Twisted reactor for scheduling renewal activity.
 
-    :param FilePath last_run_path: A path containing the time (as an ISO8601
-        datetime string) at which lease maintenance last ran to inform an
-        adjustment to the first interval before running it again.  If no file
-        exists at the path it is treated as though there has been no previous
-        run.  The path will also be rewritten on each run to update this
-        value.
+    :param last_run_path: A path containing the time (as an ISO8601 datetime
+        string) at which lease maintenance last ran to inform an adjustment to
+        the first interval before running it again.  If no file exists at the
+        path it is treated as though there has been no previous run.  The path
+        will also be rewritten on each run to update this value.
 
     :param random: An object like ``random.Random`` which can be used as a
         source of scheduling delay.
@@ -390,7 +422,7 @@ def lease_maintenance_service(
     interval_range = lease_maint_config.crawl_interval_range
     halfrange = interval_range // 2
 
-    def sample_interval_distribution():
+    def sample_interval_distribution() -> timedelta:
         return timedelta(
             seconds=random.uniform(
                 (interval_mean - halfrange).total_seconds(),
@@ -418,19 +450,21 @@ def lease_maintenance_service(
             timedelta(0),
         )
 
-    def get_lease_maint_config():
+    def get_lease_maint_config() -> LeaseMaintenanceConfig:
         return lease_maint_config
+
+    async def maintain_and_record_last_run() -> None:
+        try:
+            await maintain_leases()
+        finally:
+            write_time_to_path(
+                last_run_path,
+                datetime.utcfromtimestamp(reactor.seconds()),
+            )
 
     return _FuzzyTimerService(
         SERVICE_NAME,
-        lambda: bracket(
-            lambda: None,
-            lambda: write_time_to_path(
-                last_run_path,
-                datetime.utcfromtimestamp(reactor.seconds()),
-            ),
-            maintain_leases,
-        ),
+        lambda: Deferred.fromCoroutine(maintain_and_record_last_run()),
         initial_interval,
         sample_interval_distribution,
         get_lease_maint_config,
@@ -497,7 +531,7 @@ class LeaseMaintenanceConfig(object):
             ),
         )
 
-    def get_lease_duration(self):
+    def get_lease_duration(self) -> int:
         """
         Return the minimum amount of time for which a newly granted lease will
         ensure data is stored.
@@ -562,58 +596,66 @@ def lease_maintenance_config_from_dict(d: dict[str, str]) -> LeaseMaintenanceCon
     )
 
 
-def write_time_to_path(path, when):
+def write_time_to_path(path: FilePath, when: datetime) -> None:
     """
     Write an ISO8601 datetime string to a file.
 
-    :param FilePath path: The path to a file to which to write the datetime
-        string.
+    :param path: The path to a file to which to write the datetime string.
 
-    :param datetime when: The datetime to write.
+    :param when: The datetime to write.
     """
-    path.setContent(when.isoformat().encode("utf-8"))
+    path.setContent(when.isoformat().encode("utf-8"))  # type: ignore[no-untyped-call]
 
 
-def read_time_from_path(path):
+def read_time_from_path(path: FilePath) -> Optional[datetime]:
     """
     Read an ISO8601 datetime string from a file.
 
-    :param FilePath path: The path to a file containing a datetime string.
+    :param path: The path to a file containing a datetime string.
 
     :return: None if no file exists at the path.  Otherwise, a datetime
         instance giving the time represented in the file.
     """
     try:
-        when = path.getContent()
+        when = path.getContent()  # type: ignore[no-untyped-call]
     except IOError as e:
         if ENOENT == e.errno:
             return None
         raise
     else:
-        return parse_datetime(when.decode("ascii"))
+        result = parse_datetime(when.decode("ascii"))
+        assert isinstance(result, datetime)
+        return result
 
 
-def visit_storage_indexes_from_root(visitor, get_root_nodes):
+def visit_storage_indexes_from_root(
+    visit_assets: Callable[[VisitAssets], Awaitable[None]],
+    get_root_nodes: Callable[[], list[IFilesystemNode]],
+) -> Callable[[], Coroutine[Deferred[None], None, None]]:
     """
     An operation for ``lease_maintenance_service`` which applies the given
     visitor to ``root_node`` and all its children.
 
-    :param visitor: A one-argument callable which takes the traversal function
-        and which should call it as desired.
+    :param visit_assets: A one-argument callable which takes the traversal
+        function and which should call it as desired.
 
     :param get_root_nodes: A no-argument callable which returns a list of
         filesystem nodes (``IFilesystemNode``) at which traversal will begin.
 
     :return: A no-argument callable to perform the visits.
     """
-    return lambda: visitor(
-        partial(
-            visit_storage_indexes,
-            # Make sure we call get_root_nodes each time to give us a chance
-            # to notice when it changes.
-            get_root_nodes(),
-        ),
-    )
+
+    async def result() -> None:
+        # Make sure we call get_root_nodes each time to give us a chance
+        # to notice when it changes.
+        roots = get_root_nodes()
+
+        async def bound_visitor(visitor: Visitor) -> None:
+            await visit_storage_indexes(roots, visitor)
+
+        await visit_assets(bound_visitor)
+
+    return result
 
 
 @implementer(ILeaseMaintenanceObserver)
@@ -622,38 +664,38 @@ class NoopMaintenanceObserver(object):
     A lease maintenance observer that does nothing.
     """
 
-    def observe(self, sizes):
+    def observe(self, sizes: list[int]) -> None:
         pass
 
-    def finish(self):
+    def finish(self) -> None:
         pass
 
 
 @implementer(ILeaseMaintenanceObserver)
-@attr.s
+@define
 class MemoryMaintenanceObserver(object):
     """
     A lease maintenance observer that records observations in memory.
     """
 
-    observed = attr.ib(default=attr.Factory(list))
-    finished = attr.ib(default=False)
+    observed: list[list[int]] = Factory(list)
+    finished: bool = False
 
-    def observe(self, sizes):
+    def observe(self, sizes: list[int]) -> None:
         self.observed.append(sizes)
 
-    def finish(self):
+    def finish(self) -> None:
         self.finished = True
 
 
 def maintain_leases_from_root(
-    get_root_nodes,
-    storage_broker,
-    secret_holder,
-    min_lease_remaining,
-    progress,
-    get_now,
-):
+    get_root_nodes: Callable[[], list[IFilesystemNode]],
+    storage_broker: StorageFarmBroker,
+    secret_holder: SecretHolder,
+    min_lease_remaining: timedelta,
+    progress: Callable[[], ILeaseMaintenanceObserver],
+    get_now: Callable[[], datetime],
+) -> Callable[[], Coroutine[Deferred[None], None, None]]:
     """
     An operation for ``lease_maintenance_service`` which visits ``root_node``
     and all its children and renews their leases if they have
@@ -680,8 +722,8 @@ def maintain_leases_from_root(
     :return: A no-argument callable to perform the maintenance.
     """
 
-    def visitor(visit_assets):
-        return renew_leases(
+    async def visitor(visit_assets: VisitAssets) -> None:
+        await renew_leases(
             visit_assets,
             storage_broker,
             secret_holder,
@@ -696,7 +738,11 @@ def maintain_leases_from_root(
     )
 
 
-def calculate_initial_interval(sample_interval_distribution, last_run, now):
+def calculate_initial_interval(
+    sample_interval_distribution: Callable[[], timedelta],
+    last_run: datetime,
+    now: datetime,
+) -> timedelta:
     """
     Determine how long to wait before performing an initial (for this process)
     scan for aging leases.

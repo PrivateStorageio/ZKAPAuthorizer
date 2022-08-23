@@ -20,15 +20,11 @@ from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define, field
-from tahoe_capabilities import (
-    DirectoryReadCapability,
-    danger_real_capability_string,
-    readable_from_string,
-)
+from tahoe_capabilities import DirectoryReadCapability, danger_real_capability_string
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
-from .tahoe import DataProvider, ITahoeClient, download_child
+from .tahoe import DataProvider, FileNode, ITahoeClient, download_child
 
 
 class SnapshotMissing(Exception):
@@ -206,7 +202,18 @@ def statements_from_snapshot(get_snapshot: DataProvider) -> Iterator[str]:
     version = snapshot.get("version", None)
     if version != 1:
         raise ValueError(f"Unknown serialized snapshot version {version}")
-    return snapshot["statements"]
+    statements = snapshot["statements"]
+    if not isinstance(statements, list):
+        raise ValueError(f"Unknown serialized statements type {type(statements)}")
+    return _str_statements(iter(statements))
+
+
+def _str_statements(statements: Iterator[object]) -> Iterator[str]:
+    for statement in statements:
+        if isinstance(statement, str):
+            yield statement
+        else:
+            raise ValueError(f"Unknown serialized statement type {type(statement)}")
 
 
 def recover(
@@ -332,11 +339,11 @@ async def tahoe_lafs_downloader(
     await download_child(snapshot_path, client, recovery_cap, [SNAPSHOT_NAME])
 
     entry_paths = []
-    for name, (entry_type, entry) in entries.items():
-        if entry_type == "filenode" and name.startswith("event-stream-"):
+    for name, entry in entries.items():
+        if isinstance(entry, FileNode) and name.startswith("event-stream-"):
             entry_path = client.get_private_path(name)
             entry_paths.append(entry_path)
-            await client.download(entry_path, readable_from_string(entry["ro_uri"]))
+            await client.download(entry_path, entry.ro_uri)
 
     return (
         partial(snapshot_path.open, "rb"),

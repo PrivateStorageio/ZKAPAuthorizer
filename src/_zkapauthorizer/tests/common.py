@@ -19,24 +19,50 @@ itself.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import partial
 from inspect import iscoroutinefunction
-from typing import Awaitable, Callable, TypeVar, Union
+from typing import (
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Generic,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from attrs import Factory, define, field
-from eliot import log_call
-from twisted.internet.defer import Deferred
+from testtools import TestCase
+from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+from twisted.internet.task import Clock
 from twisted.python.reflect import fullyQualifiedName
-from zope.interface import classImplements
+from typing_extensions import Concatenate, ParamSpec, TypeAlias
+from zope.interface import Interface, directlyProvides, providedBy
 from zope.interface.interface import InterfaceClass
 
+from ..config import Config
+from ..eliot import log_call
+from ..foolscap import ShareStat
 
-def skipIf(condition, reason):
+GetConfig: TypeAlias = Callable[[str, str], Config]
+
+T = TypeVar("T")
+P = ParamSpec("P")
+
+
+def skipIf(
+    condition: bool, reason: str
+) -> Callable[
+    [Callable[Concatenate[TC, P], object]], Callable[Concatenate[TC, P], object]
+]:
     """
     Create a decorate a function to be skipped if the given condition is true.
 
-    :param bool condition: The condition under which to skip.
-    :param unicode reason: A reason for the skip.
+    :param condition: The condition under which to skip.
+    :param reason: A reason for the skip.
 
     :return: A function decorator which will skip the test if the given
         condition is true.
@@ -46,9 +72,18 @@ def skipIf(condition, reason):
     return lambda x: x
 
 
-def _skipper(reason):
-    def wrapper(f):
-        def skipIt(self, *a, **kw):
+TC = TypeVar("TC", bound=TestCase)
+
+
+def _skipper(
+    reason: str,
+) -> Callable[
+    [Callable[Concatenate[TC, P], object]], Callable[Concatenate[TC, P], object]
+]:
+    def wrapper(
+        f: Callable[Concatenate[TC, P], object]
+    ) -> Callable[Concatenate[TC, P], object]:
+        def skipIt(self: TC, /, *a: P.args, **kw: P.kwargs) -> None:
             self.skipTest(reason)
 
         return skipIt
@@ -64,15 +99,18 @@ def flushErrors(exc_type: type) -> list[Exception]:
     """
     # There is no public API for flushing logged errors if you're not
     # using one of trial's TestCase classes...
-    from twisted.trial.runner import _logObserver
+    from twisted.trial.runner import _logObserver  # type: ignore[attr-defined]
 
-    return _logObserver.flushErrors(exc_type)
+    result = _logObserver.flushErrors(exc_type)
+    assert isinstance(result, list)
+    return result
 
 
 _A = TypeVar("_A")
+_I = TypeVar("_I", bound=Interface)
 
 
-def delayedProxy(iface, obj: _A) -> tuple[_DelayedController, _A]:
+def delayedProxy(iface: InterfaceClass, obj: _I) -> tuple[_DelayedController[_I], _I]:
     """
     Wrap ``obj`` in a proxy for ``iface`` which inserts an arbitrary delay
     prior to the execution of each method.
@@ -96,18 +134,19 @@ def delayedProxy(iface, obj: _A) -> tuple[_DelayedController, _A]:
 
     :return: A two-tuple of a controller for the proxy and the proxy itself.
     """
-    controller = _DelayedController()
+    controller: _DelayedController[_I] = _DelayedController()
     originalAttribute = "_original"
-    proxyType = proxyForInterface(
-        iface,
+    proxyObj = proxyForObject(
+        obj,
         partial(controller._descriptorFactory, obj),
         originalAttribute,
     )
-    return (controller, proxyType(obj))
+    assert iface.providedBy(proxyObj)
+    return (controller, proxyObj)
 
 
 @define
-class _DelayedController:
+class _DelayedController(Generic[_A]):
     """
     Control when the methods of a delayed proxy are allowed to run.
 
@@ -142,8 +181,8 @@ class _DelayedController:
         await d
 
     def _descriptorFactory(
-        self, obj: object, iface: InterfaceClass, name: str, originalName: str
-    ) -> Union[Callable, _DelayedMethodDescriptor]:
+        self, obj: _A, iface: InterfaceClass, name: str, originalName: str
+    ) -> Union[Callable[_P, _B], _DelayedMethodDescriptor[_A, _B, _P]]:
         """
         Create a delayed method descriptor for a method of the given name.
         """
@@ -152,25 +191,33 @@ class _DelayedController:
             return _DelayedMethodDescriptor(function, originalName, self)
         return partial(function, obj)
 
-    def _delayedMethod(self, oself, original) -> _DelayedMethod:
+    def _delayedMethod(
+        self, oself: _A, original: Callable[Concatenate[_A, _P], Awaitable[_B]]
+    ) -> _DelayedMethod[_A, _B, _P]:
         """
         Create a delayed method wrapper around the given method.
         """
         return _DelayedMethod(self._timeToRun, oself, original)
 
 
+_P = ParamSpec("_P")
+_B = TypeVar("_B")
+
+
 @define
-class _DelayedMethodDescriptor:
+class _DelayedMethodDescriptor(Generic[_A, _B, _P]):
     """
     A method descriptor which put a delaying wrapper around the original
     method.
     """
 
-    original_method: Callable
+    original_method: Callable[Concatenate[_A, _P], Awaitable[_B]]
     original_attribute: str
-    controller: _DelayedController
+    controller: _DelayedController[_A]
 
-    def __get__(self, oself, type=None):
+    def __get__(
+        self, oself: _A, type: Optional[type] = None
+    ) -> _DelayedMethod[_A, _B, _P]:
         """
         Retrieve the attribute named ``self.attributeName`` from ``oself``,
         wrapped in a delay method wrapper.
@@ -181,16 +228,16 @@ class _DelayedMethodDescriptor:
 
 
 @define
-class _DelayedMethod:
+class _DelayedMethod(Generic[_A, _B, _P]):
     """
     A method wrapper which inserts a delay before calling the original method.
     """
 
     _timeToRun: Callable[[], Awaitable[None]]
-    _original_self: object
-    _original_method: Callable
+    _original_self: _A
+    _original_method: Callable[Concatenate[_A, _P], Awaitable[_B]]
 
-    async def __call__(self, *args, **kwargs):
+    async def __call__(self, *args: _P.args, **kwargs: _P.kwargs) -> _B:
         """
         Delay and then call the wrapped method.
         """
@@ -198,24 +245,34 @@ class _DelayedMethod:
         return await self._original_method(self._original_self, *args, **kwargs)
 
 
-def proxyForInterface(
-    iface: InterfaceClass,
+def proxyForObject(
+    o: _I,
     descriptorFactory: Callable[[InterfaceClass, str, str], object],
     originalAttribute: str = "original",
-):
+) -> _I:
     """
-    Create a proxy to an object which exposes descriptors built by the given
-    factory for the given interface's methods.
+    Create an object that proxies access to another object via descriptors
+    built by the given factory for the interfaces provided by the original
+    value.
 
-    :param iface: The interface the methods of which will be exposed.
+    :param o: The original object.
 
-    :param descriptorFactory: A callable for creating the descriptors.
+    :param descriptorFactory: A callable which can create the proxy
+        descriptors.
 
-    :param originalAttribute: The name of the attribute where the original
-        object will be referenced on the proxy object.
+    :param originalAttribute: An attribute name on the proxy object at which
+        the original object will be accessible.
     """
 
-    def __init__(self, original):
+    ifaces = list(providedBy(o))
+    if len(ifaces) != 1:
+        raise ValueError(
+            f"Cannot determine proxy interface for {o!r} from among {ifaces!r}"
+        )
+
+    [iface] = ifaces
+
+    def __init__(self: _I, original: _I) -> None:
         setattr(self, originalAttribute, original)
 
     # It usually doesn't make sense to proxy `__init__` (the wrapped object
@@ -234,8 +291,55 @@ def proxyForInterface(
     # mypy-zope declarations.classImplements only works when passing a
     # concrete class type.  ignore the error produced by trying to use it on
     # our dynamically constructed class.
-    classImplements(proxy, iface)  # type: ignore[misc]
-    return proxy
+    # classImplements(proxy, iface)  # type: ignore[misc]
+
+    proxyObj = proxy(o)
+    directlyProvides(proxyObj, iface)
+
+    # We just constructed `proxy` to implement `iface` and marked it as so for
+    # zope.interface.  mypy can't do much with the dynamic type object we
+    # created so it considers `proxyObj` to be `Any`.  Unless ...
+    return cast(_I, proxyObj)
+
+
+# def proxyForInterface(
+#     iface: InterfaceClass,
+#     descriptorFactory: Callable[[InterfaceClass, str, str], object],
+#     originalAttribute: str = "original",
+# ) -> InterfaceClass:
+#     """
+#     Create a type that proxies access to an object via descriptors built
+#     by the given factory for the given interface's methods.
+
+#     :param iface: The interface the methods of which will be exposed.
+
+#     :param descriptorFactory: A callable for creating the descriptors.
+
+#     :param originalAttribute: The name of the attribute where the original
+#         object will be referenced on the proxy object.
+#     """
+
+#     def __init__(self, original):
+#         setattr(self, originalAttribute, original)
+
+#     # It usually doesn't make sense to proxy `__init__` (the wrapped object
+#     # must already have been initialized by the time we get it) so we don't
+#     # support it here, but maybe some generalization could change that.
+#     contents: dict[str, object] = {"__init__": __init__}
+
+#     # Use the supplied descriptor factory to create a descriptor for each
+#     # method/attribute defined by the interface.
+#     for name in iface.names():
+#         contents[name] = descriptorFactory(iface, name, originalAttribute)
+
+#     # Create a type with all the attributes we just defined.
+#     proxy = type(f"(Proxy for {fullyQualifiedName(iface)})", (object,), contents)
+
+#     # mypy-zope declarations.classImplements only works when passing a
+#     # concrete class type.  ignore the error produced by trying to use it on
+#     # our dynamically constructed class.
+#     classImplements(proxy, iface)  # type: ignore[misc]
+#     return proxy
 
 
 def from_awaitable(a: Awaitable[_A]) -> Deferred[_A]:
@@ -247,3 +351,49 @@ def from_awaitable(a: Awaitable[_A]) -> Deferred[_A]:
         return await a
 
     return Deferred.fromCoroutine(adapt())
+
+
+@define
+class DummyStorageServer(object):
+    """
+    A dummy implementation of ``IStorageServer`` from Tahoe-LAFS.
+
+    :ivar buckets: A mapping from storage index to
+        metadata about shares at that storage index.
+    """
+
+    clock: Clock
+    buckets: dict[bytes, dict[int, ShareStat]]
+    lease_seed: bytes
+
+    def stat_shares(
+        self, storage_indexes: list[bytes]
+    ) -> Deferred[list[dict[int, ShareStat]]]:
+        return succeed(list(self.buckets.get(idx, {}) for idx in storage_indexes))
+
+    def get_lease_seed(self) -> bytes:
+        return self.lease_seed
+
+    def add_lease(
+        self, storage_index: bytes, renew_secret: bytes, cancel_secret: bytes
+    ) -> None:
+        for stat in self.buckets.get(storage_index, {}).values():
+            stat.lease_expiration = int(
+                self.clock.seconds() + timedelta(days=31).total_seconds()
+            )
+
+
+def async_test(
+    f: Callable[[TestCase], Coroutine[Deferred[object], object, object]]
+) -> Callable[[TestCase], Deferred[None]]:
+    """
+    Decorate a coroutine function to adapt it into a function that can be used
+    as a test method.
+    """
+
+    @inlineCallbacks
+    def g(self: object) -> Generator[Deferred[object], object, None]:
+        d: Deferred[object] = Deferred.fromCoroutine(f(self))
+        yield d
+
+    return g

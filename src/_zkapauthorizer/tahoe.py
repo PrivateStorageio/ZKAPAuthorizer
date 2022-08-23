@@ -7,15 +7,20 @@ from functools import wraps
 from hashlib import sha256
 from json import loads
 from tempfile import mkdtemp
-from typing import IO, Any, Callable, List, Optional, Union
+from typing import IO, Any, Callable, List, Optional, TypeVar, Union, cast
 
 import treq
 from allmydata.util.base32 import b2a as b32encode
 from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
 from tahoe_capabilities import (
+    CHKRead,
+    CHKVerify,
     DirectoryReadCapability,
+    NotRecognized,
     ReadCapability,
+    SSKDirectoryWrite,
+    SSKWrite,
     capability_from_string,
     danger_real_capability_string,
     digested_capability_string,
@@ -23,12 +28,15 @@ from tahoe_capabilities import (
     is_write,
     readable_from_string,
     readonly_directory_from_string,
+    writeable_directory_from_string,
     writeable_from_string,
 )
 from treq.client import HTTPClient
 from twisted.internet.error import ConnectionRefusedError
+from twisted.internet.interfaces import IReactorTCP
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
+from typing_extensions import ParamSpec
 from zope.interface import Interface, implementer
 
 from ._types import CapStr
@@ -70,7 +78,13 @@ class ShareEncoding:
     total: int
 
 
-def async_retry(matchers: list[Callable[[Exception], bool]]):
+_T = TypeVar("_T")
+_P = ParamSpec("_P")
+
+
+def async_retry(
+    matchers: list[Callable[[Exception], bool]]
+) -> Callable[[Callable[_P, Awaitable[_T]]], Callable[_P, Awaitable[_T]]]:
     """
     Decorate a function with automatic retry behavior for certain cases.
 
@@ -79,9 +93,9 @@ def async_retry(matchers: list[Callable[[Exception], bool]]):
         function then the decorated function will be called again.
     """
 
-    def retry_decorator(f) -> Callable:
+    def retry_decorator(f: Callable[_P, Awaitable[_T]]) -> Callable[_P, Awaitable[_T]]:
         @wraps(f)
-        async def decorated(*a, **kw) -> Awaitable:
+        async def decorated(*a: _P.args, **kw: _P.kwargs) -> _T:
             while True:
                 try:
                     result = await f(*a, **kw)
@@ -181,7 +195,7 @@ async def upload_bytes(
     client: HTTPClient,
     get_data_provider: DataProvider,
     api_root: DecodedURL,
-) -> Awaitable[str]:
+) -> str:
     """
     Upload the given data and return the resulting capability.
 
@@ -209,9 +223,10 @@ async def upload_bytes(
     uri = api_root.child("uri")
     data = get_data_provider()
     resp = await client.put(uri, data)
-    content = (await treq.content(resp)).decode("utf-8")
+    body = await treq.content(resp)
+    content = body.decode("utf-8")
     if resp.code in (200, 201):
-        return content
+        return cast(str, content)
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
@@ -241,7 +256,7 @@ async def download(
     :raise: If there is a problem downloading the data then some exception is
         raised.
     """
-    outtemp = outpath.temporarySibling()
+    outtemp = outpath.temporarySibling()  # type: ignore[no-untyped-call]
 
     uri = api_root.child("uri").child(danger_real_capability_string(cap))
 
@@ -255,12 +270,27 @@ async def download(
         raise TahoeAPIError("get", uri, resp.code, content)
 
 
+@frozen
+class FileNode:
+    size: int
+    ro_uri: ReadCapability
+
+
+@frozen
+class DirectoryNode:
+    ro_uri: DirectoryReadCapability
+
+
+_DirectoryEntry = Union[FileNode, DirectoryNode]
+_DirectoryListing = dict[str, _DirectoryEntry]
+
+
 @async_retry(_common_tahoe_errors)
 async def list_directory(
     client: HTTPClient,
     api_root: DecodedURL,
     dir_cap: str,
-) -> Awaitable[dict[str, dict[str, dict]]]:
+) -> _DirectoryListing:
     """
     Read the direct children of a directory.
     """
@@ -272,7 +302,20 @@ async def list_directory(
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
         kind, details = loads(content)
-        return details["children"]
+
+        def filenode(entry: dict[str, Any]) -> FileNode:
+            return FileNode(entry["size"], readable_from_string(entry["ro_uri"]))
+
+        def dirnode(entry: dict[str, Any]) -> DirectoryNode:
+            return DirectoryNode(readonly_directory_from_string(entry["ro_uri"]))
+
+        r: _DirectoryListing = {}
+        for (name, (entry_kind, entry)) in details["children"].items():
+            if entry_kind == "filenode":
+                r[name] = filenode(entry)
+            else:
+                r[name] = dirnode(entry)
+        return r
 
     raise TahoeAPIError("get", uri, resp.code, content)
 
@@ -281,7 +324,7 @@ async def list_directory(
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-) -> Awaitable[str]:
+) -> str:
     """
     Create a new mutable directory and return the write capability string.
     """
@@ -289,7 +332,7 @@ async def make_directory(
     resp = await client.post(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
-        return content
+        return cast(str, content)
     raise TahoeAPIError("post", uri, resp.code, content)
 
 
@@ -423,7 +466,7 @@ class ITahoeClient(Interface):
         :param entry_name: The name of the entry to remove.
         """
 
-    async def list_directory(dir_cap: CapStr) -> dict[str, list[Any]]:
+    async def list_directory(dir_cap: CapStr) -> _DirectoryListing:
         """
         List the entries linked into a directory.
         """
@@ -444,7 +487,7 @@ class Tahoe(object):
     _node_config: Config
 
     @property
-    def _api_root(self):
+    def _api_root(self) -> DecodedURL:
         # The reading of node.url is intentionally delayed until it is
         # required for the benefit of test code that doesn't ever make any
         # requests and also doesn't fully populate the node's filesystem
@@ -466,29 +509,29 @@ class Tahoe(object):
         """
         Get the path to a file in the node's private directory.
         """
-        return FilePath(self._node_config.get_private_path(name))
+        return FilePath(self._node_config.get_private_path(name))  # type: ignore[no-untyped-call]
 
     async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
         await download(self.client, outpath, self._api_root, cap)
 
-    def upload(self, get_data_provider):
-        return upload_bytes(self.client, get_data_provider, self._api_root)
+    async def upload(self, get_data_provider: DataProvider) -> str:
+        return await upload_bytes(self.client, get_data_provider, self._api_root)
 
-    def make_directory(self):
-        return make_directory(self.client, self._api_root)
+    async def make_directory(self) -> str:
+        return await make_directory(self.client, self._api_root)
 
-    def list_directory(self, dir_cap):
-        return list_directory(self.client, self._api_root, dir_cap)
+    async def list_directory(self, dir_cap: str) -> _DirectoryListing:
+        return await list_directory(self.client, self._api_root, dir_cap)
 
-    def link(self, dir_cap, entry_name, entry_cap):
-        return link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
+    async def link(self, dir_cap: str, entry_name: str, entry_cap: str) -> None:
+        return await link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
-    def unlink(self, dir_cap, entry_name):
-        return unlink(self.client, self._api_root, dir_cap, entry_name)
+    async def unlink(self, dir_cap: str, entry_name: str) -> None:
+        return await unlink(self.client, self._api_root, dir_cap, entry_name)
 
 
 @define
-class _Directory:
+class _MemoryDirectory:
     """
     Represent a Tahoe-LAFS directory object.
 
@@ -496,11 +539,7 @@ class _Directory:
         used to look up the object for that entry.
     """
 
-    children: dict[str, CapStr] = field()
-
-    @children.default
-    def _default_children(self):
-        return {}
+    children: dict[str, CapStr] = Factory(dict)
 
 
 @define
@@ -518,7 +557,9 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[CapStr, Union[bytes, _Directory]] = field(default=Factory(dict))
+    _objects: dict[CapStr, Union[bytes, _MemoryDirectory]] = field(
+        default=Factory(dict)
+    )
 
     def client(
         self,
@@ -530,23 +571,29 @@ class MemoryGrid:
         real Tahoe-LAFS storage grid.
         """
         if basedir is None:
-            basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))
+            basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))  # type: ignore[no-untyped-call]
         return _MemoryTahoe(self, basedir, share_encoding)
 
     def upload(self, data: bytes) -> CapStr:
-        def encode(s: str) -> str:
-            return b32encode(s.encode("ascii")).decode("ascii")
+        assert isinstance(data, bytes)
 
-        cap = "URI:CHK:{}:{}:{}:{}:{}".format(
-            encode("{:016}".format(self._counter)),
-            encode("{:032}".format(self._counter)),
-            self._counter,
-            self._counter,
-            self._counter,
+        def encode(n: int, w: int) -> bytes:
+            return n.to_bytes(w, "big")
+
+        cap = CHKRead(
+            readkey=encode(self._counter, 16),
+            verifier=CHKVerify(
+                storage_index=encode(self._counter, 16),
+                uri_extension_hash=encode(self._counter, 32),
+                needed=self._counter % 256,
+                total=self._counter % 256,
+                size=self._counter,
+            ),
         )
-        self._objects[cap] = data
+        cap_str = danger_real_capability_string(cap)
+        self._objects[cap_str] = data
         self._counter += 1
-        return cap
+        return cap_str
 
     def download(self, cap: ReadCapability) -> bytes:
         data = self._objects[danger_real_capability_string(cap)]
@@ -554,18 +601,23 @@ class MemoryGrid:
         return data
 
     def make_directory(self) -> CapStr:
-        def encode(s: str) -> str:
-            return b32encode(s.encode("ascii")).decode("ascii")
+        def encode(n: int, w: int) -> bytes:
+            return n.to_bytes(w, "big")
 
-        writekey = encode("{:016x}".format(self._counter))
-        fingerprint = encode("{:032x}".format(self._counter))
+        writekey = encode(self._counter, 16)
+        fingerprint = encode(self._counter, 32)
 
         self._counter += 1
-        cap = f"URI:DIR2:{writekey}:{fingerprint}"
-        rocap = attenuate_writecap(cap)
-        self._objects[cap] = self._objects[rocap] = _Directory()
+        cap = SSKDirectoryWrite(
+            cap_object=SSKWrite.derive(writekey, fingerprint),
+        )
+        rw_cap_str = danger_real_capability_string(cap)
+        ro_cap_str = danger_real_capability_string(cap.reader)
+        dirobj = _MemoryDirectory()
+        for cap_str in [rw_cap_str, ro_cap_str]:
+            self._objects[cap_str] = dirobj
 
-        return cap
+        return rw_cap_str
 
     def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
         capobj = capability_from_string(dir_cap)
@@ -578,8 +630,8 @@ class MemoryGrid:
         else:
             dirobj = self._objects[dir_cap]
             # It is a directory cap so we know the object will be a
-            # _Directory.
-            assert isinstance(dirobj, _Directory)
+            # _MemoryDirectory.
+            assert isinstance(dirobj, _MemoryDirectory)
             dirobj.children[entry_name] = entry_cap
 
     def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
@@ -589,24 +641,36 @@ class MemoryGrid:
         if not is_directory(capobj):
             raise NotADirectoryError()
         dirobj = self._objects[dir_cap]
-        # It is a directory cap so we know the object will be a _Directory.
-        assert isinstance(dirobj, _Directory)
+        # It is a directory cap so we know the object will be a _MemoryDirectory.
+        assert isinstance(dirobj, _MemoryDirectory)
         del dirobj.children[entry_name]
 
-    def list_directory(self, dir_cap: CapStr) -> dict[str, list[Any]]:
-        def kind(entry):
-            if isinstance(entry, _Directory):
-                return "dirnode"
-            return "filenode"
+    def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
+        def describe(cap_str: CapStr) -> _DirectoryEntry:
+            dir_cap_ro: DirectoryReadCapability
+            cap_ro: ReadCapability
 
-        def describe(cap):
-            obj = self._objects[cap]
-            if kind(obj) == "dirnode":
-                return ["dirnode", {"rw_uri": cap}]
-            return ["filenode", {"size": len(obj), "ro_uri": cap}]
+            obj = self._objects[cap_str]
+            try:
+                try:
+                    dir_cap_rw = writeable_directory_from_string(cap_str)
+                    dir_cap_ro = dir_cap_rw.reader
+                except NotRecognized:
+                    dir_cap_ro = readonly_directory_from_string(cap_str)
+                return DirectoryNode(dir_cap_ro)
+            except NotRecognized:
+                pass
+
+            try:
+                cap_rw = writeable_from_string(cap_str)
+                cap_ro = cap_rw.reader
+            except NotRecognized:
+                cap_ro = readable_from_string(cap_str)
+            assert isinstance(obj, bytes), f"{obj!r}"
+            return FileNode(len(obj), cap_ro)
 
         dirobj = self._objects[dir_cap]
-        if isinstance(dirobj, _Directory):
+        if isinstance(dirobj, _MemoryDirectory):
             return {name: describe(entry) for (name, entry) in dirobj.children.items()}
 
         raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
@@ -634,8 +698,8 @@ class _MemoryTahoe:
     _nodedir: FilePath
     share_encoding: ShareEncoding
 
-    def __attrs_post_init__(self):
-        self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)
+    def __attrs_post_init__(self) -> None:
+        self._nodedir.child("private").makedirs(ignoreExistingDirectory=True)  # type: ignore[no-untyped-call]
 
     def get_config(self) -> TahoeConfig:
         """
@@ -648,14 +712,14 @@ class _MemoryTahoe:
         Get the path to a file in a private directory dedicated to this instance
         (there is no Tahoe node directory to look in).
         """
-        return self._nodedir.child("private").child(name)
+        return cast(FilePath, self._nodedir.child("private").child(name))  # type: ignore[no-untyped-call]
 
     async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
         data = self._grid.download(cap)
         assert isinstance(data, bytes)
-        outpath.setContent(data)
+        outpath.setContent(data)  # type: ignore[no-untyped-call]
 
-    async def upload(self, data_provider: DataProvider):
+    async def upload(self, data_provider: DataProvider) -> CapStr:
         """
         Send some data to Tahoe-LAFS, returning an immutable capability.
 
@@ -668,16 +732,16 @@ class _MemoryTahoe:
             content = d.read()
         return self._grid.upload(content)
 
-    async def make_directory(self):
+    async def make_directory(self) -> CapStr:
         return self._grid.make_directory()
 
-    async def link(self, dir_cap, entry_name, entry_cap):
+    async def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
-    async def unlink(self, dir_cap, entry_name):
+    async def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
         return self._grid.unlink(dir_cap, entry_name)
 
-    async def list_directory(self, dir_cap):
+    async def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
         return self._grid.list_directory(dir_cap)
 
 
@@ -710,20 +774,18 @@ async def download_child(
         raise ValueError("Path to child must be provided")
     else:
         p = child_path[0]
+        remaining_path = child_path[1:]
         children = await client.list_directory(danger_real_capability_string(dircap))
         child = children[p]
-        ro_uri = child[1]["ro_uri"]
 
-        if len(child_path) == 1:
-            await client.download(outpath, readable_from_string(ro_uri))
-        else:
-            if child[0] == "dirnode":
-                next_dircap = readonly_directory_from_string(ro_uri)
-                await download_child(outpath, client, next_dircap, child_path[1:])
+        if remaining_path:
+            if isinstance(child, DirectoryNode):
+                await download_child(outpath, client, child.ro_uri, remaining_path)
             else:
-                raise NotADirectoryError(
-                    digested_capability_string(capability_from_string(ro_uri))
-                )
+                raise NotADirectoryError(digested_capability_string(child.ro_uri))
+        else:
+            assert isinstance(child, FileNode)
+            await client.download(outpath, child.ro_uri)
 
 
 def attenuate_writecap(rw_cap: CapStr) -> CapStr:
@@ -735,7 +797,7 @@ def attenuate_writecap(rw_cap: CapStr) -> CapStr:
     return danger_real_capability_string(writeable_from_string(rw_cap).reader)
 
 
-def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:
+def get_tahoe_client(reactor: IReactorTCP, node_config: Config) -> ITahoeClient:
     """
     Return a Tahoe-LAFS client appropriate for the given node configuration.
 
@@ -744,7 +806,7 @@ def get_tahoe_client(reactor, node_config: Config) -> ITahoeClient:
     :param node_config: The Tahoe-LAFS client node configuration for the
         client (giving, for example, the root URI of the node's HTTP API).
     """
-    agent = Agent(reactor)
+    agent = Agent(reactor)  # type: ignore[no-untyped-call]
     http_client = HTTPClient(agent)
     return Tahoe(http_client, node_config)
 

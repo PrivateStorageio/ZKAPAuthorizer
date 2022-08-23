@@ -23,8 +23,8 @@ In the future it should also allow users to read statistics about token usage.
 
 from collections.abc import Awaitable
 from functools import partial
-from json import dumps, loads
-from typing import Callable, Optional
+from json import dumps
+from typing import Callable, Optional, Union, cast
 
 from attr import Factory, define, field
 from autobahn.twisted.resource import WebSocketResource
@@ -49,11 +49,12 @@ from zope.interface import Attribute
 from . import NAME
 from . import __version__ as _zkapauthorizer_version
 from ._base64 import urlsafe_b64decode
-from ._json import dumps_utf8
+from ._json import dumps_utf8, loads
+from ._types import JSON
 from .config import Config
 from .controller import IRedeemer, PaymentController, get_redeemer
 from .lease_maintenance import LeaseMaintenanceConfig
-from .model import VoucherStore
+from .model import Voucher, VoucherStore
 from .pricecalculator import PriceCalculator
 from .private import create_private_tree
 from .recover import Downloader, RecoveryStages, RecoveryState, StatefulRecoverer
@@ -139,17 +140,25 @@ def from_configuration(
             None,
             None,
         )
+    if clock is None:
+        from twisted.internet import reactor
+
+        clock_ = cast(IReactorTime, reactor)
+    else:
+        clock_ = clock
 
     default_token_count = get_token_count(
         NAME,
         node_config,
     )
+    public_keys = get_configured_allowed_public_keys(node_config)
+
     controller = PaymentController(
+        clock_,
         store,
         redeemer,
         default_token_count,
-        allowed_public_keys=get_configured_allowed_public_keys(node_config),
-        clock=clock,
+        public_keys,
     )
 
     calculator = PriceCalculator(
@@ -162,19 +171,31 @@ def from_configuration(
         LeaseMaintenanceConfig.from_node_config(node_config).get_lease_duration(),
     )
 
-    root = create_private_tree(
-        lambda: node_config.get_private_config("api_auth_token").encode("utf-8"),
-        authorizationless_resource_tree(
-            store,
-            controller,
-            get_downloader,
-            setup_replication,
-            calculate_price,
+    def get_api_auth_token() -> bytes:
+        token = node_config.get_private_config("api_auth_token")
+        assert isinstance(token, str)
+        return token.encode("utf-8")
+
+    root = cast(
+        IZKAPRoot,
+        create_private_tree(
+            get_api_auth_token,
+            authorizationless_resource_tree(
+                store,
+                controller,
+                get_downloader,
+                setup_replication,
+                calculate_price,
+            ),
         ),
     )
     root.store = store
     root.controller = controller
     return root
+
+
+def set_response_code(request: IRequest, code: int) -> None:
+    request.setResponseCode(code)  # type: ignore[no-untyped-call]
 
 
 def internal_server_error(err: Failure, logger: Logger, request: IRequest) -> None:
@@ -186,9 +207,9 @@ def internal_server_error(err: Failure, logger: Logger, request: IRequest) -> No
     request.
     """
     logger.failure("replication setup failed", err)
-    request.setResponseCode(INTERNAL_SERVER_ERROR)
-    request.write(dumps_utf8({"reason": err.getErrorMessage()}))
-    request.finish()
+    set_response_code(request, INTERNAL_SERVER_ERROR)
+    request.write(dumps_utf8({"reason": err.getErrorMessage()}))  # type: ignore[no-untyped-call]
+    request.finish()  # type: ignore[no-untyped-call]
 
 
 @define
@@ -206,7 +227,7 @@ class ReplicateResource(Resource):
     _log: Logger = Logger()
 
     def __attrs_post_init__(self) -> None:
-        Resource.__init__(self)
+        Resource.__init__(self)  # type: ignore[no-untyped-call]
 
     def render_POST(self, request: IRequest) -> int:
         d = Deferred.fromCoroutine(self._setup_replication(request))
@@ -227,18 +248,18 @@ class ReplicateResource(Resource):
             status = CREATED
 
         application_json(request)
-        request.setResponseCode(status)
-        request.write(
+        set_response_code(request, status)
+        request.write(  # type: ignore[no-untyped-call]
             dumps_utf8(
                 {
                     "recovery-capability": danger_real_capability_string(cap_obj),
                 }
             )
         )
-        request.finish()
+        request.finish()  # type: ignore[no-untyped-call]
 
 
-class RecoverProtocol(WebSocketServerProtocol):
+class RecoverProtocol(WebSocketServerProtocol):  # type: ignore[misc]
     """
     Speaks the server side of the WebSocket /recover protocol.
 
@@ -255,7 +276,7 @@ class RecoverProtocol(WebSocketServerProtocol):
 
     _log = Logger()
 
-    def onClose(self, wasClean, code, reason) -> None:
+    def onClose(self, wasClean: object, code: object, reason: object) -> None:
         """
         WebSocket API: we've lost our connection for some reason
         """
@@ -266,13 +287,15 @@ class RecoverProtocol(WebSocketServerProtocol):
             # in the clients list
             pass
 
-    def onMessage(self, payload, isBinary) -> None:
+    def onMessage(self, payload: bytes, isBinary: bool) -> None:
         """
         WebSocket API: a message has been received from the client (the
         only thing they can send is a request to initiate recovery).
         """
         try:
             body = loads(payload)
+            if not isinstance(body, dict):
+                raise ValueError(f"Expected dict, instead got {type(body)}")
             if set(body.keys()) != {"recovery-capability"}:
                 raise ValueError("Unknown keys present in request")
             cap_str = body["recovery-capability"]
@@ -281,11 +304,11 @@ class RecoverProtocol(WebSocketServerProtocol):
                     f"Recovery capability must be a string, got {type(cap_str)!r} instead."
                 )
             recovery_capability = readonly_directory_from_string(cap_str)
-        except Exception as e:
+        except Exception:
             self._log.failure("Failed to initiate recovery")
             self.sendClose(
                 code=4000,
-                reason=f"Failed to parse recovery request: {e}",
+                reason="Failed to parse recovery request",
             )
             return
         # we have a valid request, tell our factory to start recovery
@@ -293,7 +316,7 @@ class RecoverProtocol(WebSocketServerProtocol):
 
 
 @define
-class RecoverFactory(WebSocketServerFactory):
+class RecoverFactory(WebSocketServerFactory):  # type: ignore[misc]
     """
     Track state of recovery.
 
@@ -302,22 +325,23 @@ class RecoverFactory(WebSocketServerFactory):
     to link to other resources that are also constructed once.
     """
 
-    store: VoucherStore = field()
-    get_downloader: Callable[[DirectoryReadCapability], Downloader] = field()
-    recoverer: StatefulRecoverer = field()
-    recovering_d: Optional[Deferred] = field(default=None)
-    recovering_cap: Optional[DirectoryReadCapability] = field(default=None)
-    # manage WebSocket client(s)
-    clients: list = field(default=Factory(list))
-    sent_updates: list = field(default=Factory(list))
+    protocol = RecoverProtocol
     _log = Logger()
+
+    store: VoucherStore
+    get_downloader: Callable[[DirectoryReadCapability], Downloader]
+    recoverer: StatefulRecoverer = field()
+    recovering_d: Optional[Deferred[None]] = None
+    recovering_cap: Optional[DirectoryReadCapability] = None
+    # manage WebSocket client(s)
+    clients: list[WebSocketServerProtocol] = Factory(list)
+    sent_updates: list[bytes] = Factory(list)
 
     @recoverer.default
     def _default_recoverer(self) -> StatefulRecoverer:
         return StatefulRecoverer(listeners={self._on_state_change})
 
     def __attrs_post_init__(self) -> None:
-        self.protocol = RecoverProtocol
         WebSocketServerFactory.__init__(self, server="ZKAPAuthorizer")
 
     def _on_state_change(self, state: RecoveryState) -> None:
@@ -348,11 +372,11 @@ class RecoverFactory(WebSocketServerFactory):
             self.recovering_cap = cap
             self.recovering_d = Deferred.fromCoroutine(self._recover(self.store, cap))
 
-            def disconnect_clients():
+            def disconnect_clients() -> None:
                 for client in self.clients:
                     client.sendClose()
 
-            def err(f):
+            def err(f: Failure) -> None:
                 self._log.failure("Error during restore", f)
                 # One likely reason to get here is the ValueError we
                 # raise about existing local state .. and the
@@ -366,7 +390,7 @@ class RecoverFactory(WebSocketServerFactory):
                 )
                 disconnect_clients()
 
-            def happy(_):
+            def happy(_: object) -> None:
                 disconnect_clients()
 
             self.recovering_d.addCallbacks(happy, err)
@@ -384,7 +408,7 @@ class RecoverFactory(WebSocketServerFactory):
             for update in self.sent_updates:
                 client.sendMessage(update)
 
-    def buildProtocol(self, addr) -> RecoverProtocol:
+    def buildProtocol(self, addr: object) -> RecoverProtocol:
         """
         IFactory API
         """
@@ -430,35 +454,35 @@ def authorizationless_resource_tree(
 
     :return IResource: The root of the resource hierarchy.
     """
-    root = Resource()
+    root = Resource()  # type: ignore[no-untyped-call]
 
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"recover",
         WebSocketResource(RecoverFactory(store, get_downloader)),
     )
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"replicate",
         ReplicateResource(setup_replication),
     )
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"voucher",
         _VoucherCollection(
             store,
             controller,
         ),
     )
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"lease-maintenance",
         _LeaseMaintenanceResource(
             store,
             controller,
         ),
     )
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"version",
-        _ProjectVersion(),
+        _ProjectVersion(),  # type: ignore[no-untyped-call]
     )
-    root.putChild(
+    root.putChild(  # type: ignore[no-untyped-call]
         b"calculate-price",
         calculate_price,
     )
@@ -474,7 +498,7 @@ class _CalculatePrice(Resource):
 
     render_HEAD = render_GET = None
 
-    def __init__(self, price_calculator, lease_period):
+    def __init__(self, price_calculator: PriceCalculator, lease_period: int):
         """
         :param _PriceCalculator price_calculator: The object which can actually
             calculate storage prices.
@@ -483,9 +507,9 @@ class _CalculatePrice(Resource):
         """
         self._price_calculator = price_calculator
         self._lease_period = lease_period
-        Resource.__init__(self)
+        Resource.__init__(self)  # type: ignore[no-untyped-call]
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> Union[int, bytes]:
         """
         Calculate the price in ZKAPs to store or continue storing files specified
         sizes.
@@ -498,10 +522,17 @@ class _CalculatePrice(Resource):
         try:
             body_object = loads(payload)
         except ValueError:
-            request.setResponseCode(BAD_REQUEST)
+            set_response_code(request, BAD_REQUEST)
             return dumps_utf8(
                 {
                     "error": "could not parse request body",
+                }
+            )
+        if not isinstance(body_object, dict):
+            set_response_code(request, BAD_REQUEST)
+            return dumps_utf8(
+                {
+                    "error": "request body must be a JSON object",
                 }
             )
 
@@ -509,7 +540,7 @@ class _CalculatePrice(Resource):
             version = body_object["version"]
             sizes = body_object["sizes"]
         except (TypeError, KeyError):
-            request.setResponseCode(BAD_REQUEST)
+            set_response_code(request, BAD_REQUEST)
             return dumps_utf8(
                 {
                     "error": "could not read `version` and `sizes` properties",
@@ -517,7 +548,7 @@ class _CalculatePrice(Resource):
             )
 
         if version != 1:
-            request.setResponseCode(BAD_REQUEST)
+            set_response_code(request, BAD_REQUEST)
             return dumps_utf8(
                 {
                     "error": "did not find required version number 1 in request",
@@ -527,7 +558,7 @@ class _CalculatePrice(Resource):
         if not isinstance(sizes, list) or not all(
             isinstance(size, int) and size >= 0 for size in sizes
         ):
-            request.setResponseCode(BAD_REQUEST)
+            set_response_code(request, BAD_REQUEST)
             return dumps_utf8(
                 {
                     "error": "did not find required positive integer sizes list in request",
@@ -545,7 +576,7 @@ class _CalculatePrice(Resource):
         )
 
 
-def wrong_content_type(request, required_type):
+def wrong_content_type(request: IRequest, required_type: str) -> bool:
     """
     Check the content-type of a request and respond if it is incorrect.
 
@@ -562,17 +593,17 @@ def wrong_content_type(request, required_type):
         [None],
     )[0]
     if actual_type != required_type:
-        request.setResponseCode(BAD_REQUEST)
-        request.finish()
+        set_response_code(request, BAD_REQUEST)
+        request.finish()  # type: ignore[no-untyped-call]
         return True
     return False
 
 
-def application_json(request):
+def application_json(request: IRequest) -> None:
     """
     Set the given request's response content-type to ``application/json``.
 
-    :param twisted.web.iweb.IRequest request: The request to modify.
+    :param request: The request to modify.
     """
     request.responseHeaders.setRawHeaders("content-type", ["application/json"])
 
@@ -582,7 +613,7 @@ class _ProjectVersion(Resource):
     This resource exposes the version of **ZKAPAuthorizer** itself.
     """
 
-    def render_GET(self, request):
+    def render_GET(self, request: IRequest) -> bytes:
         application_json(request)
         return dumps_utf8(
             {
@@ -599,12 +630,12 @@ class _LeaseMaintenanceResource(Resource):
 
     _log = Logger()
 
-    def __init__(self, store, controller):
+    def __init__(self, store: VoucherStore, controller: PaymentController) -> None:
         self._store = store
         self._controller = controller
-        Resource.__init__(self)
+        Resource.__init__(self)  # type: ignore[no-untyped-call]
 
-    def render_GET(self, request):
+    def render_GET(self, request: IRequest) -> bytes:
         """
         Retrieve the spending information.
         """
@@ -616,7 +647,7 @@ class _LeaseMaintenanceResource(Resource):
             }
         )
 
-    def _lease_maintenance_activity(self):
+    def _lease_maintenance_activity(self) -> Optional[dict[str, JSON]]:
         activity = self._store.get_latest_lease_maintenance_activity()
         if activity is None:
             return activity
@@ -636,36 +667,40 @@ class _VoucherCollection(Resource):
 
     _log = Logger()
 
-    def __init__(self, store, controller):
+    def __init__(self, store: VoucherStore, controller: PaymentController):
         self._store = store
         self._controller = controller
-        Resource.__init__(self)
+        Resource.__init__(self)  # type: ignore[no-untyped-call]
 
-    def render_PUT(self, request):
+    def render_PUT(self, request: IRequest) -> bytes:
         """
         Record a voucher and begin attempting to redeem it.
         """
         try:
             payload = loads(request.content.read())
         except Exception:
-            return bad_request("json request body required").render(request)
+            return bad_request("json request body required").render(request)  # type: ignore[no-untyped-call,no-any-return]
+        if not isinstance(payload, dict):
+            return bad_request("request body must be a JSON object").render(request)  # type: ignore[no-untyped-call,no-any-return]
         if payload.keys() != {"voucher"}:
-            return bad_request(
+            return bad_request(  # type: ignore[no-any-return]
                 "request object must have exactly one key: 'voucher'"
-            ).render(request)
+            ).render(
+                request
+            )  # type: ignore[no-untyped-call]
         voucher = payload["voucher"]
         if not is_syntactic_voucher(voucher):
-            return bad_request("submitted voucher is syntactically invalid").render(
+            return bad_request("submitted voucher is syntactically invalid").render(  # type: ignore[no-untyped-call,no-any-return]
                 request
             )
 
         self._log.info(
             "Accepting a voucher ({voucher}) for redemption.", voucher=voucher
         )
-        self._controller.redeem(voucher.encode("ascii"))
+        Deferred.fromCoroutine(self._controller.redeem(voucher.encode("ascii")))
         return b""
 
-    def render_GET(self, request):
+    def render_GET(self, request: IRequest) -> bytes:
         application_json(request)
         return dumps_utf8(
             {
@@ -676,18 +711,18 @@ class _VoucherCollection(Resource):
             }
         )
 
-    def getChild(self, segment, request):
-        voucher = segment.decode("utf-8")
-        if not is_syntactic_voucher(voucher):
+    def getChild(self, segment: bytes, request: IRequest) -> IResource:
+        voucher_str = segment.decode("utf-8")
+        if not is_syntactic_voucher(voucher_str):
             return bad_request()
         try:
-            voucher = self._store.get(voucher.encode("ascii"))
+            voucher_obj = self._store.get(voucher_str.encode("ascii"))
         except KeyError:
-            return NoResource()
-        return VoucherView(self._controller.incorporate_transient_state(voucher))
+            return NoResource()  # type: ignore[no-untyped-call]
+        return VoucherView(self._controller.incorporate_transient_state(voucher_obj))
 
 
-def is_syntactic_voucher(voucher):
+def is_syntactic_voucher(voucher: str) -> bool:
     """
     :param voucher: A candidate object to inspect.
 
@@ -714,25 +749,25 @@ class VoucherView(Resource):
     This class implements a view for a ``Voucher`` instance.
     """
 
-    def __init__(self, voucher):
+    def __init__(self, voucher: Voucher) -> None:
         """
         :param Voucher reference: The model object for which to provide a
             view.
         """
         self._voucher = voucher
-        Resource.__init__(self)
+        Resource.__init__(self)  # type: ignore[no-untyped-call]
 
-    def render_GET(self, request):
+    def render_GET(self, request: IRequest) -> bytes:
         application_json(request)
         return self._voucher.to_json()
 
 
-def bad_request(reason="Bad Request"):
+def bad_request(reason: str = "Bad Request") -> IResource:
     """
-    :return IResource: A resource which can be rendered to produce a **BAD
-        REQUEST** response.
+    :return: A resource which can be rendered to produce a **BAD REQUEST**
+        response.
     """
-    return ErrorPage(
+    return ErrorPage(  # type: ignore[no-untyped-call]
         BAD_REQUEST,
         b"Bad Request",
         reason.encode("utf-8"),
@@ -744,7 +779,7 @@ async def recover(
     api_root: DecodedURL,
     auth_token: str,
     replica_dircap_str: str,
-) -> list[dict]:
+) -> list[JSON]:
     """
     Initiate recovery from a replica.
 
