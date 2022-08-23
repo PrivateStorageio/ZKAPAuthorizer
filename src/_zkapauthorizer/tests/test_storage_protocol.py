@@ -16,7 +16,7 @@
 Tests for communication between the client and server components.
 """
 
-from typing import Callable, Iterator, TypeAlias
+from typing import Callable, Iterator
 
 from allmydata.storage.common import storage_index_to_dir
 from allmydata.storage.server import StorageServer
@@ -48,6 +48,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet.task import Clock
 from twisted.python.filepath import FilePath
 from twisted.python.runtime import platform
+from typing_extensions import TypeAlias
 
 from ..api import (
     MorePassesRequired,

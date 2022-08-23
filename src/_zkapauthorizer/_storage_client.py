@@ -206,6 +206,7 @@ class RRefHaver(Protocol):
     """
     Something that has a Foolscap remote reference.
     """
+
     def _rref(self) -> IRemoteReference:
         """
         Get the Foolscap remote reference.

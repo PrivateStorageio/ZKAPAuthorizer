@@ -17,7 +17,7 @@ Tests for ``_zkapauthorizer._storage_client``.
 """
 
 from functools import partial
-from typing import Callable, NoReturn, TypeAlias
+from typing import Callable, NoReturn
 
 from allmydata.client import config_from_string
 from challenge_bypass_ristretto import random_signing_key
@@ -36,6 +36,7 @@ from testtools.matchers import (
 )
 from testtools.twistedsupport import failed, succeeded
 from twisted.internet.defer import Deferred, fail, succeed
+from typing_extensions import TypeAlias
 
 from .. import NAME
 from .._storage_client import call_with_passes

@@ -17,17 +17,10 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Generic,
-    TypeAlias,
-    TypedDict,
-    TypeVar,
-    Union,
-)
+from typing import TYPE_CHECKING, Callable, Generic, TypedDict, TypeVar, Union
 
 from attrs import Attribute as _Attribute
+from typing_extensions import TypeAlias
 
 # A Tahoe-LAFS capability string
 CapStr = str
