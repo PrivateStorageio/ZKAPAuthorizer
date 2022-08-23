@@ -882,6 +882,7 @@ class ClientResourceTests(TestCase):
             addr = IPv4Address("TCP", "127.0.0.1", 0)
             # use the _actual_ WebSocketResource's factory
             proto = wsr._factory.buildProtocol(addr)
+            assert isinstance(proto, RecoverProtocol)
             return proto
 
         agent = create_memory_agent(clock, pumper, create_proto)
