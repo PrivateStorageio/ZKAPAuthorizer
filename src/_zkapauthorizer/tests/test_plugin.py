@@ -115,7 +115,7 @@ from ..replicate import (
     statements_to_snapshot,
     with_replication,
 )
-from ..resource import recover
+from ..resource import RecoverProtocol, recover
 from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
 from .common import GetConfig, skipIf
 from .fixtures import DetectLeakedDescriptors
@@ -878,7 +878,7 @@ class ClientResourceTests(TestCase):
         clock = MemoryReactorClockResolver()
         pumper = create_pumper()
 
-        def create_proto():
+        def create_proto() -> RecoverProtocol:
             addr = IPv4Address("TCP", "127.0.0.1", 0)
             # use the _actual_ WebSocketResource's factory
             proto = wsr._factory.buildProtocol(addr)
