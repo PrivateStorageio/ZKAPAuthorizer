@@ -195,7 +195,7 @@ async def upload_bytes(
     client: HTTPClient,
     get_data_provider: DataProvider,
     api_root: DecodedURL,
-) -> str:
+) -> ReadCapability:
     """
     Upload the given data and return the resulting capability.
 
@@ -226,7 +226,7 @@ async def upload_bytes(
     body = await treq.content(resp)
     content = body.decode("utf-8")
     if resp.code in (200, 201):
-        return cast(str, content)
+        return readable_from_string(content)
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
@@ -434,7 +434,7 @@ class ITahoeClient(Interface):
         Download the contents of an object to a given local path.
         """
 
-    async def upload(data_provider: DataProvider) -> CapStr:
+    async def upload(data_provider: DataProvider) -> ReadCapability:
         """
         Upload some data, creating a new object, and returning a capability for
         it.
@@ -514,7 +514,7 @@ class Tahoe(object):
     async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
         await download(self.client, outpath, self._api_root, cap)
 
-    async def upload(self, get_data_provider: DataProvider) -> str:
+    async def upload(self, get_data_provider: DataProvider) -> ReadCapability:
         return await upload_bytes(self.client, get_data_provider, self._api_root)
 
     async def make_directory(self) -> str:
@@ -574,7 +574,7 @@ class MemoryGrid:
             basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))  # type: ignore[no-untyped-call]
         return _MemoryTahoe(self, basedir, share_encoding)
 
-    def upload(self, data: bytes) -> CapStr:
+    def upload(self, data: bytes) -> ReadCapability:
         assert isinstance(data, bytes)
 
         def encode(n: int, w: int) -> bytes:
@@ -593,7 +593,7 @@ class MemoryGrid:
         cap_str = danger_real_capability_string(cap)
         self._objects[cap_str] = data
         self._counter += 1
-        return cap_str
+        return cap
 
     def download(self, cap: ReadCapability) -> bytes:
         data = self._objects[danger_real_capability_string(cap)]
@@ -719,7 +719,7 @@ class _MemoryTahoe:
         assert isinstance(data, bytes)
         outpath.setContent(data)  # type: ignore[no-untyped-call]
 
-    async def upload(self, data_provider: DataProvider) -> CapStr:
+    async def upload(self, data_provider: DataProvider) -> ReadCapability:
         """
         Send some data to Tahoe-LAFS, returning an immutable capability.
 

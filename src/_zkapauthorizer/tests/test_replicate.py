@@ -16,7 +16,7 @@ from eliot import start_action
 from fixtures import TempDir
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import ReadCapability
+from tahoe_capabilities import ReadCapability, danger_real_capability_string
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -799,7 +799,9 @@ class TahoeDirectoryListerTests(TestCase):
         for name in directory_names:
             grid.link(dircap, name, grid.make_directory())
         for name in file_names:
-            grid.link(dircap, name, grid.upload(filedata))
+            grid.link(
+                dircap, name, danger_real_capability_string(grid.upload(filedata))
+            )
 
         client = grid.client()
         lister = get_tahoe_lafs_direntry_lister(client, dircap)
@@ -831,7 +833,7 @@ class TahoeDirectoryPrunerTests(TestCase):
         grid = MemoryGrid()
         dircap = grid.make_directory()
         for name in ignore + delete:
-            filecap = grid.upload(b"some data")
+            filecap = danger_real_capability_string(grid.upload(b"some data"))
             grid.link(dircap, name, filecap)
 
         client = grid.client()

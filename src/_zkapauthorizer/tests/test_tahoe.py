@@ -12,7 +12,11 @@ from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
-from tahoe_capabilities import readable_from_string, writeable_directory_from_string
+from tahoe_capabilities import (
+    danger_real_capability_string,
+    readable_from_string,
+    writeable_directory_from_string,
+)
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
@@ -162,7 +166,7 @@ class UploadDownloadTestsMixin:
         content = b"abc" * 1024
         outpath = workdir.child("downloaded")
 
-        cap = readable_from_string(await client.upload(lambda: BytesIO(content)))
+        cap = await client.upload(lambda: BytesIO(content))
         await client.download(outpath, cap)
 
         self.assertThat(  # type: ignore[attr-defined]
@@ -192,7 +196,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
             return BytesIO(content)
 
         dircap = await client.make_directory()
-        filecap = await client.upload(get_content)
+        filecap = danger_real_capability_string(await client.upload(get_content))
         await client.link(dircap, "foo", filecap)
 
         try:
@@ -255,7 +259,9 @@ class DirectoryTestsMixin:
             return b"x" * (int(name) + 1)
 
         async def upload(name: str) -> tuple[str, CapStr]:
-            cap = await tahoe.upload(lambda: BytesIO(file_content(name)))
+            cap = danger_real_capability_string(
+                await tahoe.upload(lambda: BytesIO(file_content(name)))
+            )
             await tahoe.link(dir_cap, name, cap)
             return (name, cap)
 
@@ -306,7 +312,9 @@ class DirectoryTestsMixin:
         tahoe = self.get_client()
 
         # Upload not-a-directory
-        filecap = await tahoe.upload(lambda: BytesIO(b"hello world"))
+        filecap = danger_real_capability_string(
+            await tahoe.upload(lambda: BytesIO(b"hello world"))
+        )
 
         try:
             result = await tahoe.list_directory(filecap)
@@ -326,7 +334,9 @@ class DirectoryTestsMixin:
 
         dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        entry_cap = danger_real_capability_string(
+            await tahoe.upload(lambda: BytesIO(content))
+        )
         await tahoe.link(
             dir_cap,
             entry_name,
@@ -376,7 +386,9 @@ class DirectoryTestsMixin:
         # create a directory and put one entry in it
         dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        entry_cap = danger_real_capability_string(
+            await tahoe.upload(lambda: BytesIO(content))
+        )
         await tahoe.link(
             dir_cap,
             entry_name,
@@ -403,7 +415,9 @@ class DirectoryTestsMixin:
         # create a directory and put one entry in it
         dir_cap = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = await tahoe.upload(lambda: BytesIO(content))
+        entry_cap = danger_real_capability_string(
+            await tahoe.upload(lambda: BytesIO(content))
+        )
         await tahoe.link(
             dir_cap,
             entry_name,
@@ -438,7 +452,9 @@ class DirectoryTestsMixin:
 
         # create a non-directory
         content = b"some content"
-        non_dir_cap = await tahoe.upload(lambda: BytesIO(content))
+        non_dir_cap = danger_real_capability_string(
+            await tahoe.upload(lambda: BytesIO(content))
+        )
 
         # try to unlink some file from the non-directory (expecting
         # failure)
