@@ -439,10 +439,9 @@ class ReplicationServiceTests(TestCase):
 
         grid = MemoryGrid()
         replica_obj = grid.make_directory()
-        replica_cap = danger_real_capability_string(replica_obj)
         client = grid.client()
 
-        replica = get_tahoe_lafs_direntry_replica(client, replica_cap)
+        replica = get_tahoe_lafs_direntry_replica(client, replica_obj)
         service = replication_service(store._connection, replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
@@ -475,10 +474,9 @@ class ReplicationServiceTests(TestCase):
 
         grid = MemoryGrid()
         replica_obj = grid.make_directory()
-        replica_cap = danger_real_capability_string(replica_obj)
         client = grid.client()
 
-        replica = get_tahoe_lafs_direntry_replica(client, replica_cap)
+        replica = get_tahoe_lafs_direntry_replica(client, replica_obj)
         # This accomplishes (1).
         service = replication_service(store._connection, replica, naive_policy)
         service.startService()
@@ -547,7 +545,7 @@ class ReplicationServiceTests(TestCase):
 
         srv = replication_service(
             tvs.store._connection,
-            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            get_tahoe_lafs_direntry_replica(delay_client, replica_obj),
             naive_policy,
         )
 
@@ -649,7 +647,7 @@ class ReplicationServiceTests(TestCase):
 
         srv = replication_service(
             tvs.store._connection,
-            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            get_tahoe_lafs_direntry_replica(delay_client, replica_obj),
             naive_policy,
         )
 
@@ -757,9 +755,7 @@ class ReplicationServiceTests(TestCase):
         # event streams are uploaded.
         snapshot_policy = CountBasedPolicy(replica_file_limit=3)
 
-        replica = get_tahoe_lafs_direntry_replica(
-            client, danger_real_capability_string(replica_dircap)
-        )
+        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
         # This accomplishes (1).
         service = replication_service(store._connection, replica, snapshot_policy)
         service.startService()
@@ -805,14 +801,13 @@ class TahoeDirectoryListerTests(TestCase):
         filedata = b"somedata"
         grid = MemoryGrid()
         dirobj = grid.make_directory()
-        dircap = danger_real_capability_string(dirobj)
         for name in directory_names:
             grid.link(dirobj, name, grid.make_directory())
         for name in file_names:
             grid.link(dirobj, name, grid.upload(filedata))
 
         client = grid.client()
-        lister = get_tahoe_lafs_direntry_lister(client, dircap)
+        lister = get_tahoe_lafs_direntry_lister(client, dirobj)
 
         expected = {name: DirectoryEntry("dirnode", 0) for name in directory_names}
         expected.update(
@@ -840,13 +835,12 @@ class TahoeDirectoryPrunerTests(TestCase):
 
         grid = MemoryGrid()
         dirobj = grid.make_directory()
-        dircap = danger_real_capability_string(dirobj)
         for name in ignore + delete:
             filecap = grid.upload(b"some data")
             grid.link(dirobj, name, filecap)
 
         client = grid.client()
-        pruner = get_tahoe_lafs_direntry_pruner(client, dircap)
+        pruner = get_tahoe_lafs_direntry_pruner(client, dirobj)
 
         # ask the pruner to delete some of the files
         self.assertThat(

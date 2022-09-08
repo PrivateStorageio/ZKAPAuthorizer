@@ -399,12 +399,11 @@ class TahoeLAFSDownloaderTests(TestCase):
         grid = MemoryGrid()
         tahoeclient = grid.client()
         replica_dir_cap = grid.make_directory()
-        replica_dir_cap_str = danger_real_capability_string(replica_dir_cap)
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
             tahoeclient,
-            replica_dir_cap_str,
+            replica_dir_cap,
         )
         self.assertThat(
             from_awaitable(upload(SNAPSHOT_NAME, lambda: BytesIO(expected_snapshot))),
