@@ -632,18 +632,17 @@ def get_tahoe_lafs_direntry_pruner(
         predicate. The prediate is given a filename inside the mutable to
         consider.
     """
+    dirobj = writeable_directory_from_string(directory_mutable_cap)
 
     async def maybe_unlink(predicate: Callable[[str], bool]) -> None:
         """
         For each child of `directory_mutable_cap` delete it iff the
         predicate returns True for that name
         """
-        entries = await client.list_directory(directory_mutable_cap)
+        entries = await client.list_directory(dirobj.reader)
         for name in entries.keys():
             if predicate(name):
-                await client.unlink(
-                    writeable_directory_from_string(directory_mutable_cap), name
-                )
+                await client.unlink(dirobj, name)
 
     return maybe_unlink
 
@@ -655,9 +654,10 @@ def get_tahoe_lafs_direntry_lister(
     Bind a Tahoe client to a mutable directory in a callable that will list
     the entries of that directory.
     """
+    dirobj = writeable_directory_from_string(directory_mutable_cap)
 
     async def lister() -> dict[str, DirectoryEntry]:
-        entries = await client.list_directory(directory_mutable_cap)
+        entries = await client.list_directory(dirobj.reader)
         return {
             name: DirectoryEntry(
                 "filenode" if isinstance(entry, FileNode) else "dirnode",

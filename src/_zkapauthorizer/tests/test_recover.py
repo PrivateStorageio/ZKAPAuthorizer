@@ -554,9 +554,7 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         ro_cap = results[0]
 
         self.assertThat(
-            Deferred.fromCoroutine(
-                client.list_directory(danger_real_capability_string(ro_cap))
-            ),
+            Deferred.fromCoroutine(client.list_directory(ro_cap)),
             succeeded(Equals({})),
         )
 

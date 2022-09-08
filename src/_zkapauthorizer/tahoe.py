@@ -295,15 +295,20 @@ _DirectoryListing = dict[str, _DirectoryEntry]
 async def list_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-    dir_cap: str,
+    dir_cap: DirectoryReadCapability,
 ) -> _DirectoryListing:
     """
     Read the direct children of a directory.
     """
-    if not dir_cap.startswith("URI:DIR2"):
-        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+    if not is_directory(dir_cap):
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap.prefix})")
 
-    uri = api_root.child("uri").child(dir_cap).child("").add("t", "json")
+    uri = (
+        api_root.child("uri")
+        .child(danger_real_capability_string(dir_cap))
+        .child("")
+        .add("t", "json")
+    )
     resp = await client.get(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
@@ -485,7 +490,7 @@ class ITahoeClient(Interface):
         :param entry_name: The name of the entry to remove.
         """
 
-    async def list_directory(dir_cap: CapStr) -> _DirectoryListing:
+    async def list_directory(dir_cap: DirectoryReadCapability) -> _DirectoryListing:
         """
         List the entries linked into a directory.
         """
@@ -539,7 +544,9 @@ class Tahoe(object):
     async def make_directory(self) -> DirectoryWriteCapability:
         return await make_directory(self.client, self._api_root)
 
-    async def list_directory(self, dir_cap: str) -> _DirectoryListing:
+    async def list_directory(
+        self, dir_cap: DirectoryReadCapability
+    ) -> _DirectoryListing:
         return await list_directory(self.client, self._api_root, dir_cap)
 
     async def link(
@@ -670,7 +677,7 @@ class MemoryGrid:
         assert isinstance(dirobj, _MemoryDirectory)
         del dirobj.children[entry_name]
 
-    def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
+    def list_directory(self, dir_cap: DirectoryReadCapability) -> _DirectoryListing:
         def describe(cap_str: CapStr) -> _DirectoryEntry:
             dir_cap_ro: DirectoryReadCapability
             cap_ro: ReadCapability
@@ -694,11 +701,11 @@ class MemoryGrid:
             assert isinstance(obj, bytes), f"{obj!r}"
             return FileNode(len(obj), cap_ro)
 
-        dirobj = self._objects[dir_cap]
+        dirobj = self._objects[danger_real_capability_string(dir_cap)]
         if isinstance(dirobj, _MemoryDirectory):
             return {name: describe(entry) for (name, entry) in dirobj.children.items()}
 
-        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap.prefix})")
 
 
 _no_children_message = (
@@ -771,7 +778,9 @@ class _MemoryTahoe:
     async def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         return self._grid.unlink(dir_cap, entry_name)
 
-    async def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
+    async def list_directory(
+        self, dir_cap: DirectoryReadCapability
+    ) -> _DirectoryListing:
         return self._grid.list_directory(dir_cap)
 
 
@@ -805,7 +814,7 @@ async def download_child(
     else:
         p = child_path[0]
         remaining_path = child_path[1:]
-        children = await client.list_directory(danger_real_capability_string(dircap))
+        children = await client.list_directory(dircap)
         child = children[p]
 
         if remaining_path:

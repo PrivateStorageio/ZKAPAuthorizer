@@ -12,11 +12,7 @@ from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
-from tahoe_capabilities import (
-    DirectoryWriteCapability,
-    ReadCapability,
-    danger_real_capability_string,
-)
+from tahoe_capabilities import DirectoryWriteCapability, ReadCapability
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
@@ -251,7 +247,6 @@ class DirectoryTestsMixin:
         """
         tahoe: ITahoeClient = self.get_client()
         dir_obj = await tahoe.make_directory()
-        dir_cap = danger_real_capability_string(dir_obj)
         entry_names = list(map(str, range(5)))
 
         def file_content(name: str) -> bytes:
@@ -275,7 +270,7 @@ class DirectoryTestsMixin:
         await tahoe.link(dir_obj, "directory", inner_dir)
 
         # Read it back
-        children = await tahoe.list_directory(dir_cap)
+        children = await tahoe.list_directory(dir_obj.reader)
 
         self.assertThat(set(children), Equals({"directory"} | set(entry_names)))
         for name in entry_names:
@@ -305,12 +300,12 @@ class DirectoryTestsMixin:
         tahoe: ITahoeClient = self.get_client()
 
         # Upload not-a-directory
-        filecap = danger_real_capability_string(
-            await tahoe.upload(lambda: BytesIO(b"hello world"))
-        )
+        filecap = await tahoe.upload(lambda: BytesIO(b"hello world"))
 
         try:
-            result = await tahoe.list_directory(filecap)
+            result = await tahoe.list_directory(
+                filecap,  # type: ignore[arg-type]
+            )
         except ValueError:
             pass
         else:
@@ -373,7 +368,6 @@ class DirectoryTestsMixin:
 
         # create a directory and put one entry in it
         dir_obj = await tahoe.make_directory()
-        dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
         entry_cap = await tahoe.upload(lambda: BytesIO(content))
         await tahoe.link(
@@ -383,12 +377,12 @@ class DirectoryTestsMixin:
         )
 
         # ensure the file is in the directory
-        entries_before = await tahoe.list_directory(dir_cap)
+        entries_before = await tahoe.list_directory(dir_obj.reader)
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # unlink the file, leaving the directory empty again
         await tahoe.unlink(dir_obj, entry_name)
-        entries_after = await tahoe.list_directory(dir_cap)
+        entries_after = await tahoe.list_directory(dir_obj.reader)
         self.assertThat(list(entries_after.keys()), Equals([]))
 
     @async_test
@@ -401,7 +395,6 @@ class DirectoryTestsMixin:
 
         # create a directory and put one entry in it
         dir_obj = await tahoe.make_directory()
-        dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
         entry_cap = await tahoe.upload(lambda: BytesIO(content))
         await tahoe.link(
@@ -411,7 +404,7 @@ class DirectoryTestsMixin:
         )
 
         # ensure the file is in the directory
-        entries_before = await tahoe.list_directory(dir_cap)
+        entries_before = await tahoe.list_directory(dir_obj.reader)
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         try:
