@@ -778,14 +778,13 @@ async def recover(
     agent: IWebSocketClientAgent,
     api_root: DecodedURL,
     auth_token: str,
-    replica_dircap_str: str,
+    replica_dircap: DirectoryReadCapability,
 ) -> list[JSON]:
     """
     Initiate recovery from a replica.
 
     :return: The status updates received while recovery was progressing.
     """
-    replica_dircap = readonly_directory_from_string(replica_dircap_str)
     endpoint_url = api_root.child(
         "storage-plugins", "privatestorageio-zkapauthz-v2", "recover"
     ).to_text()

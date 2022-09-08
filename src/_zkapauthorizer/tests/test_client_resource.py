@@ -67,6 +67,7 @@ from tahoe_capabilities import (
     MDMFDirectoryWrite,
     SSKDirectoryWrite,
     danger_real_capability_string,
+    readonly_directory_from_string,
 )
 from tahoe_capabilities.strategies import chk_reads, mdmf_writes, ssk_writes
 from testtools import TestCase
@@ -832,7 +833,7 @@ class RecoverTests(TestCase):
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
                 api_auth_token.decode("ascii"),
-                self.GOOD_CAPABILITY,
+                readonly_directory_from_string(self.GOOD_CAPABILITY),
             )
         )
         pumper._flush()
@@ -902,7 +903,7 @@ class RecoverTests(TestCase):
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
                 api_auth_token.decode("ascii"),
-                self.GOOD_CAPABILITY,
+                readonly_directory_from_string(self.GOOD_CAPABILITY),
             )
         )
         pumper._flush()
@@ -1052,7 +1053,7 @@ class RecoverTests(TestCase):
                     agent,
                     DecodedURL.from_text("ws://127.0.0.1:1/"),
                     api_auth_token.decode("ascii"),
-                    self.GOOD_CAPABILITY,
+                    readonly_directory_from_string(self.GOOD_CAPABILITY),
                 )
             )
             for i in range(2)

@@ -49,7 +49,6 @@ from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
 from prometheus_client import Gauge, Metric
 from prometheus_client.parser import text_string_to_metric_families
-from tahoe_capabilities import danger_real_capability_string
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -887,13 +886,12 @@ class ClientResourceTests(TestCase):
         pumper.start()
         self.addCleanup(pumper.stop)
 
-        replica_dircap_ro = danger_real_capability_string(replica_dirobj_rw.reader)
         recovering = Deferred.fromCoroutine(
             recover(
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
                 token,
-                replica_dircap_ro,
+                replica_dirobj_rw.reader,
             )
         )
         pumper._flush()
