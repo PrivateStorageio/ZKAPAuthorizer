@@ -427,10 +427,10 @@ class TahoeLAFSDownloaderTests(TestCase):
 
         # Put some confusing junk in the replica.
         for entry in confusing_directories:
-            grid.link(replica_dir_cap_str, entry, grid.make_directory())
+            grid.link(replica_dir_cap, entry, grid.make_directory())
         for entry in confusing_filenodes:
             grid.link(
-                replica_dir_cap_str,
+                replica_dir_cap,
                 entry,
                 danger_real_capability_string(grid.upload(entry.encode("utf-8"))),
             )

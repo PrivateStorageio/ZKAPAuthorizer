@@ -592,7 +592,11 @@ async def tahoe_lafs_uploader(
     snapshot_immutable_cap = danger_real_capability_string(
         await client.upload(get_snapshot_data)
     )
-    await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
+    await client.link(
+        writeable_directory_from_string(recovery_cap),
+        entry_name,
+        snapshot_immutable_cap,
+    )
 
 
 def get_tahoe_lafs_direntry_uploader(

@@ -38,7 +38,6 @@ from ..tahoe import (
     TahoeAPIError,
     _scrub_cap,
     async_retry,
-    attenuate_writecap,
     download_child,
     required_passes_for_data,
 )
@@ -158,7 +157,7 @@ class UploadDownloadTestsMixin:
         If the identified object can be downloaded then it is written to the given
         path.
         """
-        client = self.get_client()
+        client: ITahoeClient = self.get_client()
 
         tempdir = self.useFixture(TempDir())  # type: ignore[attr-defined]
         workdir = FilePath(tempdir.join("test_found"))
@@ -185,7 +184,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
         """
         If a child path is given and the identified object is not a directory then ...
         """
-        client = self.get_client()
+        client: ITahoeClient = self.get_client()
 
         workdir = FilePath(self.useFixture(TempDir()).join("test_found"))
         workdir.makedirs()
@@ -197,7 +196,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
 
         dircap = await client.make_directory()
         filecap = danger_real_capability_string(await client.upload(get_content))
-        await client.link(dircap, "foo", filecap)
+        await client.link(writeable_directory_from_string(dircap), "foo", filecap)
 
         try:
             await download_child(
@@ -251,8 +250,9 @@ class DirectoryTestsMixin:
         ``make_directory`` creates a directory the children of which can be listed
         using ``list_directory``.
         """
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
         dir_cap = await tahoe.make_directory()
+        dir_obj = writeable_directory_from_string(dir_cap)
         entry_names = list(map(str, range(5)))
 
         def file_content(name: str) -> bytes:
@@ -262,7 +262,7 @@ class DirectoryTestsMixin:
             cap = danger_real_capability_string(
                 await tahoe.upload(lambda: BytesIO(file_content(name)))
             )
-            await tahoe.link(dir_cap, name, cap)
+            await tahoe.link(dir_obj, name, cap)
             return (name, cap)
 
         # Populate it a little
@@ -275,7 +275,7 @@ class DirectoryTestsMixin:
         )
         # Put another directory in it too.
         inner_dir_cap = await tahoe.make_directory()
-        await tahoe.link(dir_cap, "directory", inner_dir_cap)
+        await tahoe.link(dir_obj, "directory", inner_dir_cap)
 
         # Read it back
         children = await tahoe.list_directory(dir_cap)
@@ -309,7 +309,7 @@ class DirectoryTestsMixin:
         ``list_directory`` returns a coroutine that raises ``ValueError`` when
         called with a capability that is not a directory capability.
         """
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
 
         # Upload not-a-directory
         filecap = danger_real_capability_string(
@@ -330,15 +330,16 @@ class DirectoryTestsMixin:
         """
         tmp = FilePath(self.useFixture(TempDir()).path)
         content = b"some content"
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
 
         dir_cap = await tahoe.make_directory()
+        dir_obj = writeable_directory_from_string(dir_cap)
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))
         )
         await tahoe.link(
-            dir_cap,
+            dir_obj,
             entry_name,
             entry_cap,
         )
@@ -347,7 +348,7 @@ class DirectoryTestsMixin:
         await download_child(
             outpath,
             tahoe,
-            writeable_directory_from_string(dir_cap).reader,
+            dir_obj.reader,
             child_path=[entry_name],
         )
 
@@ -362,18 +363,16 @@ class DirectoryTestsMixin:
         If ``link`` is passed a read-only directory capability then it returns a
         coroutine that raises ``NotWriteableError``.
         """
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
         dir_cap = await tahoe.make_directory()
-        ro_dir_cap = attenuate_writecap(dir_cap)
+        dir_obj = writeable_directory_from_string(dir_cap)
 
         try:
-            result = await tahoe.link(ro_dir_cap, "self", dir_cap)
+            await tahoe.link(dir_obj.reader, "self", dir_cap)  # type: ignore[arg-type]
         except NotWriteableError:
             pass
         else:
-            self.fail(
-                f"Expected link to fail with NotWriteableError, got {result!r} instead"
-            )  # pragma: nocover
+            self.fail("Expected link to fail with NotWriteableError")  # pragma: nocover
 
     @async_test
     async def test_unlink(self: TestCase) -> None:
@@ -381,16 +380,17 @@ class DirectoryTestsMixin:
         ``unlink`` removes an entry from a directory.
         """
         content = b"some content"
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
 
         # create a directory and put one entry in it
         dir_cap = await tahoe.make_directory()
+        dir_obj = writeable_directory_from_string(dir_cap)
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))
         )
         await tahoe.link(
-            dir_cap,
+            dir_obj,
             entry_name,
             entry_cap,
         )
@@ -410,16 +410,17 @@ class DirectoryTestsMixin:
         ``unlink`` fails to remove an entry from a read-only directory.
         """
         content = b"some content"
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
 
         # create a directory and put one entry in it
         dir_cap = await tahoe.make_directory()
+        dir_obj = writeable_directory_from_string(dir_cap)
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))
         )
         await tahoe.link(
-            dir_cap,
+            dir_obj,
             entry_name,
             entry_cap,
         )
@@ -428,18 +429,16 @@ class DirectoryTestsMixin:
         entries_before = await tahoe.list_directory(dir_cap)
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
-        # try to unlink the file but pass only the read-only cap so we
-        # expect failure
-        ro_dir_cap = attenuate_writecap(dir_cap)
-
         try:
-            result = await tahoe.unlink(ro_dir_cap, entry_name)
+            # try to unlink the file but pass only the read-only cap so we
+            # expect failure
+            await tahoe.unlink(
+                danger_real_capability_string(dir_obj.reader), entry_name
+            )
         except NotWriteableError:
             pass
         else:
-            self.fail(
-                f"Expected link to fail with NotWriteableError, got {result!r} instead"
-            )  # pragma: nocover
+            self.fail("Expected link to fail with NotWriteableError")  # pragma: nocover
 
     @async_test
     async def test_unlink_non_directory(self: TestCase) -> None:
@@ -448,7 +447,7 @@ class DirectoryTestsMixin:
         that isn't actually a directory
         """
         content = b"some content"
-        tahoe = self.get_client()
+        tahoe: ITahoeClient = self.get_client()
 
         # create a non-directory
         content = b"some content"
@@ -456,10 +455,10 @@ class DirectoryTestsMixin:
             await tahoe.upload(lambda: BytesIO(content))
         )
 
-        # try to unlink some file from the non-directory (expecting
-        # failure)
         try:
-            result = await tahoe.unlink(non_dir_cap, "foo")
+            # try to unlink some file from the non-directory (expecting
+            # failure)
+            await tahoe.unlink(non_dir_cap, "foo")
         except (NotADirectoryError, NotWriteableError):
             # The real implementation and the memory implementation differ in
             # their behavior. :/ We need a create-mutable-non-directory API to
@@ -468,7 +467,7 @@ class DirectoryTestsMixin:
             pass
         else:
             self.fail(
-                f"Expected link to fail with NotADirectoryError or NotWriteableError, got {result!r} instead"
+                "Expected link to fail with NotADirectoryError or NotWriteableError"
             )  # pragma: nocover
 
 
