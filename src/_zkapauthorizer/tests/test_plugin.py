@@ -117,7 +117,7 @@ from ..replicate import (
     with_replication,
 )
 from ..resource import RecoverProtocol, recover
-from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
 from .common import GetConfig, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -857,7 +857,6 @@ class ClientResourceTests(TestCase):
             f.write(token)
 
         replica_dirobj_rw = self.grid.make_directory()
-        replica_dircap_rw = danger_real_capability_string(replica_dirobj_rw)
         self.grid.link(
             replica_dirobj_rw,
             "snapshot",
@@ -888,7 +887,7 @@ class ClientResourceTests(TestCase):
         pumper.start()
         self.addCleanup(pumper.stop)
 
-        replica_dircap_ro = attenuate_writecap(replica_dircap_rw)
+        replica_dircap_ro = danger_real_capability_string(replica_dirobj_rw.reader)
         recovering = Deferred.fromCoroutine(
             recover(
                 agent,

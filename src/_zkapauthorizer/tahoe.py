@@ -827,15 +827,6 @@ async def download_child(
             await client.download(outpath, child.ro_uri)
 
 
-def attenuate_writecap(rw_cap: CapStr) -> CapStr:
-    """
-    Get a read-only capability corresponding to the same data as the given
-    read-write capability.
-    """
-
-    return danger_real_capability_string(writeable_from_string(rw_cap).reader)
-
-
 def get_tahoe_client(reactor: IReactorTCP, node_config: Config) -> ITahoeClient:
     """
     Return a Tahoe-LAFS client appropriate for the given node configuration.
