@@ -325,7 +325,7 @@ async def list_directory(
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-) -> str:
+) -> DirectoryWriteCapability:
     """
     Create a new mutable directory and return the write capability string.
     """
@@ -333,7 +333,7 @@ async def make_directory(
     resp = await client.post(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
-        return cast(str, content)
+        return writeable_directory_from_string(content)
     raise TahoeAPIError("post", uri, resp.code, content)
 
 
@@ -450,7 +450,7 @@ class ITahoeClient(Interface):
             required.
         """
 
-    async def make_directory() -> CapStr:
+    async def make_directory() -> DirectoryWriteCapability:
         """
         Create a new, empty, mutable directory.
         """
@@ -525,7 +525,7 @@ class Tahoe(object):
     async def upload(self, get_data_provider: DataProvider) -> ReadCapability:
         return await upload_bytes(self.client, get_data_provider, self._api_root)
 
-    async def make_directory(self) -> str:
+    async def make_directory(self) -> DirectoryWriteCapability:
         return await make_directory(self.client, self._api_root)
 
     async def list_directory(self, dir_cap: str) -> _DirectoryListing:
@@ -610,7 +610,7 @@ class MemoryGrid:
         assert isinstance(data, bytes)
         return data
 
-    def make_directory(self) -> CapStr:
+    def make_directory(self) -> DirectoryWriteCapability:
         def encode(n: int, w: int) -> bytes:
             return n.to_bytes(w, "big")
 
@@ -627,7 +627,7 @@ class MemoryGrid:
         for cap_str in [rw_cap_str, ro_cap_str]:
             self._objects[cap_str] = dirobj
 
-        return rw_cap_str
+        return cap
 
     def link(
         self, dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: CapStr
@@ -743,7 +743,7 @@ class _MemoryTahoe:
             content = d.read()
         return self._grid.upload(content)
 
-    async def make_directory(self) -> CapStr:
+    async def make_directory(self) -> DirectoryWriteCapability:
         return self._grid.make_directory()
 
     async def link(

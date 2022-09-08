@@ -39,7 +39,6 @@ from tahoe_capabilities import (
     is_mutable,
     is_read,
     writeable_directory_from_string,
-    writeable_from_string,
 )
 from testtools import TestCase
 from testtools.matchers import (
@@ -399,8 +398,8 @@ class TahoeLAFSDownloaderTests(TestCase):
         """
         grid = MemoryGrid()
         tahoeclient = grid.client()
-        replica_dir_cap_str = grid.make_directory()
-        replica_dir_cap = writeable_directory_from_string(replica_dir_cap_str)
+        replica_dir_cap = grid.make_directory()
+        replica_dir_cap_str = danger_real_capability_string(replica_dir_cap)
 
         # use the uploader to push some replica data
         upload = get_tahoe_lafs_direntry_uploader(
@@ -427,7 +426,11 @@ class TahoeLAFSDownloaderTests(TestCase):
 
         # Put some confusing junk in the replica.
         for entry in confusing_directories:
-            grid.link(replica_dir_cap, entry, grid.make_directory())
+            grid.link(
+                replica_dir_cap,
+                entry,
+                danger_real_capability_string(grid.make_directory()),
+            )
         for entry in confusing_filenodes:
             grid.link(
                 replica_dir_cap,
@@ -477,8 +480,8 @@ class SetupTahoeLAFSReplicationTests(TestCase):
         grid = MemoryGrid()
         client = grid.client()
 
-        rwcap_str = grid.make_directory()
-        rwcap_obj = writeable_from_string(rwcap_str)
+        rwcap_obj = grid.make_directory()
+        rwcap_str = danger_real_capability_string(rwcap_obj)
 
         client.get_private_path(REPLICA_RWCAP_BASENAME).setContent(
             rwcap_str.encode("ascii")

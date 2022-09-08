@@ -16,11 +16,7 @@ from eliot import start_action
 from fixtures import TempDir
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import (
-    ReadCapability,
-    danger_real_capability_string,
-    writeable_directory_from_string,
-)
+from tahoe_capabilities import ReadCapability, danger_real_capability_string
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -439,7 +435,7 @@ class ReplicationServiceTests(TestCase):
         store = tvs.store
 
         grid = MemoryGrid()
-        replica_dircap = grid.make_directory()
+        replica_dircap = danger_real_capability_string(grid.make_directory())
         client = grid.client()
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
@@ -474,7 +470,7 @@ class ReplicationServiceTests(TestCase):
         store = tvs.store
 
         grid = MemoryGrid()
-        replica_dircap = grid.make_directory()
+        replica_dircap = danger_real_capability_string(grid.make_directory())
         client = grid.client()
 
         replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
@@ -527,7 +523,7 @@ class ReplicationServiceTests(TestCase):
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         grid = MemoryGrid()
-        replica_cap = grid.make_directory()
+        replica_cap = danger_real_capability_string(grid.make_directory())
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
         rwcap_file.setContent(replica_cap.encode("ascii"))
@@ -628,7 +624,7 @@ class ReplicationServiceTests(TestCase):
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         grid = MemoryGrid()
-        replica_cap = grid.make_directory()
+        replica_cap = danger_real_capability_string(grid.make_directory())
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
         rwcap_file.setContent(replica_cap.encode("ascii"))
@@ -747,7 +743,7 @@ class ReplicationServiceTests(TestCase):
         store = tvs.store
 
         grid = MemoryGrid()
-        replica_dircap = grid.make_directory()
+        replica_dircap = danger_real_capability_string(grid.make_directory())
         client = grid.client()
 
         # This policy will decide it is time to upload after 1 snapshot + 2
@@ -799,10 +795,12 @@ class TahoeDirectoryListerTests(TestCase):
         """
         filedata = b"somedata"
         grid = MemoryGrid()
-        dircap = grid.make_directory()
-        dirobj = writeable_directory_from_string(dircap)
+        dirobj = grid.make_directory()
+        dircap = danger_real_capability_string(dirobj)
         for name in directory_names:
-            grid.link(dirobj, name, grid.make_directory())
+            grid.link(
+                dirobj, name, danger_real_capability_string(grid.make_directory())
+            )
         for name in file_names:
             grid.link(
                 dirobj, name, danger_real_capability_string(grid.upload(filedata))
@@ -836,8 +834,8 @@ class TahoeDirectoryPrunerTests(TestCase):
         delete = ["three", "four"]
 
         grid = MemoryGrid()
-        dircap = grid.make_directory()
-        dirobj = writeable_directory_from_string(dircap)
+        dirobj = grid.make_directory()
+        dircap = danger_real_capability_string(dirobj)
         for name in ignore + delete:
             filecap = danger_real_capability_string(grid.upload(b"some data"))
             grid.link(dirobj, name, filecap)

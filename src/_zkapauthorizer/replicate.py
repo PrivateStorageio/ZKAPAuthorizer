@@ -312,9 +312,10 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
 
         # Create a directory with it
         rw_cap = await client.make_directory()
+        rw_str = danger_real_capability_string(rw_cap)
 
         # Store the resulting write-cap in the node's private directory
-        config_path.setContent(rw_cap.encode("ascii"))  # type: ignore[no-untyped-call]
+        config_path.setContent(rw_str.encode("ascii"))  # type: ignore[no-untyped-call]
 
     finally:
         # On success and failure, release the lock since we're done with the
@@ -322,7 +323,7 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
         config_lock.unlock()  # type: ignore[no-untyped-call]
 
     # Return the corresponding read-cap.
-    return writeable_directory_from_string(rw_cap).reader
+    return rw_cap.reader
 
 
 def is_replication_setup(config: Config) -> bool:

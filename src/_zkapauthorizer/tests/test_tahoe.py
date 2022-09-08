@@ -12,11 +12,7 @@ from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
-from tahoe_capabilities import (
-    danger_real_capability_string,
-    readable_from_string,
-    writeable_directory_from_string,
-)
+from tahoe_capabilities import danger_real_capability_string, readable_from_string
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
@@ -196,13 +192,13 @@ class DownloadChildTests(MemoryMixin, TestCase):
 
         dircap = await client.make_directory()
         filecap = danger_real_capability_string(await client.upload(get_content))
-        await client.link(writeable_directory_from_string(dircap), "foo", filecap)
+        await client.link(dircap, "foo", filecap)
 
         try:
             await download_child(
                 outpath,
                 client,
-                writeable_directory_from_string(dircap).reader,
+                dircap.reader,
                 ["foo", "somepath"],
             )
         except NotADirectoryError:
@@ -251,8 +247,8 @@ class DirectoryTestsMixin:
         using ``list_directory``.
         """
         tahoe: ITahoeClient = self.get_client()
-        dir_cap = await tahoe.make_directory()
-        dir_obj = writeable_directory_from_string(dir_cap)
+        dir_obj = await tahoe.make_directory()
+        dir_cap = danger_real_capability_string(dir_obj)
         entry_names = list(map(str, range(5)))
 
         def file_content(name: str) -> bytes:
@@ -274,8 +270,9 @@ class DirectoryTestsMixin:
             )
         )
         # Put another directory in it too.
-        inner_dir_cap = await tahoe.make_directory()
-        await tahoe.link(dir_obj, "directory", inner_dir_cap)
+        inner_dir_obj = await tahoe.make_directory()
+        inner_dir_str = danger_real_capability_string(inner_dir_obj)
+        await tahoe.link(dir_obj, "directory", inner_dir_str)
 
         # Read it back
         children = await tahoe.list_directory(dir_cap)
@@ -296,11 +293,7 @@ class DirectoryTestsMixin:
         details = children["directory"]
         self.assertThat(
             details,
-            Equals(
-                DirectoryNode(
-                    ro_uri=writeable_directory_from_string(inner_dir_cap).reader
-                )
-            ),
+            Equals(DirectoryNode(ro_uri=inner_dir_obj.reader)),
         )
 
     @async_test
@@ -332,8 +325,7 @@ class DirectoryTestsMixin:
         content = b"some content"
         tahoe: ITahoeClient = self.get_client()
 
-        dir_cap = await tahoe.make_directory()
-        dir_obj = writeable_directory_from_string(dir_cap)
+        dir_obj = await tahoe.make_directory()
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))
@@ -364,8 +356,8 @@ class DirectoryTestsMixin:
         coroutine that raises ``NotWriteableError``.
         """
         tahoe: ITahoeClient = self.get_client()
-        dir_cap = await tahoe.make_directory()
-        dir_obj = writeable_directory_from_string(dir_cap)
+        dir_obj = await tahoe.make_directory()
+        dir_cap = danger_real_capability_string(dir_obj)
 
         try:
             await tahoe.link(dir_obj.reader, "self", dir_cap)  # type: ignore[arg-type]
@@ -383,8 +375,8 @@ class DirectoryTestsMixin:
         tahoe: ITahoeClient = self.get_client()
 
         # create a directory and put one entry in it
-        dir_cap = await tahoe.make_directory()
-        dir_obj = writeable_directory_from_string(dir_cap)
+        dir_obj = await tahoe.make_directory()
+        dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))
@@ -413,8 +405,8 @@ class DirectoryTestsMixin:
         tahoe: ITahoeClient = self.get_client()
 
         # create a directory and put one entry in it
-        dir_cap = await tahoe.make_directory()
-        dir_obj = writeable_directory_from_string(dir_cap)
+        dir_obj = await tahoe.make_directory()
+        dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
         entry_cap = danger_real_capability_string(
             await tahoe.upload(lambda: BytesIO(content))

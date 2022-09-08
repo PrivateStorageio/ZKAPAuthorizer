@@ -49,10 +49,7 @@ from hypothesis import given, settings
 from hypothesis.strategies import floats, integers, just, sampled_from, timedeltas
 from prometheus_client import Gauge, Metric
 from prometheus_client.parser import text_string_to_metric_families
-from tahoe_capabilities import (
-    danger_real_capability_string,
-    writeable_directory_from_string,
-)
+from tahoe_capabilities import danger_real_capability_string
 from testtools import TestCase
 from testtools.content import text_content
 from testtools.matchers import (
@@ -859,8 +856,8 @@ class ClientResourceTests(TestCase):
         with open(config.get_private_path("api_auth_token"), "w") as f:
             f.write(token)
 
-        replica_dircap_rw = self.grid.make_directory()
-        replica_dirobj_rw = writeable_directory_from_string(replica_dircap_rw)
+        replica_dirobj_rw = self.grid.make_directory()
+        replica_dircap_rw = danger_real_capability_string(replica_dirobj_rw)
         self.grid.link(
             replica_dirobj_rw,
             "snapshot",
