@@ -798,13 +798,9 @@ class TahoeDirectoryListerTests(TestCase):
         dirobj = grid.make_directory()
         dircap = danger_real_capability_string(dirobj)
         for name in directory_names:
-            grid.link(
-                dirobj, name, danger_real_capability_string(grid.make_directory())
-            )
+            grid.link(dirobj, name, grid.make_directory())
         for name in file_names:
-            grid.link(
-                dirobj, name, danger_real_capability_string(grid.upload(filedata))
-            )
+            grid.link(dirobj, name, grid.upload(filedata))
 
         client = grid.client()
         lister = get_tahoe_lafs_direntry_lister(client, dircap)
@@ -837,7 +833,7 @@ class TahoeDirectoryPrunerTests(TestCase):
         dirobj = grid.make_directory()
         dircap = danger_real_capability_string(dirobj)
         for name in ignore + delete:
-            filecap = danger_real_capability_string(grid.upload(b"some data"))
+            filecap = grid.upload(b"some data")
             grid.link(dirobj, name, filecap)
 
         client = grid.client()

@@ -590,9 +590,7 @@ async def tahoe_lafs_uploader(
     Upload a replica to Tahoe, linking the result into the given recovery
     mutable capbility under the name given by :py:data:`SNAPSHOT_NAME`.
     """
-    snapshot_immutable_cap = danger_real_capability_string(
-        await client.upload(get_snapshot_data)
-    )
+    snapshot_immutable_cap = await client.upload(get_snapshot_data)
     await client.link(
         writeable_directory_from_string(recovery_cap),
         entry_name,

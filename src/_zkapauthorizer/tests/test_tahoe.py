@@ -12,7 +12,11 @@ from hyperlink import DecodedURL
 from hypothesis import assume, given
 from hypothesis.strategies import integers, just, lists, sampled_from, text, tuples
 from pyutil.mathutil import div_ceil
-from tahoe_capabilities import danger_real_capability_string, readable_from_string
+from tahoe_capabilities import (
+    DirectoryWriteCapability,
+    ReadCapability,
+    danger_real_capability_string,
+)
 from testresources import setUpResources, tearDownResources
 from testtools import TestCase
 from testtools.matchers import AfterPreprocessing, Equals, Is, IsInstance, Not
@@ -20,7 +24,6 @@ from testtools.twistedsupport import AsynchronousDeferredRunTest, failed, succee
 from twisted.internet.defer import Deferred, gatherResults
 from twisted.python.filepath import FilePath
 
-from .._types import CapStr
 from ..storage_common import required_passes
 from ..tahoe import (
     DirectoryNode,
@@ -191,7 +194,7 @@ class DownloadChildTests(MemoryMixin, TestCase):
             return BytesIO(content)
 
         dircap = await client.make_directory()
-        filecap = danger_real_capability_string(await client.upload(get_content))
+        filecap = await client.upload(get_content)
         await client.link(dircap, "foo", filecap)
 
         try:
@@ -254,15 +257,13 @@ class DirectoryTestsMixin:
         def file_content(name: str) -> bytes:
             return b"x" * (int(name) + 1)
 
-        async def upload(name: str) -> tuple[str, CapStr]:
-            cap = danger_real_capability_string(
-                await tahoe.upload(lambda: BytesIO(file_content(name)))
-            )
+        async def upload(name: str) -> tuple[str, ReadCapability]:
+            cap = await tahoe.upload(lambda: BytesIO(file_content(name)))
             await tahoe.link(dir_obj, name, cap)
             return (name, cap)
 
         # Populate it a little
-        expected_entry_caps = dict(
+        expected_entry_caps: dict[str, ReadCapability] = dict(
             (
                 await gatherResults(
                     [Deferred.fromCoroutine(upload(n)) for n in entry_names]
@@ -270,9 +271,8 @@ class DirectoryTestsMixin:
             )
         )
         # Put another directory in it too.
-        inner_dir_obj = await tahoe.make_directory()
-        inner_dir_str = danger_real_capability_string(inner_dir_obj)
-        await tahoe.link(dir_obj, "directory", inner_dir_str)
+        inner_dir: DirectoryWriteCapability = await tahoe.make_directory()
+        await tahoe.link(dir_obj, "directory", inner_dir)
 
         # Read it back
         children = await tahoe.list_directory(dir_cap)
@@ -285,7 +285,7 @@ class DirectoryTestsMixin:
                 Equals(
                     FileNode(
                         size=len(file_content(name)),
-                        ro_uri=readable_from_string(expected_entry_caps[name]),
+                        ro_uri=expected_entry_caps[name],
                     )
                 ),
             )
@@ -293,7 +293,7 @@ class DirectoryTestsMixin:
         details = children["directory"]
         self.assertThat(
             details,
-            Equals(DirectoryNode(ro_uri=inner_dir_obj.reader)),
+            Equals(DirectoryNode(ro_uri=inner_dir.reader)),
         )
 
     @async_test
@@ -327,9 +327,7 @@ class DirectoryTestsMixin:
 
         dir_obj = await tahoe.make_directory()
         entry_name = "foo"
-        entry_cap = danger_real_capability_string(
-            await tahoe.upload(lambda: BytesIO(content))
-        )
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
         await tahoe.link(
             dir_obj,
             entry_name,
@@ -357,10 +355,9 @@ class DirectoryTestsMixin:
         """
         tahoe: ITahoeClient = self.get_client()
         dir_obj = await tahoe.make_directory()
-        dir_cap = danger_real_capability_string(dir_obj)
 
         try:
-            await tahoe.link(dir_obj.reader, "self", dir_cap)  # type: ignore[arg-type]
+            await tahoe.link(dir_obj.reader, "self", dir_obj)  # type: ignore[arg-type]
         except NotWriteableError:
             pass
         else:
@@ -378,9 +375,7 @@ class DirectoryTestsMixin:
         dir_obj = await tahoe.make_directory()
         dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
-        entry_cap = danger_real_capability_string(
-            await tahoe.upload(lambda: BytesIO(content))
-        )
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
         await tahoe.link(
             dir_obj,
             entry_name,
@@ -408,9 +403,7 @@ class DirectoryTestsMixin:
         dir_obj = await tahoe.make_directory()
         dir_cap = danger_real_capability_string(dir_obj)
         entry_name = "foo"
-        entry_cap = danger_real_capability_string(
-            await tahoe.upload(lambda: BytesIO(content))
-        )
+        entry_cap = await tahoe.upload(lambda: BytesIO(content))
         await tahoe.link(
             dir_obj,
             entry_name,

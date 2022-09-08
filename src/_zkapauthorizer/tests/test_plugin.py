@@ -861,9 +861,7 @@ class ClientResourceTests(TestCase):
         self.grid.link(
             replica_dirobj_rw,
             "snapshot",
-            danger_real_capability_string(
-                self.grid.upload(statements_to_snapshot(iter([])))
-            ),
+            self.grid.upload(statements_to_snapshot(iter([]))),
         )
 
         root = self.plugin.get_client_resource(config)

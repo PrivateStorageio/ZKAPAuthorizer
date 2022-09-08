@@ -429,13 +429,13 @@ class TahoeLAFSDownloaderTests(TestCase):
             grid.link(
                 replica_dir_cap,
                 entry,
-                danger_real_capability_string(grid.make_directory()),
+                grid.make_directory(),
             )
         for entry in confusing_filenodes:
             grid.link(
                 replica_dir_cap,
                 entry,
-                danger_real_capability_string(grid.upload(entry.encode("utf-8"))),
+                grid.upload(entry.encode("utf-8")),
             )
 
         # download it with the downloader

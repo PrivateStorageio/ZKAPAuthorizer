@@ -22,6 +22,7 @@ from tahoe_capabilities import (
     ReadCapability,
     SSKDirectoryWrite,
     SSKWrite,
+    WriteCapability,
     capability_from_string,
     danger_real_capability_string,
     digested_capability_string,
@@ -51,6 +52,12 @@ from .storage_common import (
 
 # An object which can get a readable byte stream
 DataProvider = Callable[[], IO[bytes]]
+
+# A capability that confers read or write access to application data.  This
+# should be essentially everything except verify caps.
+DataCapability = Union[
+    ReadCapability, WriteCapability, DirectoryReadCapability, DirectoryWriteCapability
+]
 
 
 @frozen
@@ -343,7 +350,7 @@ async def link(
     api_root: DecodedURL,
     dir_cap: DirectoryWriteCapability,
     entry_name: str,
-    entry_cap: str,
+    entry_cap: DataCapability,
 ) -> None:
     """
     Link an object into a directory.
@@ -351,7 +358,7 @@ async def link(
     :param dir_cap: The capability of the directory in which to create the
         link.
 
-    :param entry_cap: The capability string of the object to link in to the
+    :param entry_cap: The capability of the object to link in to the
         directory.
     """
     uri = (
@@ -360,7 +367,9 @@ async def link(
         .child(entry_name)
         .add("t", "uri")
     )
-    resp = await client.put(uri, data=entry_cap.encode("ascii"))
+    resp = await client.put(
+        uri, data=danger_real_capability_string(entry_cap).encode("ascii")
+    )
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
         return None
@@ -456,7 +465,7 @@ class ITahoeClient(Interface):
         """
 
     async def link(
-        dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: CapStr
+        dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: DataCapability
     ) -> None:
         """
         Link an object into a directory.
@@ -532,7 +541,10 @@ class Tahoe(object):
         return await list_directory(self.client, self._api_root, dir_cap)
 
     async def link(
-        self, dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: str
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
     ) -> None:
         return await link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
@@ -590,16 +602,14 @@ class MemoryGrid:
         def encode(n: int, w: int) -> bytes:
             return n.to_bytes(w, "big")
 
-        cap = CHKRead(
+        cap = CHKRead.derive(
             readkey=encode(self._counter, 16),
-            verifier=CHKVerify(
-                storage_index=encode(self._counter, 16),
-                uri_extension_hash=encode(self._counter, 32),
-                needed=self._counter % 256,
-                total=self._counter % 256,
-                size=self._counter,
-            ),
+            uri_extension_hash=encode(self._counter, 32),
+            needed=self._counter % 256,
+            total=self._counter % 256,
+            size=self._counter,
         )
+
         cap_str = danger_real_capability_string(cap)
         self._objects[cap_str] = data
         self._counter += 1
@@ -630,7 +640,10 @@ class MemoryGrid:
         return cap
 
     def link(
-        self, dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: CapStr
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
     ) -> None:
         if not is_write(dir_cap):
             raise NotWriteableError()
@@ -643,7 +656,7 @@ class MemoryGrid:
             # It is a directory cap so we know the object will be a
             # _MemoryDirectory.
             assert isinstance(dirobj, _MemoryDirectory)
-            dirobj.children[entry_name] = entry_cap
+            dirobj.children[entry_name] = danger_real_capability_string(entry_cap)
 
     def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
         capobj = capability_from_string(dir_cap)
@@ -747,7 +760,10 @@ class _MemoryTahoe:
         return self._grid.make_directory()
 
     async def link(
-        self, dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: CapStr
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
     ) -> None:
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
