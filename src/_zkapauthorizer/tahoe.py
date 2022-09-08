@@ -15,7 +15,6 @@ from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
 from tahoe_capabilities import (
     CHKRead,
-    CHKVerify,
     DirectoryReadCapability,
     DirectoryWriteCapability,
     NotRecognized,
@@ -23,7 +22,6 @@ from tahoe_capabilities import (
     SSKDirectoryWrite,
     SSKWrite,
     WriteCapability,
-    capability_from_string,
     danger_real_capability_string,
     digested_capability_string,
     is_directory,
@@ -384,14 +382,14 @@ async def link(
 async def unlink(
     client: HTTPClient,
     api_root: DecodedURL,
-    dir_cap: str,
+    dir_cap: DirectoryWriteCapability,
     entry_name: str,
 ) -> None:
     """
     Unink an object from a directory.
 
-    :param dir_cap: The capability string of the directory in which to create
-        the link.
+    :param dir_cap: The capability of the directory in which to create the
+        link.
 
     :param entry_name: The name of the entry to delete.
 
@@ -401,7 +399,11 @@ async def unlink(
     :raise NotDirectoryError: If the given capability is not a directory
         capability at all.
     """
-    uri = api_root.child("uri").child(dir_cap).child(entry_name)
+    uri = (
+        api_root.child("uri")
+        .child(danger_real_capability_string(dir_cap))
+        .child(entry_name)
+    )
     resp = await client.delete(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
@@ -475,7 +477,7 @@ class ITahoeClient(Interface):
         :param entry_cap: The capability of the object to link in.
         """
 
-    async def unlink(dir_cap: CapStr, entry_name: str) -> None:
+    async def unlink(dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         """
         Delete an object out of a directory.
 
@@ -548,7 +550,7 @@ class Tahoe(object):
     ) -> None:
         return await link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
-    async def unlink(self, dir_cap: str, entry_name: str) -> None:
+    async def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         return await unlink(self.client, self._api_root, dir_cap, entry_name)
 
 
@@ -658,13 +660,12 @@ class MemoryGrid:
             assert isinstance(dirobj, _MemoryDirectory)
             dirobj.children[entry_name] = danger_real_capability_string(entry_cap)
 
-    def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
-        capobj = capability_from_string(dir_cap)
-        if not is_write(capobj):
+    def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
+        if not is_write(dir_cap):
             raise NotWriteableError()
-        if not is_directory(capobj):
+        if not is_directory(dir_cap):
             raise NotADirectoryError()
-        dirobj = self._objects[dir_cap]
+        dirobj = self._objects[danger_real_capability_string(dir_cap)]
         # It is a directory cap so we know the object will be a _MemoryDirectory.
         assert isinstance(dirobj, _MemoryDirectory)
         del dirobj.children[entry_name]
@@ -767,7 +768,7 @@ class _MemoryTahoe:
     ) -> None:
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
-    async def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
+    async def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         return self._grid.unlink(dir_cap, entry_name)
 
     async def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:

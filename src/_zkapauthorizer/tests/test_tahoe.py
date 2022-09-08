@@ -387,7 +387,7 @@ class DirectoryTestsMixin:
         self.assertThat(list(entries_before.keys()), Equals([entry_name]))
 
         # unlink the file, leaving the directory empty again
-        await tahoe.unlink(dir_cap, entry_name)
+        await tahoe.unlink(dir_obj, entry_name)
         entries_after = await tahoe.list_directory(dir_cap)
         self.assertThat(list(entries_after.keys()), Equals([]))
 
@@ -418,7 +418,8 @@ class DirectoryTestsMixin:
             # try to unlink the file but pass only the read-only cap so we
             # expect failure
             await tahoe.unlink(
-                danger_real_capability_string(dir_obj.reader), entry_name
+                dir_obj.reader,  # type: ignore[arg-type]
+                entry_name,
             )
         except NotWriteableError:
             pass
@@ -436,14 +437,15 @@ class DirectoryTestsMixin:
 
         # create a non-directory
         content = b"some content"
-        non_dir_cap = danger_real_capability_string(
-            await tahoe.upload(lambda: BytesIO(content))
-        )
+        non_dir_cap = await tahoe.upload(lambda: BytesIO(content))
 
         try:
             # try to unlink some file from the non-directory (expecting
             # failure)
-            await tahoe.unlink(non_dir_cap, "foo")
+            await tahoe.unlink(
+                non_dir_cap,  # type: ignore[arg-type]
+                "foo",
+            )
         except (NotADirectoryError, NotWriteableError):
             # The real implementation and the memory implementation differ in
             # their behavior. :/ We need a create-mutable-non-directory API to

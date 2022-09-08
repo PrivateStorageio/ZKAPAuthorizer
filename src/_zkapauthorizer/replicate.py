@@ -641,7 +641,9 @@ def get_tahoe_lafs_direntry_pruner(
         entries = await client.list_directory(directory_mutable_cap)
         for name in entries.keys():
             if predicate(name):
-                await client.unlink(directory_mutable_cap, name)
+                await client.unlink(
+                    writeable_directory_from_string(directory_mutable_cap), name
+                )
 
     return maybe_unlink
 
