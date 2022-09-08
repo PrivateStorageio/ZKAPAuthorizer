@@ -39,7 +39,6 @@ from twisted.web.client import Agent
 from typing_extensions import ParamSpec
 from zope.interface import Interface, implementer
 
-from ._types import CapStr
 from .config import Config, read_node_url
 from .storage_common import (
     get_configured_shares_needed,
@@ -570,7 +569,7 @@ class _MemoryDirectory:
         used to look up the object for that entry.
     """
 
-    children: dict[str, CapStr] = Factory(dict)
+    children: dict[str, DataCapability] = Factory(dict)
 
 
 @define
@@ -588,7 +587,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[CapStr, Union[bytes, _MemoryDirectory]] = field(
+    _objects: dict[DataCapability, Union[bytes, _MemoryDirectory]] = field(
         default=Factory(dict)
     )
 
@@ -619,13 +618,12 @@ class MemoryGrid:
             size=self._counter,
         )
 
-        cap_str = danger_real_capability_string(cap)
-        self._objects[cap_str] = data
+        self._objects[cap] = data
         self._counter += 1
         return cap
 
     def download(self, cap: ReadCapability) -> bytes:
-        data = self._objects[danger_real_capability_string(cap)]
+        data = self._objects[cap]
         assert isinstance(data, bytes)
         return data
 
@@ -640,12 +638,9 @@ class MemoryGrid:
         cap = SSKDirectoryWrite(
             cap_object=SSKWrite.derive(writekey, fingerprint),
         )
-        rw_cap_str = danger_real_capability_string(cap)
-        ro_cap_str = danger_real_capability_string(cap.reader)
         dirobj = _MemoryDirectory()
-        for cap_str in [rw_cap_str, ro_cap_str]:
-            self._objects[cap_str] = dirobj
-
+        self._objects[cap] = dirobj
+        self._objects[cap.reader] = dirobj
         return cap
 
     def link(
@@ -661,28 +656,29 @@ class MemoryGrid:
                 f"Cannot link entry into non-directory capability ({dir_cap.prefix})"
             )
         else:
-            dirobj = self._objects[danger_real_capability_string(dir_cap)]
+            dirobj = self._objects[dir_cap]
             # It is a directory cap so we know the object will be a
             # _MemoryDirectory.
             assert isinstance(dirobj, _MemoryDirectory)
-            dirobj.children[entry_name] = danger_real_capability_string(entry_cap)
+            dirobj.children[entry_name] = entry_cap
 
     def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         if not is_write(dir_cap):
             raise NotWriteableError()
         if not is_directory(dir_cap):
             raise NotADirectoryError()
-        dirobj = self._objects[danger_real_capability_string(dir_cap)]
+        dirobj = self._objects[dir_cap]
         # It is a directory cap so we know the object will be a _MemoryDirectory.
         assert isinstance(dirobj, _MemoryDirectory)
         del dirobj.children[entry_name]
 
     def list_directory(self, dir_cap: DirectoryReadCapability) -> _DirectoryListing:
-        def describe(cap_str: CapStr) -> _DirectoryEntry:
+        def describe(cap: DataCapability) -> _DirectoryEntry:
             dir_cap_ro: DirectoryReadCapability
             cap_ro: ReadCapability
 
-            obj = self._objects[cap_str]
+            cap_str = danger_real_capability_string(cap)
+            obj = self._objects[cap]
             try:
                 try:
                     dir_cap_rw = writeable_directory_from_string(cap_str)
@@ -701,7 +697,7 @@ class MemoryGrid:
             assert isinstance(obj, bytes), f"{obj!r}"
             return FileNode(len(obj), cap_ro)
 
-        dirobj = self._objects[danger_real_capability_string(dir_cap)]
+        dirobj = self._objects[dir_cap]
         if isinstance(dirobj, _MemoryDirectory):
             return {name: describe(entry) for (name, entry) in dirobj.children.items()}
 
