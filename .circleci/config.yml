@@ -350,21 +350,6 @@ jobs:
               --cores 5 \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
-      - run:
-          name: "Check Black"
-          command: |
-            nix run .#black -- --check --diff src
-
-      - run:
-          name: "Check isort"
-          command: |
-            nix run .#isort -- --check --diff src
-
-      - run:
-          name: "Check flake8"
-          command: |
-            nix run .#flake8 -- src
-
       - run: &PUSH_TO_CACHIX
           name: "Push to Cachix"
           when: "always"
@@ -402,10 +387,27 @@ jobs:
       - run:
           <<: *SETUP_CACHIX
       - "checkout"
+
+      - run:
+          name: "Check Black"
+          command: |
+            nix run .#black -- --check --diff src
+
+      - run:
+          name: "Check isort"
+          command: |
+            nix run .#isort -- --check --diff src
+
+      - run:
+          name: "Check flake8"
+          command: |
+            nix run .#flake8 -- src
+
       - run:
           name: "Run Type Checks"
           command: |
             nix run .#mypy -- src
+
       - run:
           <<: *PUSH_TO_CACHIX
 
