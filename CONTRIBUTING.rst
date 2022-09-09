@@ -25,8 +25,6 @@ For a PR to be accepted it needs to have:
 Updating Dependencies
 ---------------------
 
-We use `niv <https://github.com/nmattia/niv>`_ to manage several of our dependencies.
-
 Python Dependencies
 ...................
 
