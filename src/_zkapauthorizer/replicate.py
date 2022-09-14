@@ -87,6 +87,8 @@ from attrs import Attribute, Factory, define, field, frozen
 from compose import compose
 from tahoe_capabilities import (
     DirectoryReadCapability,
+    DirectoryWriteCapability,
+    danger_real_capability_string,
     digested_capability_string,
     writeable_directory_from_string,
 )
@@ -96,7 +98,6 @@ from twisted.logger import Logger
 from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
-from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
 from .eliot import log_call
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
@@ -311,9 +312,10 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
 
         # Create a directory with it
         rw_cap = await client.make_directory()
+        rw_str = danger_real_capability_string(rw_cap)
 
         # Store the resulting write-cap in the node's private directory
-        config_path.setContent(rw_cap.encode("ascii"))  # type: ignore[no-untyped-call]
+        config_path.setContent(rw_str.encode("ascii"))  # type: ignore[no-untyped-call]
 
     finally:
         # On success and failure, release the lock since we're done with the
@@ -321,7 +323,7 @@ async def setup_tahoe_lafs_replication(client: ITahoeClient) -> DirectoryReadCap
         config_lock.unlock()  # type: ignore[no-untyped-call]
 
     # Return the corresponding read-cap.
-    return writeable_directory_from_string(rw_cap).reader
+    return rw_cap.reader
 
 
 def is_replication_setup(config: Config) -> bool:
@@ -335,14 +337,14 @@ def is_replication_setup(config: Config) -> bool:
     return False
 
 
-def get_replica_rwcap(config: Config) -> CapStr:
+def get_replica_rwcap(config: Config) -> DirectoryWriteCapability:
     """
     :return: a mutable directory capability for our replica.
     :raises: Exception if replication is not setup
     """
     rwcap_file = FilePath(config.get_private_path(REPLICA_RWCAP_BASENAME))  # type: ignore[no-untyped-call]
     rwcap_bytes: bytes = rwcap_file.getContent()  # type: ignore[no-untyped-call]
-    return rwcap_bytes.decode("ascii")
+    return writeable_directory_from_string(rwcap_bytes.decode("ascii"))
 
 
 @define
@@ -580,7 +582,7 @@ snapshot: Callable[[Connection], bytes] = compose(
 
 async def tahoe_lafs_uploader(
     client: ITahoeClient,
-    recovery_cap: str,
+    recovery_cap: DirectoryWriteCapability,
     get_snapshot_data: DataProvider,
     entry_name: str,
 ) -> None:
@@ -589,12 +591,16 @@ async def tahoe_lafs_uploader(
     mutable capbility under the name given by :py:data:`SNAPSHOT_NAME`.
     """
     snapshot_immutable_cap = await client.upload(get_snapshot_data)
-    await client.link(recovery_cap, entry_name, snapshot_immutable_cap)
+    await client.link(
+        recovery_cap,
+        entry_name,
+        snapshot_immutable_cap,
+    )
 
 
 def get_tahoe_lafs_direntry_uploader(
     client: ITahoeClient,
-    directory_mutable_cap: str,
+    directory_mutable_cap: DirectoryWriteCapability,
 ) -> Callable[[str, DataProvider], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
@@ -616,7 +622,7 @@ def get_tahoe_lafs_direntry_uploader(
 
 def get_tahoe_lafs_direntry_pruner(
     client: ITahoeClient,
-    directory_mutable_cap: str,
+    directory_mutable_cap: DirectoryWriteCapability,
 ) -> Callable[[Callable[[str], bool]], Awaitable[None]]:
     """
     Bind a Tahoe client to a mutable directory in a callable that will
@@ -632,7 +638,7 @@ def get_tahoe_lafs_direntry_pruner(
         For each child of `directory_mutable_cap` delete it iff the
         predicate returns True for that name
         """
-        entries = await client.list_directory(directory_mutable_cap)
+        entries = await client.list_directory(directory_mutable_cap.reader)
         for name in entries.keys():
             if predicate(name):
                 await client.unlink(directory_mutable_cap, name)
@@ -641,7 +647,7 @@ def get_tahoe_lafs_direntry_pruner(
 
 
 def get_tahoe_lafs_direntry_lister(
-    client: ITahoeClient, directory_mutable_cap: str
+    client: ITahoeClient, directory_mutable_cap: DirectoryWriteCapability
 ) -> EntryLister:
     """
     Bind a Tahoe client to a mutable directory in a callable that will list
@@ -649,7 +655,7 @@ def get_tahoe_lafs_direntry_lister(
     """
 
     async def lister() -> dict[str, DirectoryEntry]:
-        entries = await client.list_directory(directory_mutable_cap)
+        entries = await client.list_directory(directory_mutable_cap.reader)
         return {
             name: DirectoryEntry(
                 "filenode" if isinstance(entry, FileNode) else "dirnode",
@@ -662,7 +668,7 @@ def get_tahoe_lafs_direntry_lister(
 
 
 def get_tahoe_lafs_direntry_replica(
-    client: ITahoeClient, directory_mutable_cap: str
+    client: ITahoeClient, directory_mutable_cap: DirectoryWriteCapability
 ) -> Replica:
     """
     Get an object that can interact with a replica stored in a Tahoe-LAFS

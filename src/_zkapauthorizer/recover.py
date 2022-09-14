@@ -20,7 +20,7 @@ from typing import Callable, Iterable, Iterator, NoReturn, Optional, Sequence
 
 import cbor2
 from attrs import define, field
-from tahoe_capabilities import DirectoryReadCapability, danger_real_capability_string
+from tahoe_capabilities import DirectoryReadCapability
 
 from .replicate import SNAPSHOT_NAME, EventStream, statements_to_snapshot
 from .sql import Cursor, escape_identifier
@@ -332,7 +332,7 @@ async def tahoe_lafs_downloader(
     node's private directory.
     """
     set_state(RecoveryState(stage=RecoveryStages.inspect_replica))
-    entries = await client.list_directory(danger_real_capability_string(recovery_cap))
+    entries = await client.list_directory(recovery_cap)
 
     set_state(RecoveryState(stage=RecoveryStages.downloading))
     snapshot_path = client.get_private_path(SNAPSHOT_NAME)

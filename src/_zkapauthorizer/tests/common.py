@@ -374,7 +374,7 @@ class DummyStorageServer(object):
     def get_lease_seed(self) -> bytes:
         return self.lease_seed
 
-    def add_lease(
+    async def add_lease(
         self, storage_index: bytes, renew_secret: bytes, cancel_secret: bytes
     ) -> None:
         for stat in self.buckets.get(storage_index, {}).values():

@@ -16,7 +16,11 @@ from eliot import start_action
 from fixtures import TempDir
 from hypothesis import given
 from hypothesis.strategies import lists, text
-from tahoe_capabilities import ReadCapability
+from tahoe_capabilities import (
+    DirectoryReadCapability,
+    ReadCapability,
+    danger_real_capability_string,
+)
 from testtools import TestCase
 from testtools.matchers import (
     AfterPreprocessing,
@@ -37,7 +41,6 @@ from testtools.twistedsupport import succeeded
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
-from .._types import CapStr
 from ..config import REPLICA_RWCAP_BASENAME
 from ..eliot import log_call
 from ..model import RandomToken, VoucherStore, aware_now
@@ -346,7 +349,7 @@ async def noop_list_entries() -> dict[str, DirectoryEntry]:
 noop_replica = Replica(noop_upload, noop_prune, noop_list_entries)
 
 
-def has_files(grid: MemoryGrid, dir_cap: CapStr, count: int) -> bool:
+def has_files(grid: MemoryGrid, dir_cap: DirectoryReadCapability, count: int) -> bool:
     """
     A predicate that returns True only when the directory indicated has at
     least the given number of children in it.
@@ -435,16 +438,16 @@ class ReplicationServiceTests(TestCase):
         store = tvs.store
 
         grid = MemoryGrid()
-        replica_dircap = grid.make_directory()
+        replica_obj = grid.make_directory()
         client = grid.client()
 
-        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        replica = get_tahoe_lafs_direntry_replica(client, replica_obj)
         service = replication_service(store._connection, replica, naive_policy)
         service.startService()
         self.addCleanup(service.stopService)
 
         self.assertThat(
-            grid.list_directory(replica_dircap),
+            grid.list_directory(replica_obj.reader),
             Contains("snapshot"),
         )
 
@@ -470,17 +473,17 @@ class ReplicationServiceTests(TestCase):
         store = tvs.store
 
         grid = MemoryGrid()
-        replica_dircap = grid.make_directory()
+        replica_obj = grid.make_directory()
         client = grid.client()
 
-        replica = get_tahoe_lafs_direntry_replica(client, replica_dircap)
+        replica = get_tahoe_lafs_direntry_replica(client, replica_obj)
         # This accomplishes (1).
         service = replication_service(store._connection, replica, naive_policy)
         service.startService()
 
         # Demonstrate (2).
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_obj.reader)),
             Equals({"snapshot"}),
         )
 
@@ -497,7 +500,7 @@ class ReplicationServiceTests(TestCase):
             Not(HasLength(0)),
         )
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_obj.reader)),
             Equals({"snapshot"}),
         )
 
@@ -511,7 +514,7 @@ class ReplicationServiceTests(TestCase):
             HasLength(0),
         )
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_obj.reader)),
             Equals({"snapshot", "event-stream-2"}),
         )
 
@@ -523,14 +526,15 @@ class ReplicationServiceTests(TestCase):
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         grid = MemoryGrid()
-        replica_cap = grid.make_directory()
+        replica_obj = grid.make_directory()
+        replica_cap = danger_real_capability_string(replica_obj)
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
         rwcap_file.setContent(replica_cap.encode("ascii"))
 
         # Predicate to check if the replica directory has at least some number
         # of files in it.
-        has_files_bound = partial(has_files, grid, replica_cap)
+        has_files_bound = partial(has_files, grid, replica_obj.reader)
 
         # we use this to contol when the first upload happens, so that we
         # actually use the queue
@@ -541,7 +545,7 @@ class ReplicationServiceTests(TestCase):
 
         srv = replication_service(
             tvs.store._connection,
-            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            get_tahoe_lafs_direntry_replica(delay_client, replica_obj),
             naive_policy,
         )
 
@@ -567,7 +571,7 @@ class ReplicationServiceTests(TestCase):
         # working as intended by asserting there are no event streams on the
         # grid.
         self.assertThat(
-            sorted(grid.list_directory(replica_cap)),
+            sorted(grid.list_directory(replica_obj.reader)),
             Equals(["snapshot"]),
         )
 
@@ -582,7 +586,7 @@ class ReplicationServiceTests(TestCase):
             repeat_until(partial(has_files_bound, 2), delay_controller.run)
 
         self.assertThat(
-            sorted(grid.list_directory(replica_cap)),
+            sorted(grid.list_directory(replica_obj.reader)),
             Equals(sorted(["snapshot", "event-stream-2"])),
         )
 
@@ -594,7 +598,7 @@ class ReplicationServiceTests(TestCase):
         # There is no third upload because the data for the 2nd and 3rd
         # add_tokens calls should have been combined into a single upload.
         self.assertThat(
-            grid.list_directory(replica_cap),
+            grid.list_directory(replica_obj.reader),
             MatchesDict(
                 {
                     "snapshot": Always(),
@@ -624,14 +628,15 @@ class ReplicationServiceTests(TestCase):
         tvs = self.useFixture(TemporaryVoucherStore(aware_now))
 
         grid = MemoryGrid()
-        replica_cap = grid.make_directory()
+        replica_obj = grid.make_directory()
+        replica_cap = danger_real_capability_string(replica_obj)
         rwcap_file = FilePath(tvs.config.get_private_path(REPLICA_RWCAP_BASENAME))
         rwcap_file.parent().makedirs()
         rwcap_file.setContent(replica_cap.encode("ascii"))
 
         # Predicate to check if the replica directory has at least some number
         # of files in it.
-        has_files_bound = partial(has_files, grid, replica_cap)
+        has_files_bound = partial(has_files, grid, replica_obj.reader)
 
         # we use this to contol when the first upload happens, so that we
         # actually use the queue
@@ -642,7 +647,7 @@ class ReplicationServiceTests(TestCase):
 
         srv = replication_service(
             tvs.store._connection,
-            get_tahoe_lafs_direntry_replica(delay_client, replica_cap),
+            get_tahoe_lafs_direntry_replica(delay_client, replica_obj),
             naive_policy,
         )
 
@@ -674,7 +679,7 @@ class ReplicationServiceTests(TestCase):
 
         # ..so we should have uploaded here
         self.assertThat(
-            grid.list_directory(replica_cap),
+            grid.list_directory(replica_obj.reader),
             MatchesDict(
                 {
                     "snapshot": Always(),
@@ -718,7 +723,7 @@ class ReplicationServiceTests(TestCase):
         # have said "yes" to the event-stream we did upload
 
         self.assertThat(
-            grid.list_directory(replica_cap),
+            grid.list_directory(replica_obj.reader),
             MatchesDict(
                 {
                     "snapshot": Always(),
@@ -757,14 +762,14 @@ class ReplicationServiceTests(TestCase):
 
         # Demonstrate (2).
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_dircap.reader)),
             Equals({"snapshot"}),
         )
 
         # Make an important change to get to (3).
         add_tokens(store)
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_dircap.reader)),
             Equals({"snapshot", "event-stream-2"}),
         )
 
@@ -774,7 +779,7 @@ class ReplicationServiceTests(TestCase):
         # The event streams should have been pruned and the new snapshot
         # uploaded.
         self.assertThat(
-            set(grid.list_directory(replica_dircap)),
+            set(grid.list_directory(replica_dircap.reader)),
             Equals({"snapshot"}),
         )
 
@@ -795,14 +800,14 @@ class TahoeDirectoryListerTests(TestCase):
         """
         filedata = b"somedata"
         grid = MemoryGrid()
-        dircap = grid.make_directory()
+        dirobj = grid.make_directory()
         for name in directory_names:
-            grid.link(dircap, name, grid.make_directory())
+            grid.link(dirobj, name, grid.make_directory())
         for name in file_names:
-            grid.link(dircap, name, grid.upload(filedata))
+            grid.link(dirobj, name, grid.upload(filedata))
 
         client = grid.client()
-        lister = get_tahoe_lafs_direntry_lister(client, dircap)
+        lister = get_tahoe_lafs_direntry_lister(client, dirobj)
 
         expected = {name: DirectoryEntry("dirnode", 0) for name in directory_names}
         expected.update(
@@ -829,13 +834,13 @@ class TahoeDirectoryPrunerTests(TestCase):
         delete = ["three", "four"]
 
         grid = MemoryGrid()
-        dircap = grid.make_directory()
+        dirobj = grid.make_directory()
         for name in ignore + delete:
             filecap = grid.upload(b"some data")
-            grid.link(dircap, name, filecap)
+            grid.link(dirobj, name, filecap)
 
         client = grid.client()
-        pruner = get_tahoe_lafs_direntry_pruner(client, dircap)
+        pruner = get_tahoe_lafs_direntry_pruner(client, dirobj)
 
         # ask the pruner to delete some of the files
         self.assertThat(
@@ -846,6 +851,6 @@ class TahoeDirectoryPrunerTests(TestCase):
         )
 
         self.assertThat(
-            set(grid.list_directory(dircap).keys()),
+            set(grid.list_directory(dirobj.reader).keys()),
             Equals(set(ignore)),
         )

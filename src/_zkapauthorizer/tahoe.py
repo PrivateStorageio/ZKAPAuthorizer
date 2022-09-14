@@ -15,13 +15,13 @@ from attrs import Factory, define, field, frozen
 from hyperlink import DecodedURL
 from tahoe_capabilities import (
     CHKRead,
-    CHKVerify,
     DirectoryReadCapability,
+    DirectoryWriteCapability,
     NotRecognized,
     ReadCapability,
     SSKDirectoryWrite,
     SSKWrite,
-    capability_from_string,
+    WriteCapability,
     danger_real_capability_string,
     digested_capability_string,
     is_directory,
@@ -39,7 +39,6 @@ from twisted.web.client import Agent
 from typing_extensions import ParamSpec
 from zope.interface import Interface, implementer
 
-from ._types import CapStr
 from .config import Config, read_node_url
 from .storage_common import (
     get_configured_shares_needed,
@@ -50,6 +49,12 @@ from .storage_common import (
 
 # An object which can get a readable byte stream
 DataProvider = Callable[[], IO[bytes]]
+
+# A capability that confers read or write access to application data.  This
+# should be essentially everything except verify caps.
+DataCapability = Union[
+    ReadCapability, WriteCapability, DirectoryReadCapability, DirectoryWriteCapability
+]
 
 
 @frozen
@@ -195,7 +200,7 @@ async def upload_bytes(
     client: HTTPClient,
     get_data_provider: DataProvider,
     api_root: DecodedURL,
-) -> str:
+) -> ReadCapability:
     """
     Upload the given data and return the resulting capability.
 
@@ -226,7 +231,7 @@ async def upload_bytes(
     body = await treq.content(resp)
     content = body.decode("utf-8")
     if resp.code in (200, 201):
-        return cast(str, content)
+        return readable_from_string(content)
     raise TahoeAPIError("put", uri, resp.code, content)
 
 
@@ -289,15 +294,20 @@ _DirectoryListing = dict[str, _DirectoryEntry]
 async def list_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-    dir_cap: str,
+    dir_cap: DirectoryReadCapability,
 ) -> _DirectoryListing:
     """
     Read the direct children of a directory.
     """
-    if not dir_cap.startswith("URI:DIR2"):
-        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+    if not is_directory(dir_cap):
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap.prefix})")
 
-    uri = api_root.child("uri").child(dir_cap).child("").add("t", "json")
+    uri = (
+        api_root.child("uri")
+        .child(danger_real_capability_string(dir_cap))
+        .child("")
+        .add("t", "json")
+    )
     resp = await client.get(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
@@ -324,7 +334,7 @@ async def list_directory(
 async def make_directory(
     client: HTTPClient,
     api_root: DecodedURL,
-) -> str:
+) -> DirectoryWriteCapability:
     """
     Create a new mutable directory and return the write capability string.
     """
@@ -332,7 +342,7 @@ async def make_directory(
     resp = await client.post(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
-        return cast(str, content)
+        return writeable_directory_from_string(content)
     raise TahoeAPIError("post", uri, resp.code, content)
 
 
@@ -340,21 +350,28 @@ async def make_directory(
 async def link(
     client: HTTPClient,
     api_root: DecodedURL,
-    dir_cap: str,
+    dir_cap: DirectoryWriteCapability,
     entry_name: str,
-    entry_cap: str,
+    entry_cap: DataCapability,
 ) -> None:
     """
     Link an object into a directory.
 
-    :param dir_cap: The capability string of the directory in which to create
-        the link.
+    :param dir_cap: The capability of the directory in which to create the
+        link.
 
-    :param entry_cap: The capability string of the object to link in to the
+    :param entry_cap: The capability of the object to link in to the
         directory.
     """
-    uri = api_root.child("uri").child(dir_cap).child(entry_name).add("t", "uri")
-    resp = await client.put(uri, data=entry_cap.encode("ascii"))
+    uri = (
+        api_root.child("uri")
+        .child(danger_real_capability_string(dir_cap))
+        .child(entry_name)
+        .add("t", "uri")
+    )
+    resp = await client.put(
+        uri, data=danger_real_capability_string(entry_cap).encode("ascii")
+    )
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
         return None
@@ -369,14 +386,14 @@ async def link(
 async def unlink(
     client: HTTPClient,
     api_root: DecodedURL,
-    dir_cap: str,
+    dir_cap: DirectoryWriteCapability,
     entry_name: str,
 ) -> None:
     """
     Unink an object from a directory.
 
-    :param dir_cap: The capability string of the directory in which to create
-        the link.
+    :param dir_cap: The capability of the directory in which to create the
+        link.
 
     :param entry_name: The name of the entry to delete.
 
@@ -386,7 +403,11 @@ async def unlink(
     :raise NotDirectoryError: If the given capability is not a directory
         capability at all.
     """
-    uri = api_root.child("uri").child(dir_cap).child(entry_name)
+    uri = (
+        api_root.child("uri")
+        .child(danger_real_capability_string(dir_cap))
+        .child(entry_name)
+    )
     resp = await client.delete(uri)
     content = (await treq.content(resp)).decode("utf-8")
     if resp.code == 200:
@@ -434,7 +455,7 @@ class ITahoeClient(Interface):
         Download the contents of an object to a given local path.
         """
 
-    async def upload(data_provider: DataProvider) -> CapStr:
+    async def upload(data_provider: DataProvider) -> ReadCapability:
         """
         Upload some data, creating a new object, and returning a capability for
         it.
@@ -444,12 +465,14 @@ class ITahoeClient(Interface):
             required.
         """
 
-    async def make_directory() -> CapStr:
+    async def make_directory() -> DirectoryWriteCapability:
         """
         Create a new, empty, mutable directory.
         """
 
-    async def link(dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
+    async def link(
+        dir_cap: DirectoryWriteCapability, entry_name: str, entry_cap: DataCapability
+    ) -> None:
         """
         Link an object into a directory.
 
@@ -458,7 +481,7 @@ class ITahoeClient(Interface):
         :param entry_cap: The capability of the object to link in.
         """
 
-    async def unlink(dir_cap: CapStr, entry_name: str) -> None:
+    async def unlink(dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         """
         Delete an object out of a directory.
 
@@ -466,7 +489,7 @@ class ITahoeClient(Interface):
         :param entry_name: The name of the entry to remove.
         """
 
-    async def list_directory(dir_cap: CapStr) -> _DirectoryListing:
+    async def list_directory(dir_cap: DirectoryReadCapability) -> _DirectoryListing:
         """
         List the entries linked into a directory.
         """
@@ -514,19 +537,26 @@ class Tahoe(object):
     async def download(self, outpath: FilePath, cap: ReadCapability) -> None:
         await download(self.client, outpath, self._api_root, cap)
 
-    async def upload(self, get_data_provider: DataProvider) -> str:
+    async def upload(self, get_data_provider: DataProvider) -> ReadCapability:
         return await upload_bytes(self.client, get_data_provider, self._api_root)
 
-    async def make_directory(self) -> str:
+    async def make_directory(self) -> DirectoryWriteCapability:
         return await make_directory(self.client, self._api_root)
 
-    async def list_directory(self, dir_cap: str) -> _DirectoryListing:
+    async def list_directory(
+        self, dir_cap: DirectoryReadCapability
+    ) -> _DirectoryListing:
         return await list_directory(self.client, self._api_root, dir_cap)
 
-    async def link(self, dir_cap: str, entry_name: str, entry_cap: str) -> None:
+    async def link(
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
+    ) -> None:
         return await link(self.client, self._api_root, dir_cap, entry_name, entry_cap)
 
-    async def unlink(self, dir_cap: str, entry_name: str) -> None:
+    async def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         return await unlink(self.client, self._api_root, dir_cap, entry_name)
 
 
@@ -539,7 +569,7 @@ class _MemoryDirectory:
         used to look up the object for that entry.
     """
 
-    children: dict[str, CapStr] = Factory(dict)
+    children: dict[str, DataCapability] = Factory(dict)
 
 
 @define
@@ -557,7 +587,7 @@ class MemoryGrid:
     """
 
     _counter: int = 0
-    _objects: dict[CapStr, Union[bytes, _MemoryDirectory]] = field(
+    _objects: dict[DataCapability, Union[bytes, _MemoryDirectory]] = field(
         default=Factory(dict)
     )
 
@@ -574,33 +604,30 @@ class MemoryGrid:
             basedir = FilePath(mkdtemp(suffix=".memory-tahoe"))  # type: ignore[no-untyped-call]
         return _MemoryTahoe(self, basedir, share_encoding)
 
-    def upload(self, data: bytes) -> CapStr:
+    def upload(self, data: bytes) -> ReadCapability:
         assert isinstance(data, bytes)
 
         def encode(n: int, w: int) -> bytes:
             return n.to_bytes(w, "big")
 
-        cap = CHKRead(
+        cap = CHKRead.derive(
             readkey=encode(self._counter, 16),
-            verifier=CHKVerify(
-                storage_index=encode(self._counter, 16),
-                uri_extension_hash=encode(self._counter, 32),
-                needed=self._counter % 256,
-                total=self._counter % 256,
-                size=self._counter,
-            ),
+            uri_extension_hash=encode(self._counter, 32),
+            needed=self._counter % 256,
+            total=self._counter % 256,
+            size=self._counter,
         )
-        cap_str = danger_real_capability_string(cap)
-        self._objects[cap_str] = data
+
+        self._objects[cap] = data
         self._counter += 1
-        return cap_str
+        return cap
 
     def download(self, cap: ReadCapability) -> bytes:
-        data = self._objects[danger_real_capability_string(cap)]
+        data = self._objects[cap]
         assert isinstance(data, bytes)
         return data
 
-    def make_directory(self) -> CapStr:
+    def make_directory(self) -> DirectoryWriteCapability:
         def encode(n: int, w: int) -> bytes:
             return n.to_bytes(w, "big")
 
@@ -611,21 +638,22 @@ class MemoryGrid:
         cap = SSKDirectoryWrite(
             cap_object=SSKWrite.derive(writekey, fingerprint),
         )
-        rw_cap_str = danger_real_capability_string(cap)
-        ro_cap_str = danger_real_capability_string(cap.reader)
         dirobj = _MemoryDirectory()
-        for cap_str in [rw_cap_str, ro_cap_str]:
-            self._objects[cap_str] = dirobj
+        self._objects[cap] = dirobj
+        self._objects[cap.reader] = dirobj
+        return cap
 
-        return rw_cap_str
-
-    def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
-        capobj = capability_from_string(dir_cap)
-        if not is_write(capobj):
+    def link(
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
+    ) -> None:
+        if not is_write(dir_cap):
             raise NotWriteableError()
-        if not is_directory(capobj):
+        if not is_directory(dir_cap):
             raise ValueError(
-                f"Cannot link entry into non-directory capability ({dir_cap[:7]})"
+                f"Cannot link entry into non-directory capability ({dir_cap.prefix})"
             )
         else:
             dirobj = self._objects[dir_cap]
@@ -634,23 +662,23 @@ class MemoryGrid:
             assert isinstance(dirobj, _MemoryDirectory)
             dirobj.children[entry_name] = entry_cap
 
-    def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
-        capobj = capability_from_string(dir_cap)
-        if not is_write(capobj):
+    def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
+        if not is_write(dir_cap):
             raise NotWriteableError()
-        if not is_directory(capobj):
+        if not is_directory(dir_cap):
             raise NotADirectoryError()
         dirobj = self._objects[dir_cap]
         # It is a directory cap so we know the object will be a _MemoryDirectory.
         assert isinstance(dirobj, _MemoryDirectory)
         del dirobj.children[entry_name]
 
-    def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
-        def describe(cap_str: CapStr) -> _DirectoryEntry:
+    def list_directory(self, dir_cap: DirectoryReadCapability) -> _DirectoryListing:
+        def describe(cap: DataCapability) -> _DirectoryEntry:
             dir_cap_ro: DirectoryReadCapability
             cap_ro: ReadCapability
 
-            obj = self._objects[cap_str]
+            cap_str = danger_real_capability_string(cap)
+            obj = self._objects[cap]
             try:
                 try:
                     dir_cap_rw = writeable_directory_from_string(cap_str)
@@ -673,7 +701,7 @@ class MemoryGrid:
         if isinstance(dirobj, _MemoryDirectory):
             return {name: describe(entry) for (name, entry) in dirobj.children.items()}
 
-        raise ValueError(f"Cannot list a non-directory capability ({dir_cap[:7]})")
+        raise ValueError(f"Cannot list a non-directory capability ({dir_cap.prefix})")
 
 
 _no_children_message = (
@@ -719,7 +747,7 @@ class _MemoryTahoe:
         assert isinstance(data, bytes)
         outpath.setContent(data)  # type: ignore[no-untyped-call]
 
-    async def upload(self, data_provider: DataProvider) -> CapStr:
+    async def upload(self, data_provider: DataProvider) -> ReadCapability:
         """
         Send some data to Tahoe-LAFS, returning an immutable capability.
 
@@ -732,16 +760,23 @@ class _MemoryTahoe:
             content = d.read()
         return self._grid.upload(content)
 
-    async def make_directory(self) -> CapStr:
+    async def make_directory(self) -> DirectoryWriteCapability:
         return self._grid.make_directory()
 
-    async def link(self, dir_cap: CapStr, entry_name: str, entry_cap: CapStr) -> None:
+    async def link(
+        self,
+        dir_cap: DirectoryWriteCapability,
+        entry_name: str,
+        entry_cap: DataCapability,
+    ) -> None:
         return self._grid.link(dir_cap, entry_name, entry_cap)
 
-    async def unlink(self, dir_cap: CapStr, entry_name: str) -> None:
+    async def unlink(self, dir_cap: DirectoryWriteCapability, entry_name: str) -> None:
         return self._grid.unlink(dir_cap, entry_name)
 
-    async def list_directory(self, dir_cap: CapStr) -> _DirectoryListing:
+    async def list_directory(
+        self, dir_cap: DirectoryReadCapability
+    ) -> _DirectoryListing:
         return self._grid.list_directory(dir_cap)
 
 
@@ -775,7 +810,7 @@ async def download_child(
     else:
         p = child_path[0]
         remaining_path = child_path[1:]
-        children = await client.list_directory(danger_real_capability_string(dircap))
+        children = await client.list_directory(dircap)
         child = children[p]
 
         if remaining_path:
@@ -786,15 +821,6 @@ async def download_child(
         else:
             assert isinstance(child, FileNode)
             await client.download(outpath, child.ro_uri)
-
-
-def attenuate_writecap(rw_cap: CapStr) -> CapStr:
-    """
-    Get a read-only capability corresponding to the same data as the given
-    read-write capability.
-    """
-
-    return danger_real_capability_string(writeable_from_string(rw_cap).reader)
 
 
 def get_tahoe_client(reactor: IReactorTCP, node_config: Config) -> ITahoeClient:
