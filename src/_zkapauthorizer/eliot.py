@@ -27,6 +27,7 @@ from eliot import start_action
 from eliot.json import EliotJSONEncoder
 from eliot.testing import capture_logging as _capture_logging
 from typing_extensions import ParamSpec
+
 from ._types import JSON
 
 PRIVACYPASS_MESSAGE = Field(
@@ -119,6 +120,7 @@ P = ParamSpec("P")
 Q = ParamSpec("Q")
 
 JSONT = TypeVar("JSONT", bound=JSON)
+
 
 def log_call(
     action_type: Optional[str] = None,
