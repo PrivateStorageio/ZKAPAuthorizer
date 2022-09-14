@@ -116,7 +116,7 @@ from ..replicate import (
     with_replication,
 )
 from ..resource import RecoverProtocol, recover
-from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding, attenuate_writecap
+from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
 from .common import GetConfig, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
@@ -142,9 +142,6 @@ from .strategies import (
     tahoe_configs,
     vouchers,
 )
-
-# from twisted.plugins.zkapauthorizer import storage_server_plugin
-
 
 SIGNING_KEY_PATH = FilePath(__file__).sibling("testing-signing.key")
 
@@ -858,9 +855,9 @@ class ClientResourceTests(TestCase):
         with open(config.get_private_path("api_auth_token"), "w") as f:
             f.write(token)
 
-        replica_dircap_rw = self.grid.make_directory()
+        replica_dirobj_rw = self.grid.make_directory()
         self.grid.link(
-            replica_dircap_rw,
+            replica_dirobj_rw,
             "snapshot",
             self.grid.upload(statements_to_snapshot(iter([]))),
         )
@@ -889,13 +886,12 @@ class ClientResourceTests(TestCase):
         pumper.start()
         self.addCleanup(pumper.stop)
 
-        replica_dircap_ro = attenuate_writecap(replica_dircap_rw)
         recovering = Deferred.fromCoroutine(
             recover(
                 agent,
                 DecodedURL.from_text("ws://127.0.0.1:1/"),
                 token,
-                replica_dircap_ro,
+                replica_dirobj_rw.reader,
             )
         )
         pumper._flush()

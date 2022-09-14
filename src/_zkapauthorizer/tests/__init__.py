@@ -67,7 +67,7 @@ def _configure_hypothesis() -> None:
         stateful_step_count=15,
     )
 
-    profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "default")
+    profile_name = environ.get("ZKAPAUTHORIZER_HYPOTHESIS_PROFILE", "fast")
     settings.load_profile(profile_name)
     print("Loaded profile {}".format(profile_name))
 
