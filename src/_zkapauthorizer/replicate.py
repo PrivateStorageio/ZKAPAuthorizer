@@ -99,7 +99,7 @@ from twisted.python.filepath import FilePath
 from twisted.python.lockfile import FilesystemLock
 
 from .config import REPLICA_RWCAP_BASENAME, Config
-from .eliot import log_call
+from .eliot import log_call, log_call_coroutine
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
 from .tahoe import DataProvider, DirectoryEntry, FileNode, ITahoeClient
 
@@ -932,7 +932,7 @@ class _ReplicationService(Service):
         elif self.should_upload_eventstream(self._changes):
             self.queue_event_upload()
 
-    @log_call(action_type="zkapauthorizer:replicate:snapshot-upload")
+    @log_call_coroutine(action_type="zkapauthorizer:replicate:snapshot-upload")
     async def _do_one_snapshot_upload(self) -> None:
         """
         Perform a single snapshot upload, including pruning event-streams
@@ -980,7 +980,7 @@ class _ReplicationService(Service):
 
         await self._replica.prune(is_old_eventstream)
 
-    @log_call(action_type="zkapauthorizer:replicate:event-upload")
+    @log_call_coroutine(action_type="zkapauthorizer:replicate:event-upload")
     async def _do_one_event_upload(self) -> None:
         """
         Process a single upload of all current events and then delete them
