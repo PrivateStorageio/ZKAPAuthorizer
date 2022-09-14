@@ -98,7 +98,7 @@ from twisted.python.lockfile import FilesystemLock
 
 from ._types import CapStr
 from .config import REPLICA_RWCAP_BASENAME, Config
-from .eliot import log_call
+from .eliot import log_call, log_call_coroutine
 from .sql import Connection, Cursor, SQLRuntimeType, SQLType, statement_mutates
 from .tahoe import DataProvider, DirectoryEntry, FileNode, ITahoeClient
 
