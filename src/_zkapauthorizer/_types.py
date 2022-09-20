@@ -17,7 +17,16 @@ Re-usable type definitions for ZKAPAuthorizer.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, Generic, TypedDict, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Generic,
+    Mapping,
+    Sequence,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 
 from attrs import Attribute as _Attribute
 from typing_extensions import TypeAlias
@@ -36,7 +45,7 @@ else:
 
 # mypy does not support recursive types so we can't say much about what's in
 # the containers here.
-JSON = Union[None, int, float, str, list, dict]
+JSON = Union[None, int, float, str, Sequence, Mapping]
 
 ServerConfig = TypedDict(
     "ServerConfig",
