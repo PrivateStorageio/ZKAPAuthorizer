@@ -352,7 +352,7 @@ jobs:
             cachix watch-exec "${CACHIX_NAME}" nix build \
               --verbose \
               --cores 5 \
-              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov |
+              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
 
       - run:
           name: "Persist Coverage to Workspace"
