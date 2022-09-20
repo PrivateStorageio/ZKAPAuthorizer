@@ -929,11 +929,11 @@ class PaymentController(object):
             if voucher_obj.state.should_start_redemption():
                 counter_start = voucher_obj.state.start_at_counter()
             else:
-                raise ValueError(
-                    "Cannot redeem voucher in state {}.".format(
-                        voucher_obj.state,
-                    ),
+                self._log.info(
+                    "Cannot redeem voucher in state {state}.",
+                    state=voucher_obj.state,
                 )
+                return None
 
         self._log.info(
             "Starting redemption of {voucher}[{start}..{end}] for {num_tokens} tokens.",

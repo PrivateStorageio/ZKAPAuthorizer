@@ -192,7 +192,7 @@ class PaymentControllerTests(TestCase):
     """
 
     @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
-    def test_should_not_redeem(
+    def test_currently_redeeming(
         self,
         get_config: GetConfig,
         now: datetime,
@@ -200,8 +200,40 @@ class PaymentControllerTests(TestCase):
         public_key: PublicKey,
     ) -> None:
         """
-        ``PaymentController.redeem`` raises ``ValueError`` if passed a voucher in
-        a state when redemption should not be started.
+        ``PaymentController.redeem`` finishes with ``None`` if passed a
+        voucher that is currently being redeemed.
+        """
+        store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
+        controller = PaymentController(
+            Clock(),
+            store,
+            NonRedeemer(),
+            default_token_count=100,
+            allowed_public_keys={public_key},
+        )
+
+        # Sanity check.  It should be redeemed now.
+        self.assertThat(
+            Deferred.fromCoroutine(controller.redeem(voucher)),
+            has_no_result(),
+        )
+
+        self.assertThat(
+            Deferred.fromCoroutine(controller.redeem(voucher)),
+            succeeded(Equals(None)),
+        )
+
+    @given(tahoe_configs(), aware_datetimes(), vouchers(), dummy_ristretto_keys())
+    def test_already_redeemed(
+        self,
+        get_config: GetConfig,
+        now: datetime,
+        voucher: bytes,
+        public_key: PublicKey,
+    ) -> None:
+        """
+        ``PaymentController.redeem`` finishes with ``None`` if passed a
+        voucher that has already been completely redeemed.
         """
         store = self.useFixture(TemporaryVoucherStore(lambda: now, get_config)).store
         controller = PaymentController(
@@ -226,12 +258,7 @@ class PaymentControllerTests(TestCase):
 
         self.assertThat(
             Deferred.fromCoroutine(controller.redeem(voucher)),
-            failed(
-                AfterPreprocessing(
-                    lambda f: f.type,
-                    Equals(ValueError),
-                ),
-            ),
+            succeeded(Equals(None)),
         )
 
     @given(tahoe_configs(), aware_datetimes(), vouchers())
