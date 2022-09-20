@@ -316,16 +316,20 @@ jobs:
     environment:
       <<: *NIX_ENVIRON
 
-      # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us to push to CACHIX_NAME.
+      # CACHIX_AUTH_TOKEN is manually set in the CircleCI web UI and allows us
+      # to push to CACHIX_NAME.
       CACHIX_NAME: "privatestorage-opensource"
 
     steps:
       - run: &SETUP_CACHIX
           name: "Set up Cachix"
           command: |
+            # Install cachix, the Nix-friendly caching tool.
             nix-env -f $NIXPKGS -iA cachix bash
+            # Activate it for "binary substitution".  This sets up
+            # configuration that lets Nix download something from the cache
+            # instead of building it locally, if possible.
             cachix use "${CACHIX_NAME}"
-            nix path-info --all > /tmp/store-path-pre-build
 
       - "checkout"
 
@@ -345,29 +349,10 @@ jobs:
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            nix build \
+            cachix watch-exec "${CACHIX_NAME}" nix build \
               --verbose \
               --cores 5 \
-              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
-
-      - run: &PUSH_TO_CACHIX
-          name: "Push to Cachix"
-          when: "always"
-          command: |
-            # Cribbed from
-            # https://circleci.com/blog/managing-secrets-when-you-have-pull-requests-from-outside-contributors/
-            if [ -n "$CIRCLE_PR_NUMBER" ]; then
-              # I'm sure you're thinking "CIRCLE_PR_NUMBER must just be the
-              # number of the PR being built".  Sorry, dear reader, you have
-              # guessed poorly.  It is also conditionally set based on whether
-              # this is a PR from a fork or not.
-              #
-              # https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables
-              echo "Skipping Cachix push for forked PR."
-            else
-              # https://docs.cachix.org/continuous-integration-setup/circleci.html
-              bash -c "comm -13 <(sort /tmp/store-path-pre-build | grep -v '\.drv$') <(nix path-info --all | grep -v '\.drv$' | sort) | cachix push $CACHIX_NAME"
-            fi
+              .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov |
 
       - run:
           name: "Persist Coverage to Workspace"
@@ -407,9 +392,6 @@ jobs:
           name: "Run Type Checks"
           command: |
             nix run .#mypy -- src
-
-      - run:
-          <<: *PUSH_TO_CACHIX
 
 
   # A job that merges all of the coverage data and generates a report.
