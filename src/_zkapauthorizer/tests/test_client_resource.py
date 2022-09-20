@@ -17,7 +17,6 @@ Tests for the web resource provided by the client part of the Tahoe-LAFS
 plugin.
 """
 
-from base64 import b32encode
 from datetime import datetime
 from io import BytesIO
 from typing import (
@@ -65,7 +64,9 @@ from tahoe_capabilities import (
     DirectoryReadCapability,
     DirectoryWriteCapability,
     MDMFDirectoryWrite,
+    SSKDirectoryRead,
     SSKDirectoryWrite,
+    SSKRead,
     danger_real_capability_string,
 )
 from tahoe_capabilities.strategies import chk_reads, mdmf_writes, ssk_writes
@@ -771,12 +772,8 @@ class RecoverTests(TestCase):
     Tests for the ``/recover`` endpoint.
     """
 
-    # These are syntactically valid, at least.
-    readkey = b32encode(b"x" * 16).decode("ascii").strip("=").lower()
-    fingerprint = b32encode(b"y" * 32).decode("ascii").strip("=").lower()
-
-    GOOD_CAPABILITY = f"URI:DIR2-RO:{readkey}:{fingerprint}"
-    GOOD_REQUEST_BODY = dumps_utf8({"recovery-capability": GOOD_CAPABILITY})
+    GOOD_CAPABILITY = SSKDirectoryRead(SSKRead.derive(b"x" * 16, b"y" * 32))
+    GOOD_CAPABILITY_STR = danger_real_capability_string(GOOD_CAPABILITY)
 
     # All of the test methods complete synchronously but the Autobahn testing
     # "pumper" stops asynchronously and we need to wait for it or delayed
@@ -941,7 +938,7 @@ class RecoverTests(TestCase):
         """
         self._request_error_test(
             # This is almost right but has an extra property.
-            dumps_utf8({"foo": "bar", "recovery-capability": self.GOOD_CAPABILITY}),
+            dumps_utf8({"a": "b", "recovery-capability": self.GOOD_CAPABILITY_STR})
         )
 
     def test_recovery_capability_not_a_string(self) -> None:

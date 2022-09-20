@@ -22,9 +22,6 @@ from typing import TYPE_CHECKING, Callable, Generic, TypedDict, TypeVar, Union
 from attrs import Attribute as _Attribute
 from typing_extensions import TypeAlias
 
-# A Tahoe-LAFS capability string
-CapStr = str
-
 GetTime = Callable[[], datetime]
 
 _T = TypeVar("_T")

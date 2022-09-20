@@ -28,6 +28,8 @@ from eliot.json import EliotJSONEncoder
 from eliot.testing import capture_logging as _capture_logging
 from typing_extensions import ParamSpec
 
+from ._types import JSON
+
 PRIVACYPASS_MESSAGE = Field(
     "message",
     str,
@@ -117,14 +119,16 @@ T = TypeVar("T")
 P = ParamSpec("P")
 Q = ParamSpec("Q")
 
+JSONT = TypeVar("JSONT", bound=JSON)
+
 
 def log_call(
     action_type: Optional[str] = None,
     include_args: Optional[list[str]] = None,
     include_result: bool = True,
-) -> Callable[[Callable[P, T]], Callable[P, T]]:
+) -> Callable[[Callable[P, JSONT]], Callable[P, JSONT]]:
     return cast(
-        Callable[[Callable[P, T]], Callable[P, T]],
+        Callable[[Callable[P, JSONT]], Callable[P, JSONT]],
         _log_call(
             action_type=action_type,
             include_args=include_args,
