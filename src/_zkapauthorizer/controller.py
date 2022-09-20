@@ -915,7 +915,7 @@ class PaymentController(object):
         """
         # Try to get an existing voucher object for the given number.
         try:
-            voucher_obj = self.store.get(voucher)
+            voucher_obj = self.get_voucher(voucher)
         except KeyError:
             # This is our first time dealing with this number.
             counter_start = 0
