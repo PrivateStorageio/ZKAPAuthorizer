@@ -26,6 +26,7 @@ from eliot import log_call as _log_call
 from eliot import start_action
 from eliot.json import EliotJSONEncoder
 from eliot.testing import capture_logging as _capture_logging
+from twisted.internet.defer import Deferred
 from typing_extensions import ParamSpec
 
 from ._types import JSON
@@ -139,21 +140,21 @@ def log_call(
 
 def log_call_deferred(
     action_type: Optional[str] = None,
-) -> Callable[[Callable[P, T]], Callable[P, T]]:
+) -> Callable[[Callable[P, Deferred[JSONT]]], Callable[P, Deferred[JSONT]]]:
     return cast(
-        Callable[[Callable[P, T]], Callable[P, T]],
+        Callable[[Callable[P, Deferred[JSONT]]], Callable[P, Deferred[JSONT]]],
         _log_call_deferred(action_type),
     )
 
 
 def log_call_coroutine(
     action_type: str,
-) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+) -> Callable[[Callable[P, Awaitable[JSONT]]], Callable[P, Awaitable[JSONT]]]:
     def decorate_log_call_coroutine(
-        f: Callable[P, Awaitable[T]]
-    ) -> Callable[P, Awaitable[T]]:
+        f: Callable[P, Awaitable[JSONT]]
+    ) -> Callable[P, Awaitable[JSONT]]:
         @wraps(f)
-        async def logged_f(*a: P.args, **kw: P.kwargs) -> T:
+        async def logged_f(*a: P.args, **kw: P.kwargs) -> JSONT:
             with start_action(action_type=action_type):
                 return await f(*a, **kw)
 
