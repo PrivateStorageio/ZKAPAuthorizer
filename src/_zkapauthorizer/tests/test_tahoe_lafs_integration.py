@@ -18,6 +18,8 @@ from testtools.matchers import FileContains
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from twisted.python.filepath import FilePath
 
+from .. import NAME
+from .._json import dumps_utf8
 from ..tahoe import get_tahoe_client
 from .resources import ZKAPTahoeGrid
 
@@ -70,12 +72,43 @@ class IntegrationTests(TestCase):
         """
         A new immutable object can be uploaded and downloaded again.
         """
+        token = self.client._node_config.get_private_config("api_auth_token")
+        headers = {"authorization": f"tahoe-lafs {token}"}
+
+        await self.client.client.put(
+            self.client._api_root.child("storage-plugins").child(NAME).child("voucher"),
+            headers=headers,
+            data=dumps_utf8({"voucher": "x" * 44}),
+        )
+
         from testtools.content import content_from_file
 
         # XXX Replace content_from_file with something that renders eliot logs w/ eliot-tree
-        self.addDetail("client-eliot-log", content_from_file(self.grid.client.node_dir.child("log.eliot").path))
-        self.addDetail("client-stdout", content_from_file(self.grid.client.node_dir.child("stdout").path))
-        self.addDetail("client-stderr", content_from_file(self.grid.client.node_dir.child("stderr").path))
+        self.addDetail(
+            "client-eliot-log",
+            content_from_file(self.grid.client.node_dir.child("log.eliot").path),
+        )
+        self.addDetail(
+            "client-stdout",
+            content_from_file(self.grid.client.node_dir.child("stdout").path),
+        )
+        self.addDetail(
+            "client-stderr",
+            content_from_file(self.grid.client.node_dir.child("stderr").path),
+        )
+
+        self.addDetail(
+            "storage-eliot-log",
+            content_from_file(self.grid.storage.node_dir.child("log.eliot").path),
+        )
+        self.addDetail(
+            "storage-stdout",
+            content_from_file(self.grid.storage.node_dir.child("stdout").path),
+        )
+        self.addDetail(
+            "storage-stderr",
+            content_from_file(self.grid.storage.node_dir.child("stderr").path),
+        )
 
         tempdir = self.useFixture(TempDir())
         outpath = FilePath(tempdir.join("downloaded"))

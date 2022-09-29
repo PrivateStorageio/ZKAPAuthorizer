@@ -287,7 +287,9 @@ class TahoeClient:
         )
         setup_exit_trigger(self.node_dir)
         config = self.read_config()
-        config.write_private_config("servers.yaml", safe_dump({"storage": self.storage.servers_yaml_entry()}))
+        config.write_private_config(
+            "servers.yaml", safe_dump({"storage": self.storage.servers_yaml_entry()})
+        )
         self.customize_config(self.read_config())
 
     def start(self) -> None:
@@ -298,10 +300,6 @@ class TahoeClient:
         # Unfortunately we don't notice if this command crashes because of
         # some bug.  In that case the test will just hang and fail after
         # timing out.
-
-        print(check_output([executable, "-m", "site"]))
-        print(check_output([executable, "-c", "import _zkapauthorizer; print(_zkapauthorizer.NAME)"]))
-
         self.process = Popen(
             TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
             stdout=self.node_dir.child("stdout").open("wb"),
@@ -356,7 +354,9 @@ def add_zkapauthz_server_section(config: Config, section: Mapping[str, str]) -> 
         config.set_config(f"storageserver.plugins.{NAME}", k, v)
 
 
-def add_zkapauthz_client_section(client_config: Config, storage_config: Config, issuer: Issuer) -> None:
+def add_zkapauthz_client_section(
+    client_config: Config, storage_config: Config, issuer: Issuer
+) -> None:
     client_config.set_config("client", "storage.plugins", NAME)
     for k, v in issuer.client_config.items():
         client_config.set_config(f"storageclient.plugins.{NAME}", k, v)
@@ -364,22 +364,34 @@ def add_zkapauthz_client_section(client_config: Config, storage_config: Config, 
     # Also rewrite the static servers list to refer only to the server's
     # zkapauthz-enabled storage service.
     storage_node_pubkey = read_text(storage_config.config_path.sibling("node.pubkey"))
-    client_config.write_private_config("servers.yaml", safe_dump({
-        "storage": {
-            storage_node_pubkey[len("pub-"):]: {
-                "ann": {
-                    "anonymous-storage-FURL": "pb://@tcp:/",
-                    "nickname": "storage",
-                    "storage-options": [{
-                        "name": NAME,
-                        "ristretto-issuer-root-url": issuer.root_url,
-                        "ristretto-public-keys": [k.encode_base64().decode("ascii") for k in issuer.allowed_public_keys],
-                        "storage-server-FURL": storage_config.get_private_config(f"storage-plugin.{NAME}.furl"),
-                    }],
-                },
-            },
-        }
-    }))
+    client_config.write_private_config(
+        "servers.yaml",
+        safe_dump(
+            {
+                "storage": {
+                    storage_node_pubkey[len("pub-") :]: {
+                        "ann": {
+                            "anonymous-storage-FURL": "pb://@tcp:/",
+                            "nickname": "storage",
+                            "storage-options": [
+                                {
+                                    "name": NAME,
+                                    "ristretto-issuer-root-url": issuer.root_url,
+                                    "ristretto-public-keys": [
+                                        k.encode_base64().decode("ascii")
+                                        for k in issuer.allowed_public_keys
+                                    ],
+                                    "storage-server-FURL": storage_config.get_private_config(
+                                        f"storage-plugin.{NAME}.furl"
+                                    ),
+                                }
+                            ],
+                        },
+                    },
+                }
+            }
+        ),
+    )
 
 
 # Keep hacking?
@@ -420,9 +432,7 @@ class ZKAPTahoeGrid(TestResourceManager):
         ("grid_dir", TemporaryDirectoryResource()),
     ]
 
-    def make(
-        self, dependency_resources: Mapping[str, Any]
-    ) -> Grid:
+    def make(self, dependency_resources: Mapping[str, Any]) -> Grid:
         issuer = dependency_resources["issuer"]
 
         storage_dependencies = {
