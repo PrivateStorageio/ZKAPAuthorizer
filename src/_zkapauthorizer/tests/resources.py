@@ -2,19 +2,22 @@
 ``testresources``-style resources.
 """
 
+from functools import partial
 from subprocess import Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
 from time import sleep
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional, Tuple
 
 from allmydata.client import config_from_string
 from attrs import define
+from challenge_bypass_ristretto import random_signing_key
 from hyperlink import DecodedURL
 from testresources import TestResourceManager
 from twisted.python.filepath import FilePath
 from yaml import safe_dump
 
+from .. import NAME
 from .._types import JSON
 from ..config import Config
 
@@ -100,11 +103,26 @@ class TahoeStorage:
     """
 
     node_dir: FilePath
+    # Unfortunately the Config type strongly prefers in-place mutation.
+    # Someday, replace this with a pure function.
+    customize_config: Callable[[Config], None] = lambda cfg: None
     create_output: Optional[str] = None
     process: Optional[Popen[bytes]] = None
     node_url: Optional[str] = None
     storage_furl: Optional[str] = None
     node_pubkey: Optional[str] = None
+
+    def read_config(self) -> Config:
+        """
+        Read this client node's configuration file into a configuration object.
+        """
+        config_path = self.node_dir.child("tahoe.cfg")
+        return config_from_string(
+            self.node_dir.path,
+            "tub.port",
+            config_path.getContent(),
+            fpath=config_path,
+        )
 
     def run(self) -> None:
         """
@@ -129,6 +147,7 @@ class TahoeStorage:
             encoding="utf-8",
         )
         setup_exit_trigger(self.node_dir)
+        self.customize_config(self.read_config())
 
     def start(self) -> None:
         """
@@ -222,6 +241,9 @@ class TahoeClient:
 
     node_dir: FilePath
     storage: TahoeStorage
+    # Unfortunately the Config type strongly prefers in-place mutation.
+    # Someday, replace this with a pure function.
+    customize_config: Callable[[Config], None] = lambda cfg: None
     create_output: Optional[str] = None
     process: Optional[Popen[bytes]] = None
     node_url: Optional[DecodedURL] = None
@@ -230,10 +252,12 @@ class TahoeClient:
         """
         Read this client node's configuration file into a configuration object.
         """
+        config_path = self.node_dir.child("tahoe.cfg")
         return config_from_string(
             self.node_dir.path,
             "tub.port",
-            self.node_dir.child("tahoe.cfg").getContent(),
+            config_path.getContent(),
+            fpath=config_path,
         )
 
     def run(self) -> None:
@@ -262,12 +286,9 @@ class TahoeClient:
             encoding="utf-8",
         )
         setup_exit_trigger(self.node_dir)
-        with open(
-            self.node_dir.descendant(["private", "servers.yaml"]).path, "wt"
-        ) as f:
-            f.write(
-                safe_dump({"storage": self.storage.servers_yaml_entry()}),
-            )
+        config = self.read_config()
+        config.write_private_config("servers.yaml", safe_dump({"storage": self.storage.servers_yaml_entry()}))
+        self.customize_config(self.read_config())
 
     def start(self) -> None:
         """
@@ -277,6 +298,10 @@ class TahoeClient:
         # Unfortunately we don't notice if this command crashes because of
         # some bug.  In that case the test will just hang and fail after
         # timing out.
+
+        print(check_output([executable, "-m", "site"]))
+        print(check_output([executable, "-c", "import _zkapauthorizer; print(_zkapauthorizer.NAME)"]))
+
         self.process = Popen(
             TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
             stdout=self.node_dir.child("stdout").open("wb"),
@@ -321,3 +346,112 @@ class TahoeClientManager(TestResourceManager):
 
 
 client_manager = TahoeClientManager()
+
+from .issuer import Issuer, run_issuer, stop_issuer
+
+
+def add_zkapauthz_server_section(config: Config, section: Mapping[str, str]) -> None:
+    config.set_config("storage", "plugins", NAME)
+    for k, v in section.items():
+        config.set_config(f"storageserver.plugins.{NAME}", k, v)
+
+
+def add_zkapauthz_client_section(client_config: Config, storage_config: Config, issuer: Issuer) -> None:
+    client_config.set_config("client", "storage.plugins", NAME)
+    for k, v in issuer.client_config.items():
+        client_config.set_config(f"storageclient.plugins.{NAME}", k, v)
+
+    # Also rewrite the static servers list to refer only to the server's
+    # zkapauthz-enabled storage service.
+    storage_node_pubkey = read_text(storage_config.config_path.sibling("node.pubkey"))
+    client_config.write_private_config("servers.yaml", safe_dump({
+        "storage": {
+            storage_node_pubkey[len("pub-"):]: {
+                "ann": {
+                    "anonymous-storage-FURL": "pb://@tcp:/",
+                    "nickname": "storage",
+                    "storage-options": [{
+                        "name": NAME,
+                        "ristretto-issuer-root-url": issuer.root_url,
+                        "ristretto-public-keys": [k.encode_base64().decode("ascii") for k in issuer.allowed_public_keys],
+                        "storage-server-FURL": storage_config.get_private_config(f"storage-plugin.{NAME}.furl"),
+                    }],
+                },
+            },
+        }
+    }))
+
+
+# Keep hacking?
+
+
+class IssuerManager(TestResourceManager):
+    resources = [
+        ("issuer_dir", TemporaryDirectoryResource()),
+    ]
+
+    def make(self, dependency_resources):
+        from twisted.internet import reactor
+
+        signing_key = random_signing_key()
+        issuer_path = dependency_resources["issuer_dir"]
+        signing_key_path = issuer_path.child("signing.key")
+        signing_key_path.setContent(signing_key.encode_base64())
+        return run_issuer(reactor, signing_key_path)
+
+    def clean(self, issuer):
+        return stop_issuer(issuer)
+
+
+@define
+class Grid:
+    storage: TahoeStorage
+    client: TahoeClient
+
+    # The resources we built it from.  testresources insists on setting these
+    # on us.
+    issuer: Any = None
+    grid_dir: Any = None
+
+
+class ZKAPTahoeGrid(TestResourceManager):
+    resources = [
+        ("issuer", IssuerManager()),
+        ("grid_dir", TemporaryDirectoryResource()),
+    ]
+
+    def make(
+        self, dependency_resources: Mapping[str, Any]
+    ) -> Grid:
+        issuer = dependency_resources["issuer"]
+
+        storage_dependencies = {
+            "node_dir": dependency_resources["grid_dir"].child("storage"),
+            "customize_config": partial(
+                add_zkapauthz_server_section,
+                section=issuer.server_config,
+            ),
+        }
+        storage = TahoeStorageManager().make(storage_dependencies)
+
+        client_dependencies = {
+            "node_dir": dependency_resources["grid_dir"].child("client"),
+            "storage": storage,
+            "customize_config": partial(
+                add_zkapauthz_client_section,
+                storage_config=storage.read_config(),
+                issuer=issuer,
+            ),
+        }
+        client = TahoeClientManager().make(client_dependencies)
+
+        return Grid(storage, client)
+
+    def clean(self, grid: Tuple[TahoeStorage, TahoeClient]) -> None:
+        TahoeStorageManager().clean(grid.storage)
+        TahoeClientManager().clean(grid.client)
+
+
+# (a -> b -> d) -> (b -> c -> e) -> (a, b, c) -> (d, e)
+# (a -> b -> d) -> (c -> b -> e) -> (a, b, c) -> (d, e)
+# (b -> d) -> (b -> e) -> b -> (d, e)
