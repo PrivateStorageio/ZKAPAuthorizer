@@ -29,7 +29,7 @@ from typing import (
 )
 
 from attrs import Attribute as _Attribute
-from typing_extensions import TypeAlias
+from typing_extensions import Literal
 
 GetTime = Callable[[], datetime]
 
@@ -47,10 +47,12 @@ else:
 # the containers here.
 JSON = Union[None, int, float, str, Sequence, Mapping]
 
+# The contents of the [storageserver.plugins.privatestorageio-zkapauthz-v2]
+# section of a storage server's tahoe.cfg.
 ServerConfig = TypedDict(
     "ServerConfig",
     {
-        "pass-value": int,
+        "pass-value": str,
         "ristretto-issuer-root-url": str,
         "ristretto-signing-key-path": str,
         "prometheus-metrics-path": str,
@@ -59,4 +61,60 @@ ServerConfig = TypedDict(
     total=False,
 )
 
-ClientConfig: TypeAlias = dict[str, str]
+# The contents of the [storageclient.plugins.privatestorageio-zkapauthz-v2]
+# section of a client node's tahoe.cfg.
+class NonRedeemerConfig(TypedDict):
+    redeemer: Literal["non"]
+
+
+DummyRedeemerConfig = TypedDict(
+    "DummyRedeemerConfig",
+    {
+        "redeemer": Literal["dummy"],
+        "issuer-public-key": str,
+        "allowed-public-keys": str,
+        # XXX All the other types should have these too but it's so tedious...
+        "lease.crawl-interval.mean": str,
+        "lease.crawl-interval.range": str,
+        "lease.min-time-remaining": str,
+    },
+)
+
+
+class DoubleSpendRedeemerConfig(TypedDict):
+    redeemer: Literal["double-spend"]
+
+
+class UnpaidRedeemerConfig(TypedDict):
+    redeemer: Literal["unpaid"]
+
+
+class ErrorRedeemerConfig(TypedDict):
+    redeemer: Literal["error"]
+    details: str
+
+
+RistrettoRedeemerConfig = TypedDict(
+    "RistrettoRedeemerConfig",
+    {
+        "redeemer": Literal["ristretto"],
+        "issuer-public-key": str,
+        "ristretto-issuer-root-url": str,
+        "pass-value": str,
+        "default-token-count": str,
+        "allowed-public-keys": str,
+        "lease.crawl-interval.mean": str,
+        "lease.crawl-interval.range": str,
+        "lease.min-time-remaining": str,
+    },
+    total=False,
+)
+
+ClientConfig = Union[
+    NonRedeemerConfig,
+    DummyRedeemerConfig,
+    DoubleSpendRedeemerConfig,
+    UnpaidRedeemerConfig,
+    ErrorRedeemerConfig,
+    RistrettoRedeemerConfig,
+]

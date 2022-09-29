@@ -12,16 +12,22 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from allmydata.client import config_from_string
 from attrs import define
 from challenge_bypass_ristretto import random_signing_key
+from eliottree import colored, get_theme, render_tasks, tasks_from_iterable
 from hyperlink import DecodedURL
 from testresources import TestResourceManager
+from testtools import TestCase
+from testtools.content import Content, content_from_file
+from testtools.content_type import UTF8_TEXT
 from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 from typing_extensions import TypedDict
 from yaml import safe_dump
 
 from .. import NAME
-from .._types import JSON
+from .._json import loads
+from .._types import JSON, ServerConfig
 from ..config import Config
+from .issuer import Issuer, run_issuer, stop_issuer
 
 # An argv prefix to use in place of `tahoe` to run the Tahoe-LAFS CLI.  This
 # runs the CLI via the `__main__` so that we don't rely on `tahoe` being in
@@ -30,6 +36,41 @@ TAHOE = [executable, "-m", "allmydata"]
 
 # A plausible value for the ``retry`` parameter of ``wait_for_path``.
 RETRY_DELAY = [0.3] * 100
+
+
+def eliottree_from_file(path: FilePath) -> Content:
+    """
+    Gather Eliot logs from the given path, rendered as a tree with eliot-tree.
+
+    The log file is not read until ``Content.iter_bytes`` resolves the
+    content.  The expected usage pattern us to add this content as detail at
+    the beginning of a test so that the full log is available if the test
+    fails later.
+    """
+
+    def get_bytes() -> Iterable[bytes]:
+        """
+        Read the file and render the contents as a tree.
+        """
+        buf: list[str] = []
+        try:
+            with path.open() as f:
+                render_tasks(
+                    buf.append,
+                    tasks_from_iterable(loads(line) for line in f),
+                    human_readable=True,
+                    colorize_tree=True,
+                    theme=get_theme(dark_background=True, colored=colored),
+                )
+        except Exception as e:
+            # It would be nice to send this error elsewhere but currently
+            # there is no where else to send it.
+            yield f"<<error reading {path.asTextMode().path}: {e}>>".encode("ascii")
+        else:
+            for line in buf:
+                yield line.encode("utf-8")
+
+    return Content(UTF8_TEXT, get_bytes)
 
 
 class TemporaryDirectoryResource(TestResourceManager):
@@ -114,6 +155,13 @@ class TahoeStorage:
     storage_furl: Optional[str] = None
     node_pubkey: Optional[str] = None
 
+    @property
+    def eliot_log_path(self) -> FilePath:
+        """
+        The path to the Eliot log file for this node.
+        """
+        return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
+
     def read_config(self) -> Config:
         """
         Read this client node's configuration file into a configuration object.
@@ -157,7 +205,7 @@ class TahoeStorage:
         """
         eliot = [
             "--eliot-destination",
-            "file:" + self.node_dir.asTextMode().child("log.eliot").path,
+            "file:" + self.eliot_log_path.asTextMode().path,
         ]
         self.process = Popen(
             TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
@@ -189,6 +237,21 @@ class TahoeStorage:
                 },
             }
         raise ValueError("Cannot get servers.yaml before starting.")
+
+    def addDetail(self, case: TestCase) -> None:
+        """
+        Add the Tahoe-LAFS storage node's logs as details to the given test
+        case.
+        """
+        for name in ["stdout", "stderr"]:
+            case.addDetail(
+                f"storage-{name}",
+                content_from_file(self.node_dir.child(name).path),
+            )
+        case.addDetail(
+            "storage-eliot.log",
+            eliottree_from_file(self.eliot_log_path),
+        )
 
 
 class TahoeStorageManager(TestResourceManager):
@@ -250,6 +313,23 @@ class TahoeClient:
     process: Optional[Popen[bytes]] = None
     node_url: Optional[DecodedURL] = None
 
+    @property
+    def authorization(self) -> Mapping[str, str]:
+        """
+        HTTP headers to submit with requests to this client to authorize use
+        of its private APIs.
+        """
+        token = self.read_config().get_private_config("api_auth_token")
+        headers = {"authorization": f"tahoe-lafs {token}"}
+        return headers
+
+    @property
+    def eliot_log_path(self) -> FilePath:
+        """
+        The path to the Eliot log file for this node.
+        """
+        return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
+
     def read_config(self) -> Config:
         """
         Read this client node's configuration file into a configuration object.
@@ -298,7 +378,7 @@ class TahoeClient:
         """
         Start the node child process.
         """
-        eliot = ["--eliot-destination", "file:" + self.node_dir.child("log.eliot").path]
+        eliot = ["--eliot-destination", "file:" + self.eliot_log_path.asTextMode().path]
         # Unfortunately we don't notice if this command crashes because of
         # some bug.  In that case the test will just hang and fail after
         # timing out.
@@ -310,6 +390,21 @@ class TahoeClient:
         node_url_path = self.node_dir.child("node.url")
         wait_for_path(node_url_path)
         self.node_url = DecodedURL.from_text(read_text(node_url_path))
+
+    def addDetail(self, case: TestCase) -> None:
+        """
+        Add the Tahoe-LAFS client node's logs as details to the given test
+        case.
+        """
+        for name in ["stdout", "stderr"]:
+            case.addDetail(
+                f"client-{name}",
+                content_from_file(self.node_dir.child(name).path),
+            )
+        case.addDetail(
+            "client-eliot.log",
+            eliottree_from_file(self.eliot_log_path),
+        )
 
 
 class TahoeClientManager(TestResourceManager):
@@ -347,10 +442,15 @@ class TahoeClientManager(TestResourceManager):
 
 client_manager = TahoeClientManager()
 
-from .issuer import Issuer, run_issuer, stop_issuer
 
+def add_zkapauthz_server_section(config: Config, section: ServerConfig) -> None:
+    """
+    Enable the ZKAPAuthorizer plugin for a Tahoe-LAFS storage server and write
+    its configuration to the correct section.
 
-def add_zkapauthz_server_section(config: Config, section: Mapping[str, str]) -> None:
+    The configuration is rewritten *in place* because that's what ``Config``
+    supports.
+    """
     config.set_config("storage", "plugins", NAME)
     for k, v in section.items():
         config.set_config(f"storageserver.plugins.{NAME}", k, v)
@@ -359,6 +459,13 @@ def add_zkapauthz_server_section(config: Config, section: Mapping[str, str]) -> 
 def add_zkapauthz_client_section(
     client_config: Config, storage_config: Config, issuer: Issuer
 ) -> None:
+    """
+    Enable the ZKAPAuthorizer plugin for a Tahoe-LAFS client node and write
+    its configuration to the correct section.
+
+    The configuration is rewritten *in place* because that's what ``Config``
+    supports.
+    """
     client_config.set_config("client", "storage.plugins", NAME)
     for k, v in issuer.client_config.items():
         client_config.set_config(f"storageclient.plugins.{NAME}", k, v)
@@ -400,6 +507,7 @@ class IssuerDependencies(TypedDict):
     """
     The dependency resources expected by ``IssuerManager``.
     """
+
     issuer_dir: FilePath
 
 
@@ -436,6 +544,10 @@ class Grid:
     # on us.
     issuer: Any = None
     grid_dir: Any = None
+
+    def addDetail(self, case: TestCase) -> None:
+        self.storage.addDetail(case)
+        self.client.addDetail(case)
 
 
 class ZKAPTahoeGrid(TestResourceManager):

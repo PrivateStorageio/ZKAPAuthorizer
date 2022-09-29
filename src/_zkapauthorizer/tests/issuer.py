@@ -1,4 +1,4 @@
-from typing import Any, Mapping
+from typing import Any
 
 from attrs import define
 from challenge_bypass_ristretto import (
@@ -16,6 +16,7 @@ from twisted.web.resource import Resource
 from twisted.web.server import Site
 
 from .._json import dumps_utf8, loads
+from .._types import ClientConfig, ServerConfig
 
 
 @define
@@ -47,14 +48,14 @@ class Issuer:
         return f"http://127.0.0.1:{address.port}/"
 
     @property
-    def server_config(self) -> Mapping[str, str]:
+    def server_config(self) -> ServerConfig:
         return {
             "ristretto-issuer-root-url": self.root_url,
             "ristretto-signing-key-path": self.signing_key_path.asTextMode().path,
         }
 
     @property
-    def client_config(self) -> Mapping[str, str]:
+    def client_config(self) -> ClientConfig:
         return {
             "redeemer": "ristretto",
             "ristretto-issuer-root-url": self.root_url,

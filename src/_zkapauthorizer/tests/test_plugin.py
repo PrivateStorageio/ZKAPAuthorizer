@@ -96,7 +96,7 @@ from .._plugin import (
     storage_server_plugin,
 )
 from .._storage_client import IncorrectStorageServerReference
-from .._types import ClientConfig, ServerConfig
+from .._types import ServerConfig
 from ..config import CONFIG_DB_NAME, Config
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..eliot import GET_PASSES, capture_logging
@@ -565,7 +565,9 @@ class ClientPluginTests(TestCase):
         self.useFixture(DetectLeakedDescriptors())
 
     @given(tahoe_configs(), announcements())
-    def test_interface(self, get_config: GetConfig, announcement: ClientConfig) -> None:
+    def test_interface(
+        self, get_config: GetConfig, announcement: dict[str, str]
+    ) -> None:
         """
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
@@ -591,7 +593,7 @@ class ClientPluginTests(TestCase):
 
     @given(tahoe_configs_with_mismatched_issuer, announcements())
     def test_mismatched_ristretto_issuer(
-        self, config_text: str, announcement: ClientConfig
+        self, config_text: str, announcement: dict[str, str]
     ) -> None:
         """
         ``get_storage_client`` raises an exception when called with an
@@ -633,7 +635,7 @@ class ClientPluginTests(TestCase):
     def test_mismatch_storage_server_furl(
         self,
         get_config: GetConfig,
-        announcement: ClientConfig,
+        announcement: dict[str, str],
         storage_index: bytes,
         renew_secret: bytes,
         cancel_secret: bytes,
@@ -695,7 +697,7 @@ class ClientPluginTests(TestCase):
         logger: ILogger,
         get_config: GetConfig,
         now: datetime,
-        announcement: ClientConfig,
+        announcement: dict[str, str],
         voucher: bytes,
         num_passes: int,
         public_key: PublicKey,
