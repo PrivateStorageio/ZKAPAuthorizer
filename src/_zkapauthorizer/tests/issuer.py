@@ -1,15 +1,21 @@
 from typing import Any, Mapping
 
 from attrs import define
-from challenge_bypass_ristretto import BatchDLEQProof, PublicKey, SigningKey, BlindedToken
-from twisted.internet.defer import Deferred
+from challenge_bypass_ristretto import (
+    BatchDLEQProof,
+    BlindedToken,
+    PublicKey,
+    SigningKey,
+)
+from twisted.internet.address import IPv4Address
+from twisted.internet.defer import Deferred, maybeDeferred
 from twisted.internet.interfaces import IListeningPort, IReactorTCP
 from twisted.python.filepath import FilePath
+from twisted.web.iweb import IRequest
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 
-from .._json import dumps_utf8 as dumps
-from .._json import loads
+from .._json import dumps_utf8, loads
 
 
 @define
@@ -36,13 +42,15 @@ class Issuer:
 
     @property
     def root_url(self) -> str:
-        return f"http://127.0.0.1:{self.port.getHost().port}/"
+        address = self.port.getHost()
+        assert isinstance(address, IPv4Address)
+        return f"http://127.0.0.1:{address.port}/"
 
     @property
     def server_config(self) -> Mapping[str, str]:
         return {
             "ristretto-issuer-root-url": self.root_url,
-            "ristretto-signing-key-path": self.signing_key_path.path,
+            "ristretto-signing-key-path": self.signing_key_path.asTextMode().path,
         }
 
     @property
@@ -55,15 +63,20 @@ class Issuer:
 
 
 class Redeem(Resource):
-    def __init__(self, signing_key):
+    def __init__(self, signing_key: SigningKey) -> None:
         Resource.__init__(self)
         self.signing_key = signing_key
 
-    def render_POST(self, request):
+    def render_POST(self, request: IRequest) -> bytes:
+        # cattrs
+        obj = loads(request.content.read())
+        assert isinstance(obj, dict)
+        tokens = obj["redeemTokens"]
+        assert isinstance(tokens, list)
+
         blinded_tokens = [
             BlindedToken.decode_base64(blinded_token.encode("ascii"))
-            for blinded_token
-            in loads(request.content.read())["redeemTokens"]
+            for blinded_token in tokens
         ]
 
         signatures = list(
@@ -75,12 +88,16 @@ class Redeem(Resource):
             blinded_tokens,
             signatures,
         )
-        return dumps(
+        return dumps_utf8(
             {
                 "success": True,
-                "signatures": [sig.encode_base64().decode("ascii") for sig in signatures],
+                "signatures": [
+                    sig.encode_base64().decode("ascii") for sig in signatures
+                ],
                 "proof": proof.encode_base64().decode("ascii"),
-                "public-key": PublicKey.from_signing_key(self.signing_key).encode_base64().decode("ascii"),
+                "public-key": PublicKey.from_signing_key(self.signing_key)
+                .encode_base64()
+                .decode("ascii"),
             }
         )
 
@@ -97,9 +114,9 @@ def issuer(signing_key: SigningKey) -> Site:
 
 def run_issuer(reactor: IReactorTCP, signing_key_path: FilePath) -> Issuer:
     signing_key = SigningKey.decode_base64(signing_key_path.getContent())
-    port = reactor.listenTCP(0, issuer(signing_key), interface="127.0.0.1")
+    port = reactor.listenTCP(0, issuer(signing_key), backlog=3, interface="127.0.0.1")
     return Issuer(port, signing_key_path)
 
 
 def stop_issuer(issuer: Issuer) -> Deferred[None]:
-    return issuer.port.stopListening()
+    return maybeDeferred(issuer.port.stopListening)  # type: ignore[arg-type]

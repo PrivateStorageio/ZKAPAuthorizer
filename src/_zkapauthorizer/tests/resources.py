@@ -7,14 +7,16 @@ from subprocess import Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
 from time import sleep
-from typing import Any, Callable, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 from allmydata.client import config_from_string
 from attrs import define
 from challenge_bypass_ristretto import random_signing_key
 from hyperlink import DecodedURL
 from testresources import TestResourceManager
+from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
+from typing_extensions import TypedDict
 from yaml import safe_dump
 
 from .. import NAME
@@ -394,7 +396,11 @@ def add_zkapauthz_client_section(
     )
 
 
-# Keep hacking?
+class IssuerDependencies(TypedDict):
+    """
+    The dependency resources expected by ``IssuerManager``.
+    """
+    issuer_dir: FilePath
 
 
 class IssuerManager(TestResourceManager):
@@ -402,8 +408,11 @@ class IssuerManager(TestResourceManager):
         ("issuer_dir", TemporaryDirectoryResource()),
     ]
 
-    def make(self, dependency_resources):
+    def make(self, dependency_resources: IssuerDependencies) -> Issuer:
         from twisted.internet import reactor
+        from twisted.internet.interfaces import IReactorTCP
+
+        assert IReactorTCP.providedBy(reactor)
 
         signing_key = random_signing_key()
         issuer_path = dependency_resources["issuer_dir"]
@@ -411,7 +420,10 @@ class IssuerManager(TestResourceManager):
         signing_key_path.setContent(signing_key.encode_base64())
         return run_issuer(reactor, signing_key_path)
 
-    def clean(self, issuer):
+    def clean(self, issuer: Issuer) -> Deferred[Any]:
+        # XXX testresources doesn't know about Deferreds so this probably
+        # won't get waited properly, nor failures logged very well (but it's
+        # only `stopListening` so maybe it won't fail...)
         return stop_issuer(issuer)
 
 
@@ -457,11 +469,6 @@ class ZKAPTahoeGrid(TestResourceManager):
 
         return Grid(storage, client)
 
-    def clean(self, grid: Tuple[TahoeStorage, TahoeClient]) -> None:
+    def clean(self, grid: Grid) -> None:
         TahoeStorageManager().clean(grid.storage)
         TahoeClientManager().clean(grid.client)
-
-
-# (a -> b -> d) -> (b -> c -> e) -> (a, b, c) -> (d, e)
-# (a -> b -> d) -> (c -> b -> e) -> (a, b, c) -> (d, e)
-# (b -> d) -> (b -> e) -> b -> (d, e)

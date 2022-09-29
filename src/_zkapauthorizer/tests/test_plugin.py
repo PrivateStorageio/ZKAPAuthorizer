@@ -68,7 +68,7 @@ from testtools.matchers import (
     Not,
     Raises,
 )
-from testtools.twistedsupport import succeeded
+from testtools.twistedsupport import failed, succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import RequestTraversalAgent
 from twisted.application.service import MultiService
@@ -117,7 +117,7 @@ from ..replicate import (
 )
 from ..resource import RecoverProtocol, recover
 from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
-from .common import GetConfig, skipIf
+from .common import GetConfig, from_awaitable, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Matcher, Provides, matches_response, raises
@@ -672,8 +672,13 @@ class ClientPluginTests(TestCase):
             )
 
         self.assertThat(
-            use_it,
-            raises(IncorrectStorageServerReference),
+            from_awaitable(use_it()),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(IncorrectStorageServerReference),
+                ),
+            ),
         )
 
     @given(

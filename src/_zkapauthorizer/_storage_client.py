@@ -28,6 +28,7 @@ from attr.validators import provides
 from attrs import Factory, define, field
 from foolscap.ipb import IRemoteReference
 from foolscap.referenceable import RemoteReference
+from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from typing_extensions import Concatenate, ParamSpec
@@ -217,8 +218,8 @@ _S = TypeVar("_S", bound=RRefHaver)
 
 
 def with_rref(
-    f: Callable[Concatenate[_S, IRemoteReference, _P], _T],
-) -> Callable[Concatenate[_S, _P], _T]:
+    f: Callable[Concatenate[_S, IRemoteReference, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_S, _P], Deferred[_T]]:
     """
     Decorate a function so that it automatically receives a
     ``IRemoteReference`` as its first argument when called.
@@ -228,8 +229,11 @@ def with_rref(
     """
 
     @wraps(f)
-    def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-        return f(self, self._rref(), *args, **kwargs)
+    def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> Deferred[_T]:
+        async def h() -> _T:
+            return await f(self, self._rref(), *args, **kwargs)
+
+        return Deferred.fromCoroutine(h())
 
     return g
 
@@ -568,8 +572,8 @@ class ZKAPAuthorizerStorageClient(object):
         )
         return None
 
-    @log_call_coroutine("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     @with_rref
+    @log_call_coroutine("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     async def slot_testv_and_readv_and_writev(
         self,
         rref: IRemoteReference,

@@ -16,6 +16,7 @@ from testresources import (
 from testtools import TestCase
 from testtools.matchers import FileContains
 from testtools.twistedsupport import AsynchronousDeferredRunTest
+from twisted.internet.defer import Deferred
 from twisted.python.filepath import FilePath
 
 from .. import NAME
@@ -40,16 +41,19 @@ class IntegrationTests(TestCase):
 
     resources = [("grid", ZKAPTahoeGrid())]
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.setUpResources()
 
         from twisted.internet import reactor
+        from twisted.internet.interfaces import IReactorTCP
+
+        assert IReactorTCP.providedBy(reactor)
 
         self.reactor = reactor
-        self.client = get_tahoe_client(self.reactor, self.grid.client.read_config())
+        self.client = get_tahoe_client(reactor, self.grid.client.read_config())
 
-        def f():
+        def f() -> Deferred[None]:
             # Let the reactor turn over to complete the HTTP11Connection
             # disconnection. https://github.com/twisted/twisted/issues/8998
             from twisted.internet.task import deferLater
@@ -58,25 +62,35 @@ class IntegrationTests(TestCase):
 
         self.addCleanup(f)
 
-    def setUpResources(self):
+    def setUpResources(self) -> None:
         setUpResources(self, self.resources, _get_result())
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.tearDownResources()
         super().tearDown()
 
-    def tearDownResources(self):
+    def tearDownResources(self) -> None:
         tearDownResources(self, self.resources, _get_result())
 
     async def test_uploadDownloadImmutable(self) -> None:
         """
         A new immutable object can be uploaded and downloaded again.
         """
-        token = self.client._node_config.get_private_config("api_auth_token")
+        token = (
+            self.client.get_private_path("api_auth_token").getContent().decode("ascii")
+        )
         headers = {"authorization": f"tahoe-lafs {token}"}
 
-        await self.client.client.put(
-            self.client._api_root.child("storage-plugins").child(NAME).child("voucher"),
+        from treq.client import HTTPClient
+        from twisted.web.client import Agent
+
+        agent = Agent(self.reactor)
+        http_client = HTTPClient(agent)
+
+        api_root = self.grid.client.node_url
+        assert api_root is not None
+        await http_client.put(
+            api_root.child("storage-plugins").child(NAME).child("voucher"),
             headers=headers,
             data=dumps_utf8({"voucher": "x" * 44}),
         )
