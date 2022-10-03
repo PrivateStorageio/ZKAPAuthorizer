@@ -5,7 +5,7 @@ let
   v1_18_0 = fetchPypi {
     pname = "tahoe-lafs";
     version = "1.18.0";
-    sha256 = "sha256-Lcf8ED/g5Pn8aZU5NAifVeRCi9XZRnDoROZMIQ18FnI=";
+    sha256 = "sha256-cXpHDfNO3TGta5RGfauqHK7dfy9SM7BLidjP6TbjF/4=";
   };
 in
 [
