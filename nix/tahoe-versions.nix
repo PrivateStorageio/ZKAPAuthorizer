@@ -51,7 +51,7 @@ in
       # we'll call it something close to another version we know about.  If we
       # really need to know what version it was then the Nix derivation has
       # this information and we can dig it out.
-      version = "1.17.1.post1";
+      version = "1.18.0.post1";
       postPatch =
         let
           versionFileContents = version: ''

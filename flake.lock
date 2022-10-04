@@ -85,11 +85,11 @@
     "tahoe-lafs-dev": {
       "flake": false,
       "locked": {
-        "lastModified": 1660571400,
-        "narHash": "sha256-atIr+RwV4zSejX0sPqgqKTR2lNvjI2+H5do6lhrslSk=",
+        "lastModified": 1664893933,
+        "narHash": "sha256-85aDykgcPjRr+y7Q8tKEDd3kKpDwFl3AtMNLQO5Nqqc=",
         "owner": "tahoe-lafs",
         "repo": "tahoe-lafs",
-        "rev": "7dd346a32df34712696606137391c0355bb07a55",
+        "rev": "f56b43468b63a99c5fe22657cde75131344052dd",
         "type": "github"
       },
       "original": {
