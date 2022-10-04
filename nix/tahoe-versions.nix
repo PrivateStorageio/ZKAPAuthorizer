@@ -7,6 +7,12 @@ let
     version = "1.17.1";
     sha256 = "sha256-Lcf8ED/g5Pn8aZU5NAifVeRCi9XZRnDoROZMIQ18FnI=";
   };
+
+  v1_18_0 = fetchPypi {
+    pname = "tahoe-lafs";
+    version = "1.18.0";
+    sha256 = "sha256-cXpHDfNO3TGta5RGfauqHK7dfy9SM7BLidjP6TbjF/4=";
+  };
 in
 [
   {
@@ -17,6 +23,17 @@ in
     version = "1_17_1";
     buildArgs = {
       src = v1_17_1;
+      requirementsExtra = ''
+      eliot
+      foolscap
+      '';
+    };
+  }
+
+  {
+    version = "1_18_0";
+    buildArgs = {
+      src = v1_18_0;
       requirementsExtra = ''
       eliot
       foolscap
