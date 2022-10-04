@@ -498,6 +498,7 @@ workflows:
               - "310"
             tahoe-lafs:
               - "1_17_1"
+              - "1_18_0"
               # This is usually not master@HEAD because it is still pinned to
               # a certain revision.  The intent is to update it frequently and
               # discover fixable incompatibilities in small groups and
