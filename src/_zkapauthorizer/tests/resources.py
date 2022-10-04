@@ -3,7 +3,7 @@
 """
 
 from functools import partial
-from subprocess import Popen, check_output
+from subprocess import CalledProcessError, Popen, check_output
 from sys import executable
 from tempfile import mkdtemp
 from time import sleep
@@ -181,11 +181,8 @@ class TahoeStorage:
         self.create()
         self.start()
 
-    def create(self) -> None:
-        """
-        Create the node directory.
-        """
-        self.create_output = check_output(
+    def _create_node(self) -> str:
+        return check_output(
             TAHOE
             + [
                 "create-node",
@@ -196,6 +193,16 @@ class TahoeStorage:
             text=True,
             encoding="utf-8",
         )
+
+    def create(self) -> None:
+        """
+        Create the node directory.
+        """
+        try:
+            self.create_output = self._create_node()
+        except CalledProcessError as e:
+            self.create_output = e.output
+            raise
         setup_exit_trigger(self.node_dir)
         self.customize_config(self.read_config())
 
@@ -251,6 +258,14 @@ class TahoeStorage:
         case.addDetail(
             "storage-eliot.log",
             eliottree_from_file(self.eliot_log_path),
+        )
+        case.addDetail(
+            "storage-tahoe.cfg",
+            content_from_file(self.node_dir.child("tahoe.cfg").path),
+        )
+        case.addDetail(
+            "storage-create-output",
+            Content(UTF8_TEXT, lambda: [self.create_output.encode("utf-8")] if self.create_output is not None else []),
         )
 
 
@@ -349,16 +364,12 @@ class TahoeClient:
         self.create()
         self.start()
 
-    def create(self) -> None:
-        """
-        Create the node directory and write the necessary configuration to it.
-        """
-        self.create_output = check_output(
+    def _create_node(self) -> str:
+        return check_output(
             TAHOE
             + [
-                "create-node",
+                "create-client",
                 "--webport=tcp:port=0",
-                "--hostname=127.0.0.1",
                 "--shares-needed=1",
                 "--shares-total=1",
                 "--shares-happy=1",
@@ -367,6 +378,16 @@ class TahoeClient:
             text=True,
             encoding="utf-8",
         )
+
+    def create(self) -> None:
+        """
+        Create the node directory and write the necessary configuration to it.
+        """
+        try:
+            self.create_output = self._create_node()
+        except CalledProcessError as e:
+            self.create_output = e.output
+            raise
         setup_exit_trigger(self.node_dir)
         config = self.read_config()
         config.write_private_config(
@@ -404,6 +425,14 @@ class TahoeClient:
         case.addDetail(
             "client-eliot.log",
             eliottree_from_file(self.eliot_log_path),
+        )
+        case.addDetail(
+            "client-tahoe.cfg",
+            content_from_file(self.node_dir.child("tahoe.cfg").path),
+        )
+        case.addDetail(
+            "client-create-output",
+            Content(UTF8_TEXT, lambda: [self.create_output.encode("utf-8")] if self.create_output is not None else []),
         )
 
 

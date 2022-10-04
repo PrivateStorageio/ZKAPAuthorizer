@@ -607,9 +607,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        result = self._original.slot_readv(storage_index, shares, readv)
-        assert isinstance(result, Deferred)
-        return result
+        return self._original.slot_readv(storage_index, shares, readv)
 
 
 def check_pass_quantity(

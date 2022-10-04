@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 from fixtures import TempDir
+from hyperlink import DecodedURL
 from testresources import (
     OptimisingTestSuite,
     TestLoader,
@@ -15,7 +16,7 @@ from testresources import (
     tearDownResources,
 )
 from testtools import TestCase
-from testtools.matchers import FileContains
+from testtools.matchers import Equals, FileContains
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from treq.client import HTTPClient
 from twisted.internet.interfaces import IReactorTCP, IReactorTime
@@ -40,6 +41,16 @@ if TYPE_CHECKING:
         """
 
 
+async def addZKAPs(
+    http_client: HTTPClient, api_root: DecodedURL, authorization: dict[str, str]
+) -> None:
+    await http_client.put(
+        api_root.child("storage-plugins").child(NAME).child("voucher"),
+        headers=authorization,
+        data=dumps_utf8({"voucher": "x" * 44}),
+    )
+
+
 class IntegrationTests(TestCase):
     """
     Test ZKAPAuthorizer functionality through the Tahoe-LAFS web API.
@@ -52,7 +63,7 @@ class IntegrationTests(TestCase):
     sample values instead.
     """
 
-    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=10.0)
+    run_tests_with = AsynchronousDeferredRunTest.make_factory(timeout=1000.0)
 
     resources = [
         ("grid", ZKAPTahoeGrid()),
@@ -75,6 +86,12 @@ class IntegrationTests(TestCase):
         # disconnection.  https://github.com/twisted/twisted/issues/8998
         self.addCleanup(lambda: deferLater(self.reactor, 0.0, lambda: None))
 
+    async def addZKAPs(self) -> None:
+        # Load up the client with some ZKAPs
+        api_root = self.grid.client.node_url
+        assert api_root is not None
+        await addZKAPs(self.http_client, api_root, self.grid.client.authorization)
+
     def setUpResources(self) -> None:
         setUpResources(self, self.resources, _get_result())
 
@@ -89,14 +106,7 @@ class IntegrationTests(TestCase):
         """
         A new immutable object can be uploaded and downloaded again.
         """
-        # Load up the client with some ZKAPs
-        api_root = self.grid.client.node_url
-        assert api_root is not None
-        await self.http_client.put(
-            api_root.child("storage-plugins").child(NAME).child("voucher"),
-            headers=self.grid.client.authorization,
-            data=dumps_utf8({"voucher": "x" * 44}),
-        )
+        await self.addZKAPs()
 
         tempdir = self.useFixture(TempDir())
         outpath = FilePath(tempdir.join("downloaded"))
@@ -106,6 +116,16 @@ class IntegrationTests(TestCase):
         await self.client.download(outpath, ro_cap)
 
         self.assertThat(outpath.path, FileContains(expected))
+
+    async def test_uploadDownloadMutable(self) -> None:
+        """
+        A new mutable object can be uploaded and downloaded again.
+        """
+        await self.addZKAPs()
+
+        rw_cap = await self.client.make_directory()
+        children = await self.client.list_directory(rw_cap.reader)
+        self.assertThat(children, Equals({}))
 
 
 def testSuite() -> OptimisingTestSuite:
