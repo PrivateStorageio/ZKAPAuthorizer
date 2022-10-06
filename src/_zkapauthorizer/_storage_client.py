@@ -668,4 +668,4 @@ class ZKAPAuthorizerStorageClient(object):
         )
         # XXX If this function raises an exception, the read fails with no
         # additional detail logged anywhere.
-        return result
+        return result  # type: ignore[no-any-return]
