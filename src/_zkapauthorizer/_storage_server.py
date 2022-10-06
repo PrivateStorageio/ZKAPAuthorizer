@@ -602,7 +602,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_slot_readv(
         self, storage_index: bytes, shares: Optional[Container[int]], readv: ReadVector
-    ) -> Deferred[bytes]:
+    ) -> dict[int, bytes]:
         """
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.

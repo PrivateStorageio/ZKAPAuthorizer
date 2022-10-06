@@ -659,7 +659,7 @@ class ZKAPAuthorizerStorageClient(object):
         storage_index: bytes,
         shares: list[int],
         r_vector: ReadVector,
-    ) -> bytes:
+    ) -> dict[int, bytes]:
         result = await rref.callRemote(  # type: ignore[no-untyped-call]
             "slot_readv",
             storage_index,
