@@ -321,6 +321,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         assert isinstance(result, dict)
         return result
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:allocate-buckets",
+        include_args=["storage_index", "sharenums", "allocated_size"],
+        include_result=False,
+    )
     def remote_allocate_buckets(
         self,
         passes: list[bytes],
@@ -408,6 +413,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             k: FoolscapBucketWriter(bw) for (k, bw) in bucketwriters.items()
         }
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:get-buckets",
+        include_args=["storage_index"],
+        include_result=False,
+    )
     def remote_get_buckets(
         self, storage_index: bytes
     ) -> dict[int, FoolscapBucketWriter]:

@@ -3,6 +3,7 @@ Tests for ``_zkapauthorizer._plugin.storage_server_plugin`` / Tahoe-LAFS
 integration.
 """
 
+from base64 import b32encode
 from io import BytesIO
 from json import dumps
 from typing import TYPE_CHECKING
@@ -19,7 +20,7 @@ from testresources import (
 )
 from testtools import TestCase
 from testtools.content import text_content
-from testtools.matchers import Equals, FileContains, Not
+from testtools.matchers import Contains, Equals, FileContains, Not
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from treq.client import HTTPClient
 from twisted.internet.interfaces import IReactorTCP, IReactorTime
@@ -29,8 +30,7 @@ from twisted.web.client import Agent
 
 from .. import NAME
 from .._json import dumps_utf8
-from .._storage_server import storage_index_to_dir
-from ..tahoe import get_tahoe_client
+from ..tahoe import TahoeAPIError, get_tahoe_client
 from .resources import ZKAPTahoeGrid
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
         """
 
 
-async def addZKAPs(
+async def add_zkaps(
     http_client: HTTPClient, api_root: DecodedURL, authorization: dict[str, str]
 ) -> None:
     await http_client.put(
@@ -90,11 +90,11 @@ class IntegrationTests(TestCase):
         # disconnection.  https://github.com/twisted/twisted/issues/8998
         self.addCleanup(lambda: deferLater(self.reactor, 0.0, lambda: None))
 
-    async def addZKAPs(self) -> None:
+    async def add_zkaps(self) -> None:
         # Load up the client with some ZKAPs
         api_root = self.grid.client.node_url
         assert api_root is not None
-        await addZKAPs(self.http_client, api_root, self.grid.client.authorization)
+        await add_zkaps(self.http_client, api_root, self.grid.client.authorization)
 
     def setUpResources(self) -> None:
         setUpResources(self, self.resources, _get_result())
@@ -110,7 +110,7 @@ class IntegrationTests(TestCase):
         """
         A new immutable object can be uploaded and downloaded again.
         """
-        await self.addZKAPs()
+        await self.add_zkaps()
 
         tempdir = self.useFixture(TempDir())
         outpath = FilePath(tempdir.join("downloaded"))
@@ -125,7 +125,7 @@ class IntegrationTests(TestCase):
         """
         A new mutable object can be uploaded and downloaded again.
         """
-        await self.addZKAPs()
+        await self.add_zkaps()
 
         rw_cap = await self.client.make_directory()
         children = await self.client.list_directory(rw_cap.reader)
@@ -135,7 +135,7 @@ class IntegrationTests(TestCase):
         """
         An existing share can have its lease renewed.
         """
-        await self.addZKAPs()
+        await self.add_zkaps()
 
         expected = "xyz" * 1024
         ro_cap = await self.client.upload(lambda: BytesIO(expected.encode("ascii")))
@@ -144,11 +144,7 @@ class IntegrationTests(TestCase):
         assert not isinstance(ro_cap, LiteralRead)
 
         # Scrounge!
-        share_path = (
-            self.grid.client.storage.node_dir.descendant(("storage", "shares"))
-            .preauthChild(storage_index_to_dir(ro_cap.verifier.storage_index))
-            .child("0")
-        )
+        share_path = self.grid.client.storage.get_share_path(ro_cap.verifier, 0)
         share_before = share_path.getContent()
 
         # Leases have a resolution of one second so if we don't let the
@@ -175,6 +171,53 @@ class IntegrationTests(TestCase):
         # check succeeds whether a lease is added or not so we should also
         # verify that the lease was really added.
         self.assertThat(share_before, Not(Equals(share_after)))
+
+    async def test_advise_corrupt_share(self) -> None:
+        """
+        A corruption advisory is reported to the storage server when the
+        storage client decides a share is corrupt.
+        """
+        await self.add_zkaps()
+
+        expected = "xyz" * 1024
+        ro_cap = await self.client.upload(lambda: BytesIO(expected.encode("ascii")))
+
+        # If it's a literal cap then corruption advisories aren't applicable.
+        assert not isinstance(ro_cap, LiteralRead)
+
+        # Mess it up.
+        share_path = self.grid.client.storage.get_share_path(ro_cap.verifier, 0)
+
+        # Try to find a ciphertext block and scribble over some of it.
+        with share_path.open("r+") as f:
+            f.seek(200)
+            f.write(b"x")
+
+        # Try to download it - we can't because it's broken.
+        tempdir = self.useFixture(TempDir())
+        outpath = FilePath(tempdir.join("downloaded"))
+
+        try:
+            await self.client.download(outpath, ro_cap)
+        except TahoeAPIError:
+            pass
+        else:
+            self.addDetail(
+                "downloaded-object", text_content(outpath.getContent().decode("ascii"))
+            )
+            self.fail("expected download of corrupt share to fail")
+
+        # Check for the corruption advisory.
+        advisories = self.grid.client.storage.get_corruption_advisories().children()
+        self.assertThat(advisories, Not(Equals([])))
+        self.assertThat(
+            advisories[0].path,
+            FileContains(
+                matcher=Contains(
+                    f"storage_index: {b32encode(ro_cap.verifier.storage_index).strip(b'=').lower().decode('ascii')}"
+                )
+            ),
+        )
 
 
 def testSuite() -> OptimisingTestSuite:

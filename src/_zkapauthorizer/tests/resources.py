@@ -14,6 +14,7 @@ from attrs import define
 from challenge_bypass_ristretto import random_signing_key
 from eliottree import colored, get_theme, render_tasks, tasks_from_iterable
 from hyperlink import DecodedURL
+from tahoe_capabilities import CHKVerify, MDMFVerify, SSKVerify, VerifyCapability
 from testresources import TestResourceManager
 from testtools import TestCase
 from testtools.content import Content, content_from_file
@@ -25,6 +26,7 @@ from yaml import safe_dump
 
 from .. import NAME
 from .._json import loads
+from .._storage_server import storage_index_to_dir
 from .._types import JSON, ServerConfig
 from ..config import Config
 from .issuer import Issuer, run_issuer, stop_issuer
@@ -161,6 +163,28 @@ class TahoeStorage:
         The path to the Eliot log file for this node.
         """
         return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
+
+    def get_share_path(self, cap: VerifyCapability, sharenum: int) -> FilePath:
+        """
+        Get the filesystem path to a share of an object identified by a
+        certain capability which could be stored by this server.
+        """
+        if isinstance(cap, (CHKVerify, SSKVerify, MDMFVerify)):
+            storage_index = cap.storage_index
+        else:
+            storage_index = cap.cap_object.storage_index
+        return (  # type: ignore[no-any-return]
+            self.node_dir.descendant(("storage", "shares"))
+            .preauthChild(storage_index_to_dir(storage_index))
+            .child(f"{sharenum}")
+        )
+
+    def get_corruption_advisories(self) -> FilePath:
+        """
+        Get the location of the storage server's corruption advisories
+        directory.
+        """
+        return self.node_dir.descendant(("storage", "corruption-advisories"))  # type: ignore[no-any-return]
 
     def read_config(self) -> Config:
         """

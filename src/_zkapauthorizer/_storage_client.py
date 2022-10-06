@@ -555,6 +555,7 @@ class ZKAPAuthorizerStorageClient(object):
         return await stat_shares(rref, storage_indexes)
 
     @with_rref
+    @log_call_coroutine("zkapauthorizer:storage-client:advise-corrupt-share")
     async def advise_corrupt_share(
         self,
         rref: IRemoteReference,
