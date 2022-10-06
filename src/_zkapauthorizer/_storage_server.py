@@ -21,6 +21,12 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
+__all__ = [
+    "storage_index_to_dir",
+    "LeaseRenewalRequired",
+    "ZKAPAuthorizerStorageServer",
+]
+
 from datetime import timedelta
 from errno import ENOENT
 from functools import partial
@@ -414,6 +420,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             for (k, bucket) in self._original.get_buckets(storage_index).items()
         }
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:add-lease",
+        include_args=["storage_index"],
+        include_result=False,
+    )
     def remote_add_lease(
         self,
         passes: list[bytes],

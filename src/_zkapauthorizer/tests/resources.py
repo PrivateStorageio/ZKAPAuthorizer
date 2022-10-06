@@ -265,7 +265,12 @@ class TahoeStorage:
         )
         case.addDetail(
             "storage-create-output",
-            Content(UTF8_TEXT, lambda: [self.create_output.encode("utf-8")] if self.create_output is not None else []),
+            Content(
+                UTF8_TEXT,
+                lambda: [self.create_output.encode("utf-8")]
+                if self.create_output is not None
+                else [],
+            ),
         )
 
 
@@ -432,7 +437,12 @@ class TahoeClient:
         )
         case.addDetail(
             "client-create-output",
-            Content(UTF8_TEXT, lambda: [self.create_output.encode("utf-8")] if self.create_output is not None else []),
+            Content(
+                UTF8_TEXT,
+                lambda: [self.create_output.encode("utf-8")]
+                if self.create_output is not None
+                else [],
+            ),
         )
 
 

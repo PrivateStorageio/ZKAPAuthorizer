@@ -4,10 +4,12 @@ integration.
 """
 
 from io import BytesIO
+from json import dumps
 from typing import TYPE_CHECKING
 
 from fixtures import TempDir
 from hyperlink import DecodedURL
+from tahoe_capabilities import LiteralRead, danger_real_capability_string
 from testresources import (
     OptimisingTestSuite,
     TestLoader,
@@ -16,7 +18,8 @@ from testresources import (
     tearDownResources,
 )
 from testtools import TestCase
-from testtools.matchers import Equals, FileContains
+from testtools.content import text_content
+from testtools.matchers import Equals, FileContains, Not
 from testtools.twistedsupport import AsynchronousDeferredRunTest
 from treq.client import HTTPClient
 from twisted.internet.interfaces import IReactorTCP, IReactorTime
@@ -26,6 +29,7 @@ from twisted.web.client import Agent
 
 from .. import NAME
 from .._json import dumps_utf8
+from .._storage_server import storage_index_to_dir
 from ..tahoe import get_tahoe_client
 from .resources import ZKAPTahoeGrid
 
@@ -126,6 +130,51 @@ class IntegrationTests(TestCase):
         rw_cap = await self.client.make_directory()
         children = await self.client.list_directory(rw_cap.reader)
         self.assertThat(children, Equals({}))
+
+    async def test_renewLease(self) -> None:
+        """
+        An existing share can have its lease renewed.
+        """
+        await self.addZKAPs()
+
+        expected = "xyz" * 1024
+        ro_cap = await self.client.upload(lambda: BytesIO(expected.encode("ascii")))
+
+        # If it's a literal cap then leases aren't applicable.
+        assert not isinstance(ro_cap, LiteralRead)
+
+        # Scrounge!
+        share_path = (
+            self.grid.client.storage.node_dir.descendant(("storage", "shares"))
+            .preauthChild(storage_index_to_dir(ro_cap.verifier.storage_index))
+            .child("0")
+        )
+        share_before = share_path.getContent()
+
+        # Leases have a resolution of one second so if we don't let the
+        # wallclock seconds counter tick over to a new value we won't be able
+        # to observe the lease renewal!
+        await deferLater(self.reactor, 1.0, lambda: None)
+
+        api_root = self.grid.client.node_url
+        add_lease = (
+            api_root.child("uri", danger_real_capability_string(ro_cap))
+            .add("t", "check")
+            .add("add-lease", "true")
+            .add("output", "JSON")
+        )
+        response = await self.http_client.post(add_lease)
+        content = await response.json()
+
+        self.addDetail("check-output", text_content(dumps(content)))
+        self.assertThat(response.code, Equals(200))
+        self.assertThat(content["summary"], Equals("Healthy"))
+
+        share_after = share_path.getContent()
+
+        # check succeeds whether a lease is added or not so we should also
+        # verify that the lease was really added.
+        self.assertThat(share_before, Not(Equals(share_after)))
 
 
 def testSuite() -> OptimisingTestSuite:
