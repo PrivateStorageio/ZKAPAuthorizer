@@ -666,6 +666,6 @@ class ZKAPAuthorizerStorageClient(object):
             shares,
             r_vector,
         )
-        if isinstance(result, bytes):
-            return result
-        raise ValueError(f"expected bytes from slot_readv, got {type(result)}")
+        # XXX If this function raises an exception, the read fails with no
+        # additional detail logged anywhere.
+        return result
