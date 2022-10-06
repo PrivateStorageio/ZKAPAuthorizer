@@ -607,7 +607,14 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        return self._original.slot_readv(storage_index, shares, readv)
+        with start_action(
+            action_type="zkapauthorizer:storage-server:remote:slot-readv",
+            storage_index=b2a(storage_index),
+            path=storage_index_to_dir(storage_index),
+            shares=list(shares) if shares is not None else None,
+            readv=readv,
+        ):
+            return self._original.slot_readv(storage_index, shares, readv)
 
 
 def check_pass_quantity(
