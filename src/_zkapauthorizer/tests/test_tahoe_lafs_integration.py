@@ -106,7 +106,7 @@ class IntegrationTests(TestCase):
     def tearDownResources(self) -> None:
         tearDownResources(self, self.resources, _get_result())
 
-    async def test_uploadDownloadImmutable(self) -> None:
+    async def test_upload_download_immutable(self) -> None:
         """
         A new immutable object can be uploaded and downloaded again.
         """
@@ -121,7 +121,7 @@ class IntegrationTests(TestCase):
 
         self.assertThat(outpath.path, FileContains(expected))
 
-    async def test_uploadDownloadMutable(self) -> None:
+    async def test_upload_download_mutable(self) -> None:
         """
         A new mutable object can be uploaded and downloaded again.
         """
@@ -131,7 +131,7 @@ class IntegrationTests(TestCase):
         children = await self.client.list_directory(rw_cap.reader)
         self.assertThat(children, Equals({}))
 
-    async def test_renewLease(self) -> None:
+    async def test_renew_lease(self) -> None:
         """
         An existing share can have its lease renewed.
         """
