@@ -27,6 +27,7 @@ from twisted.internet.interfaces import IReactorTCP, IReactorTime
 from twisted.internet.task import deferLater
 from twisted.python.filepath import FilePath
 from twisted.web.client import Agent
+from twisted.web.http import OK
 
 from .. import NAME
 from .._json import dumps_utf8
@@ -48,11 +49,34 @@ if TYPE_CHECKING:
 async def add_zkaps(
     http_client: HTTPClient, api_root: DecodedURL, authorization: dict[str, str]
 ) -> None:
+    """
+    Add a voucher to a ZKAPAuthorizer-enabled Tahoe-LAFS client node to be
+    redeemed for ZKAPs.
+
+    Complete after at least some ZKAPs have been obtained.
+    """
+    voucher = "x" * 44
+    voucher_collection = api_root.child("storage-plugins").child(NAME).child("voucher")
     await http_client.put(
-        api_root.child("storage-plugins").child(NAME).child("voucher"),
+        voucher_collection,
         headers=authorization,
-        data=dumps_utf8({"voucher": "x" * 44}),
+        data=dumps_utf8({"voucher": voucher}),
     )
+
+    while True:
+        response = await http_client.get(
+            voucher_collection.child(voucher),
+            headers=authorization,
+        )
+        if response.code == OK:
+            body = await response.json()
+            if body["state"]["counter"] > 0:
+                return
+        else:
+            raise Exception(
+                f"Getting voucher state failed ({response.code}): "
+                f"{await response.content()}"
+            )
 
 
 class IntegrationTests(TestCase):
