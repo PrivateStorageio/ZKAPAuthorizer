@@ -193,7 +193,7 @@ jobs:
               .
 
             # Get in-development version of Twisted for some disttrial fixes
-            venv/bin/pip install --upgrade 'git+https://github.com/twisted/twisted.git@trunk#eggname=Twisted'
+            venv/bin/pip install --upgrade 'git+https://github.com/exarkun/twisted.git@11710-more-disttrial-amp-errors#eggname=Twisted'
 
       - run:
           name: "Test"
