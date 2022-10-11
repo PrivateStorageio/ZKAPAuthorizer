@@ -190,6 +190,9 @@ class IntegrationTests(TestCase):
         self.assertThat(response.code, Equals(200))
         self.assertThat(content["summary"], Equals("Healthy"))
 
+        # wait for ... platform I/O ... to ... settle???
+        await deferLater(self.reactor, 5.0, lambda: None)
+
         share_after = share_path.getContent()
 
         # check succeeds whether a lease is added or not so we should also
