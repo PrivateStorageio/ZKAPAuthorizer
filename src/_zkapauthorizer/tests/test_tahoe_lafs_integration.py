@@ -171,10 +171,18 @@ class IntegrationTests(TestCase):
         share_path = self.grid.client.storage.get_share_path(ro_cap.verifier, 0)
         share_before = share_path.getContent()
 
+        # We'll need this below to detect that the file has been written to.
+        mtime_before = share_path.getModificationTime()
+
         # Leases have a resolution of one second so if we don't let the
         # wallclock seconds counter tick over to a new value we won't be able
         # to observe the lease renewal!
-        await deferLater(self.reactor, 1.0, lambda: None)
+
+        # We can save literally fractions of a second by only waiting until
+        # the seconds counter ticks over though!
+        now = self.reactor.seconds()
+        delay = 1 - (now - int(now))
+        await deferLater(self.reactor, delay, lambda: None)
 
         api_root = self.grid.client.node_url
         add_lease = (
@@ -190,11 +198,20 @@ class IntegrationTests(TestCase):
         self.assertThat(response.code, Equals(200))
         self.assertThat(content["summary"], Equals("Healthy"))
 
-        # wait for ... platform I/O ... to ... settle???
-        await deferLater(self.reactor, 5.0, lambda: None)
+        # The t=check operation we ran _completes before leases are added_!
+        # Oh no!  So wait a little while longer and try to notice when it
+        # might have happened.
+        delay = 0.2
+        checks = 10
+        for i in range(checks):
+            share_path.restat()
+            if share_path.getModificationTime() != mtime_before:
+                break
+
+            # Give it a little time to work
+            await deferLater(self.reactor, delay, lambda: None)
 
         share_after = share_path.getContent()
-
         # check succeeds whether a lease is added or not so we should also
         # verify that the lease was really added.
         self.assertThat(share_before, Not(Equals(share_after)))
