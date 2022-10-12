@@ -226,13 +226,20 @@ def with_rref(
 
     The ``IRemoteReference`` is retrieved by calling ``_rref`` on the first
     argument passed to the function (expected to be ``self``).
+
+    The return type is changed from any ``Awaitable`` to a ``Deferred``
+    because this decorator is almost exclusively for methods called by
+    Tahoe-LAFS which still requires exactly a ``Deferred`` return value.
     """
 
     @wraps(f)
     def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> Deferred[_T]:
+
+        # h adapts an arbitrary Awaitable result to a coroutine.
         async def h() -> _T:
             return await f(self, self._rref(), *args, **kwargs)
 
+        # And then the coroutine is adapted to a Deferred.
         return Deferred.fromCoroutine(h())
 
     return g
