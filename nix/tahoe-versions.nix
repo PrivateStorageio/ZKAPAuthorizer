@@ -7,6 +7,12 @@ let
     version = "1.17.1";
     sha256 = "sha256-Lcf8ED/g5Pn8aZU5NAifVeRCi9XZRnDoROZMIQ18FnI=";
   };
+
+  v1_18_0 = fetchPypi {
+    pname = "tahoe-lafs";
+    version = "1.18.0";
+    sha256 = "sha256-cXpHDfNO3TGta5RGfauqHK7dfy9SM7BLidjP6TbjF/4=";
+  };
 in
 [
   {
@@ -24,6 +30,17 @@ in
     };
   }
 
+  {
+    version = "1_18_0";
+    buildArgs = {
+      src = v1_18_0;
+      requirementsExtra = ''
+      eliot
+      foolscap
+      '';
+    };
+  }
+
   # Some other version.  Often probably a recent master revision, but who
   # knows.
   {
@@ -34,7 +51,7 @@ in
       # we'll call it something close to another version we know about.  If we
       # really need to know what version it was then the Nix derivation has
       # this information and we can dig it out.
-      version = "1.17.1.post1";
+      version = "1.18.0.post1";
       postPatch =
         let
           versionFileContents = version: ''
