@@ -201,8 +201,8 @@ class IntegrationTests(TestCase):
         # The t=check operation we ran _completes before leases are added_!
         # Oh no!  So wait a little while longer and try to notice when it
         # might have happened.
-        delay = 0.2
-        checks = 10
+        delay = 0.1
+        checks = 50
         for i in range(checks):
             share_path.restat()
             if share_path.getModificationTime() != mtime_before:
