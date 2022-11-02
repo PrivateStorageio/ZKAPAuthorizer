@@ -4,7 +4,9 @@ A ZKAP issuer implemented as a L{twisted.web.resource.Resource}.
 
 from typing import Any
 
-from attrs import define
+from attrs import define, field, frozen
+from cattrs.gen import make_dict_unstructure_fn, override
+from cattrs.preconf import json
 from challenge_bypass_ristretto import (
     BatchDLEQProof,
     BlindedToken,
@@ -19,7 +21,6 @@ from twisted.web.iweb import IRequest
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 
-from .._json import dumps_utf8, loads
 from .._types import ClientConfig, ServerConfig
 
 
@@ -105,6 +106,61 @@ class Issuer:
         }
 
 
+@frozen
+class RedemptionRequest:
+    """
+    Represent the fields of a request to redeem a voucher for some ZKAPs.
+
+    :ivar redeemVoucher: The voucher being redeemed.
+    :ivar redeemTokens: The blinded tokens submitted for signature.
+    :ivar redeemCounter: The number of the redemption group to which these
+        tokens belong.
+    """
+
+    redeemVoucher: str
+    redeemTokens: list[str]
+    redeemCounter: int
+
+
+@frozen
+class Issuance:
+    """
+    Represent a group of issued ZKAPs.
+    """
+
+    signatures: list[str]
+    proof: str
+    public_key: str
+    success: bool = field(init=False, default=True)
+
+
+def _issue(signing_key: SigningKey, req: RedemptionRequest) -> Issuance:
+    """
+    Respond to a request for a voucher redemption.
+
+    :param signing_key: The signing key to use create issue signatures.
+
+    :param req: The redemption request carrying the blinded tokens to sign.
+
+    :return: The requested signatures and a proof that they were created with
+        ``signing_key``.
+    """
+    blinded_tokens = [
+        BlindedToken.decode_base64(blinded_token.encode("ascii"))
+        for blinded_token in req.redeemTokens
+    ]
+
+    signatures = list(map(signing_key.sign, blinded_tokens))
+
+    proof = BatchDLEQProof.create(signing_key, blinded_tokens, signatures)
+
+    return Issuance(
+        [sig.encode_base64().decode("ascii") for sig in signatures],
+        proof.encode_base64().decode("ascii"),
+        PublicKey.from_signing_key(signing_key).encode_base64().decode("ascii"),
+    )
+
+
 class Redeem(Resource):
     """
     Implement the voucher redemption endpoint.
@@ -115,38 +171,9 @@ class Redeem(Resource):
         self.signing_key = signing_key
 
     def render_POST(self, request: IRequest) -> bytes:
-        # cattrs
-        obj = loads(request.content.read())
-        assert isinstance(obj, dict)
-        tokens = obj["redeemTokens"]
-        assert isinstance(tokens, list)
-
-        blinded_tokens = [
-            BlindedToken.decode_base64(blinded_token.encode("ascii"))
-            for blinded_token in tokens
-        ]
-
-        signatures = list(
-            self.signing_key.sign(blinded_token) for blinded_token in blinded_tokens
-        )
-
-        proof = BatchDLEQProof.create(
-            self.signing_key,
-            blinded_tokens,
-            signatures,
-        )
-        return dumps_utf8(
-            {
-                "success": True,
-                "signatures": [
-                    sig.encode_base64().decode("ascii") for sig in signatures
-                ],
-                "proof": proof.encode_base64().decode("ascii"),
-                "public-key": PublicKey.from_signing_key(self.signing_key)
-                .encode_base64()
-                .decode("ascii"),
-            }
-        )
+        req = _converter.loads(request.content.read(), RedemptionRequest)
+        issuance = _issue(self.signing_key, req)
+        return _converter.dumps(issuance).encode("utf-8")
 
 
 def issuer(signing_key: SigningKey) -> Site:
@@ -167,3 +194,10 @@ def run_issuer(reactor: IReactorTCP, signing_key_path: FilePath) -> Issuer:
 
 def stop_issuer(issuer: Issuer) -> Deferred[None]:
     return maybeDeferred(issuer.port.stopListening)  # type: ignore[arg-type]
+
+
+_converter = json.make_converter(forbid_extra_keys=True)
+_issuance_hook = make_dict_unstructure_fn(
+    Issuance, _converter, public_key=override(rename="public-key")
+)
+_converter.register_unstructure_hook(Issuance, _issuance_hook)
