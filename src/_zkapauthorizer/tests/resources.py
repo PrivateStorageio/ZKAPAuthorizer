@@ -130,10 +130,8 @@ def setup_exit_trigger(node_dir: FilePath) -> None:
 
 
 @define
-class TahoeStorage:
+class TahoeNode:
     """
-    Provide a basic interface to a Tahoe-LAFS storage node child process.
-
     :ivar node_dir: The path to the node's directory.
 
     :ivar create_output: The output from creating the node.
@@ -141,8 +139,6 @@ class TahoeStorage:
     :ivar process: After the node is started, a handle on the child process.
 
     :ivar node_url: After the node is started, the root of the node's web API.
-
-    :ivar storage_furl: After the node is started, the node's storage fURL.
 
     :ivar node_pubkey: After the node is started, the node's public key.
     """
@@ -153,9 +149,12 @@ class TahoeStorage:
     customize_config: Callable[[Config], None] = lambda cfg: None
     create_output: Optional[str] = None
     process: Optional[Popen[bytes]] = None
-    node_url: Optional[str] = None
-    storage_furl: Optional[str] = None
+    node_url: Optional[DecodedURL] = None
     node_pubkey: Optional[str] = None
+
+    @property
+    def node_type(self) -> str:
+        raise NotImplementedError("Subclass should define node_type")
 
     @property
     def eliot_log_path(self) -> FilePath:
@@ -163,6 +162,109 @@ class TahoeStorage:
         The path to the Eliot log file for this node.
         """
         return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
+
+    def read_config(self) -> Config:
+        """
+        Read this client node's configuration file into a configuration object.
+        """
+        config_path = self.node_dir.child("tahoe.cfg")
+        return config_from_string(
+            self.node_dir.path,
+            "tub.port",
+            config_path.getContent(),
+            fpath=config_path,
+        )
+
+    def addDetail(self, case: TestCase) -> None:
+        """
+        Add the Tahoe-LAFS storage node's logs as details to the given test
+        case.
+        """
+        node_type = self.node_type
+
+        for name in ["stdout", "stderr"]:
+            case.addDetail(
+                f"{node_type}-{name}",
+                content_from_file(self.node_dir.child(name).path),
+            )
+        case.addDetail(
+            f"{node_type}-eliot.log",
+            eliottree_from_file(self.eliot_log_path),
+        )
+        case.addDetail(
+            f"{node_type}-tahoe.cfg",
+            content_from_file(self.node_dir.child("tahoe.cfg").path),
+        )
+        case.addDetail(
+            f"{node_type}-create-output",
+            Content(
+                UTF8_TEXT,
+                lambda: [self.create_output.encode("utf-8")]
+                if self.create_output is not None
+                else [],
+            ),
+        )
+
+    def run(self) -> None:
+        """
+        Create and start the node in a child process.
+        """
+        self.create()
+        self.start()
+
+    def create_unsafely(self) -> str:
+        """
+        Try to create the node directory without any extra error handling.
+
+        Use ``create`` instead.  This is for subclasses to override.
+        """
+
+    def create(self) -> None:
+        """
+        Create the node directory.
+        """
+        try:
+            self.create_output = self.create_unsafely()
+        except CalledProcessError as e:
+            self.create_output = e.output
+            raise
+        setup_exit_trigger(self.node_dir)
+        self.customize_config(self.read_config())
+
+    def start(self) -> None:
+        """
+        Start the node child process.
+        """
+        eliot = [
+            "--eliot-destination",
+            "file:" + self.eliot_log_path.asTextMode().path,
+        ]
+        # Unfortunately we don't notice if this command crashes because of
+        # some bug.  In that case the test will just hang and fail after
+        # timing out.
+        self.process = Popen(
+            TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
+            stdout=self.node_dir.child("stdout").open("wb"),
+            stderr=self.node_dir.child("stderr").open("wb"),
+        )
+        node_url_path = self.node_dir.child("node.url")
+        wait_for_path(node_url_path)
+        self.node_url = DecodedURL.from_text(read_text(node_url_path))
+
+
+@define
+class TahoeStorage(TahoeNode):
+    """
+    Provide a basic interface to a Tahoe-LAFS storage node child process.
+
+    :ivar storage_furl: After the node is started, the node's storage fURL.
+    """
+
+    storage_furl: Optional[str] = None
+
+    @property
+    def node_type(self) -> str:
+        return "storage"
 
     def get_share_path(self, cap: VerifyCapability, sharenum: int) -> FilePath:
         """
@@ -186,26 +288,10 @@ class TahoeStorage:
         """
         return self.node_dir.descendant(("storage", "corruption-advisories"))  # type: ignore[no-any-return]
 
-    def read_config(self) -> Config:
+    def create_unsafely(self) -> str:
         """
-        Read this client node's configuration file into a configuration object.
+        Create a Tahoe-LAFS storage node.
         """
-        config_path = self.node_dir.child("tahoe.cfg")
-        return config_from_string(
-            self.node_dir.path,
-            "tub.port",
-            config_path.getContent(),
-            fpath=config_path,
-        )
-
-    def run(self) -> None:
-        """
-        Create and start the node in a child process.
-        """
-        self.create()
-        self.start()
-
-    def _create_node(self) -> str:
         return check_output(
             TAHOE
             + [
@@ -218,34 +304,11 @@ class TahoeStorage:
             encoding="utf-8",
         )
 
-    def create(self) -> None:
-        """
-        Create the node directory.
-        """
-        try:
-            self.create_output = self._create_node()
-        except CalledProcessError as e:
-            self.create_output = e.output
-            raise
-        setup_exit_trigger(self.node_dir)
-        self.customize_config(self.read_config())
-
     def start(self) -> None:
         """
         Start the node child process.
         """
-        eliot = [
-            "--eliot-destination",
-            "file:" + self.eliot_log_path.asTextMode().path,
-        ]
-        self.process = Popen(
-            TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
-            stdout=self.node_dir.child("stdout").open("wb"),
-            stderr=self.node_dir.child("stderr").open("wb"),
-        )
-        node_url_path = self.node_dir.child("node.url")
-        wait_for_path(node_url_path)
-        self.node_url = read_text(node_url_path)
+        super().start()
         storage_furl_path = self.node_dir.descendant(["private", "storage.furl"])
         wait_for_path(storage_furl_path)
         self.storage_furl = read_text(storage_furl_path)
@@ -268,34 +331,6 @@ class TahoeStorage:
                 },
             }
         raise ValueError("Cannot get servers.yaml before starting.")
-
-    def addDetail(self, case: TestCase) -> None:
-        """
-        Add the Tahoe-LAFS storage node's logs as details to the given test
-        case.
-        """
-        for name in ["stdout", "stderr"]:
-            case.addDetail(
-                f"storage-{name}",
-                content_from_file(self.node_dir.child(name).path),
-            )
-        case.addDetail(
-            "storage-eliot.log",
-            eliottree_from_file(self.eliot_log_path),
-        )
-        case.addDetail(
-            "storage-tahoe.cfg",
-            content_from_file(self.node_dir.child("tahoe.cfg").path),
-        )
-        case.addDetail(
-            "storage-create-output",
-            Content(
-                UTF8_TEXT,
-                lambda: [self.create_output.encode("utf-8")]
-                if self.create_output is not None
-                else [],
-            ),
-        )
 
 
 class TahoeStorageManager(TestResourceManager):
@@ -332,30 +367,19 @@ class TahoeStorageManager(TestResourceManager):
 
 
 @define
-class TahoeClient:
+class TahoeClient(TahoeNode):
     """
     Provide a basic interface to a Tahoe-LAFS client node child process.
 
-    :ivar node_dir: The path to the node's directory.
-
     :ivar storage: A representation of the storage server the node will be
         configured with.
-
-    :ivar create_output: The output from creating the node.
-
-    :ivar process: After the node is started, a handle on the child process.
-
-    :ivar node_url: After the node is started, the root of the node's web API.
     """
 
-    node_dir: FilePath
-    storage: TahoeStorage
-    # Unfortunately the Config type strongly prefers in-place mutation.
-    # Someday, replace this with a pure function.
-    customize_config: Callable[[Config], None] = lambda cfg: None
-    create_output: Optional[str] = None
-    process: Optional[Popen[bytes]] = None
-    node_url: Optional[DecodedURL] = None
+    storage: Optional[TahoeStorage] = None
+
+    @property
+    def node_type(self) -> str:
+        return "client"
 
     @property
     def authorization(self) -> Mapping[str, str]:
@@ -367,33 +391,10 @@ class TahoeClient:
         headers = {"authorization": f"tahoe-lafs {token}"}
         return headers
 
-    @property
-    def eliot_log_path(self) -> FilePath:
+    def create_unsafely(self) -> str:
         """
-        The path to the Eliot log file for this node.
+        Create a Tahoe-LAFS client node.
         """
-        return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
-
-    def read_config(self) -> Config:
-        """
-        Read this client node's configuration file into a configuration object.
-        """
-        config_path = self.node_dir.child("tahoe.cfg")
-        return config_from_string(
-            self.node_dir.path,
-            "tub.port",
-            config_path.getContent(),
-            fpath=config_path,
-        )
-
-    def run(self) -> None:
-        """
-        Create and start the node in a child process.
-        """
-        self.create()
-        self.start()
-
-    def _create_node(self) -> str:
         return check_output(
             TAHOE
             + [
@@ -411,63 +412,21 @@ class TahoeClient:
     def create(self) -> None:
         """
         Create the node directory and write the necessary configuration to it.
-        """
-        try:
-            self.create_output = self._create_node()
-        except CalledProcessError as e:
-            self.create_output = e.output
-            raise
-        setup_exit_trigger(self.node_dir)
-        config = self.read_config()
-        config.write_private_config(
-            "servers.yaml", safe_dump({"storage": self.storage.servers_yaml_entry()})
-        )
-        self.customize_config(self.read_config())
 
-    def start(self) -> None:
+        In addition to the inherited implementation, write the static server
+        configuration.
         """
-        Start the node child process.
-        """
-        eliot = ["--eliot-destination", "file:" + self.eliot_log_path.asTextMode().path]
-        # Unfortunately we don't notice if this command crashes because of
-        # some bug.  In that case the test will just hang and fail after
-        # timing out.
-        self.process = Popen(
-            TAHOE + eliot + ["run", self.node_dir.asTextMode().path],
-            stdout=self.node_dir.child("stdout").open("wb"),
-            stderr=self.node_dir.child("stderr").open("wb"),
-        )
-        node_url_path = self.node_dir.child("node.url")
-        wait_for_path(node_url_path)
-        self.node_url = DecodedURL.from_text(read_text(node_url_path))
-
-    def addDetail(self, case: TestCase) -> None:
-        """
-        Add the Tahoe-LAFS client node's logs as details to the given test
-        case.
-        """
-        for name in ["stdout", "stderr"]:
-            case.addDetail(
-                f"client-{name}",
-                content_from_file(self.node_dir.child(name).path),
+        super().create()
+        if self.storage is not None:
+            config = self.read_config()
+            config.write_private_config(
+                "servers.yaml",
+                safe_dump(
+                    {
+                        "storage": self.storage.servers_yaml_entry(),
+                    }
+                ),
             )
-        case.addDetail(
-            "client-eliot.log",
-            eliottree_from_file(self.eliot_log_path),
-        )
-        case.addDetail(
-            "client-tahoe.cfg",
-            content_from_file(self.node_dir.child("tahoe.cfg").path),
-        )
-        case.addDetail(
-            "client-create-output",
-            Content(
-                UTF8_TEXT,
-                lambda: [self.create_output.encode("utf-8")]
-                if self.create_output is not None
-                else [],
-            ),
-        )
 
 
 class TahoeClientManager(TestResourceManager):
