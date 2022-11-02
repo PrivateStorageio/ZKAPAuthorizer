@@ -192,9 +192,6 @@ jobs:
               -r requirements/test.in \
               .
 
-            # Get in-development version of Twisted for some disttrial fixes
-            venv/bin/pip install --upgrade 'git+https://github.com/twisted/twisted.git@trunk#eggname=Twisted'
-
       - run:
           name: "Test"
           command: |
