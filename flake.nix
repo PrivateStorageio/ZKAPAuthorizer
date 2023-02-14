@@ -1,7 +1,7 @@
 {
   description = "A Tahoe-LAFS storage-system plugin which authorizes storage operations based on privacy-respecting tokens.";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.05";
+    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.11";
     flake-utils.url = "github:numtide/flake-utils";
     pypi-deps-db = {
       flake = false;
