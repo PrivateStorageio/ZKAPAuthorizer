@@ -27,18 +27,16 @@ rec {
     { pyVersion
     , tahoe-lafs
     }:
-    let
-      tahoe-lafs-package = mach-nix.buildPythonPackage (
-        tahoe-lafs.buildArgs // { python = pyVersion; }
-      );
-    in
-      mach-nix.buildPythonPackage {
-        python = pyVersion;
-        providers.tahoe-lafs = "nixpkgs";
-        overridesPre = [(self: super: {
-          tahoe-lafs = tahoe-lafs-package;
-        })];
+      let
+        tahoe-lafs-package = mach-nix.buildPythonPackage (
+          tahoe-lafs.buildArgs // { python = pyVersion; }
+        );
+      in
+      with pkgs."${pyVersion}Packages"; buildPythonPackage {
         inherit src;
+	pname = "ZKAPAuthorizer";
+        version = "9001";
+        propagatedBuildInputs = [ prometheus-client colorama tahoe-lafs-package ];
       };
 
   # Create a Python environment suitable for running automated tests for the
