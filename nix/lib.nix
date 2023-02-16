@@ -36,7 +36,15 @@ rec {
         inherit src;
 	pname = "ZKAPAuthorizer";
         version = "9001";
-        propagatedBuildInputs = [ prometheus-client colorama tahoe-lafs-package ];
+        propagatedBuildInputs = [
+          prometheus-client
+          colorama
+          tahoe-lafs-package
+          (callPackage ./compose.nix {})
+          (callPackage ./tahoe-capabilities.nix {})
+          sqlparse
+          autobahn
+        ];
       };
 
   # Create a Python environment suitable for running automated tests for the
