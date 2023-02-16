@@ -11,8 +11,6 @@ buildPythonPackage rec {
 
   propagatedBuildInputs = [ attrs ];
 
-  # doCheck = false;
-
   meta = with lib; {
     homepage = "https://github.com/tahoe-lafs/tahoe-capabilities";
     description = "Simple, re-usable types for interacting with Tahoe-LAFS capabilities";
