@@ -16,6 +16,6 @@ buildPythonPackage rec {
   meta = with lib; {
     homepage = "https://github.com/tahoe-lafs/tahoe-capabilities";
     description = "Simple, re-usable types for interacting with Tahoe-LAFS capabilities";
-    license = licenses.bsd0;
+    license = licenses.gpl2;
   };
 }
