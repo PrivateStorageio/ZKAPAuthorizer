@@ -22,6 +22,7 @@ in
     # (`_`).
     version = "1_17_1";
     buildArgs = {
+      version = "1.17.1";
       src = v1_17_1;
       requirementsExtra = ''
       eliot
@@ -33,6 +34,7 @@ in
   {
     version = "1_18_0";
     buildArgs = {
+      version = "1.18.0";
       src = v1_18_0;
       requirementsExtra = ''
       eliot

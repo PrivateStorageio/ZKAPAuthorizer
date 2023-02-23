@@ -27,12 +27,43 @@ rec {
     { pyVersion
     , tahoe-lafs
     }:
+      with pkgs."${pyVersion}Packages";
       let
-        tahoe-lafs-package = mach-nix.buildPythonPackage (
-          tahoe-lafs.buildArgs // { python = pyVersion; }
-        );
+        tahoe-lafs-package = buildPythonPackage {
+          # tahoe-lafs.buildArgs // { python = pyVersion; }
+	  pname = "tahoe-lafs";
+          version = tahoe-lafs.buildArgs.version;
+          src = tahoe-lafs.buildArgs.src;
+          propagatedBuildInputs = [
+            zfec
+            zope_interface
+            foolscap
+            cryptography
+            twisted
+            pyyaml
+            six
+            magic-wormhole
+            eliot
+            pyrsistent
+            attrs
+            autobahn
+            future
+            netifaces
+            pyutil
+            collections-extended
+            klein
+            werkzeug
+            treq
+            cbor2
+            (callPackage ./pycddl.nix {})
+            click
+            psutil
+            filelock
+          ];
+        };
       in
-      with pkgs."${pyVersion}Packages"; buildPythonPackage {
+        buildPythonPackage {
+        # 	nativeBuildInputs = [ pkgs.breakpointHook ];
         inherit src;
 	pname = "ZKAPAuthorizer";
         version = "9001";
