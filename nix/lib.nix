@@ -26,6 +26,7 @@ rec {
   packageForVersion =
     { pyVersion
     , tahoe-lafs
+    , challenge-bypass-ristretto
     }:
       with pkgs."${pyVersion}Packages";
       let
@@ -34,6 +35,7 @@ rec {
 	  pname = "tahoe-lafs";
           version = tahoe-lafs.buildArgs.version;
           src = tahoe-lafs.buildArgs.src;
+          dontUseSetuptoolsCheck = true;
           propagatedBuildInputs = [
             zfec
             zope_interface
@@ -51,7 +53,7 @@ rec {
             netifaces
             pyutil
             collections-extended
-            klein
+            (klein.overrideAttrs (old: { doInstallCheck = false; }))
             werkzeug
             treq
             cbor2
@@ -59,6 +61,10 @@ rec {
             click
             psutil
             filelock
+            distro
+            appdirs
+            bcrypt
+            aniso8601
           ];
         };
       in
@@ -75,6 +81,7 @@ rec {
           (callPackage ./tahoe-capabilities.nix {})
           sqlparse
           autobahn
+          (challenge-bypass-ristretto (builtins.trace "pyversion: ${pyVersion}" pyVersion))
         ];
       };
 
@@ -85,15 +92,19 @@ rec {
   pythonTestingEnv =
     { pyVersion          # string, eg "python39"
     , tahoe-lafs
+    , challenge-bypass-ristretto
     , requirementsExtra  # string, eg "pudb\n"
-    }: mach-nix.mkPython {
-    python = pyVersion;
-    requirements = ''
-    ${requirementsExtra}
-    ${builtins.readFile "${src}/requirements/test.in"}
-    '';
-    packagesExtra = [ (packageForVersion { inherit pyVersion tahoe-lafs; } ) ];
-  };
+    }:
+    pkgs.${pyVersion}.withPackages (ps: with ps; [
+      (packageForVersion { inherit pyVersion tahoe-lafs challenge-bypass-ristretto; } )
+      coverage
+      fixtures
+      testtools
+      testresources
+      hypothesis
+       # openapi_spec_validator
+   ]);
+#    ${requirementsExtra}
 
   runTests =
     { testEnv
@@ -117,6 +128,7 @@ rec {
   testsForVersion =
     { pyVersion
     , tahoe-lafs
+    , challenge-bypass-ristretto
     , hypothesisProfile ? null
     , collectCoverage ? false
     , moreArgs ? [ "--rterrors" "--jobs=$NIX_BUILD_CORES" "--force-gc" ]
@@ -124,7 +136,7 @@ rec {
     }:
     let
       testEnv = pythonTestingEnv {
-        inherit pyVersion tahoe-lafs;
+        inherit pyVersion tahoe-lafs challenge-bypass-ristretto;
         requirementsExtra = lib.optionalString collectCoverage "coverage_enable_subprocess";
       };
       runTestsCommand = runTests {

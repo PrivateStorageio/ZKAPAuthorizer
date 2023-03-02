@@ -3,6 +3,8 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.05";
     flake-utils.url = "github:numtide/flake-utils";
+    challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto?ref=v2023.01.23rc1;
+    challenge-bypass-ristretto.inputs.nixpkgs.follows = "nixpkgs";
     pypi-deps-db = {
       flake = false;
       url = "github:DavHau/pypi-deps-db";
@@ -30,7 +32,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, mach-nix-flake, tahoe-lafs-dev, ... }:
+  outputs = { self, nixpkgs, flake-utils, mach-nix-flake, tahoe-lafs-dev, challenge-bypass-ristretto, ... }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
 
       mach-nix = mach-nix-flake.lib.${system};
@@ -54,11 +56,12 @@
       packageCoordinates = lib.attrsets.cartesianProductOfSets {
         pyVersion = pyVersions;
         tahoe-lafs = tahoeVersions;
+        challenge-bypass-ristretto = [ (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto") ];
       };
 
       # A formatter to construct the appropriate package name for a certain
       # configuration.
-      packageName = { pyVersion, tahoe-lafs }:
+      packageName = { pyVersion, tahoe-lafs, challenge-bypass-ristretto }:
         "zkapauthorizer-${pyVersion}-tahoe_${tahoe-lafs.version}";
 
       # Construct a matrix of package-building derivations.
@@ -81,11 +84,12 @@
         tahoe-lafs = tahoeVersions;
         hypothesisProfile = hypothesisProfiles;
         collectCoverage = coverageOptions;
+        challenge-bypass-ristretto = [ (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto") ];
       };
 
       # A formatter to construct the appropriate derivation name for a test
       # configuration.
-      testName = { pyVersion, tahoe-lafs, hypothesisProfile, collectCoverage }:
+      testName = { pyVersion, tahoe-lafs, hypothesisProfile, collectCoverage, challenge-bypass-ristretto }:
         builtins.concatStringsSep "-" [
           "tests"
           "${pyVersion}"
