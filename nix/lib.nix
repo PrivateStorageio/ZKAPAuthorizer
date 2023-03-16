@@ -100,7 +100,6 @@ rec {
         };
       in
         buildPythonPackage {
-          # nativeBuildInputs = [ pkgs.breakpointHook ];
           inherit src;
           pname = "ZKAPAuthorizer";
           version = "9001";
@@ -139,7 +138,7 @@ rec {
       testtools
       testresources
       hypothesis
-       # openapi_spec_validator
+      openapi-spec-validator
    ]);
 #    ${requirementsExtra}
 
