@@ -6,4 +6,4 @@ twisted.overrideAttrs (old: {
       sha256 = "sha256-Mqy9QKlPX0bntCwQm/riswIlCUVWF4Oot6BZBI8tTTE=";
     };
 })
-  
+
