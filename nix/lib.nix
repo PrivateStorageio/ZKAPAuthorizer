@@ -69,7 +69,9 @@ rec {
     buildPythonPackage {
       inherit src;
       pname = "ZKAPAuthorizer";
-      version = "9001";
+      # Don't forget to bump the version number in
+      # src/_zkapauthorizer/__init__.py too.
+      version = "2022.8.21";
       format = "setuptools";
 
       propagatedBuildInputs = [
