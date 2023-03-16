@@ -58,68 +58,35 @@ rec {
 
         compose = self.callPackage ./compose.nix {};
         tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
+
+        tahoe-lafs-package = self.callPackage ./tahoe-lafs.nix {
+          tahoe-lafs-version = tahoe-lafs.buildArgs.version;
+          tahoe-lafs-src = tahoe-lafs.buildArgs.src;
+          postPatch = tahoe-lafs.buildArgs.postPatch or null;
+        };
       };
     }).pkgs;
-      let
-        tahoe-lafs-package = buildPythonPackage {
-          # tahoe-lafs.buildArgs // { python = pyVersion; }
-          pname = "tahoe-lafs";
-          version = tahoe-lafs.buildArgs.version;
-          src = tahoe-lafs.buildArgs.src;
-          dontUseSetuptoolsCheck = true;
-          propagatedBuildInputs = [
-            zfec
-            zope_interface
-            foolscap
-            cryptography
-            twisted
-            pyyaml
-            six
-            magic-wormhole
-            eliot
-            pyrsistent
-            attrs
-            autobahn
-            future
-            netifaces
-            pyutil
-            collections-extended
-            klein
-            werkzeug
-            treq
-            cbor2
-            pycddl
-            click
-            psutil
-            filelock
-            distro
-            appdirs
-            bcrypt
-            aniso8601
-          ];
-        };
-      in
-        buildPythonPackage {
-          inherit src;
-          pname = "ZKAPAuthorizer";
-          version = "9001";
-          format = "setuptools";
+    buildPythonPackage {
+      inherit src;
+      pname = "ZKAPAuthorizer";
+      version = "9001";
+      format = "setuptools";
 
-          propagatedBuildInputs = [
-            prometheus-client
-            colorama
-            tahoe-lafs-package
-            compose
-            tahoe-capabilities
-            sqlparse
-            autobahn
-            # It would be nice if we got challenge-bypass-ristretto as
-            # something we could `callPackage` but instead we just get a
-            # derivation from the python-challenge-bypass-ristretto flake.
-            # Handle that case specially here.
-            (challenge-bypass-ristretto pyVersion)
-          ];
-        };
+      propagatedBuildInputs = [
+        prometheus-client
+        colorama
+        tahoe-lafs-package
+        compose
+        tahoe-capabilities
+        sqlparse
+        autobahn
+        # It would be nice if we got challenge-bypass-ristretto as
+        # something we could `callPackage` but instead we just get a
+        # derivation from the python-challenge-bypass-ristretto flake.
+        # Handle that case specially here.
+        (challenge-bypass-ristretto pyVersion)
+      ];
+    };
 
   # Create a Python environment suitable for running automated tests for the
   # project.
