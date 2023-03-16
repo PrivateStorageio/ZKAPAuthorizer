@@ -56,6 +56,8 @@ rec {
           # Versus.testVersusHTTPServerAuthenticated
         });
 
+        compose = self.callPackage ./compose.nix {};
+        tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
       };
     }).pkgs;
       let
@@ -108,11 +110,15 @@ rec {
             prometheus-client
             colorama
             tahoe-lafs-package
-            (callPackage ./compose.nix {})
-            (callPackage ./tahoe-capabilities.nix {})
+            compose
+            tahoe-capabilities
             sqlparse
             autobahn
-            (challenge-bypass-ristretto (builtins.trace "pyversion: ${pyVersion}" pyVersion))
+            # It would be nice if we got challenge-bypass-ristretto as
+            # something we could `callPackage` but instead we just get a
+            # derivation from the python-challenge-bypass-ristretto flake.
+            # Handle that case specially here.
+            (challenge-bypass-ristretto pyVersion)
           ];
         };
 
