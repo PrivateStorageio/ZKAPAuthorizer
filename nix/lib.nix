@@ -28,11 +28,40 @@ rec {
     , tahoe-lafs
     , challenge-bypass-ristretto
     }:
-      with pkgs."${pyVersion}Packages";
+    with (pkgs.${pyVersion}.override {
+      # super is the unmodified package set that we're about to override some
+      # contents of.
+      #
+      # self is the fixed point of the package set - the result of applying
+      # our override recursively to the package set until the return value is
+      # the same as the input.
+      packageOverrides = self: super: {
+        klein = super.klein.overrideAttrs (old: {
+          # The klein test suite is a little broken so ... don't run it.
+          doInstallCheck = false;
+        });
+        pycddl = self.callPackage ./pycddl.nix {};
+        twisted = self.callPackage ./twisted.nix {
+          # Our twisted.nix is defined in terms of twisted so we cannot let
+          # self.callPackage pass twisted.  Override that by explicitly
+          # passing twisted from super here, instead.
+          inherit (super) twisted;
+        };
+
+        # The foolscap test suite has one failing test when run against the
+        # new version of Twisted, so disable the test suite for now.
+        foolscap = super.foolscap.overrideAttrs (old: {
+          doInstallCheck = false;
+          # XXX Maybe we could just disable the one failing test,
+          # Versus.testVersusHTTPServerAuthenticated
+        });
+
+      };
+    }).pkgs;
       let
         tahoe-lafs-package = buildPythonPackage {
           # tahoe-lafs.buildArgs // { python = pyVersion; }
-	  pname = "tahoe-lafs";
+          pname = "tahoe-lafs";
           version = tahoe-lafs.buildArgs.version;
           src = tahoe-lafs.buildArgs.src;
           dontUseSetuptoolsCheck = true;
@@ -53,11 +82,11 @@ rec {
             netifaces
             pyutil
             collections-extended
-            (klein.overrideAttrs (old: { doInstallCheck = false; }))
+            klein
             werkzeug
             treq
             cbor2
-            (callPackage ./pycddl.nix {})
+            pycddl
             click
             psutil
             filelock
@@ -69,21 +98,23 @@ rec {
         };
       in
         buildPythonPackage {
-        # 	nativeBuildInputs = [ pkgs.breakpointHook ];
-        inherit src;
-	pname = "ZKAPAuthorizer";
-        version = "9001";
-        propagatedBuildInputs = [
-          prometheus-client
-          colorama
-          tahoe-lafs-package
-          (callPackage ./compose.nix {})
-          (callPackage ./tahoe-capabilities.nix {})
-          sqlparse
-          autobahn
-          (challenge-bypass-ristretto (builtins.trace "pyversion: ${pyVersion}" pyVersion))
-        ];
-      };
+          # nativeBuildInputs = [ pkgs.breakpointHook ];
+          inherit src;
+          pname = "ZKAPAuthorizer";
+          version = "9001";
+          format = "setuptools";
+
+          propagatedBuildInputs = [
+            prometheus-client
+            colorama
+            tahoe-lafs-package
+            (callPackage ./compose.nix {})
+            (callPackage ./tahoe-capabilities.nix {})
+            sqlparse
+            autobahn
+            (challenge-bypass-ristretto (builtins.trace "pyversion: ${pyVersion}" pyVersion))
+          ];
+        };
 
   # Create a Python environment suitable for running automated tests for the
   # project.
