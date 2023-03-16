@@ -24,10 +24,6 @@ in
     buildArgs = {
       version = "1.17.1";
       src = v1_17_1;
-      requirementsExtra = ''
-      eliot
-      foolscap
-      '';
     };
   }
 
@@ -36,10 +32,6 @@ in
     buildArgs = {
       version = "1.18.0";
       src = v1_18_0;
-      requirementsExtra = ''
-      eliot
-      foolscap
-      '';
     };
   }
 
