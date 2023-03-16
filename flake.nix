@@ -3,7 +3,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.05";
     flake-utils.url = "github:numtide/flake-utils";
-    challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto?ref=v2023.01.23rc1;
+    challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto;
     challenge-bypass-ristretto.inputs.nixpkgs.follows = "nixpkgs";
     pypi-deps-db = {
       flake = false;

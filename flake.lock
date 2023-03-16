@@ -1,5 +1,50 @@
 {
   "nodes": {
+    "challenge-bypass-ristretto": {
+      "inputs": {
+        "fenix": "fenix",
+        "libchallenge_bypass_ristretto_ffi-src": "libchallenge_bypass_ristretto_ffi-src",
+        "naersk": "naersk",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1677792928,
+        "narHash": "sha256-KjN++Rw/Sw1yJCppFmfIk3OPluRNLXUaxgsStGuWxQg=",
+        "owner": "LeastAuthority",
+        "repo": "python-challenge-bypass-ristretto",
+        "rev": "b6fed3bc0eeee6809eecbc15a8ce3377ae6ecd3f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LeastAuthority",
+        "repo": "python-challenge-bypass-ristretto",
+        "type": "github"
+      }
+    },
+    "fenix": {
+      "inputs": {
+        "nixpkgs": [
+          "challenge-bypass-ristretto",
+          "nixpkgs"
+        ],
+        "rust-analyzer-src": "rust-analyzer-src"
+      },
+      "locked": {
+        "lastModified": 1670394267,
+        "narHash": "sha256-e3Rww5M3k50QqzXbQu/jiDdsUkfblFydrUQJPj8YYfM=",
+        "owner": "nix-community",
+        "repo": "fenix",
+        "rev": "f926b4aefa71d6f3ecb784c61f6f58d04d28fd2c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "fenix",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1659877975,
@@ -12,6 +57,22 @@
       "original": {
         "owner": "numtide",
         "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "libchallenge_bypass_ristretto_ffi-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1650323908,
+        "narHash": "sha256-b+iAbL2MR8uP21v16hESX7O9Ioj7a8o0GGqeYIFD1ys=",
+        "owner": "brave-intl",
+        "repo": "challenge-bypass-ristretto-ffi",
+        "rev": "419995e4a873c294f1eaefca276f8ad25328e89f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "brave-intl",
+        "repo": "challenge-bypass-ristretto-ffi",
         "type": "github"
       }
     },
@@ -38,6 +99,27 @@
       "original": {
         "owner": "DavHau",
         "repo": "mach-nix",
+        "type": "github"
+      }
+    },
+    "naersk": {
+      "inputs": {
+        "nixpkgs": [
+          "challenge-bypass-ristretto",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1662220400,
+        "narHash": "sha256-9o2OGQqu4xyLZP9K6kNe1pTHnyPz0Wr3raGYnr9AIgY=",
+        "owner": "nix-community",
+        "repo": "naersk",
+        "rev": "6944160c19cb591eb85bbf9b2f2768a935623ed3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "naersk",
         "type": "github"
       }
     },
@@ -75,11 +157,29 @@
     },
     "root": {
       "inputs": {
+        "challenge-bypass-ristretto": "challenge-bypass-ristretto",
         "flake-utils": "flake-utils",
         "mach-nix-flake": "mach-nix-flake",
         "nixpkgs": "nixpkgs",
         "pypi-deps-db": "pypi-deps-db",
         "tahoe-lafs-dev": "tahoe-lafs-dev"
+      }
+    },
+    "rust-analyzer-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1670314574,
+        "narHash": "sha256-gkj21vqdQC6nbbk0YZRy02eLEom38gtzVNqfLc2nKLE=",
+        "owner": "rust-lang",
+        "repo": "rust-analyzer",
+        "rev": "df07c8fafa78ace4c4d2ded82d561f76a35e0ade",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rust-lang",
+        "ref": "nightly",
+        "repo": "rust-analyzer",
+        "type": "github"
       }
     },
     "tahoe-lafs-dev": {
