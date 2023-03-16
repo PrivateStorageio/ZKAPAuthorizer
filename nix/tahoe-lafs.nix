@@ -2,7 +2,7 @@
 buildPythonPackage rec {
   pname = "tahoe-lafs";
   version = tahoe-lafs-version;
-  src = tahoe-lafs.src;
+  src = tahoe-lafs-src;
 
   inherit postPatch;
 
