@@ -349,7 +349,8 @@ jobs:
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            cachix watch-exec "${CACHIX_NAME}" -- nix build \
+            source .circleci/lib.sh
+            cache_if_able nix build \
               --verbose \
               --cores 5 \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
