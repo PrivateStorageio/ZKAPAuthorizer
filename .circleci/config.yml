@@ -86,6 +86,7 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
+            py --list
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
