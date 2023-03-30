@@ -18,6 +18,10 @@
         flake-utils.follows = "flake-utils";
       };
     };
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
+      flake = false;
+    };
 
     # Sometimes it is nice to be able to test against weird versions of some
     # of our dependencies, like arbitrary git revisions or source in local
