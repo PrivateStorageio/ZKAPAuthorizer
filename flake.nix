@@ -113,7 +113,7 @@
       defaultPackageName = packageName (builtins.head packageCoordinates);
 
       inherit (import ./nix/lib.nix {
-        inherit pkgs lib mach-nix;
+        inherit pkgs lib;
         src = ./.;
       }) packageForVersion testsForVersion derivationMatrix toWheel;
 
@@ -177,10 +177,11 @@
         };
 
       apps = let
-        tahoe-env = mach-nix.mkPython {
-          python = defaultPyVersion;
-          packagesExtra = [ self.packages.${system}.default ];
-        };
+        tahoe-env = pkgs.python310.withPackages (ps: [ (packageForVersion {
+          pyVersion = "python310";
+          tahoe-lafs = builtins.head tahoeVersions;
+          challenge-bypass-ristretto = (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto");
+        }) ]);
         checks-env = mach-nix.mkPython {
           python = defaultPyVersion;
           requirements = ''

@@ -1,4 +1,4 @@
-{ pkgs, lib, mach-nix, src }:
+{ pkgs, lib, src }:
 let
   inherit (import ./sh.nix { inherit lib; }) trial;
 in
