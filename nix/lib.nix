@@ -28,7 +28,7 @@ rec {
     , tahoe-lafs
     , challenge-bypass-ristretto
     }:
-    with (pkgs.${pyVersion}.override {
+    let python = (pkgs.${pyVersion}.override {
       # super is the unmodified package set that we're about to override some
       # contents of.
       #
@@ -65,7 +65,7 @@ rec {
           postPatch = tahoe-lafs.buildArgs.postPatch or null;
         };
       };
-    }).pkgs;
+    }); in with python.pkgs;
     buildPythonPackage {
       inherit src;
       pname = "ZKAPAuthorizer";
@@ -88,6 +88,8 @@ rec {
         # Handle that case specially here.
         (challenge-bypass-ristretto pyVersion)
       ];
+
+      passthru.python = python;
     };
 
   # Create a Python environment suitable for running automated tests for the
