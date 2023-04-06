@@ -5,19 +5,6 @@
     flake-utils.url = "github:numtide/flake-utils";
     challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto;
     challenge-bypass-ristretto.inputs.nixpkgs.follows = "nixpkgs";
-    pypi-deps-db = {
-      flake = false;
-      url = "github:DavHau/pypi-deps-db";
-    };
-    mach-nix-flake = {
-      flake = true;
-      url = "github:DavHau/mach-nix";
-      inputs = {
-        pypi-deps-db.follows = "pypi-deps-db";
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
-    };
     flake-compat = {
       url = "github:edolstra/flake-compat";
       flake = false;
@@ -36,10 +23,9 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, mach-nix-flake, tahoe-lafs-dev, challenge-bypass-ristretto, ... }:
+  outputs = { self, nixpkgs, flake-utils, tahoe-lafs-dev, challenge-bypass-ristretto, ... }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
 
-      mach-nix = mach-nix-flake.lib.${system};
       pkgs = nixpkgs.legacyPackages.${system};
       lib = pkgs.lib;
 
