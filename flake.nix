@@ -186,21 +186,33 @@
           tahoe-lafs = builtins.head tahoeVersions;
           challenge-bypass-ristretto = (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto");
         }) ]);
-        checks-env = mach-nix.mkPython {
-          python = defaultPyVersion;
-          requirements = ''
-          ${builtins.readFile ./requirements/lint.in}
-          ${builtins.readFile ./requirements/typecheck.in}
+        checks-env = self.packages.${system}.default.passthru.python.withPackages (ps: with ps; [
+            isort
+            black
+            flake8
+            flake8-isort
+            flake8-black
 
+            mypy
+            mypy-zope
+
+            # the type shed...
+            types-cryptography
+            types-PyYAML
+
+	    # and the test-time dependencies if you want the test suite to
+	    # type check, too.
+            coverage
+            fixtures
+            testtools
+            testresources
+            hypothesis
+            openapi_spec_validator
+          ] ++
           # mypy requires all of the runtime dependencies in the environment
           # as well
-          ${self.packages.${system}.default.requirements}
-
-          # and the test-time dependencies if you want the test suite to type
-          # check, too.
-          ${builtins.readFile ./requirements/test.in}
-          '';
-        };
+          self.packages.${system}.default.propagatedBuildInputs
+        );
         twine-env = pkgs.python310.withPackages (ps: [ ps.twine ]);
       in {
         default = { type = "app"; program = "${tahoe-env}/bin/tahoe"; };
