@@ -192,7 +192,7 @@
             testtools
             testresources
             hypothesis
-            openapi_spec_validator
+            openapi-spec-validator
           ] ++
           # mypy requires all of the runtime dependencies in the environment
           # as well
