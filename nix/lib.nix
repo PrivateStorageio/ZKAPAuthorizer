@@ -64,6 +64,8 @@ rec {
           tahoe-lafs-src = tahoe-lafs.buildArgs.src;
           postPatch = tahoe-lafs.buildArgs.postPatch or null;
         };
+
+        flake8-isort = self.callPackage ./flake8-isort.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage {
