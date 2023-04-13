@@ -183,7 +183,6 @@
             mypy-zope
 
             # the type shed...
-            types-cryptography
             types-PyYAML
 
 	    # and the test-time dependencies if you want the test suite to
