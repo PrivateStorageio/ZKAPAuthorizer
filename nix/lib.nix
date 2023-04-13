@@ -68,6 +68,7 @@ rec {
         flake8-isort = self.callPackage ./flake8-isort.nix {};
         flake8-black = self.callPackage ./flake8-black.nix {};
         mypy-zope = self.callPackage ./mypy-zope.nix {};
+        types-PyYAML = self.callPackage ./types-pyyaml.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage {
