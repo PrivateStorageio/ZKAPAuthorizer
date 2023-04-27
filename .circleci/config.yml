@@ -79,6 +79,9 @@ jobs:
       name: "win/server-2022"
       # resource class, can be "medium", "large", "xlarge", "2xlarge"
       size: "medium"
+      # The default Windows machine image changes from time to time - which
+      # often breaks things.  Avoid that.
+      version: "2022.08.1"
 
     steps:
       # Commands are run in a Windows virtual machine environment
@@ -86,6 +89,7 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
+            py --list
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
