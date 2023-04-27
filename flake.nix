@@ -183,8 +183,8 @@
             # mypy requires all of the runtime dependencies in the environment
             # as well
             ++ pkg.propagatedBuildInputs
-	          # and the test-time dependencies if you want the test suite to
-	          # type check, too.
+            # and the test-time dependencies if you want the test suite to
+            # type check, too.
             ++ pkg.passthru.checkInputs
           );
         twine-env = pkgs.python3.withPackages (ps: [ ps.twine ]);
