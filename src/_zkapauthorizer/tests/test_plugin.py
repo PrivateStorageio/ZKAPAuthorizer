@@ -37,8 +37,8 @@ from autobahn.twisted.testing import (
     create_pumper,
 )
 from challenge_bypass_ristretto import PublicKey, SigningKey
-from eliot import ILogger
-from eliot.testing import LoggedMessage
+from eliot import MemoryLogger, ILogger
+from eliot.testing import LoggedMessage, swap_logger
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference
@@ -684,10 +684,8 @@ class ClientPluginTests(TestCase):
         num_passes=pass_counts(),
         public_key=dummy_ristretto_keys(),
     )
-    @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
         self,
-        logger: ILogger,
         get_config: GetConfig,
         now: datetime,
         announcement: ClientConfig,
@@ -699,6 +697,10 @@ class ClientPluginTests(TestCase):
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
         """
+        logger = MemoryLogger()
+        previous_logger = swap_logger(logger)
+        self.addCleanup(lambda: swap_logger(previous_logger))
+
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
@@ -765,6 +767,7 @@ class ClientPluginTests(TestCase):
                 ),
             ),
         )
+        logger.validate()
 
 
 class ClientResourceTests(TestCase):
