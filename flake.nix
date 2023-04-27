@@ -33,9 +33,6 @@
       # packages.
       pyVersions = [ "python310" "python39" ];
 
-      # The Python version of our default package.
-      defaultPyVersion = builtins.head pyVersions;
-
       # All of the versions our Tahoe-LAFS dependency for which we will expose
       # packages.
       tahoeVersions = pkgs.python3Packages.callPackage ./nix/tahoe-versions.nix {
@@ -48,6 +45,10 @@
         tahoe-lafs = tahoeVersions;
         challenge-bypass-ristretto = [ (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto") ];
       };
+
+      # To avoid being completely overwhelming, for some inputs we only
+      # support a single configuration.  Pick that configuration here.
+      defaultConfig = builtins.head packageCoordinates;
 
       # A formatter to construct the appropriate package name for a certain
       # configuration.
@@ -100,7 +101,7 @@
       # [ Coordinate ] -> { name = derivation; }
       testMatrix = derivationMatrix testName testsForVersion;
 
-      defaultPackageName = packageName (builtins.head packageCoordinates);
+      defaultPackageName = packageName defaultConfig;
 
       inherit (import ./nix/lib.nix {
         inherit pkgs lib;
@@ -121,7 +122,7 @@
           # TODO: Automatically unpack them and provide them as source
           # directories instead.
           SQLITE_SRC = "${pkgs.sqlite.src}";
-          PYTHON_SRC = "${pkgs.${defaultPyVersion}.src}";
+          PYTHON_SRC = "${pkgs.${defaultConfig.pyVersion}.src}";
 
           # Make pudb the default.  We make sure it is installed below.
           PYTHONBREAKPOINT = "pudb.set_trace";
@@ -129,7 +130,7 @@
           buildInputs = [
             # Put a Python environment that has all of the development, test,
             # and runtime dependencies in it - but not the package itself.
-            (pkgs.${defaultPyVersion}.withPackages (
+            (pkgs.${defaultConfig.pyVersion}.withPackages (
               ps: with ps;
                 [ pudb ]
                 ++ self.packages.${system}.default.passthru.lintInputs
@@ -164,11 +165,9 @@
         };
 
       apps = let
-        tahoe-env = pkgs.python310.withPackages (ps: [ (packageForVersion {
-          pyVersion = "python310";
-          tahoe-lafs = builtins.head tahoeVersions;
-          challenge-bypass-ristretto = (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto");
-        }) ]);
+        tahoe-env =
+          let pkg = self.packages.${system}.default;
+          in pkg.passthru.python.withPackages (ps: [ pkg ]);
 
         checks-env =
           let pkg = self.packages.${system}.default;
