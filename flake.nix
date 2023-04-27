@@ -132,6 +132,7 @@
             (pkgs.${defaultPyVersion}.withPackages (
               ps: with ps;
                 [ pudb ]
+                ++ self.packages.${system}.default.passthru.lintInputs
                 ++ self.packages.${system}.default.passthru.checkInputs
                 ++ self.packages.${system}.default.propagatedBuildInputs
             ))
