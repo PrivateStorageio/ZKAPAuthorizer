@@ -127,18 +127,17 @@
           PYTHONBREAKPOINT = "pudb.set_trace";
 
           buildInputs = [
-          #   # Put a Python environment that has all of the development, test,
-          #   # and runtime dependencies in it - but not the package itself.
-          #   (mach-nix.mkPython {
-          #     python = defaultPyVersion;
-          #     requirements = ''
-          #       pudb
-          #       ${builtins.readFile ./requirements/test.in}
+            # Put a Python environment that has all of the development, test,
+            # and runtime dependencies in it - but not the package itself.
+            (pkgs.${defaultPyVersion}.withPackages (
+              ps: with ps;
+                [ pudb ]
+                ++ self.packages.${system}.default.passthru.checkInputs
+                ++ self.packages.${system}.default.propagatedBuildInputs
           #       ${builtins.readFile ./requirements/lint.in}
           #       ${builtins.readFile ./requirements/typecheck.in}
-          #       ${self.packages.${system}.default.requirements}
           #     '';
-          #   })
+            ))
 
             # Give us gdb in case we need to debug CPython or an extension.
             pkgs.gdb

@@ -71,7 +71,7 @@ rec {
         types-PyYAML = self.callPackage ./types-pyyaml.nix {};
       };
     }); in with python.pkgs;
-    buildPythonPackage {
+    buildPythonPackage rec {
       inherit src;
       pname = "ZKAPAuthorizer";
       # Don't forget to bump the version number in
@@ -112,7 +112,10 @@ rec {
         (challenge-bypass-ristretto pyVersion)
       ];
 
-      passthru.python = python;
+      passthru = {
+        python = python;
+        inherit checkInputs;
+      };
     };
 
   # Create a Python environment suitable for running automated tests for the
