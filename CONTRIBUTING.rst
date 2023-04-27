@@ -28,14 +28,25 @@ Updating Dependencies
 Python Dependencies
 ...................
 
-We use `mach-nix <https://github.com/DavHau/mach-nix/>`_ to build python packages.
-It uses a snapshot of PyPI to expose python dependencies to nix,
+We use Nix to build python packages.
+We take a snapshot of our Python dependencies from nixpkgs,
 thus our python depedencies (on nix) are automatically pinned.
-To update the PyPI snapshot (and thus our python dependencies), run
+To do a minor nixpkgs update (and thus a python dependency update),
+run
 
 .. code:: shell
 
-   nix flake lock --update-input pypi-deps-db
+   nix flake lock --update-input nixpkgs
+
+To do a major nixpkgs update (and thus a python dependency update),
+edit ``flake.nix`` and change this line::
+
+.. code:: nix
+
+    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.11";
+
+Change the ``ref`` query argument to a suitable value.
+Then run the minor update command above.
 
 tahoe-lafs
 ..........
