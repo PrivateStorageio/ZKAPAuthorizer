@@ -99,10 +99,10 @@ rec {
         find $out -name dropin.cache -delete
       '';
 
-      checkPhase = ''
-        python -m twisted.trial -j$NIX_BUILD_CORES _zkapauthorizer
-      '';
+      # We'll put the test suite somewhere else.
+      doInstallCheck = false;
 
+      # This is a quick and easy check, though.
       pythonImportsCheck = [ "_zkapauthorizer" ];
 
       propagatedBuildInputs = [
@@ -148,16 +148,16 @@ rec {
     , challenge-bypass-ristretto
     , requirementsExtra  # string, eg "pudb\n"
     }:
-    pkgs.${pyVersion}.withPackages (ps: with ps; [
-      (packageForVersion { inherit pyVersion tahoe-lafs challenge-bypass-ristretto; } )
-      coverage
-      fixtures
-      testtools
-      testresources
-      hypothesis
-      openapi-spec-validator
-   ]);
-#    ${requirementsExtra}
+    let
+      pkg = packageForVersion {
+        inherit pyVersion tahoe-lafs challenge-bypass-ristretto;
+      };
+    in
+      pkgs.${pyVersion}.withPackages (
+        ps: with ps;
+          [ pkg ]
+          ++ pkg.passthru.checkInputs
+      );
 
   runTests =
     { testEnv
