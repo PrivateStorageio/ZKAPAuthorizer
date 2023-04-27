@@ -91,6 +91,14 @@ rec {
         openapi-spec-validator
       ];
 
+      postFixup = ''
+        # Our dropin.cache conflicts with any other package's dropin.cache.
+        # It's not clear that there's a way to resolve this in a nix-based
+        # Python environment ... The correct thing to do is merge them but I
+        # don't think that's an option.  So throw ours away.
+        find $out -name dropin.cache -delete
+      '';
+
       checkPhase = ''
         python -m twisted.trial -j$NIX_BUILD_CORES _zkapauthorizer
       '';
