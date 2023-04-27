@@ -37,7 +37,7 @@ from autobahn.twisted.testing import (
     create_pumper,
 )
 from challenge_bypass_ristretto import PublicKey, SigningKey
-from eliot import MemoryLogger, ILogger
+from eliot import MemoryLogger
 from eliot.testing import LoggedMessage, swap_logger
 from fixtures import TempDir
 from foolscap.broker import Broker
@@ -99,7 +99,7 @@ from .._storage_client import IncorrectStorageServerReference
 from .._types import ClientConfig, ServerConfig
 from ..config import CONFIG_DB_NAME, Config
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
-from ..eliot import GET_PASSES, capture_logging
+from ..eliot import GET_PASSES
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig, _FuzzyTimerService
 from ..model import (
