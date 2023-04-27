@@ -79,6 +79,24 @@ rec {
       version = "2022.8.21";
       format = "setuptools";
 
+      # Should this be nativeCheckInputs?  It might matter for
+      # cross-compilation.  It's not clear cross-compilation works for Python
+      # packages anyway, and no one has asked for it yet so ...
+      checkInputs = [
+        coverage
+        fixtures
+        testtools
+        testresources
+        hypothesis
+        openapi-spec-validator
+      ];
+
+      checkPhase = ''
+        python -m twisted.trial -j$NIX_BUILD_CORES _zkapauthorizer
+      '';
+
+      pythonImportsCheck = [ "_zkapauthorizer" ];
+
       propagatedBuildInputs = [
         prometheus-client
         colorama
