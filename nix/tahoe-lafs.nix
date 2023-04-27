@@ -1,10 +1,13 @@
-{ pythonPackages, buildPythonPackage, tahoe-lafs-version, tahoe-lafs-src, postPatch }:
-buildPythonPackage rec {
+{ lib, pythonPackages, buildPythonPackage, tahoe-lafs-version, tahoe-lafs-src, postPatch }:
+buildPythonPackage {
   pname = "tahoe-lafs";
   version = tahoe-lafs-version;
   src = tahoe-lafs-src;
 
-  inherit postPatch;
+  postPatch = ''
+    ${if postPatch == null then "" else postPatch}
+    sed -i -e "s/autobahn < 22.4.1/autobahn/" setup.py
+  '';
 
   dontUseSetuptoolsCheck = true;
   propagatedBuildInputs = with pythonPackages; [
