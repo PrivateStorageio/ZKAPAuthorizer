@@ -115,6 +115,18 @@ rec {
       passthru = {
         python = python;
         inherit checkInputs;
+        lintInputs = [
+          isort
+          black
+          flake8
+          flake8-isort
+          flake8-black
+
+          # Let's call the type checker a kind of linter...
+          mypy
+          mypy-zope
+          types-PyYAML
+        ];
       };
     };
 

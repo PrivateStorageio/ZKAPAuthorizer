@@ -171,33 +171,26 @@
           tahoe-lafs = builtins.head tahoeVersions;
           challenge-bypass-ristretto = (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto");
         }) ]);
-        checks-env = self.packages.${system}.default.passthru.python.withPackages (ps: with ps; [
-            isort
-            black
-            flake8
-            flake8-isort
-            flake8-black
 
-            mypy
-            mypy-zope
+        checks-env =
+          let pkg = self.packages.${system}.default;
+          in pkg.passthru.python.withPackages (ps:
+            # Put some dependencies useful for different kinds of static
+            # checks into the environment.  We ignore `ps` here and take
+            # packages from `pkg` instead.  We got `python` from `pkg` too so
+            # we know these packages are compatible with the package set we're
+            # constructing.
 
-            # the type shed...
-            types-PyYAML
-
-	    # and the test-time dependencies if you want the test suite to
-	    # type check, too.
-            coverage
-            fixtures
-            testtools
-            testresources
-            hypothesis
-            openapi-spec-validator
-          ] ++
-          # mypy requires all of the runtime dependencies in the environment
-          # as well
-          self.packages.${system}.default.propagatedBuildInputs
-        );
-        twine-env = pkgs.python310.withPackages (ps: [ ps.twine ]);
+            # Start with the various linting tools, including mypy.
+            pkg.passthru.lintInputs
+            # mypy requires all of the runtime dependencies in the environment
+            # as well
+            ++ pkg.propagatedBuildInputs
+	          # and the test-time dependencies if you want the test suite to
+	          # type check, too.
+            ++ pkg.passthru.checkInputs
+          );
+        twine-env = pkgs.python3.withPackages (ps: [ ps.twine ]);
       in {
         default = { type = "app"; program = "${tahoe-env}/bin/tahoe"; };
         twine = { type = "app"; program = "${twine-env}/bin/twine"; };
