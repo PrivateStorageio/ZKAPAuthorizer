@@ -222,3 +222,53 @@ class PriceCalculatorTests(TestCase):
             price,
             Equals(1),
         )
+
+    @given(
+        integers(min_value=2),
+        integers(max_value=254),
+    )
+    def test_minimum_spending(self, needed: int, extra_shares: int) -> None:
+        """
+        The minimum amount of spending must be at least the number
+        of 'required' shares
+        """
+
+        # "total" shares is encoded this way to give hypothesis a
+        # break: we know "total" must be >= "needed" so we just add
+        # some extra shares (possibly 0). ZFEC can only do up to 256.
+        calculator = PriceCalculator(
+            pass_value=1000,
+            shares_needed=needed,
+            shares_total=needed + extra_shares,
+        )
+        price = calculator.calculate([1000])
+        self.assertThat(
+            price,
+            greater_or_equal(needed)
+        )
+
+    def test_simple(self):
+        """
+        An easy-to-inspect specific example we worked with when
+        discovering bug 455
+        """
+
+        calculator = PriceCalculator(
+            pass_value=1000000, # one mega-byte
+            shares_needed=3,
+            shares_total=5,
+        )
+
+        # we store 1 megabyte -- but there's 5 shares so we must spend
+        # 1 ZKAP at each server
+        self.assertThat(
+            calculator.calculate([1000000]),
+            Equals(5)
+        )
+
+        # we store _just_ enough to be more than the pass-value -- but
+        # still 5 servers, so now we spend 2 at each one
+        self.assertThat(
+            calculator.calculate([1000000 * 3 + 1]),
+            Equals(10)
+        )
