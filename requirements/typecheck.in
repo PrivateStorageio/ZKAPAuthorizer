@@ -1,6 +1,0 @@
-mypy == 0.971
-mypy-zope == 0.3.9
-
-# the type shed...
-types-cryptography == 3.3.21
-types-PyYAML == 6.0.7
