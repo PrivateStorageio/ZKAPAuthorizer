@@ -134,9 +134,6 @@
                 [ pudb ]
                 ++ self.packages.${system}.default.passthru.checkInputs
                 ++ self.packages.${system}.default.propagatedBuildInputs
-          #       ${builtins.readFile ./requirements/lint.in}
-          #       ${builtins.readFile ./requirements/typecheck.in}
-          #     '';
             ))
 
             # Give us gdb in case we need to debug CPython or an extension.
