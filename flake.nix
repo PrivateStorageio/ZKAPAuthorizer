@@ -182,9 +182,11 @@
 
             # Start with the various linting tools, including mypy.
             pkg.passthru.lintInputs
+
             # mypy requires all of the runtime dependencies in the environment
             # as well
             ++ pkg.propagatedBuildInputs
+
             # and the test-time dependencies if you want the test suite to
             # type check, too.
             ++ pkg.passthru.checkInputs
