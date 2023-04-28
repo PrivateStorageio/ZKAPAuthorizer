@@ -27,7 +27,7 @@ from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 from ..pricecalculator import PriceCalculator
 from ..storage_common import required_passes
 from .matchers import greater_or_equal
-from .strategies import encoding_parameters, sizes
+from .strategies import encoding_parameters, sizes, EncodingParameters
 
 file_sizes = lists(sizes(), min_size=1)
 
@@ -225,24 +225,18 @@ class PriceCalculatorTests(TestCase):
         )
 
     @given(
-        integers(min_value=2, max_value=255),
-        integers(min_value=0, max_value=254),
+        encoding_parameters()
     )
-    def test_minimum_spending(self, needed: int, extra_shares: int) -> None:
+    def test_minimum_spending(self, params: EncodingParameters) -> None:
         """
         The minimum amount of spending must be at least the number
         of 'required' shares
         """
-        # ZFEC only allows up to 256 total shares
-        assume(needed + extra_shares < 256)
-
-        # "total" shares is encoded this way to give hypothesis a
-        # break: we know "total" must be >= "needed" so we just add
-        # some extra shares (possibly 0).
+        needed, _, total = params
         calculator = PriceCalculator(
             pass_value=1000,
             shares_needed=needed,
-            shares_total=needed + extra_shares,
+            shares_total=total,
         )
         price = calculator.calculate([1000])
         self.assertThat(price, greater_or_equal(needed))
