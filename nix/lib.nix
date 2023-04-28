@@ -41,12 +41,6 @@ rec {
           doInstallCheck = false;
         });
         pycddl = self.callPackage ./pycddl.nix {};
-        twisted = self.callPackage ./twisted.nix {
-          # Our twisted.nix is defined in terms of twisted so we cannot let
-          # self.callPackage pass twisted.  Override that by explicitly
-          # passing twisted from super here, instead.
-          inherit (super) twisted;
-        };
 
         # The foolscap test suite has one failing test when run against the
         # new version of Twisted, so disable the test suite for now.
