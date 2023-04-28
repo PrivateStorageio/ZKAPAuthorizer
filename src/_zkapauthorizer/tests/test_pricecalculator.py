@@ -19,7 +19,7 @@ Tests for ``_zkapauthorizer.pricecalculator``.
 
 from functools import partial
 
-from hypothesis import given
+from hypothesis import given, assume
 from hypothesis.strategies import integers, lists, tuples
 from testtools import TestCase
 from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
@@ -224,18 +224,20 @@ class PriceCalculatorTests(TestCase):
         )
 
     @given(
-        integers(min_value=2),
-        integers(max_value=254),
+        integers(min_value=2, max_value=255),
+        integers(min_value=0, max_value=254),
     )
     def test_minimum_spending(self, needed: int, extra_shares: int) -> None:
         """
         The minimum amount of spending must be at least the number
         of 'required' shares
         """
+        # ZFEC only allows up to 256 total shares
+        assume(needed + extra_shares < 256)
 
         # "total" shares is encoded this way to give hypothesis a
         # break: we know "total" must be >= "needed" so we just add
-        # some extra shares (possibly 0). ZFEC can only do up to 256.
+        # some extra shares (possibly 0).
         calculator = PriceCalculator(
             pass_value=1000,
             shares_needed=needed,
