@@ -25,6 +25,7 @@ from testtools import TestCase
 from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 
 from ..pricecalculator import PriceCalculator
+from ..storage_common import required_passes
 from .matchers import greater_or_equal
 from .strategies import encoding_parameters, sizes
 
@@ -247,6 +248,28 @@ class PriceCalculatorTests(TestCase):
         self.assertThat(
             price,
             greater_or_equal(needed)
+        )
+
+    @given(
+        integers(min_value=1, max_value=100).flatmap(
+            lambda n_shares: lists(sizes(), min_size=n_shares, max_size=n_shares)
+        ),
+        integers(min_value=1),
+    )
+    def test_shuffled_shares(self, share_sizes: int, bytes_per_pass: int) -> None:
+        """
+        When computing how much a set of shares will cost, it
+        doesn't matter how we order them (the result should be the
+        same).
+        """
+        self.assertThat(
+            required_passes(bytes_per_pass, share_sizes),
+            Equals(
+                sum(
+                    required_passes(bytes_per_pass, [size])
+                    for size in share_sizes
+                )
+            )
         )
 
     def test_simple(self):
