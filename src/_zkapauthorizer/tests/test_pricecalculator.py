@@ -27,7 +27,7 @@ from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 from ..pricecalculator import PriceCalculator
 from ..storage_common import required_passes
 from .matchers import greater_or_equal
-from .strategies import EncodingParameters, encoding_parameters, sizes
+from .strategies import encoding_parameters, sizes
 
 file_sizes = lists(sizes(), min_size=1)
 
@@ -225,7 +225,7 @@ class PriceCalculatorTests(TestCase):
         )
 
     @given(encoding_parameters())
-    def test_minimum_spending(self, params: EncodingParameters) -> None:
+    def test_minimum_spending(self, params: tuple[int, int, int]) -> None:
         """
         The minimum amount of spending must be at least the number
         of 'required' shares
