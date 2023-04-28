@@ -253,7 +253,7 @@ class PriceCalculatorTests(TestCase):
         ),
         integers(min_value=1),
     )
-    def test_shuffled_shares(self, share_sizes: int, bytes_per_pass: int) -> None:
+    def test_shuffled_shares(self, share_sizes: list[int], bytes_per_pass: int) -> None:
         """
         When computing how much a set of shares will cost, it
         doesn't matter how we order them (the result should be the
@@ -266,7 +266,7 @@ class PriceCalculatorTests(TestCase):
             ),
         )
 
-    def test_simple(self):
+    def test_simple(self) -> None:
         """
         An easy-to-inspect specific example we worked with when
         discovering bug 455
