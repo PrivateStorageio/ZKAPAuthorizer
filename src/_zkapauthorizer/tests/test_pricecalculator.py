@@ -248,9 +248,7 @@ class PriceCalculatorTests(TestCase):
         self.assertThat(price, greater_or_equal(needed))
 
     @given(
-        integers(min_value=1, max_value=100).flatmap(
-            lambda n_shares: lists(sizes(), min_size=n_shares, max_size=n_shares)
-        ),
+        lists(sizes(), min_size=1, max_size=100),
         integers(min_value=1),
     )
     def test_shuffled_shares(self, share_sizes: list[int], bytes_per_pass: int) -> None:
