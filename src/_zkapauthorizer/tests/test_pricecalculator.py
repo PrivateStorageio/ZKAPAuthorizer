@@ -245,10 +245,7 @@ class PriceCalculatorTests(TestCase):
             shares_total=needed + extra_shares,
         )
         price = calculator.calculate([1000])
-        self.assertThat(
-            price,
-            greater_or_equal(needed)
-        )
+        self.assertThat(price, greater_or_equal(needed))
 
     @given(
         integers(min_value=1, max_value=100).flatmap(
@@ -265,11 +262,8 @@ class PriceCalculatorTests(TestCase):
         self.assertThat(
             required_passes(bytes_per_pass, share_sizes),
             Equals(
-                sum(
-                    required_passes(bytes_per_pass, [size])
-                    for size in share_sizes
-                )
-            )
+                sum(required_passes(bytes_per_pass, [size]) for size in share_sizes)
+            ),
         )
 
     def test_simple(self):
@@ -279,21 +273,15 @@ class PriceCalculatorTests(TestCase):
         """
 
         calculator = PriceCalculator(
-            pass_value=1000000, # one mega-byte
+            pass_value=1000000,  # one mega-byte
             shares_needed=3,
             shares_total=5,
         )
 
         # we store 1 megabyte -- but there's 5 shares so we must spend
         # 1 ZKAP at each server
-        self.assertThat(
-            calculator.calculate([1000000]),
-            Equals(5)
-        )
+        self.assertThat(calculator.calculate([1000000]), Equals(5))
 
         # we store _just_ enough to be more than the pass-value -- but
         # still 5 servers, so now we spend 2 at each one
-        self.assertThat(
-            calculator.calculate([1000000 * 3 + 1]),
-            Equals(10)
-        )
+        self.assertThat(calculator.calculate([1000000 * 3 + 1]), Equals(10))
