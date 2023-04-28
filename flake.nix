@@ -53,6 +53,8 @@
       # A formatter to construct the appropriate package name for a certain
       # configuration.
       packageName = { pyVersion, tahoe-lafs, challenge-bypass-ristretto }:
+        # We only support one version of challenge so we don't bother burning
+        # its version into the name.
         "zkapauthorizer-${pyVersion}-tahoe_${tahoe-lafs.version}";
 
       # Construct a matrix of package-building derivations.
