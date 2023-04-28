@@ -19,7 +19,7 @@ Tests for ``_zkapauthorizer.pricecalculator``.
 
 from functools import partial
 
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis.strategies import integers, lists, tuples
 from testtools import TestCase
 from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
