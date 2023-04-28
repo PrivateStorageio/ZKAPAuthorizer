@@ -103,7 +103,10 @@ rec {
       doInstallCheck = false;
 
       # This is a quick and easy check, though.
-      pythonImportsCheck = [ "_zkapauthorizer" ];
+      pythonImportsCheck = [
+        "_zkapauthorizer"
+        "twisted.plugins.zkapauthorizer"
+      ];
 
       propagatedBuildInputs = [
         prometheus-client
