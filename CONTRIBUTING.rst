@@ -48,6 +48,9 @@ edit ``flake.nix`` and change this line::
 Change the ``ref`` query argument to a suitable value.
 Then run the minor update command above.
 
+For dependencies or versions of dependencies that are required but not available from nixpkgs,
+we maintain our own packages in the ``nix/`` directory.
+
 tahoe-lafs
 ..........
 
