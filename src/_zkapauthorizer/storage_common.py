@@ -158,12 +158,15 @@ def required_passes(
                 share_sizes,
             ),
         )
-    result, b = divmod(sum(share_sizes, 0), bytes_per_pass)
-    if b > 0:
-        result += 1
+    zkaps = 0
+    for x in share_sizes:
+        result, b = divmod(x, bytes_per_pass)
+        if b > 0:
+            result += 1
+        zkaps += result
 
-    # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, result))
-    return result
+    # print("required_passes({}, {}) == {}".format(bytes_per_pass, share_sizes, zkaps))
+    return zkaps
 
 
 Secrets = tuple[bytes, bytes, bytes]
