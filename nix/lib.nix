@@ -63,6 +63,12 @@ rec {
         flake8-black = self.callPackage ./flake8-black.nix {};
         mypy-zope = self.callPackage ./mypy-zope.nix {};
         types-PyYAML = self.callPackage ./types-pyyaml.nix {};
+
+        # Hypothesis 6.54-ish has a bug that causes our test suite to fail.
+        # Get a newer one.
+        hypothesis = self.callPackage ./hypothesis.nix {
+          inherit (super) hypothesis;
+        };
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
