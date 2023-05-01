@@ -378,7 +378,9 @@ class LeaseMaintenanceServiceTests(TestCase):
         )
 
     @given(
-        randoms(),
+        # We don't necessarily want to use_true_random but this works around
+        # https://github.com/HypothesisWorks/hypothesis/issues/3630
+        randoms(use_true_random=True),
         clocks(),
     )
     def test_nodes_visited(self, random: Random, clock: Clock) -> None:
