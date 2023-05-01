@@ -53,6 +53,25 @@ rec {
         compose = self.callPackage ./compose.nix {};
         tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
 
+        # Disable some expensive dependencies that we don't care about.
+        black = (super.black.override {
+          aiohttp = null;
+          # ipython = null;
+          colorama = null;
+          uvloop = null;
+          # tokenize-rt = null;
+        }).overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
+        tqdm = super.tqdm.overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
+        isort = super.isort.overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
         tahoe-lafs-package = self.callPackage ./tahoe-lafs.nix {
           tahoe-lafs-version = tahoe-lafs.buildArgs.version;
           tahoe-lafs-src = tahoe-lafs.buildArgs.src;
