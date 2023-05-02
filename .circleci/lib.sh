@@ -32,22 +32,21 @@ function is_cache_writeable() {
 }
 
 function is_cache_required() {
-    # If we're building in tahoe-lafs/tahoe-lafs then we must use the cache.
+    # If we're building in the upstream repository then we must use the cache.
     # If we're building anything from a fork then we're allowed to not have
     # the credentials.
     is_upstream
 }
 
-# Return success if the origin of this build is the tahoe-lafs/tahoe-lafs
-# repository itself (and so we expect to have cache credentials available),
-# failure otherwise.
+# Return success if the origin of this build is the upstream repository itself
+# (and so we expect to have cache credentials available), failure otherwise.
 #
 # See circleci.txt for notes about how this determination is made.
 function is_upstream() {
     # CIRCLE_PROJECT_USERNAME is set to the org the build is happening for.
     # If a PR targets a fork of the repo then this is set to something other
-    # than "tahoe-lafs".
-    [ "$CIRCLE_PROJECT_USERNAME" == "tahoe-lafs" ] &&
+    # than the upstream org (PrivateStorageio in our case).
+    [ "$CIRCLE_PROJECT_USERNAME" == "PrivateStorageio" ] &&
 
 	# CIRCLE_BRANCH is set to the real branch name for in-repo PRs and
 	# "pull/NNNN" for pull requests from forks.
