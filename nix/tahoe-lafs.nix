@@ -4,10 +4,13 @@ buildPythonPackage {
   version = tahoe-lafs-version;
   src = tahoe-lafs-src;
 
-  postPatch = ''
-    ${if postPatch == null then "" else postPatch}
-    sed -i -e "s/autobahn < 22.4.1/autobahn/" setup.py
-  '';
+  postPatch =
+    if postPatch == null then "" else postPatch +
+    # This < is really trying to be a !=.  We provide a new-enough Autobahn
+    # that it actually works, so remove the constraint from the Python metadata.
+    ''
+      sed -i -e "s/autobahn < 22.4.1/autobahn/" setup.py
+    '';
 
   dontUseSetuptoolsCheck = true;
   propagatedBuildInputs = with pythonPackages; [
