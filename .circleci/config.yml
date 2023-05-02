@@ -381,7 +381,7 @@ jobs:
       - run:
           name: "Check Black"
           command: |
-            nix run .#black -- --check --diff src
+            nix run -v .#black -- --check --diff src
 
       - run:
           name: "Check isort"
