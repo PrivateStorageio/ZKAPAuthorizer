@@ -30,7 +30,7 @@ aliases:
 
   - nix_docker: &NIX_DOCKER
       # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.2"
+      - image: "nixos/nix:2.15.0"
 
   - nix_environ: &NIX_ENVIRON
       # Let us use features marked "experimental".  For example, most/all of
