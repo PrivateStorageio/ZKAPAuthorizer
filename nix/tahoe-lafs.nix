@@ -5,7 +5,7 @@ buildPythonPackage {
   src = tahoe-lafs-src;
 
   postPatch =
-    if postPatch == null then "" else postPatch +
+    (if postPatch == null then "" else postPatch) +
     # This < is really trying to be a !=.  We provide a new-enough Autobahn
     # that it actually works, so remove the constraint from the Python metadata.
     ''
