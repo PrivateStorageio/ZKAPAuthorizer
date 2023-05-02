@@ -381,22 +381,26 @@ jobs:
       - run:
           name: "Check Black"
           command: |
-            nix run -v .#black -- --check --diff src
+            source .circleci/lib.sh
+            cache_if_able nix run -v .#black -- --check --diff src
 
       - run:
           name: "Check isort"
           command: |
-            nix run .#isort -- --check --diff src
+            source .circleci/lib.sh
+            cache_if_able nix run .#isort -- --check --diff src
 
       - run:
           name: "Check flake8"
           command: |
-            nix run .#flake8 -- src
+            source .circleci/lib.sh
+            cache_if_able nix run .#flake8 -- src
 
       - run:
           name: "Run Type Checks"
           command: |
-            nix run .#mypy -- src
+            source .circleci/lib.sh
+            cache_if_able nix run .#mypy -- src
 
 
   # A job that merges all of the coverage data and generates a report.
