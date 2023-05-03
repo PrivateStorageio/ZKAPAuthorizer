@@ -1,4 +1,4 @@
-{ pkgs, lib, mach-nix, src }:
+{ pkgs, lib, src }:
 let
   inherit (import ./sh.nix { inherit lib; }) trial;
 in
@@ -26,20 +26,139 @@ rec {
   packageForVersion =
     { pyVersion
     , tahoe-lafs
+    , challenge-bypass-ristretto
     }:
-    let
-      tahoe-lafs-package = mach-nix.buildPythonPackage (
-        tahoe-lafs.buildArgs // { python = pyVersion; }
-      );
-    in
-      mach-nix.buildPythonPackage {
-        python = pyVersion;
-        providers.tahoe-lafs = "nixpkgs";
-        overridesPre = [(self: super: {
-          tahoe-lafs = tahoe-lafs-package;
-        })];
-        inherit src;
+    let python = (pkgs.${pyVersion}.override {
+      # super is the unmodified package set that we're about to override some
+      # contents of.
+      #
+      # self is the fixed point of the package set - the result of applying
+      # our override recursively to the package set until the return value is
+      # the same as the input.
+      packageOverrides = self: super: {
+        klein = super.klein.overrideAttrs (old: {
+          # The klein test suite is a little broken so ... don't run it.
+          doInstallCheck = false;
+        });
+        pycddl = self.callPackage ./pycddl.nix {};
+
+        # The foolscap test suite has one failing test when run against the
+        # new version of Twisted, so disable the test suite for now.
+        foolscap = super.foolscap.overrideAttrs (old: {
+          doInstallCheck = false;
+          # XXX Maybe we could just disable the one failing test,
+          # Versus.testVersusHTTPServerAuthenticated
+        });
+
+        compose = self.callPackage ./compose.nix {};
+        tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
+
+        # Disable some expensive dependencies that we don't care about.
+        black = (super.black.override {
+          aiohttp = null;
+          # ipython = null;
+          colorama = null;
+          uvloop = null;
+          # tokenize-rt = null;
+        }).overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
+        tqdm = super.tqdm.overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
+        isort = super.isort.overrideAttrs (old: {
+          doInstallCheck = false;
+        });
+
+        tahoe-lafs-package = self.callPackage ./tahoe-lafs.nix {
+          tahoe-lafs-version = tahoe-lafs.buildArgs.version;
+          tahoe-lafs-src = tahoe-lafs.buildArgs.src;
+          postPatch = tahoe-lafs.buildArgs.postPatch or null;
+        };
+
+        flake8-isort = self.callPackage ./flake8-isort.nix {};
+        flake8-black = self.callPackage ./flake8-black.nix {};
+        mypy-zope = self.callPackage ./mypy-zope.nix {};
+        types-PyYAML = self.callPackage ./types-pyyaml.nix {};
+
+        # Hypothesis 6.54-ish has a bug that causes our test suite to fail.
+        # Get a newer one.
+        hypothesis = self.callPackage ./hypothesis.nix {
+          inherit (super) hypothesis;
+        };
       };
+    }); in with python.pkgs;
+    buildPythonPackage rec {
+      inherit src;
+      pname = "ZKAPAuthorizer";
+      # Don't forget to bump the version number in
+      # src/_zkapauthorizer/__init__.py too.
+      version = "2022.8.21";
+      format = "setuptools";
+
+      # Should this be nativeCheckInputs?  It might matter for
+      # cross-compilation.  It's not clear cross-compilation works for Python
+      # packages anyway, and no one has asked for it yet so ...
+      checkInputs = [
+        coverage
+        fixtures
+        testtools
+        testresources
+        hypothesis
+        openapi-spec-validator
+      ];
+
+      postFixup = ''
+        # Our dropin.cache conflicts with any other package's dropin.cache.
+        # It's not clear that there's a way to resolve this in a nix-based
+        # Python environment ... The correct thing to do is merge them but I
+        # don't think that's an option.  So throw ours away.
+        find $out -name dropin.cache -delete
+      '';
+
+      # We'll put the test suite somewhere else.
+      doInstallCheck = false;
+
+      # This is a quick and easy check, though.
+      pythonImportsCheck = [
+        "_zkapauthorizer"
+        "twisted.plugins.zkapauthorizer"
+      ];
+
+      propagatedBuildInputs = [
+        prometheus-client
+        colorama
+        tahoe-lafs-package
+        compose
+        tahoe-capabilities
+        sqlparse
+        autobahn
+        # It would be nice if we got challenge-bypass-ristretto as
+        # something we could `callPackage` but instead we just get a
+        # derivation from the python-challenge-bypass-ristretto flake.
+        # Handle that case specially here.
+        (challenge-bypass-ristretto pyVersion)
+      ];
+
+      passthru = {
+        python = python;
+        inherit checkInputs;
+        lintInputs = [
+          isort
+          black
+          flake8
+          flake8-isort
+          flake8-black
+
+          # Let's call the type checker a kind of linter...
+          mypy
+          mypy-zope
+          types-PyYAML
+        ];
+      };
+    };
 
   # Create a Python environment suitable for running automated tests for the
   # project.
@@ -48,15 +167,19 @@ rec {
   pythonTestingEnv =
     { pyVersion          # string, eg "python39"
     , tahoe-lafs
+    , challenge-bypass-ristretto
     , requirementsExtra  # string, eg "pudb\n"
-    }: mach-nix.mkPython {
-    python = pyVersion;
-    requirements = ''
-    ${requirementsExtra}
-    ${builtins.readFile "${src}/requirements/test.in"}
-    '';
-    packagesExtra = [ (packageForVersion { inherit pyVersion tahoe-lafs; } ) ];
-  };
+    }:
+    let
+      pkg = packageForVersion {
+        inherit pyVersion tahoe-lafs challenge-bypass-ristretto;
+      };
+    in
+      pkgs.${pyVersion}.withPackages (
+        ps: with ps;
+          [ pkg ]
+          ++ pkg.passthru.checkInputs
+      );
 
   runTests =
     { testEnv
@@ -80,6 +203,7 @@ rec {
   testsForVersion =
     { pyVersion
     , tahoe-lafs
+    , challenge-bypass-ristretto
     , hypothesisProfile ? null
     , collectCoverage ? false
     , moreArgs ? [ "--rterrors" "--jobs=$NIX_BUILD_CORES" "--force-gc" ]
@@ -87,7 +211,7 @@ rec {
     }:
     let
       testEnv = pythonTestingEnv {
-        inherit pyVersion tahoe-lafs;
+        inherit pyVersion tahoe-lafs challenge-bypass-ristretto;
         requirementsExtra = lib.optionalString collectCoverage "coverage_enable_subprocess";
       };
       runTestsCommand = runTests {

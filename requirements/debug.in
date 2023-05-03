@@ -1,6 +1,0 @@
-# An object and memory inspector which can be helpful in understanding
-# object/reference/cycle leaks.
-pympler
-
-# A debugger that's a fair bit better than pdb.
-pudb
