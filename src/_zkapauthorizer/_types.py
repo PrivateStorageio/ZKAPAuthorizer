@@ -61,6 +61,7 @@ ServerConfig = TypedDict(
     total=False,
 )
 
+
 class NonRedeemerConfig(TypedDict):
     """
     ``[storageserver.plugins.privatestorageio-zkapauthz-v2]`` contents in
@@ -69,6 +70,7 @@ class NonRedeemerConfig(TypedDict):
     In this configuration vouchers are accepted for redemption but no
     redemption attempt will ever complete.
     """
+
     redeemer: Literal["non"]
 
 
@@ -99,6 +101,7 @@ class DoubleSpendRedeemerConfig(TypedDict):
     In this configuration vouchers are accepted for redemption but all
     redemption attempts fail with an "already redeemed" error.
     """
+
     redeemer: Literal["double-spend"]
 
 
@@ -110,6 +113,7 @@ class UnpaidRedeemerConfig(TypedDict):
     In this configuration vouchers are accepted for redemption but all
     redemption attempts fail with an "unpaid voucher" error.
     """
+
     redeemer: Literal["unpaid"]
 
 
@@ -122,6 +126,7 @@ class ErrorRedeemerConfig(TypedDict):
     redemption attempts fail with an unstructured error with the associated
     details.
     """
+
     redeemer: Literal["error"]
     details: str
 

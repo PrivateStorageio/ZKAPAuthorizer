@@ -322,6 +322,7 @@ class TahoeStorage(TahoeNode):
         wait_for_path(node_pubkey_path)
         self.node_pubkey = read_text(node_pubkey_path)
 
+
 class TahoeStorageManager(TestResourceManager):
     """
     Manage a Tahoe-LAFS storage node as a ``TahoeStorage`` object.
@@ -355,7 +356,6 @@ class TahoeStorageManager(TestResourceManager):
         return storage
 
 
-
 def make_anonymous_storage_announcement(storage: TahoeStorage) -> JSON:
     """
     Get an entry describing anonymous access to this storage node for a
@@ -386,7 +386,9 @@ class TahoeClient(TahoeNode):
     """
 
     storage: Optional[TahoeStorage] = None
-    make_storage_announcement: Callable[[TahoeStorage], JSON] = make_anonymous_storage_announcement
+    make_storage_announcement: Callable[
+        [TahoeStorage], JSON
+    ] = make_anonymous_storage_announcement
 
     @property
     def node_type(self) -> str:
@@ -577,7 +579,9 @@ class ZKAPTahoeGrid(TestResourceManager):
                 storage_config=storage.read_config(),
                 issuer=issuer,
             ),
-            "make_storage_announcement": lambda storage: make_zkap_storage_announcement(issuer, storage),
+            "make_storage_announcement": lambda storage: make_zkap_storage_announcement(
+                issuer, storage
+            ),
         }
         client = TahoeClientManager().make(client_dependencies)
 
@@ -586,6 +590,7 @@ class ZKAPTahoeGrid(TestResourceManager):
     def clean(self, grid: Grid) -> None:
         TahoeStorageManager().clean(grid.storage)
         TahoeClientManager().clean(grid.client)
+
 
 def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> JSON:
     """
@@ -605,8 +610,7 @@ def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> JSO
                         "storage-server-FURL": zkap_furl,
                         "allowed-public-keys": ",".join(
                             k.encode_base64().decode("ascii")
-                            for k
-                            in issuer.allowed_public_keys
+                            for k in issuer.allowed_public_keys
                         ),
                         "ristretto-issuer-root-url": issuer.root_url,
                         "default-token-count": 50000,
@@ -614,7 +618,7 @@ def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> JSO
                         "lease.crawl-interval.range": 86400,
                         "lease.min-time-remaining": 0,
                         "pass-value": 1000000,
-                     },
+                    },
                 ],
             },
         },
