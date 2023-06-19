@@ -25,6 +25,7 @@ from testtools import TestCase
 from testtools.matchers import Equals, GreaterThan, IsInstance, MatchesAll
 
 from ..pricecalculator import PriceCalculator
+from ..storage_common import required_passes
 from .matchers import greater_or_equal
 from .strategies import encoding_parameters, sizes
 
@@ -222,3 +223,55 @@ class PriceCalculatorTests(TestCase):
             price,
             Equals(1),
         )
+
+    @given(encoding_parameters())
+    def test_minimum_spending(self, params: tuple[int, int, int]) -> None:
+        """
+        The minimum amount of spending must be at least the number
+        of 'required' shares
+        """
+        needed, _, total = params
+        calculator = PriceCalculator(
+            pass_value=1000,
+            shares_needed=needed,
+            shares_total=total,
+        )
+        price = calculator.calculate([1000])
+        self.assertThat(price, greater_or_equal(needed))
+
+    @given(
+        lists(sizes(), min_size=1, max_size=100),
+        integers(min_value=1),
+    )
+    def test_shuffled_shares(self, share_sizes: list[int], bytes_per_pass: int) -> None:
+        """
+        When computing how much a set of shares will cost, it
+        doesn't matter how we order them (the result should be the
+        same).
+        """
+        self.assertThat(
+            required_passes(bytes_per_pass, share_sizes),
+            Equals(
+                sum(required_passes(bytes_per_pass, [size]) for size in share_sizes)
+            ),
+        )
+
+    def test_simple(self) -> None:
+        """
+        An easy-to-inspect specific example we worked with when
+        discovering bug 455
+        """
+
+        calculator = PriceCalculator(
+            pass_value=1000000,  # one mega-byte
+            shares_needed=3,
+            shares_total=5,
+        )
+
+        # we store 1 megabyte -- but there's 5 shares so we must spend
+        # 1 ZKAP at each server
+        self.assertThat(calculator.calculate([1000000]), Equals(5))
+
+        # we store _just_ enough to be more than the pass-value -- but
+        # still 5 servers, so now we spend 2 at each one
+        self.assertThat(calculator.calculate([1000000 * 3 + 1]), Equals(10))

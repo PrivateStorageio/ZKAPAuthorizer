@@ -1,5 +1,66 @@
 {
   "nodes": {
+    "challenge-bypass-ristretto": {
+      "inputs": {
+        "fenix": "fenix",
+        "libchallenge_bypass_ristretto_ffi-src": "libchallenge_bypass_ristretto_ffi-src",
+        "naersk": "naersk",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1677792928,
+        "narHash": "sha256-KjN++Rw/Sw1yJCppFmfIk3OPluRNLXUaxgsStGuWxQg=",
+        "owner": "LeastAuthority",
+        "repo": "python-challenge-bypass-ristretto",
+        "rev": "b6fed3bc0eeee6809eecbc15a8ce3377ae6ecd3f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "LeastAuthority",
+        "repo": "python-challenge-bypass-ristretto",
+        "type": "github"
+      }
+    },
+    "fenix": {
+      "inputs": {
+        "nixpkgs": [
+          "challenge-bypass-ristretto",
+          "nixpkgs"
+        ],
+        "rust-analyzer-src": "rust-analyzer-src"
+      },
+      "locked": {
+        "lastModified": 1670394267,
+        "narHash": "sha256-e3Rww5M3k50QqzXbQu/jiDdsUkfblFydrUQJPj8YYfM=",
+        "owner": "nix-community",
+        "repo": "fenix",
+        "rev": "f926b4aefa71d6f3ecb784c61f6f58d04d28fd2c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "fenix",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1673956053,
+        "narHash": "sha256-4gtG9iQuiKITOjNQQeQIpoIB6b16fm+504Ch3sNKLd8=",
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "rev": "35bb57c0c8d8b62bbfd284272c928ceb64ddbde9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "edolstra",
+        "repo": "flake-compat",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1659877975,
@@ -15,71 +76,83 @@
         "type": "github"
       }
     },
-    "mach-nix-flake": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "pypi-deps-db": [
-          "pypi-deps-db"
-        ]
-      },
+    "libchallenge_bypass_ristretto_ffi-src": {
+      "flake": false,
       "locked": {
-        "lastModified": 1659091740,
-        "narHash": "sha256-aNtnezQfUX1QS/bFno2H5661qIY/Rn7BmHnspuuyI+4=",
-        "owner": "DavHau",
-        "repo": "mach-nix",
-        "rev": "f15ea8677df951cb4fe608945fd98725dcd033b3",
+        "lastModified": 1650323908,
+        "narHash": "sha256-b+iAbL2MR8uP21v16hESX7O9Ioj7a8o0GGqeYIFD1ys=",
+        "owner": "brave-intl",
+        "repo": "challenge-bypass-ristretto-ffi",
+        "rev": "419995e4a873c294f1eaefca276f8ad25328e89f",
         "type": "github"
       },
       "original": {
-        "owner": "DavHau",
-        "repo": "mach-nix",
+        "owner": "brave-intl",
+        "repo": "challenge-bypass-ristretto-ffi",
+        "type": "github"
+      }
+    },
+    "naersk": {
+      "inputs": {
+        "nixpkgs": [
+          "challenge-bypass-ristretto",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1662220400,
+        "narHash": "sha256-9o2OGQqu4xyLZP9K6kNe1pTHnyPz0Wr3raGYnr9AIgY=",
+        "owner": "nix-community",
+        "repo": "naersk",
+        "rev": "6944160c19cb591eb85bbf9b2f2768a935623ed3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "naersk",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1660581366,
-        "narHash": "sha256-et+bi9/jlSF/pHx5AYB9ZP2XDdZEQ0vnF7xlvs4503Y=",
+        "lastModified": 1681269223,
+        "narHash": "sha256-i6OeI2f7qGvmLfD07l1Az5iBL+bFeP0RHixisWtpUGo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "3d47bbaa26e7a771059d828eecf3bd8bf28a8b0f",
+        "rev": "87edbd74246ccdfa64503f334ed86fa04010bab9",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-22.05",
+        "ref": "nixos-22.11",
         "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "pypi-deps-db": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1663101621,
-        "narHash": "sha256-3VSWF+O+RuGBcieAthMJ2flA5Rf07upq1XuYs5AS9jM=",
-        "owner": "DavHau",
-        "repo": "pypi-deps-db",
-        "rev": "0e7d22a0348ff92015887b7255fb90c02a024b97",
-        "type": "github"
-      },
-      "original": {
-        "owner": "DavHau",
-        "repo": "pypi-deps-db",
         "type": "github"
       }
     },
     "root": {
       "inputs": {
+        "challenge-bypass-ristretto": "challenge-bypass-ristretto",
+        "flake-compat": "flake-compat",
         "flake-utils": "flake-utils",
-        "mach-nix-flake": "mach-nix-flake",
         "nixpkgs": "nixpkgs",
-        "pypi-deps-db": "pypi-deps-db",
         "tahoe-lafs-dev": "tahoe-lafs-dev"
+      }
+    },
+    "rust-analyzer-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1670314574,
+        "narHash": "sha256-gkj21vqdQC6nbbk0YZRy02eLEom38gtzVNqfLc2nKLE=",
+        "owner": "rust-lang",
+        "repo": "rust-analyzer",
+        "rev": "df07c8fafa78ace4c4d2ded82d561f76a35e0ade",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rust-lang",
+        "ref": "nightly",
+        "repo": "rust-analyzer",
+        "type": "github"
       }
     },
     "tahoe-lafs-dev": {

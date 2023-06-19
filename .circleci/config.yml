@@ -30,7 +30,7 @@ aliases:
 
   - nix_docker: &NIX_DOCKER
       # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.9.2"
+      - image: "nixos/nix:2.15.0"
 
   - nix_environ: &NIX_ENVIRON
       # Let us use features marked "experimental".  For example, most/all of
@@ -79,6 +79,9 @@ jobs:
       name: "win/server-2022"
       # resource class, can be "medium", "large", "xlarge", "2xlarge"
       size: "medium"
+      # The default Windows machine image changes from time to time - which
+      # often breaks things.  Avoid that.
+      version: "2022.08.1"
 
     steps:
       # Commands are run in a Windows virtual machine environment
@@ -86,6 +89,7 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
+            py --list
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
@@ -349,7 +353,8 @@ jobs:
             # class (defined above) we're using.  The CircleCI environment
             # looks like it has many more cores than are actually usable by
             # our build.
-            cachix watch-exec "${CACHIX_NAME}" -- nix build \
+            source .circleci/lib.sh
+            cache_if_able nix build \
               --verbose \
               --cores 5 \
               .#tests-python<< parameters.py-version >>-tahoe_<< parameters.tahoe-lafs >>-ci-cov
@@ -376,22 +381,26 @@ jobs:
       - run:
           name: "Check Black"
           command: |
-            nix run .#black -- --check --diff src
+            source .circleci/lib.sh
+            cache_if_able nix run -v .#black -- --check --diff src
 
       - run:
           name: "Check isort"
           command: |
-            nix run .#isort -- --check --diff src
+            source .circleci/lib.sh
+            cache_if_able nix run .#isort -- --check --diff src
 
       - run:
           name: "Check flake8"
           command: |
-            nix run .#flake8 -- src
+            source .circleci/lib.sh
+            cache_if_able nix run .#flake8 -- src
 
       - run:
           name: "Run Type Checks"
           command: |
-            nix run .#mypy -- src
+            source .circleci/lib.sh
+            cache_if_able nix run .#mypy -- src
 
 
   # A job that merges all of the coverage data and generates a report.

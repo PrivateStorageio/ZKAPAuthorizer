@@ -37,8 +37,8 @@ from autobahn.twisted.testing import (
     create_pumper,
 )
 from challenge_bypass_ristretto import PublicKey, SigningKey
-from eliot import ILogger
-from eliot.testing import LoggedMessage
+from eliot import MemoryLogger
+from eliot.testing import LoggedMessage, swap_logger
 from fixtures import TempDir
 from foolscap.broker import Broker
 from foolscap.ipb import IReferenceable, IRemotelyCallable, IRemoteReference
@@ -99,7 +99,7 @@ from .._storage_client import IncorrectStorageServerReference
 from .._types import ServerConfig
 from ..config import CONFIG_DB_NAME, Config
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
-from ..eliot import GET_PASSES, capture_logging
+from ..eliot import GET_PASSES
 from ..foolscap import RIPrivacyPassAuthorizedStorageServer
 from ..lease_maintenance import SERVICE_NAME, LeaseMaintenanceConfig, _FuzzyTimerService
 from ..model import (
@@ -691,10 +691,8 @@ class ClientPluginTests(TestCase):
         num_passes=pass_counts(),
         public_key=dummy_ristretto_keys(),
     )
-    @capture_logging(lambda self, logger: logger.validate())
     def test_unblinded_tokens_spent(
         self,
-        logger: ILogger,
         get_config: GetConfig,
         now: datetime,
         announcement: dict[str, str],
@@ -706,6 +704,10 @@ class ClientPluginTests(TestCase):
         The ``ZKAPAuthorizerStorageServer`` returned by ``get_storage_client``
         spends unblinded tokens from the plugin database.
         """
+        logger = MemoryLogger()
+        previous_logger = swap_logger(logger)
+        self.addCleanup(lambda: swap_logger(previous_logger))
+
         reactor = MemoryReactorClock()
         plugin = ZKAPAuthorizer(NAME, reactor, no_tahoe_client)
 
@@ -772,6 +774,7 @@ class ClientPluginTests(TestCase):
                 ),
             ),
         )
+        logger.validate()
 
 
 class ClientResourceTests(TestCase):

@@ -456,33 +456,33 @@ def authorizationless_resource_tree(
     """
     root = Resource()  # type: ignore[no-untyped-call]
 
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"recover",
         WebSocketResource(RecoverFactory(store, get_downloader)),
     )
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"replicate",
         ReplicateResource(setup_replication),
     )
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"voucher",
         _VoucherCollection(
             store,
             controller,
         ),
     )
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"lease-maintenance",
         _LeaseMaintenanceResource(
             store,
             controller,
         ),
     )
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"version",
         _ProjectVersion(),  # type: ignore[no-untyped-call]
     )
-    root.putChild(  # type: ignore[no-untyped-call]
+    root.putChild(
         b"calculate-price",
         calculate_price,
     )

@@ -1,20 +1,13 @@
 {
   description = "A Tahoe-LAFS storage-system plugin which authorizes storage operations based on privacy-respecting tokens.";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.05";
+    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-22.11";
     flake-utils.url = "github:numtide/flake-utils";
-    pypi-deps-db = {
+    challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto;
+    challenge-bypass-ristretto.inputs.nixpkgs.follows = "nixpkgs";
+    flake-compat = {
+      url = "github:edolstra/flake-compat";
       flake = false;
-      url = "github:DavHau/pypi-deps-db";
-    };
-    mach-nix-flake = {
-      flake = true;
-      url = "github:DavHau/mach-nix";
-      inputs = {
-        pypi-deps-db.follows = "pypi-deps-db";
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
     };
 
     # Sometimes it is nice to be able to test against weird versions of some
@@ -30,19 +23,15 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, mach-nix-flake, tahoe-lafs-dev, ... }:
+  outputs = { self, nixpkgs, flake-utils, tahoe-lafs-dev, challenge-bypass-ristretto, ... }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system: let
 
-      mach-nix = mach-nix-flake.lib.${system};
       pkgs = nixpkgs.legacyPackages.${system};
       lib = pkgs.lib;
 
       # The names of the nixpkgs Python derivations for which we will expose
       # packages.
       pyVersions = [ "python310" "python39" ];
-
-      # The Python version of our default package.
-      defaultPyVersion = builtins.head pyVersions;
 
       # All of the versions our Tahoe-LAFS dependency for which we will expose
       # packages.
@@ -54,11 +43,18 @@
       packageCoordinates = lib.attrsets.cartesianProductOfSets {
         pyVersion = pyVersions;
         tahoe-lafs = tahoeVersions;
+        challenge-bypass-ristretto = [ (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto") ];
       };
+
+      # To avoid being completely overwhelming, for some inputs we only
+      # support a single configuration.  Pick that configuration here.
+      defaultConfig = builtins.head packageCoordinates;
 
       # A formatter to construct the appropriate package name for a certain
       # configuration.
-      packageName = { pyVersion, tahoe-lafs }:
+      packageName = { pyVersion, tahoe-lafs, challenge-bypass-ristretto }:
+        # We only support one version of challenge so we don't bother burning
+        # its version into the name.
         "zkapauthorizer-${pyVersion}-tahoe_${tahoe-lafs.version}";
 
       # Construct a matrix of package-building derivations.
@@ -81,11 +77,12 @@
         tahoe-lafs = tahoeVersions;
         hypothesisProfile = hypothesisProfiles;
         collectCoverage = coverageOptions;
+        challenge-bypass-ristretto = [ (pyVersion: challenge-bypass-ristretto.packages.${system}."${pyVersion}-challenge-bypass-ristretto") ];
       };
 
       # A formatter to construct the appropriate derivation name for a test
       # configuration.
-      testName = { pyVersion, tahoe-lafs, hypothesisProfile, collectCoverage }:
+      testName = { pyVersion, tahoe-lafs, hypothesisProfile, collectCoverage, challenge-bypass-ristretto }:
         builtins.concatStringsSep "-" [
           "tests"
           "${pyVersion}"
@@ -106,10 +103,10 @@
       # [ Coordinate ] -> { name = derivation; }
       testMatrix = derivationMatrix testName testsForVersion;
 
-      defaultPackageName = packageName (builtins.head packageCoordinates);
+      defaultPackageName = packageName defaultConfig;
 
       inherit (import ./nix/lib.nix {
-        inherit pkgs lib mach-nix;
+        inherit pkgs lib;
         src = ./.;
       }) packageForVersion testsForVersion derivationMatrix toWheel;
 
@@ -127,7 +124,7 @@
           # TODO: Automatically unpack them and provide them as source
           # directories instead.
           SQLITE_SRC = "${pkgs.sqlite.src}";
-          PYTHON_SRC = "${pkgs.${defaultPyVersion}.src}";
+          PYTHON_SRC = "${pkgs.${defaultConfig.pyVersion}.src}";
 
           # Make pudb the default.  We make sure it is installed below.
           PYTHONBREAKPOINT = "pudb.set_trace";
@@ -135,16 +132,13 @@
           buildInputs = [
             # Put a Python environment that has all of the development, test,
             # and runtime dependencies in it - but not the package itself.
-            (mach-nix.mkPython {
-              python = defaultPyVersion;
-              requirements = ''
-                pudb
-                ${builtins.readFile ./requirements/test.in}
-                ${builtins.readFile ./requirements/lint.in}
-                ${builtins.readFile ./requirements/typecheck.in}
-                ${self.packages.${system}.default.requirements}
-              '';
-            })
+            (pkgs.${defaultConfig.pyVersion}.withPackages (
+              ps: with ps;
+                [ pudb ]
+                ++ self.packages.${system}.default.passthru.lintInputs
+                ++ self.packages.${system}.default.passthru.checkInputs
+                ++ self.packages.${system}.default.propagatedBuildInputs
+            ))
 
             # Give us gdb in case we need to debug CPython or an extension.
             pkgs.gdb
@@ -173,26 +167,31 @@
         };
 
       apps = let
-        tahoe-env = mach-nix.mkPython {
-          python = defaultPyVersion;
-          packagesExtra = [ self.packages.${system}.default ];
-        };
-        checks-env = mach-nix.mkPython {
-          python = defaultPyVersion;
-          requirements = ''
-          ${builtins.readFile ./requirements/lint.in}
-          ${builtins.readFile ./requirements/typecheck.in}
+        tahoe-env =
+          let pkg = self.packages.${system}.default;
+          in pkg.passthru.python.withPackages (ps: [ pkg ]);
 
-          # mypy requires all of the runtime dependencies in the environment
-          # as well
-          ${self.packages.${system}.default.requirements}
+        checks-env =
+          let pkg = self.packages.${system}.default;
+          in pkg.passthru.python.withPackages (ps:
+            # Put some dependencies useful for different kinds of static
+            # checks into the environment.  We ignore `ps` here and take
+            # packages from `pkg` instead.  We got `python` from `pkg` too so
+            # we know these packages are compatible with the package set we're
+            # constructing.
 
-          # and the test-time dependencies if you want the test suite to type
-          # check, too.
-          ${builtins.readFile ./requirements/test.in}
-          '';
-        };
-        twine-env = pkgs.python310.withPackages (ps: [ ps.twine ]);
+            # Start with the various linting tools, including mypy.
+            pkg.passthru.lintInputs
+
+            # mypy requires all of the runtime dependencies in the environment
+            # as well
+            ++ pkg.propagatedBuildInputs
+
+            # and the test-time dependencies if you want the test suite to
+            # type check, too.
+            ++ pkg.passthru.checkInputs
+          );
+        twine-env = pkgs.python3.withPackages (ps: [ ps.twine ]);
       in {
         default = { type = "app"; program = "${tahoe-env}/bin/tahoe"; };
         twine = { type = "app"; program = "${twine-env}/bin/twine"; };
