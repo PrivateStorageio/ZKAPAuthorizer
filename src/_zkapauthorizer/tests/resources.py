@@ -163,6 +163,12 @@ class TahoeNode:
         """
         return self.node_dir.child("log.eliot")  # type: ignore[no-any-return]
 
+    @property
+    def node_id(self) -> str:
+        if self.node_pubkey is None:
+            raise ValueError("Cannot identify Tahoe node before it starts.")
+        return self.node_pubkey[len("pub-") :]
+
     def read_config(self) -> Config:
         """
         Read this client node's configuration file into a configuration object.
@@ -316,23 +322,6 @@ class TahoeStorage(TahoeNode):
         wait_for_path(node_pubkey_path)
         self.node_pubkey = read_text(node_pubkey_path)
 
-    def servers_yaml_entry(self) -> JSON:
-        """
-        Get an entry describing this storage node for a client's ``servers.yaml``
-        file.
-        """
-        if self.node_pubkey is not None:
-            return {
-                self.node_pubkey[len("pub-") :]: {
-                    "ann": {
-                        "anonymous-storage-FURL": self.storage_furl,
-                        "nickname": "storage",
-                    },
-                },
-            }
-        raise ValueError("Cannot get servers.yaml before starting.")
-
-
 class TahoeStorageManager(TestResourceManager):
     """
     Manage a Tahoe-LAFS storage node as a ``TahoeStorage`` object.
@@ -366,16 +355,38 @@ class TahoeStorageManager(TestResourceManager):
         return storage
 
 
+
+def make_anonymous_storage_announcement(storage: TahoeStorage) -> dict:
+    """
+    Get an entry describing anonymous access to this storage node for a
+    client's ``servers.yaml`` file.
+    """
+    return {
+        storage.node_id: {
+            "ann": {
+                "anonymous-storage-FURL": storage.storage_furl,
+                "nickname": "storage",
+            },
+        },
+    }
+
+
 @define
 class TahoeClient(TahoeNode):
     """
     Provide a basic interface to a Tahoe-LAFS client node child process.
+
+    :ivar make_storage_announcement: A function to construct a storage service
+        announcement for a given Tahoe-LAFS storage server.  This is used to
+        generate a static announcement cache containing information for the
+        associate storage service, if there is one.
 
     :ivar storage: A representation of the storage server the node will be
         configured with.
     """
 
     storage: Optional[TahoeStorage] = None
+    make_storage_announcement: Callable[[TahoeStorage], dict] = make_anonymous_storage_announcement
 
     @property
     def node_type(self) -> str:
@@ -423,7 +434,7 @@ class TahoeClient(TahoeNode):
                 "servers.yaml",
                 safe_dump(
                     {
-                        "storage": self.storage.servers_yaml_entry(),
+                        "storage": self.make_storage_announcement(self.storage),
                     }
                 ),
             )
@@ -491,38 +502,6 @@ def add_zkapauthz_client_section(
     client_config.set_config("client", "storage.plugins", NAME)
     for k, v in issuer.client_config.items():
         client_config.set_config(f"storageclient.plugins.{NAME}", k, v)
-
-    # Also rewrite the static servers list to refer only to the server's
-    # zkapauthz-enabled storage service.
-    storage_node_pubkey = read_text(storage_config.config_path.sibling("node.pubkey"))
-    client_config.write_private_config(
-        "servers.yaml",
-        safe_dump(
-            {
-                "storage": {
-                    storage_node_pubkey[len("pub-") :]: {
-                        "ann": {
-                            "anonymous-storage-FURL": "pb://@tcp:/",
-                            "nickname": "storage",
-                            "storage-options": [
-                                {
-                                    "name": NAME,
-                                    "ristretto-issuer-root-url": issuer.root_url,
-                                    "ristretto-public-keys": [
-                                        k.encode_base64().decode("ascii")
-                                        for k in issuer.allowed_public_keys
-                                    ],
-                                    "storage-server-FURL": storage_config.get_private_config(
-                                        f"storage-plugin.{NAME}.furl"
-                                    ),
-                                }
-                            ],
-                        },
-                    },
-                }
-            }
-        ),
-    )
 
 
 class IssuerDependencies(TypedDict):
@@ -598,6 +577,7 @@ class ZKAPTahoeGrid(TestResourceManager):
                 storage_config=storage.read_config(),
                 issuer=issuer,
             ),
+            "make_storage_announcement": lambda storage: make_zkap_storage_announcement(issuer, storage),
         }
         client = TahoeClientManager().make(client_dependencies)
 
@@ -606,3 +586,36 @@ class ZKAPTahoeGrid(TestResourceManager):
     def clean(self, grid: Grid) -> None:
         TahoeStorageManager().clean(grid.storage)
         TahoeClientManager().clean(grid.client)
+
+def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> dict:
+    """
+    Get an entry describing ZKAP-mediated access to this storage node for
+    a client's ``servers.yaml`` file.
+    """
+    zkap_furl = storage.read_config().get_private_config(f"storage-plugin.{NAME}.furl")
+
+    return {
+        storage.node_id: {
+            "ann": {
+                "anonymous-storage-FURL": "pb://@tcp:/",
+                "nickname": "storage",
+                "storage-options": [
+                    {
+                        "name": NAME,
+                        "storage-server-FURL": zkap_furl,
+                        "allowed-public-keys": ",".join(
+                            k.encode_base64().decode("ascii")
+                            for k
+                            in issuer.allowed_public_keys
+                        ),
+                        "ristretto-issuer-root-url": issuer.root_url,
+                        "default-token-count": 50000,
+                        "lease.crawl-interval.mean": 864000,
+                        "lease.crawl-interval.range": 86400,
+                        "lease.min-time-remaining": 0,
+                        "pass-value": 1000000,
+                     },
+                ],
+            },
+        },
+    }
