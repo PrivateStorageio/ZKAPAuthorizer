@@ -356,7 +356,7 @@ class TahoeStorageManager(TestResourceManager):
 
 
 
-def make_anonymous_storage_announcement(storage: TahoeStorage) -> dict:
+def make_anonymous_storage_announcement(storage: TahoeStorage) -> JSON:
     """
     Get an entry describing anonymous access to this storage node for a
     client's ``servers.yaml`` file.
@@ -386,7 +386,7 @@ class TahoeClient(TahoeNode):
     """
 
     storage: Optional[TahoeStorage] = None
-    make_storage_announcement: Callable[[TahoeStorage], dict] = make_anonymous_storage_announcement
+    make_storage_announcement: Callable[[TahoeStorage], JSON] = make_anonymous_storage_announcement
 
     @property
     def node_type(self) -> str:
@@ -587,7 +587,7 @@ class ZKAPTahoeGrid(TestResourceManager):
         TahoeStorageManager().clean(grid.storage)
         TahoeClientManager().clean(grid.client)
 
-def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> dict:
+def make_zkap_storage_announcement(issuer: Issuer, storage: TahoeStorage) -> JSON:
     """
     Get an entry describing ZKAP-mediated access to this storage node for
     a client's ``servers.yaml`` file.
