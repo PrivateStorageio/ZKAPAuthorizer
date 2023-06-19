@@ -28,7 +28,11 @@ rec {
     , tahoe-lafs
     , challenge-bypass-ristretto
     }:
-    let python = (pkgs.${pyVersion}.override {
+    let
+      # Turn off a Python test suite.
+      dontCheck = drv: drv.overrideAttrs (old: { doInstallCheck = false; });
+
+      python = (pkgs.${pyVersion}.override {
       # super is the unmodified package set that we're about to override some
       # contents of.
       #
@@ -36,41 +40,38 @@ rec {
       # our override recursively to the package set until the return value is
       # the same as the input.
       packageOverrides = self: super: {
-        klein = super.klein.overrideAttrs (old: {
-          # The klein test suite is a little broken so ... don't run it.
-          doInstallCheck = false;
-        });
         pycddl = self.callPackage ./pycddl.nix {};
 
         # The foolscap test suite has one failing test when run against the
-        # new version of Twisted, so disable the test suite for now.
-        foolscap = super.foolscap.overrideAttrs (old: {
-          doInstallCheck = false;
-          # XXX Maybe we could just disable the one failing test,
-          # Versus.testVersusHTTPServerAuthenticated
-        });
+        # new version of Twisted, so disable the test suite for now.  XXX
+        # Maybe we could just disable the one failing test,
+        # Versus.testVersusHTTPServerAuthenticated
+        foolscap = dontCheck super.foolscap;
 
         compose = self.callPackage ./compose.nix {};
         tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
 
+        pyopenssl = self.callPackage ./pyopenssl.nix {
+          inherit (super) pyopenssl;
+        };
+
+        # The klein test suite is a little broken so ... don't run it.
+        klein = dontCheck (self.callPackage ./klein.nix {
+          inherit (super) klein;
+        });
+
         # Disable some expensive dependencies that we don't care about.
-        black = (super.black.override {
+        black = dontCheck (super.black.override {
           aiohttp = null;
           # ipython = null;
           colorama = null;
           uvloop = null;
           # tokenize-rt = null;
-        }).overrideAttrs (old: {
-          doInstallCheck = false;
         });
 
-        tqdm = super.tqdm.overrideAttrs (old: {
-          doInstallCheck = false;
-        });
+        tqdm = dontCheck super.tqdm;
 
-        isort = super.isort.overrideAttrs (old: {
-          doInstallCheck = false;
-        });
+        isort = dontCheck super.isort;
 
         tahoe-lafs-package = self.callPackage ./tahoe-lafs.nix {
           tahoe-lafs-version = tahoe-lafs.buildArgs.version;
