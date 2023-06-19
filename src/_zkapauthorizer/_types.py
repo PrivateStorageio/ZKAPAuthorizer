@@ -140,7 +140,6 @@ RistrettoRedeemerConfig = TypedDict(
     "RistrettoRedeemerConfig",
     {
         "redeemer": Literal["ristretto"],
-        "issuer-public-key": str,
         "ristretto-issuer-root-url": str,
         "pass-value": str,
         "default-token-count": str,
