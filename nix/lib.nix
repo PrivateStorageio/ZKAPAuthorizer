@@ -128,6 +128,7 @@ rec {
       ];
 
       propagatedBuildInputs = [
+        cattrs
         prometheus-client
         colorama
         tahoe-lafs-package
