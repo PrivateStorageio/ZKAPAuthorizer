@@ -112,7 +112,11 @@ class IntegrationTests(TestCase):
 
         # Let the reactor turn over to complete the HTTP11Connection
         # disconnection.  https://github.com/twisted/twisted/issues/8998
-        self.addCleanup(lambda: deferLater(self.reactor, 0.0, lambda: None))
+        async def wait() -> None:
+            for i in range(2):
+                await deferLater(self.reactor, 0.0, lambda: None)
+
+        self.addCleanup(wait)
 
     async def add_zkaps(self) -> None:
         # Load up the client with some ZKAPs
