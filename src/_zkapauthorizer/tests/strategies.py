@@ -50,7 +50,15 @@ from twisted.web.test.requesthelper import DummyRequest
 from zope.interface import implementer
 
 from .. import NAME
-from .._types import ClientConfig, ServerConfig
+from .._types import (
+    ClientConfig,
+    DoubleSpendRedeemerConfig,
+    DummyRedeemerConfig,
+    ErrorRedeemerConfig,
+    NonRedeemerConfig,
+    ServerConfig,
+    UnpaidRedeemerConfig,
+)
 from ..config import Config
 from ..configutil import config_string_from_sections
 from ..lease_maintenance import LeaseMaintenanceConfig, lease_maintenance_config_to_dict
@@ -342,7 +350,7 @@ def dummy_ristretto_keys_sets() -> SearchStrategy[set[str]]:
 
 
 def zkapauthz_configuration(
-    extra_configurations: SearchStrategy[dict[str, str]],
+    extra_configurations: SearchStrategy[ClientConfig],
     allowed_public_keys: SearchStrategy[set[str]] = dummy_ristretto_keys_sets(),
 ) -> SearchStrategy[Config]:
     """
@@ -360,14 +368,15 @@ def zkapauthz_configuration(
     """
 
     def merge(
-        extra_configuration: dict[str, str],
+        extra_configuration: ClientConfig,
         allowed_public_keys: set[str],
-    ) -> Config:
-        config = {
-            "default-token-count": "32",
-            "allowed-public-keys": ",".join(allowed_public_keys),
-        }
-        config.update(extra_configuration)
+    ) -> ClientConfig:
+        config = extra_configuration.copy()
+        if config["redeemer"] == "ristretto":
+            if "default-token-count" not in config:
+                config["default-token-count"] = "32"
+        if "allowed-public-keys" not in config:
+            config["allowed-public-keys"] = ",".join(allowed_public_keys)  # type: ignore[typeddict-item]
         return config
 
     return builds(
@@ -406,7 +415,7 @@ def client_dummyredeemer_configurations(
         crawl_mean: Optional[float],
         crawl_range: Optional[float],
         min_time_remaining: Optional[float],
-    ) -> Config:
+    ) -> dict[str, str]:
         config = {}
         if crawl_mean is not None:
             # Don't allow the mean to be 0
@@ -418,24 +427,23 @@ def client_dummyredeemer_configurations(
         return config
 
     def share_a_key(allowed_keys: set[str]) -> SearchStrategy[Config]:
-        def add_redeemer(config: dict[str, str]) -> dict[str, str]:
-            config.update(
-                {
-                    "redeemer": "dummy",
-                    # Pick out one of the allowed public keys so that the dummy
-                    # appears to produce usable tokens.
-                    "issuer-public-key": next(iter(allowed_keys)),
-                }
-            )
+        def add_redeemer(lease_config: dict[str, str]) -> DummyRedeemerConfig:
+            config: DummyRedeemerConfig = {  # type: ignore[typeddict-item]
+                "redeemer": "dummy",
+                # Pick out one of the allowed public keys so that the dummy
+                # appears to produce usable tokens.
+                "issuer-public-key": next(iter(allowed_keys)),
+            }
+            config.update(lease_config)  # type: ignore[typeddict-item]
             return config
 
-        lease_configs = builds(
+        lease_configs: SearchStrategy[dict[str, str]] = builds(
             make_lease_config,
             crawl_means,
             crawl_ranges,
             min_times_remaining,
         )
-        extra_config = lease_configs.map(add_redeemer)
+        extra_config: SearchStrategy[ClientConfig] = lease_configs.map(add_redeemer)
         return zkapauthz_configuration(
             extra_config,
             allowed_public_keys=just(allowed_keys),
@@ -456,53 +464,32 @@ def client_doublespendredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build DoubleSpendRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(
-        just(
-            {
-                "redeemer": "double-spend",
-            }
-        )
-    )
+    double_spend: DoubleSpendRedeemerConfig = {"redeemer": "double-spend"}
+    return zkapauthz_configuration(just(double_spend))
 
 
 def client_unpaidredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build UnpaidRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(
-        just(
-            {
-                "redeemer": "unpaid",
-            }
-        )
-    )
+    unpaid: UnpaidRedeemerConfig = {"redeemer": "unpaid"}
+    return zkapauthz_configuration(just(unpaid))
 
 
 def client_nonredeemer_configurations() -> SearchStrategy[ClientConfig]:
     """
     Build NonRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(
-        just(
-            {
-                "redeemer": "non",
-            }
-        )
-    )
+    non: NonRedeemerConfig = {"redeemer": "non"}
+    return zkapauthz_configuration(just(non))
 
 
 def client_errorredeemer_configurations(details: str) -> SearchStrategy[ClientConfig]:
     """
     Build ErrorRedeemer-using configuration values for the client-side plugin.
     """
-    return zkapauthz_configuration(
-        just(
-            {
-                "redeemer": "error",
-                "details": details,
-            }
-        )
-    )
+    error: ErrorRedeemerConfig = {"redeemer": "error", "details": details}
+    return zkapauthz_configuration(just(error))
 
 
 def integer_seconds_timedeltas(
@@ -544,7 +531,7 @@ def lease_maintenance_configurations() -> SearchStrategy[LeaseMaintenanceConfig]
 
 def client_lease_maintenance_configurations(
     maint_configs: Optional[SearchStrategy[LeaseMaintenanceConfig]] = None,
-) -> SearchStrategy[dict[str, str]]:
+) -> SearchStrategy[ClientConfig]:
     """
     Build dictionaries representing the lease maintenance options that go into
     the ZKAPAuthorizer client plugin section.
@@ -552,13 +539,15 @@ def client_lease_maintenance_configurations(
     if maint_configs is None:
         maint_configs = lease_maintenance_configurations()
     return maint_configs.map(
-        lambda lease_maint_config: lease_maintenance_config_to_dict(lease_maint_config),
+        lambda lease_maint_config: cast(
+            ClientConfig, lease_maintenance_config_to_dict(lease_maint_config)
+        ),
     )
 
 
 def direct_tahoe_configs(
     zkapauthz_v2_configuration: SearchStrategy[
-        dict[str, str]
+        ClientConfig
     ] = client_dummyredeemer_configurations(),
     shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
         (None, None, None)
@@ -589,7 +578,7 @@ def direct_tahoe_configs(
 
 def tahoe_configs(
     zkapauthz_v2_configuration: SearchStrategy[
-        dict[str, str]
+        ClientConfig
     ] = client_dummyredeemer_configurations(),
     shares: SearchStrategy[tuple[Optional[int], Optional[int], Optional[int]]] = just(
         (None, None, None)

@@ -68,7 +68,7 @@ from testtools.matchers import (
     Not,
     Raises,
 )
-from testtools.twistedsupport import succeeded
+from testtools.twistedsupport import failed, succeeded
 from testtools.twistedsupport._deferred import extract_result
 from treq.testing import RequestTraversalAgent
 from twisted.application.service import MultiService
@@ -96,7 +96,7 @@ from .._plugin import (
     storage_server_plugin,
 )
 from .._storage_client import IncorrectStorageServerReference
-from .._types import ClientConfig, ServerConfig
+from .._types import ServerConfig
 from ..config import CONFIG_DB_NAME, Config
 from ..controller import DummyRedeemer, IssuerConfigurationMismatch, PaymentController
 from ..eliot import GET_PASSES
@@ -117,7 +117,7 @@ from ..replicate import (
 )
 from ..resource import RecoverProtocol, recover
 from ..tahoe import ITahoeClient, MemoryGrid, ShareEncoding
-from .common import GetConfig, skipIf
+from .common import GetConfig, from_awaitable, skipIf
 from .fixtures import DetectLeakedDescriptors
 from .foolscap import DummyReferenceable, LocalRemote, get_anonymous_storage_server
 from .matchers import Matcher, Provides, matches_response, raises
@@ -565,7 +565,9 @@ class ClientPluginTests(TestCase):
         self.useFixture(DetectLeakedDescriptors())
 
     @given(tahoe_configs(), announcements())
-    def test_interface(self, get_config: GetConfig, announcement: ClientConfig) -> None:
+    def test_interface(
+        self, get_config: GetConfig, announcement: dict[str, str]
+    ) -> None:
         """
         ``get_storage_client`` returns an object which provides
         ``IStorageServer``.
@@ -591,7 +593,7 @@ class ClientPluginTests(TestCase):
 
     @given(tahoe_configs_with_mismatched_issuer, announcements())
     def test_mismatched_ristretto_issuer(
-        self, config_text: str, announcement: ClientConfig
+        self, config_text: str, announcement: dict[str, str]
     ) -> None:
         """
         ``get_storage_client`` raises an exception when called with an
@@ -633,7 +635,7 @@ class ClientPluginTests(TestCase):
     def test_mismatch_storage_server_furl(
         self,
         get_config: GetConfig,
-        announcement: ClientConfig,
+        announcement: dict[str, str],
         storage_index: bytes,
         renew_secret: bytes,
         cancel_secret: bytes,
@@ -672,8 +674,13 @@ class ClientPluginTests(TestCase):
             )
 
         self.assertThat(
-            use_it,
-            raises(IncorrectStorageServerReference),
+            from_awaitable(use_it()),
+            failed(
+                AfterPreprocessing(
+                    lambda f: f.value,
+                    IsInstance(IncorrectStorageServerReference),
+                ),
+            ),
         )
 
     @given(
@@ -688,7 +695,7 @@ class ClientPluginTests(TestCase):
         self,
         get_config: GetConfig,
         now: datetime,
-        announcement: ClientConfig,
+        announcement: dict[str, str],
         voucher: bytes,
         num_passes: int,
         public_key: PublicKey,

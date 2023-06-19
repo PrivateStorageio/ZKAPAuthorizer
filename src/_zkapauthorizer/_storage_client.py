@@ -28,6 +28,7 @@ from attr.validators import provides
 from attrs import Factory, define, field
 from foolscap.ipb import IRemoteReference
 from foolscap.referenceable import RemoteReference
+from twisted.internet.defer import Deferred
 from twisted.internet.interfaces import IReactorTime
 from twisted.python.reflect import namedAny
 from typing_extensions import Concatenate, ParamSpec
@@ -217,19 +218,29 @@ _S = TypeVar("_S", bound=RRefHaver)
 
 
 def with_rref(
-    f: Callable[Concatenate[_S, IRemoteReference, _P], _T],
-) -> Callable[Concatenate[_S, _P], _T]:
+    f: Callable[Concatenate[_S, IRemoteReference, _P], Awaitable[_T]],
+) -> Callable[Concatenate[_S, _P], Deferred[_T]]:
     """
     Decorate a function so that it automatically receives a
     ``IRemoteReference`` as its first argument when called.
 
     The ``IRemoteReference`` is retrieved by calling ``_rref`` on the first
     argument passed to the function (expected to be ``self``).
+
+    The return type is changed from any ``Awaitable`` to a ``Deferred``
+    because this decorator is almost exclusively for methods called by
+    Tahoe-LAFS which still requires exactly a ``Deferred`` return value.
     """
 
     @wraps(f)
-    def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-        return f(self, self._rref(), *args, **kwargs)
+    def g(self: _S, /, *args: _P.args, **kwargs: _P.kwargs) -> Deferred[_T]:
+
+        # h adapts an arbitrary Awaitable result to a coroutine.
+        async def h() -> _T:
+            return await f(self, self._rref(), *args, **kwargs)
+
+        # And then the coroutine is adapted to a Deferred.
+        return Deferred.fromCoroutine(h())
 
     return g
 
@@ -551,6 +562,7 @@ class ZKAPAuthorizerStorageClient(object):
         return await stat_shares(rref, storage_indexes)
 
     @with_rref
+    @log_call_coroutine("zkapauthorizer:storage-client:advise-corrupt-share")
     async def advise_corrupt_share(
         self,
         rref: IRemoteReference,
@@ -568,8 +580,8 @@ class ZKAPAuthorizerStorageClient(object):
         )
         return None
 
-    @log_call_coroutine("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     @with_rref
+    @log_call_coroutine("zkapauthorizer:storage-client:slot_testv_and_readv_and_writev")
     async def slot_testv_and_readv_and_writev(
         self,
         rref: IRemoteReference,
@@ -655,13 +667,13 @@ class ZKAPAuthorizerStorageClient(object):
         storage_index: bytes,
         shares: list[int],
         r_vector: ReadVector,
-    ) -> bytes:
+    ) -> dict[int, bytes]:
         result = await rref.callRemote(  # type: ignore[no-untyped-call]
             "slot_readv",
             storage_index,
             shares,
             r_vector,
         )
-        if isinstance(result, bytes):
-            return result
-        raise ValueError(f"expected bytes from slot_readv, got {type(result)}")
+        # XXX If this function raises an exception, the read fails with no
+        # additional detail logged anywhere.
+        return result  # type: ignore[no-any-return]

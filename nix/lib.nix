@@ -108,6 +108,7 @@ rec {
         testresources
         hypothesis
         openapi-spec-validator
+        (toPythonModule (pkgs.eliot-tree.override { python3Packages = python.pkgs; }))
       ];
 
       postFixup = ''
@@ -128,6 +129,7 @@ rec {
       ];
 
       propagatedBuildInputs = [
+        cattrs
         prometheus-client
         colorama
         tahoe-lafs-package

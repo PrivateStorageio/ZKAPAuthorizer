@@ -21,6 +21,12 @@ This is the server part of a storage access protocol.  The client part is
 implemented in ``_storage_client.py``.
 """
 
+__all__ = [
+    "storage_index_to_dir",
+    "LeaseRenewalRequired",
+    "ZKAPAuthorizerStorageServer",
+]
+
 from datetime import timedelta
 from errno import ENOENT
 from functools import partial
@@ -315,6 +321,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         assert isinstance(result, dict)
         return result
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:allocate-buckets",
+        include_args=["storage_index", "sharenums", "allocated_size"],
+        include_result=False,
+    )
     def remote_allocate_buckets(
         self,
         passes: list[bytes],
@@ -402,6 +413,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             k: FoolscapBucketWriter(bw) for (k, bw) in bucketwriters.items()
         }
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:get-buckets",
+        include_args=["storage_index"],
+        include_result=False,
+    )
     def remote_get_buckets(
         self, storage_index: bytes
     ) -> dict[int, FoolscapBucketWriter]:
@@ -414,6 +430,11 @@ class ZKAPAuthorizerStorageServer(Referenceable):
             for (k, bucket) in self._original.get_buckets(storage_index).items()
         }
 
+    @log_call(
+        "zkapauthorizer:storage-server:remote:add-lease",
+        include_args=["storage_index"],
+        include_result=False,
+    )
     def remote_add_lease(
         self,
         passes: list[bytes],
@@ -602,14 +623,19 @@ class ZKAPAuthorizerStorageServer(Referenceable):
 
     def remote_slot_readv(
         self, storage_index: bytes, shares: Optional[Container[int]], readv: ReadVector
-    ) -> Deferred[bytes]:
+    ) -> dict[int, bytes]:
         """
         Pass-through without a pass check to let clients read mutable shares as
         long as those shares exist.
         """
-        result = self._original.slot_readv(storage_index, shares, readv)
-        assert isinstance(result, Deferred)
-        return result
+        with start_action(
+            action_type="zkapauthorizer:storage-server:remote:slot-readv",
+            storage_index=b2a(storage_index),
+            path=storage_index_to_dir(storage_index),
+            shares=shares,
+            readv=readv,
+        ):
+            return self._original.slot_readv(storage_index, shares, readv)  # type: ignore[no-any-return]
 
 
 def check_pass_quantity(

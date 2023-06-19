@@ -191,6 +191,8 @@ class Treq(Fixture):
         # connection pool does not expose that information to us).  Empirically, a
         # couple of reactor iterations (or whatever the equivalent is on this
         # reactor) seems to be enough.  If it's not, sorry.
+        #
+        # See https://github.com/twisted/twisted/issues/8998
         yield deferLater(self.reactor, 0, lambda: None)
         yield deferLater(self.reactor, 0, lambda: None)
 

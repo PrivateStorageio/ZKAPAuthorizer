@@ -233,7 +233,7 @@ class ShareTests(TestCase):
         *get_version*.
         """
         self.assertThat(
-            Deferred.fromCoroutine(self.client.get_version()),
+            from_awaitable(self.client.get_version()),
             succeeded(matches_version_dictionary()),
         )
 
@@ -347,7 +347,7 @@ class ShareTests(TestCase):
         those resulting buckets.
         """
         alreadygot, allocated = extract_result(
-            Deferred.fromCoroutine(
+            from_awaitable(
                 self.client.allocate_buckets(
                     storage_index,
                     renew_secret,
@@ -377,9 +377,7 @@ class ShareTests(TestCase):
             bucket.remote_write(0, bytes_for_share(sharenum, size))
             bucket.remote_close()
 
-        readers = extract_result(
-            Deferred.fromCoroutine(self.client.get_buckets(storage_index))
-        )
+        readers = extract_result(from_awaitable(self.client.get_buckets(storage_index)))
 
         self.expectThat(
             set(readers.keys()),
@@ -564,7 +562,7 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            Deferred.fromCoroutine(
+            from_awaitable(
                 self.client.add_lease(
                     storage_index,
                     renew_lease_secret,
@@ -623,7 +621,7 @@ class ShareTests(TestCase):
             }
         ]
         self.assertThat(
-            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
+            from_awaitable(self.client.stat_shares([storage_index])),
             succeeded(Equals(expected)),
         )
 
@@ -715,7 +713,7 @@ class ShareTests(TestCase):
         )
 
         self.assertThat(
-            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
+            from_awaitable(self.client.stat_shares([storage_index])),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -767,7 +765,7 @@ class ShareTests(TestCase):
             fobj.truncate(position)
 
         self.assertThat(
-            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
+            from_awaitable(self.client.stat_shares([storage_index])),
             failed(
                 AfterPreprocessing(
                     lambda f: f.value,
@@ -899,7 +897,7 @@ class ShareTests(TestCase):
             }
         ]
         self.assertThat(
-            Deferred.fromCoroutine(self.client.stat_shares([storage_index])),
+            from_awaitable(self.client.stat_shares([storage_index])),
             succeeded(Equals(expected)),
         )
 
