@@ -507,7 +507,7 @@ workflows:
               - "3.9"
               - "3.10"
             xcode-version:
-              - "12.5.1"
+              - "13.4.1"
 
     - "windows-tests":
         matrix:
