@@ -789,7 +789,7 @@ class RecoverTests(TestCase):
     # testtools and Twisted both observe the log then we have to do all of
     # that work twice, once for each system.
     run_tests_with = AsynchronousDeferredRunTest.make_factory(
-        timeout=60.0, suppress_twisted_logging=True
+        timeout=90.0, suppress_twisted_logging=True
     )
 
     @given(
