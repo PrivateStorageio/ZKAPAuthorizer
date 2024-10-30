@@ -81,7 +81,7 @@ jobs:
       size: "medium"
       # The default Windows machine image changes from time to time - which
       # often breaks things.  Avoid that.
-      version: "2022.08.1"
+      version: "2024.04.1"
 
     steps:
       # Commands are run in a Windows virtual machine environment
