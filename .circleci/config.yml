@@ -67,15 +67,15 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
-            choco install -y --allow-downgrade python --version=<< parameters.py-version >>
-            python -V
-            python -m pip install -v --upgrade pip wheel
-            python -m pip install -v . -r requirements/test.in
-            python -m pip freeze
+            choco install -y --allow-downgrade python --version=<< parameters.py-version >> --override --installarguments "'InstallAllUsers=1 TargetDir=c:\python'"
+            c:\python\python -V
+            c:\python\python -m pip install -v --upgrade pip wheel
+            c:\python\python -m pip install -v . -r requirements/test.in
+            c:\python\python -m pip freeze
       - run:
           name: "Run Tests"
           command: |
-            python -m coverage run `
+            c:\python\python -m coverage run `
               --debug=config `
               --module twisted.trial `
                 --rterrors `
@@ -86,8 +86,8 @@ jobs:
           command: |
             mkdir -p coverage-workspace
             Copy-Item -Path ".coverage.*" -Destination "coverage-workspace"
-            python -m coverage combine
-            python -m coverage report
+            c:\python\python -m coverage combine
+            c:\python\python -m coverage report
 
       - persist_to_workspace:
           root: "coverage-workspace"
