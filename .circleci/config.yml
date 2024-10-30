@@ -516,6 +516,8 @@ workflows:
             py-version:
               - "3.9"
               - "3.10"
+              - "3.11"
+              - "3.12"
 
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
