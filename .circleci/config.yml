@@ -67,7 +67,7 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
-            choco install -y python --version=<< parameters.py-version >>
+            choco install -y --allow-downgrade python --version=<< parameters.py-version >>
             python -V
             python -m pip install -v --upgrade pip wheel
             python -m pip install -v . -r requirements/test.in
