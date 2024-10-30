@@ -81,7 +81,7 @@ jobs:
       size: "medium"
       # The default Windows machine image changes from time to time - which
       # often breaks things.  Avoid that.
-      version: "2022.08.1"
+      version: "2024.04.1"
 
     steps:
       # Commands are run in a Windows virtual machine environment
@@ -89,7 +89,8 @@ jobs:
       - run:
           name: "Setup Environment"
           command: |
-            py --list
+            py -<< parameters.py-version >> -c "# This err-exits if no Python of this version is installed"
+            if (-not $?) { choco install python --version=<< parameters.py-version >> --confirm --allow-downgrade }
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
@@ -515,6 +516,8 @@ workflows:
             py-version:
               - "3.9"
               - "3.10"
+              - "3.11"
+              - "3.12"
 
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
