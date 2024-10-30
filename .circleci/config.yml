@@ -74,9 +74,6 @@ jobs:
       py-version:
         type: "string"
 
-    environment:
-      PYLAUNCHER_ALLOW_INSTALL: true
-
     executor:
       # https://circleci.com/developer/orbs/orb/circleci/windows
       name: "win/server-2022"
