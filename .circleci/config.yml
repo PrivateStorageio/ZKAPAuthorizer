@@ -68,7 +68,7 @@ jobs:
           name: "Setup Environment"
           command: |
             py -<< parameters.py-version >> -c "# This err-exits if no Python of this version is installed"
-            if (-not $?) { choco install python --version=<< parameters.py-version >> --confirm --allow-downgrade }
+            if (-not $?) { choco install python --version=<< parameters.py-version >> --confirm --allow-downgrade --prerelease }
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
@@ -109,4 +109,4 @@ workflows:
               - "3.10"
               - "3.11"
               - "3.12"
-              - 3.13.0-rc2 --pre
+              - "3.13.0-rc2"
