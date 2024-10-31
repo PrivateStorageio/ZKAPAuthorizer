@@ -2,12 +2,6 @@
 # each element describing one version of Tahoe-LAFS we can build against.
 { fetchPypi, tahoe-lafs-dev }:
 let
-  v1_17_1 = fetchPypi {
-    pname = "tahoe-lafs";
-    version = "1.17.1";
-    sha256 = "sha256-Lcf8ED/g5Pn8aZU5NAifVeRCi9XZRnDoROZMIQ18FnI=";
-  };
-
   v1_18_0 = fetchPypi {
     pname = "tahoe-lafs";
     version = "1.18.0";
@@ -20,14 +14,6 @@ in
     # by Nix to select set attributes and end up require annoying quoting in
     # command line usage.  Avoid that by using a different component separator
     # (`_`).
-    version = "1_17_1";
-    buildArgs = {
-      version = "1.17.1";
-      src = v1_17_1;
-    };
-  }
-
-  {
     version = "1_18_0";
     buildArgs = {
       version = "1.18.0";
