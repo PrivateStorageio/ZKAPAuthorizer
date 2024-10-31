@@ -535,9 +535,9 @@ workflows:
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "linux-tests-39-1_17_1"
+          - "linux-tests-39-1_18_0"
           - "linux-tests-39-dev"
-          - "linux-tests-310-1_17_1"
+          - "linux-tests-310-1_18_0"
           - "linux-tests-310-dev"
           - "macos-tests-3.9-12.5.1"
           - "macos-tests-3.10-12.5.1"
