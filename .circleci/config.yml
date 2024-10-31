@@ -496,7 +496,7 @@ workflows:
     - "documentation"
     - "typecheck":
         py-version: "39"
-        tahoe-lafs: "1_17_1"
+        tahoe-lafs: "1_18_0"
     - "build-wheel"
     - "linux-tests":
         matrix:
