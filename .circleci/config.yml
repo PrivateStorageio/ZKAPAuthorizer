@@ -19,13 +19,19 @@ orbs:
   win: "circleci/windows@4.1.1"
 
 aliases:
+  # Custom checkout step using https URL instead of the ssh one provided by GitHub OAuth
+  # This avoids us having to manage keys only to read a public repo - until we have to push?
   - &CHECKOUT
     run:
-      # Custom checkout step using https URL instead of the ssh one provided by GitHub OAuth
-      # This avoids us having to manage keys only to read a public repo - until we have to push?
       name: Checkout code
       command: |
         git clone -b "${CIRCLE_BRANCH}" "https://github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" .
+
+  - &CHECKOUT_WINDOWS
+    run:
+      name: Checkout code
+      command: |
+        git clone -b "$Env:CIRCLE_BRANCH" "https://github.com/$Env:CIRCLE_PROJECT_USERNAME/$Env:CIRCLE_PROJECT_REPONAME.git" .
 
   - &PREPARE_VIRTUALENV
     run:
@@ -93,7 +99,7 @@ jobs:
 
     steps:
       # Commands are run in a Windows virtual machine environment
-      - <<: *CHECKOUT
+      - <<: *CHECKOUT_WINDOWS
       - run:
           name: "Setup Environment"
           command: |
