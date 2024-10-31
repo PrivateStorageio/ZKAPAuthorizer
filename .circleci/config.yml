@@ -514,7 +514,7 @@ workflows:
               # going into a release.
               - "dev"
 
-    # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
+    # https://circleci.com/docs/using-macos/
     - "macos-tests":
         matrix:
           parameters:
