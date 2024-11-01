@@ -26,14 +26,14 @@ aliases:
       name: Checkout code
       command: |
         git clone "https://github.com/${CIRCLE_PR_USERNAME}/${CIRCLE_PR_REPONAME}.git" .
-        git checkout "${CIRCLE_SHA1}"
+        git checkout -b "${CIRCLE_BRANCH}" "${CIRCLE_SHA1}"
 
   - &CHECKOUT_WINDOWS
     run:
       name: Checkout code
       command: |
         git clone "https://github.com/$Env:CIRCLE_PR_USERNAME/$Env:CIRCLE_PR_REPONAME.git" .
-        git checkout "$Env:CIRCLE_SHA1"
+        git checkout -b "$Env:CIRCLE_BRANCH" "$Env:CIRCLE_SHA1"
 
   - &PREPARE_VIRTUALENV
     run:
