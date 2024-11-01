@@ -21,6 +21,9 @@ orbs:
 aliases:
   # Custom checkout step using https URL instead of the ssh one provided by GitHub OAuth
   # This avoids us having to manage keys only to read a public repo - until we have to push?
+  # But we have to handle remote branches from external fork (CIRCLE_PR_XXX)
+  # and local branches from the project itself (CIRCLE_PROJECT)
+  # In addition, the code will differ between bash and powershell
   - &CHECKOUT
     run:
       name: Checkout code
