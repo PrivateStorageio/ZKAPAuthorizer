@@ -25,7 +25,9 @@ aliases:
     run:
       name: Checkout code
       command: |
-        git clone "https://github.com/${CIRCLE_PR_USERNAME}/${CIRCLE_PR_REPONAME}.git" .
+        USERNAME=${CIRCLE_PR_USERNAME:-${CIRCLE_PROJECT_USERNAME}}
+        REPONAME=${CIRCLE_PR_REPONAME:-${CIRCLE_PROJECT_REPONAME}}
+        git clone "https://github.com/${USERNAME}/${REPONAME}.git" .
         git checkout -b "${CIRCLE_BRANCH}" "${CIRCLE_SHA1}"
         TERM=ansi git log -n 1 --pretty=oneline
 
@@ -33,7 +35,9 @@ aliases:
     run:
       name: Checkout code
       command: |
-        git clone "https://github.com/$Env:CIRCLE_PR_USERNAME/$Env:CIRCLE_PR_REPONAME.git" .
+        $USERNAME = if ($Env:CIRCLE_PR_USERNAME -ne $null) { $Env:CIRCLE_PR_USERNAME } else { $Env:CIRCLE_PROJECT_USERNAME }
+        $REPONAME = if ($Env:CIRCLE_PR_REPONAME -ne $null) { $Env:CIRCLE_PR_REPONAME } else { $Env:CIRCLE_PROJECT_REPONAME }
+        git clone "https://github.com/$USERNAME/$REPONAME.git" .
         git checkout -b "$Env:CIRCLE_BRANCH" "$Env:CIRCLE_SHA1"
         git log -n 1 --pretty=oneline
 
