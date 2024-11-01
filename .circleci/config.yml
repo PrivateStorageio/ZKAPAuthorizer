@@ -524,7 +524,7 @@ workflows:
               # going into a release.
               - "dev"
 
-    # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
+    # https://circleci.com/docs/using-macos/
     - "macos-tests":
         matrix:
           parameters:
@@ -532,7 +532,7 @@ workflows:
               - "3.9"
               - "3.10"
             xcode-version:
-              - "12.5.1"
+              - "13.4.1"
 
     - "windows-tests":
         matrix:
@@ -550,7 +550,7 @@ workflows:
           - "linux-tests-39-dev"
           - "linux-tests-310-1_18_0"
           - "linux-tests-310-dev"
-          - "macos-tests-3.9-12.5.1"
-          - "macos-tests-3.10-12.5.1"
+          - "macos-tests-3.9-13.4.1"
+          - "macos-tests-3.10-13.4.1"
           - "windows-tests-3.9"
           - "windows-tests-3.10"
