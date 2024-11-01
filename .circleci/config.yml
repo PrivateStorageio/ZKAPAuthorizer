@@ -27,6 +27,7 @@ aliases:
       command: |
         git clone "https://github.com/${CIRCLE_PR_USERNAME}/${CIRCLE_PR_REPONAME}.git" .
         git checkout -b "${CIRCLE_BRANCH}" "${CIRCLE_SHA1}"
+        git log -n 1 --pretty=oneline
 
   - &CHECKOUT_WINDOWS
     run:
@@ -34,6 +35,7 @@ aliases:
       command: |
         git clone "https://github.com/$Env:CIRCLE_PR_USERNAME/$Env:CIRCLE_PR_REPONAME.git" .
         git checkout -b "$Env:CIRCLE_BRANCH" "$Env:CIRCLE_SHA1"
+        git log -n 1 --pretty=oneline
 
   - &PREPARE_VIRTUALENV
     run:
