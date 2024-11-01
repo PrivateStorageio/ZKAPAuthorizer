@@ -507,7 +507,7 @@ workflows:
     - "documentation"
     - "typecheck":
         py-version: "39"
-        tahoe-lafs: "1_17_1"
+        tahoe-lafs: "1_18_0"
     - "build-wheel"
     - "linux-tests":
         matrix:
@@ -516,7 +516,6 @@ workflows:
               - "39"
               - "310"
             tahoe-lafs:
-              - "1_17_1"
               - "1_18_0"
               # This is usually not master@HEAD because it is still pinned to
               # a certain revision.  The intent is to update it frequently and
@@ -547,9 +546,9 @@ workflows:
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "linux-tests-39-1_17_1"
+          - "linux-tests-39-1_18_0"
           - "linux-tests-39-dev"
-          - "linux-tests-310-1_17_1"
+          - "linux-tests-310-1_18_0"
           - "linux-tests-310-dev"
           - "macos-tests-3.9-12.5.1"
           - "macos-tests-3.10-12.5.1"
