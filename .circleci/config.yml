@@ -25,13 +25,15 @@ aliases:
     run:
       name: Checkout code
       command: |
-        git clone -b "${CIRCLE_BRANCH}" "https://github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" .
+        git clone "https://github.com/${CIRCLE_PR_USERNAME}/${CIRCLE_PR_REPONAME}.git" .
+        git checkout "${CIRCLE_SHA1}"
 
   - &CHECKOUT_WINDOWS
     run:
       name: Checkout code
       command: |
-        git clone -b "$Env:CIRCLE_BRANCH" "https://github.com/$Env:CIRCLE_PROJECT_USERNAME/$Env:CIRCLE_PROJECT_REPONAME.git" .
+        git clone "https://github.com/$Env:CIRCLE_PR_USERNAME/$Env:CIRCLE_PR_REPONAME.git" .
+        git checkout "$Env:CIRCLE_SHA1"
 
   - &PREPARE_VIRTUALENV
     run:
