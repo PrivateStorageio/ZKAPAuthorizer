@@ -24,7 +24,6 @@ from functools import partial, wraps
 from typing import Any, Awaitable, Callable, Optional, Protocol, TypeVar
 
 from allmydata.interfaces import IStorageServer
-from attr.validators import provides
 from attrs import Factory, define, field
 from foolscap.ipb import IRemoteReference
 from foolscap.referenceable import RemoteReference
@@ -34,6 +33,7 @@ from twisted.python.reflect import namedAny
 from typing_extensions import Concatenate, ParamSpec
 from zope.interface import implementer
 
+from ._attrs_zope import provides
 from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED, log_call_coroutine
 from .foolscap import ShareStat
 from .spending import IPassGroup

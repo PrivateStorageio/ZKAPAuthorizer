@@ -59,7 +59,7 @@ from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
-from attr.validators import instance_of, provides
+from attr.validators import instance_of
 from attrs import field, frozen
 from challenge_bypass_ristretto import (
     PublicKey,
@@ -77,6 +77,7 @@ from twisted.python.filepath import FilePath
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
+from ._attrs_zope import provides
 from .eliot import log_call
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass

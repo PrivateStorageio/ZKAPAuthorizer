@@ -24,6 +24,7 @@ from typing import Callable
 import attr
 from zope.interface import Attribute, Interface, implementer
 
+from ._attrs_zope import provides
 from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
 from .model import Pass, UnblindedToken, VoucherStore
 
@@ -131,7 +132,7 @@ class PassGroup(object):
     """
 
     _message: bytes = attr.ib(validator=attr.validators.instance_of(bytes))
-    _factory: IPassFactory = attr.ib(validator=attr.validators.provides(IPassFactory))
+    _factory: IPassFactory = attr.ib(validator=provides(IPassFactory))
     _tokens: list[tuple[UnblindedToken, Pass]] = attr.ib(
         validator=attr.validators.instance_of(list)
     )
