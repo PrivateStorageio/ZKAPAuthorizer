@@ -1,5 +1,6 @@
 import attrs
 
+
 @attrs.define(repr=False)
 class _ProvidesValidator:
     interface = attrs.field()
@@ -36,4 +37,3 @@ def provides(interface):
         value it got.
     """
     return _ProvidesValidator(interface)
-
