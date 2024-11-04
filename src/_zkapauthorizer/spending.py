@@ -24,9 +24,9 @@ from typing import Callable
 import attr
 from zope.interface import Attribute, Interface, implementer
 
+from ._attrs_zope import provides
 from .eliot import GET_PASSES, INVALID_PASSES, RESET_PASSES, SPENT_PASSES
 from .model import Pass, UnblindedToken, VoucherStore
-from ._attrs_zope import provides
 
 
 class IPassGroup(Interface):

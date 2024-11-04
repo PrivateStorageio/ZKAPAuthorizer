@@ -33,6 +33,7 @@ from twisted.python.reflect import namedAny
 from typing_extensions import Concatenate, ParamSpec
 from zope.interface import implementer
 
+from ._attrs_zope import provides
 from .eliot import CALL_WITH_PASSES, SIGNATURE_CHECK_FAILED, log_call_coroutine
 from .foolscap import ShareStat
 from .spending import IPassGroup
@@ -50,7 +51,6 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 from .validators import positive_integer
-from ._attrs_zope import provides
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")

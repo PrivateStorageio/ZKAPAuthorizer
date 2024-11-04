@@ -77,6 +77,7 @@ from twisted.python.filepath import FilePath
 from twisted.python.reflect import namedAny
 from zope.interface import implementer
 
+from ._attrs_zope import provides
 from .eliot import log_call
 from .foolscap import RIPrivacyPassAuthorizedStorageServer, ShareStat
 from .model import Pass
@@ -94,7 +95,6 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 from .validators import positive_integer
-from ._attrs_zope import provides
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
