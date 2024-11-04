@@ -19,6 +19,31 @@ orbs:
   win: "circleci/windows@4.1.1"
 
 aliases:
+  # Custom checkout step using https URL instead of the ssh one provided by GitHub OAuth
+  # This avoids us having to manage keys only to read a public repo - until we have to push?
+  # But we have to handle remote branches from external fork (CIRCLE_PR_XXX)
+  # and local branches from the project itself (CIRCLE_PROJECT)
+  # In addition, the code will differ between bash and powershell
+  - &CHECKOUT
+    run:
+      name: Checkout code
+      command: |
+        USERNAME=${CIRCLE_PR_USERNAME:-${CIRCLE_PROJECT_USERNAME}}
+        REPONAME=${CIRCLE_PR_REPONAME:-${CIRCLE_PROJECT_REPONAME}}
+        git clone "https://github.com/${USERNAME}/${REPONAME}.git" .
+        git checkout -B "${CIRCLE_BRANCH}" "${CIRCLE_SHA1}"
+        TERM=ansi git log -n 1 --pretty=oneline
+
+  - &CHECKOUT_WINDOWS
+    run:
+      name: Checkout code
+      command: |
+        $USERNAME = if ($Env:CIRCLE_PR_USERNAME -ne $null) { $Env:CIRCLE_PR_USERNAME } else { $Env:CIRCLE_PROJECT_USERNAME }
+        $REPONAME = if ($Env:CIRCLE_PR_REPONAME -ne $null) { $Env:CIRCLE_PR_REPONAME } else { $Env:CIRCLE_PROJECT_REPONAME }
+        git clone "https://github.com/$USERNAME/$REPONAME.git" .
+        git checkout -B "$Env:CIRCLE_BRANCH" "$Env:CIRCLE_SHA1"
+        git log -n 1 --pretty=oneline
+
   - &PREPARE_VIRTUALENV
     run:
       name: "Prepare virtualenv"
@@ -55,7 +80,7 @@ jobs:
       PIP_REQUIREMENTS: "-r docs/requirements.txt"
 
     steps:
-      - "checkout"
+      - <<: *CHECKOUT
 
       - <<: *PREPARE_VIRTUALENV
 
@@ -81,15 +106,16 @@ jobs:
       size: "medium"
       # The default Windows machine image changes from time to time - which
       # often breaks things.  Avoid that.
-      version: "2022.08.1"
+      version: "2024.04.1"
 
     steps:
       # Commands are run in a Windows virtual machine environment
-      - "checkout"
+      - <<: *CHECKOUT_WINDOWS
       - run:
           name: "Setup Environment"
           command: |
-            py --list
+            py -<< parameters.py-version >> -c "# This err-exits if no Python of this version is installed"
+            if (-not $?) { choco install python --version=<< parameters.py-version >> --confirm --allow-downgrade }
             py -<< parameters.py-version >> -V
             py -<< parameters.py-version >> -m pip install -v --upgrade pip wheel
             py -<< parameters.py-version >> -m pip install -v . -r requirements/test.in
@@ -127,7 +153,7 @@ jobs:
       xcode: << parameters.xcode-version >>
 
     steps:
-      - "checkout"
+      - <<: *CHECKOUT
 
       - run:
           name: "Install Python"
@@ -254,7 +280,7 @@ jobs:
       # The only reason we need the source for this step is to get
       # nix/twine.nix that defines the shell environment we can use to upload
       # the wheel.
-      - "checkout"
+      - <<: *CHECKOUT
 
       - attach_workspace:
           at: "release-workspace"
@@ -283,7 +309,7 @@ jobs:
       <<: *NIX_ENVIRON
 
     steps:
-      - "checkout"
+      - <<: *CHECKOUT
       - run:
           name: "Build Wheel"
           command: |
@@ -335,7 +361,7 @@ jobs:
             # instead of building it locally, if possible.
             cachix use "${CACHIX_NAME}"
 
-      - "checkout"
+      - <<: *CHECKOUT
 
       - run:
           name: "Run Test Suite"
@@ -376,7 +402,7 @@ jobs:
     steps:
       - run:
           <<: *SETUP_CACHIX
-      - "checkout"
+      - <<: *CHECKOUT
 
       - run:
           name: "Check Black"
@@ -409,7 +435,7 @@ jobs:
       - <<: *NIX_DOCKER
 
     steps:
-      - "checkout"
+      - <<: *CHECKOUT
       - attach_workspace:
           at: "coverage-workspace"
 
@@ -481,7 +507,7 @@ workflows:
     - "documentation"
     - "typecheck":
         py-version: "39"
-        tahoe-lafs: "1_17_1"
+        tahoe-lafs: "1_18_0"
     - "build-wheel"
     - "linux-tests":
         matrix:
@@ -490,7 +516,6 @@ workflows:
               - "39"
               - "310"
             tahoe-lafs:
-              - "1_17_1"
               - "1_18_0"
               # This is usually not master@HEAD because it is still pinned to
               # a certain revision.  The intent is to update it frequently and
@@ -499,7 +524,7 @@ workflows:
               # going into a release.
               - "dev"
 
-    # https://circleci.com/docs/2.0/testing-ios/#supported-xcode-versions
+    # https://circleci.com/docs/using-macos/
     - "macos-tests":
         matrix:
           parameters:
@@ -507,7 +532,7 @@ workflows:
               - "3.9"
               - "3.10"
             xcode-version:
-              - "12.5.1"
+              - "13.4.1"
 
     - "windows-tests":
         matrix:
@@ -515,15 +540,17 @@ workflows:
             py-version:
               - "3.9"
               - "3.10"
+              - "3.11"
+              - "3.12"
 
     - "finish-coverage":
         # Make sure it depends on all coverage-collecting jobs!
         requires:
-          - "linux-tests-39-1_17_1"
+          - "linux-tests-39-1_18_0"
           - "linux-tests-39-dev"
-          - "linux-tests-310-1_17_1"
+          - "linux-tests-310-1_18_0"
           - "linux-tests-310-dev"
-          - "macos-tests-3.9-12.5.1"
-          - "macos-tests-3.10-12.5.1"
+          - "macos-tests-3.9-13.4.1"
+          - "macos-tests-3.10-13.4.1"
           - "windows-tests-3.9"
           - "windows-tests-3.10"
