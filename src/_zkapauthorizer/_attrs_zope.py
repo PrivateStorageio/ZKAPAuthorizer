@@ -8,9 +8,7 @@ from zope.interface import Interface
 class _ProvidesValidator:
     interface: type[Interface] = attrs.field()
 
-    def __call__(
-        self, inst: object, attr: attrs.Attribute, value: object
-    ) -> None:
+    def __call__(self, inst: object, attr: attrs.Attribute, value: object) -> None:
         """
         We use a callable class to be able to change the ``__repr__``.
         """
