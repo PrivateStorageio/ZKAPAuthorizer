@@ -24,7 +24,6 @@ from functools import partial, wraps
 from typing import Any, Awaitable, Callable, Optional, Protocol, TypeVar
 
 from allmydata.interfaces import IStorageServer
-from attr.validators import provides
 from attrs import Factory, define, field
 from foolscap.ipb import IRemoteReference
 from foolscap.referenceable import RemoteReference
@@ -51,6 +50,7 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 from .validators import positive_integer
+from ._attrs_zope import provides
 
 _T = TypeVar("_T")
 _P = ParamSpec("_P")

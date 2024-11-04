@@ -59,7 +59,7 @@ from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.server import StorageServer
 from allmydata.storage.shares import get_share_file
 from allmydata.util.base32 import b2a
-from attr.validators import instance_of, provides
+from attr.validators import instance_of
 from attrs import field, frozen
 from challenge_bypass_ristretto import (
     PublicKey,
@@ -94,6 +94,7 @@ from .storage_common import (
     slot_testv_and_readv_and_writev_message,
 )
 from .validators import positive_integer
+from ._attrs_zope import provides
 
 # See allmydata/storage/mutable.py
 SLOT_HEADER_SIZE = 468
