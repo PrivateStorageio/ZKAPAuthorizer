@@ -1,7 +1,7 @@
 {
   lib,
   buildPythonPackage,
-  fetchPypi,
+  fetchFromGitHub,
   pythonOlder,
   aiocontextvars,
   boltons,
@@ -16,14 +16,16 @@
 
 buildPythonPackage rec {
   pname = "eliot";
-  version = "1.14.0";
+  version = "1.15.0";
   format = "setuptools";
 
   disabled = pythonOlder "3.6";
 
-  src = fetchPypi {
-    inherit pname version;
-    hash = "sha256-wvCZo+jV7PwidFdm58xmSkjbZLa4nZht/ycEkdhoMUk=";
+  src = fetchFromGitHub {
+    owner = "itamarst";
+    repo = "eliot";
+    rev = "1.15.0";
+    hash = "sha256-Ur7q7PZ5HH4ttD3b0HyBTe1B7eQ2nEWcTBR/Hjeg9yw=";
   };
 
   propagatedBuildInputs = [

@@ -90,6 +90,9 @@ rec {
 
         # collections-extended isn't maintained anymore.
         collections-extended = self.callPackage ./collections-extended.nix {};
+
+        # eliot 1.15 upgrades its bundled versioneer and works with Python 3.12
+        eliot = self.callPackage ./eliot.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
