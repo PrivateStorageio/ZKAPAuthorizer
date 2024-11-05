@@ -515,6 +515,8 @@ workflows:
             py-version:
               - "39"
               - "310"
+              - "311"
+              - "312"
             tahoe-lafs:
               - "1_18_0"
               # This is usually not master@HEAD because it is still pinned to
