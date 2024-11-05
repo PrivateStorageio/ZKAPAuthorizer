@@ -5,12 +5,12 @@
 , zope_schema
 }:
 buildPythonPackage rec {
-  pname = "mypy-zope";
-  version = "0.3.11";
+  pname = "mypy_zope";
+  version = "1.0.9";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-1CVfnwTUjHkIO71OL+oGUTpqx7jeBvjEzlY/2FFCygU=";
+    hash = "sha256-N9aYXfsFpMJ7Nc/0dXf9W62HjbSJPd7fVNFl9ziaHNs=";
   };
 
   # doCheck = false;
