@@ -31,7 +31,7 @@
 
       # The names of the nixpkgs Python derivations for which we will expose
       # packages.
-      pyVersions = [ "python310" "python39" ];
+      pyVersions = [ "python312" "python311" "python310" "python39" ];
 
       # All of the versions our Tahoe-LAFS dependency for which we will expose
       # packages.
