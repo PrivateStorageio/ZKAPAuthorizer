@@ -15,7 +15,8 @@ buildPythonPackage rec {
   format = "pyproject";
 
   # https://github.com/mlenzen/collections-extended/issues/198
-  disabled = pythonOlder "3.6" || pythonAtLeast "3.12";
+  # My own running the test suggest Python 3.12 is still fine.
+  disabled = pythonOlder "3.6" || pythonAtLeast "3.13";
 
   src = fetchFromGitHub {
     owner = "mlenzen";

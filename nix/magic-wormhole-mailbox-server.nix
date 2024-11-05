@@ -28,7 +28,7 @@ buildPythonPackage rec {
     owner = "magic-wormhole";
     repo = "magic-wormhole-mailbox-server";
     rev = "30ecb6e3f6f487c915e7ff0acdf2e630cbe17dc8";
-    hash = "sha256-GvEFkpCcqvUZwA5wbqyELF53+NQ1YhX+ngHHsiWKiPs=";
+    hash = "sha256-AKdGmr9wCf6VBpeLWr9gxtxhZYLDJh9O2GXwOqliYUA=";
   };
 
   nativeBuildInputs = [ setuptools ];

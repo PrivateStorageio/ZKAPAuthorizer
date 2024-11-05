@@ -22,7 +22,7 @@ buildPythonPackage rec {
     owner = "magic-wormhole";
     repo = "magic-wormhole-transit-relay";
     rev = "3b298558e419b0f575f4026be02dd369a4e5f245";
-    hash = "sha256-y0gBtGiq6v+XKG4OP+xi0dUv/jF9FACDtYNqH7To+l4=";
+    hash = "sha256-xPpA1rajFDYdlIoyqYNwZ1VmC2bQRC1qR61H15adn1g=";
   };
 
   nativeBuildInputs = [ setuptools ];
