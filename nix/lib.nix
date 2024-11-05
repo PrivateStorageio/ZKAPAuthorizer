@@ -84,12 +84,6 @@ rec {
         mypy-zope = self.callPackage ./mypy-zope.nix {};
         types-PyYAML = self.callPackage ./types-pyyaml.nix {};
 
-        # Hypothesis 6.54-ish has a bug that causes our test suite to fail.
-        # Get a newer one.
-        hypothesis = self.callPackage ./hypothesis.nix {
-          inherit (super) hypothesis;
-        };
-
         # Only the current master tip is Python 3.12 ready.
         magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
         magic-wormhole-mailbox-server = self.callPackage ./magic-wormhole-mailbox-server.nix {};
