@@ -90,6 +90,9 @@ rec {
           inherit (super) hypothesis;
         };
 
+        # Only the current master tip is Python 3.12 ready.
+        magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
+
         # collections-extended isn't maintained anymore.
         collections-extended = self.callPackage ./collections-extended.nix {};
       };
