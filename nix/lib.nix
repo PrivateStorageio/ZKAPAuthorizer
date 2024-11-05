@@ -89,6 +89,9 @@ rec {
         hypothesis = self.callPackage ./hypothesis.nix {
           inherit (super) hypothesis;
         };
+
+        # collections-extended isn't maintained anymore.
+        collections-extended = self.callPackage ./collections-extended.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
