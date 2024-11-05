@@ -5,11 +5,11 @@
 }:
 buildPythonPackage rec {
   pname = "flake8-isort";
-  version = "6.0.0";
+  version = "6.1.0";
 
   src = fetchPypi {
     inherit pname version;
-    hash = "sha256-U39FOmYNfpA/YC7Po2E2sUDeJ531jQLrG2oMhOg8Uow=";
+    hash = "sha256-1GOTQ7rFQBlMWfsWGKwsKFs+J2CfNTvvb1CQTUDBZD4=";
   };
 
   doCheck = false;

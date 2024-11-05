@@ -4,6 +4,7 @@
 , black
 , tomli
 , setuptools
+, pip
 }:
 buildPythonPackage rec {
   pname = "flake8-black";
@@ -16,7 +17,7 @@ buildPythonPackage rec {
 
   format = "pyproject";
   # doCheck = false;
-  buildInputs = [ setuptools ];
+  buildInputs = [ setuptools pip ];
   propagatedBuildInputs = [ flake8 black tomli ];
   pythonImportsCheck = [ "flake8_black" ];
 }
