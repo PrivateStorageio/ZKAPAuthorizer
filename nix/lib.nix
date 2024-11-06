@@ -87,6 +87,10 @@ rec {
         # Only the current master tip is Python 3.12 ready.
         magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
         magic-wormhole-mailbox-server = self.callPackage ./magic-wormhole-mailbox-server.nix {};
+        # Magic Wormhole tests break with the updated version of transit-relay from above.
+        magic-wormhole = self.callPackage ./magic-wormhole.nix {};
+        # Latest magic-wormhole requires latest spake2
+        spake2 = self.callPackage ./spake2.nix {};
 
         # collections-extended isn't maintained anymore.
         collections-extended = self.callPackage ./collections-extended.nix {};
