@@ -44,7 +44,7 @@ def structured_dump(db: Connection) -> Iterator[Union[str, Insert]]:
     formatting.
     """
     tables = list(_structured_dump_tables(db))
-    for (name, sql) in tables:
+    for name, sql in tables:
         yield sql
         yield from _structured_dump_table(db, name)
 
@@ -134,7 +134,7 @@ class _MatchStatement:
                 return Mismatch(
                     f"length {len(actual.fields)} != {len(self.reference.fields)}",
                 )
-            for (actual_field, reference_field) in zip(
+            for actual_field, reference_field in zip(
                 actual.fields, self.reference.fields
             ):
                 matcher = _get_matcher(reference_field, actual_field)

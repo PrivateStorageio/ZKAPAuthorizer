@@ -105,8 +105,7 @@ def has_length(expected: int) -> ValidatorType[Sequence[_T]]:
 
 
 class Ordered(Protocol):
-    def __gt__(self: _T, other: _T) -> bool:
-        ...
+    def __gt__(self: _T, other: _T) -> bool: ...
 
 
 def greater_than(expected: Ordered) -> ValidatorType[Ordered]:

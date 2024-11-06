@@ -103,7 +103,7 @@ async def visit_storage_indexes(
             # Produce consistent results by forcing some consistent ordering
             # here.  This will sort by name.
             stable_children = sorted(children.items())
-            for (name, (child_node, child_metadata)) in stable_children:
+            for name, (child_node, child_metadata) in stable_children:
                 stack.append(child_node)
 
 

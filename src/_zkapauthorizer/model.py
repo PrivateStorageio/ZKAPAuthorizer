@@ -80,8 +80,7 @@ class JSONAble(Protocol):
     An object which can marshal itself to JSON-compatible types.
     """
 
-    def to_json_v1(self) -> JSON:
-        ...
+    def to_json_v1(self) -> JSON: ...
 
 
 def aware_now() -> datetime:
@@ -1347,9 +1346,9 @@ class Voucher(object):
         return cls(
             number=number.encode("ascii"),
             expected_tokens=expected_tokens,
-            created=None
-            if values["created"] is None
-            else parse_datetime(values["created"]),
+            created=(
+                None if values["created"] is None else parse_datetime(values["created"])
+            ),
             state=state,
         )
 
