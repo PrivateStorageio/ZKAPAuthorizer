@@ -42,5 +42,7 @@ buildPythonPackage {
     appdirs
     bcrypt
     aniso8601
+    pip
+    orjson
   ];
 }
