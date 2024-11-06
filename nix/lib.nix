@@ -97,6 +97,7 @@ rec {
 
         # eliot 1.15 upgrades its bundled versioneer and works with Python 3.12
         eliot = self.callPackage ./eliot.nix {};
+        eliot-tree = self.callPackage ./eliot-tree.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
@@ -117,7 +118,7 @@ rec {
         testresources
         hypothesis
         openapi-spec-validator
-        (toPythonModule (pkgs.eliot-tree.override { python3Packages = python.pkgs; }))
+        (toPythonModule (eliot-tree.override { python3Packages = python.pkgs; }))
       ];
 
       postFixup = ''
