@@ -82,7 +82,7 @@ def write_toy_shares(
         sharenums,
         size,
     )
-    for (sharenum, writer) in allocated.items():
+    for sharenum, writer in allocated.items():
         writer.write(0, bytes_for_share(sharenum, size))
         writer.close()
 

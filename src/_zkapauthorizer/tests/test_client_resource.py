@@ -198,6 +198,7 @@ def directory_writes() -> SearchStrategy[DirectoryWriteCapability]:
 
 TRANSIENT_ERROR = "something went wrong, who knows what"
 
+
 # Helper to work-around https://github.com/twisted/treq/issues/161
 def uncooperator(started: bool = True) -> Cooperator:
     def schedule(f: Callable[[], object]) -> DelayedCall:
@@ -1784,7 +1785,9 @@ def bad_calculate_price_requests() -> SearchStrategy[Request]:
     good_headers = just({b"content-type": [b"application/json"]})
     bad_headers = fixed_dictionaries(
         {
-            b"content-type": mime_types(blacklist={"application/json"},).map(
+            b"content-type": mime_types(
+                blacklist={"application/json"},
+            ).map(
                 lambda content_type: [content_type.encode("utf-8")],
             ),
         }

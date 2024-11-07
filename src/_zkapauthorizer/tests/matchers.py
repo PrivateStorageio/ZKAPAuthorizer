@@ -178,9 +178,9 @@ def leases_current(
     """
 
     def get_relevant_stats(storage_server: StorageServer) -> Iterator[ShareStat]:
-        for (storage_index, shares) in storage_server.buckets.items():
+        for storage_index, shares in storage_server.buckets.items():
             if storage_index in relevant_storage_indexes:
-                for (sharenum, stat) in shares.items():
+                for sharenum, stat in shares.items():
                     yield stat
 
     return AfterPreprocessing(  # type: ignore[no-any-return]

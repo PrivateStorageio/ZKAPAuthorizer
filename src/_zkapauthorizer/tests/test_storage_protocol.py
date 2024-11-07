@@ -384,7 +384,7 @@ class ShareTests(TestCase):
             Equals(sharenums),
             "server did not return all buckets we wrote",
         )
-        for (sharenum, bucket) in readers.items():
+        for sharenum, bucket in readers.items():
             self.expectThat(
                 bucket.remote_read(0, size),
                 Equals(bytes_for_share(sharenum, size)),
@@ -435,6 +435,7 @@ class ShareTests(TestCase):
         When the remote *allocate_buckets* implementation reports that shares
         already exist, passes are not spent for those shares.
         """
+
         # A helper that only varies on sharenums.
         async def allocate_buckets(sharenums: set[int]) -> None:
             alreadygot, writers = await self.client.allocate_buckets(
@@ -1292,7 +1293,7 @@ def assert_read_back_data(
     for sharenum, vectors in test_and_write_vectors_for_shares.items():
         length = max(offset + len(data) for (offset, data) in vectors.write_vector)
         expected = b"\x00" * length
-        for (offset, data) in vectors.write_vector:
+        for offset, data in vectors.write_vector:
             expected = expected[:offset] + data + expected[offset + len(data) :]
         if vectors.new_length is not None and vectors.new_length < length:
             expected = expected[: vectors.new_length]

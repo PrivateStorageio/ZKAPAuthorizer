@@ -1069,7 +1069,7 @@ class _ReplicationService(Service):
         # individual argument tuple with its statement.
         events = []
         any_important = False
-        for (important, sql, manyargs) in all_changes:
+        for important, sql, manyargs in all_changes:
             any_important = any_important or important
             for args in manyargs:
                 events.append((sql, args))

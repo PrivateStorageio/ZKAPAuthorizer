@@ -213,7 +213,7 @@ def tahoe_config_texts(
     def merge_shares(
         shares: tuple[int, int, int], the_rest: dict[str, object]
     ) -> dict[str, object]:
-        for (k, v) in zip(("needed", "happy", "total"), shares):
+        for k, v in zip(("needed", "happy", "total"), shares):
             if v is not None:
                 the_rest["shares." + k] = f"{v}"
         return the_rest
@@ -606,7 +606,10 @@ def tahoe_configs(
 
         return set_paths
 
-    return direct_tahoe_configs(zkapauthz_v2_configuration, shares,).map(
+    return direct_tahoe_configs(
+        zkapauthz_v2_configuration,
+        shares,
+    ).map(
         path_setter,
     )
 
@@ -615,7 +618,10 @@ def vouchers() -> SearchStrategy[bytes]:
     """
     Build byte strings in the format of vouchers.
     """
-    return binary(min_size=32, max_size=32,).map(
+    return binary(
+        min_size=32,
+        max_size=32,
+    ).map(
         urlsafe_b64encode,
     )
 
@@ -717,7 +723,10 @@ def byte_strings(label: bytes, length: int, entropy: int) -> SearchStrategy[byte
                 length,
             )
         )
-    return binary(min_size=entropy, max_size=entropy,).map(
+    return binary(
+        min_size=entropy,
+        max_size=entropy,
+    ).map(
         lambda bs: label + b"x" * (length - entropy - len(label)) + bs,
     )
 
@@ -1019,9 +1028,9 @@ def slot_test_and_write_vectors() -> SearchStrategy[TestAndWriteVectors]:
     )
 
 
-def slot_test_and_write_vectors_for_shares() -> SearchStrategy[
-    dict[int, TestAndWriteVectors]
-]:
+def slot_test_and_write_vectors_for_shares() -> (
+    SearchStrategy[dict[int, TestAndWriteVectors]]
+):
     """
     Build Tahoe-LAFS test and write vectors for a number of shares.
     """
@@ -1077,7 +1086,7 @@ class _DirectoryNode(object):
     # For testing
     def flatten(self) -> list[IFilesystemNode]:
         result = [self]
-        for (node, _) in self._children.values():
+        for node, _ in self._children.values():
             result.extend(node.flatten())
         return result
 
@@ -1120,7 +1129,10 @@ def node_hierarchies() -> SearchStrategy[IFilesystemNode]:
             seen.add(si)
         return True
 
-    return recursive(leaf_nodes(), directory_nodes,).filter(
+    return recursive(
+        leaf_nodes(),
+        directory_nodes,
+    ).filter(
         storage_indexes_are_distinct,
     )
 
@@ -1443,6 +1455,10 @@ def mutations() -> SearchStrategy[Statement]:
 
     stmts: SearchStrategy[Callable[[str, Table], SearchStrategy[Statement]]]
     stmts = sampled_from([inserts, deletes, updates])
-    return tuples(stmts, sql_identifiers(), tables(),).flatmap(
+    return tuples(
+        stmts,
+        sql_identifiers(),
+        tables(),
+    ).flatmap(
         make,
     )
