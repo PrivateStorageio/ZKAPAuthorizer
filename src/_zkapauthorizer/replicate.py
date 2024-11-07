@@ -395,7 +395,7 @@ class _ReplicationCapableConnection:
     streaming replication-related features.
 
     All of this type's methods are intended to behave the same way as
-    ``sqlite3.Connection``\ 's methods except they may also add some
+    ``sqlite3.Connection`` 's methods except they may also add some
     additional functionality to support replication.
 
     :ivar _replicating: ``True`` if this connection is currently in
@@ -492,7 +492,7 @@ class _ReplicationCapableCursor:
     replication-related features.
 
     All of this type's attributes and methods are intended to behave the same
-    way as ``sqlite3.Cursor``\ 's methods except they may also add some
+    way as ``sqlite3.Cursor`` 's methods except they may also add some
     additional functionality to support replication.
     """
 
