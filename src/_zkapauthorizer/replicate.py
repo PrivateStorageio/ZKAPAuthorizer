@@ -390,7 +390,7 @@ MutationObserver = Callable[[_SQLite3Cursor, Iterable[Mutation]], Callable[[], N
 
 @define
 class _ReplicationCapableConnection:
-    """
+    r"""
     Wrap a ``sqlite3.Connection`` to provide additional snapshot- and
     streaming replication-related features.
 
@@ -487,7 +487,7 @@ class _ReplicationCapableConnection:
 
 @define
 class _ReplicationCapableCursor:
-    """
+    r"""
     Wrap a ``sqlite3.Cursor`` to provide additional streaming
     replication-related features.
 
@@ -1069,7 +1069,7 @@ class _ReplicationService(Service):
         # individual argument tuple with its statement.
         events = []
         any_important = False
-        for (important, sql, manyargs) in all_changes:
+        for important, sql, manyargs in all_changes:
             any_important = any_important or important
             for args in manyargs:
                 events.append((sql, args))

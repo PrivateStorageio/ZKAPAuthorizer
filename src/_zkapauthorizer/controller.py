@@ -56,6 +56,7 @@ RETRY_INTERVAL = timedelta(milliseconds=1000)
 
 StorageAnnouncement: TypeAlias = Optional[dict[str, Any]]
 
+
 # It would be nice to have frozen exception types but Failure.cleanFailure
 # interacts poorly with these.
 # https://twistedmatrix.com/trac/ticket/9641

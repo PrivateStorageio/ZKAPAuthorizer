@@ -205,9 +205,11 @@ class TahoeNode:
             f"{node_type}-create-output",
             Content(
                 UTF8_TEXT,
-                lambda: [self.create_output.encode("utf-8")]
-                if self.create_output is not None
-                else [],
+                lambda: (
+                    [self.create_output.encode("utf-8")]
+                    if self.create_output is not None
+                    else []
+                ),
             ),
         )
 
@@ -386,9 +388,9 @@ class TahoeClient(TahoeNode):
     """
 
     storage: Optional[TahoeStorage] = None
-    make_storage_announcement: Callable[
-        [TahoeStorage], JSON
-    ] = make_anonymous_storage_announcement
+    make_storage_announcement: Callable[[TahoeStorage], JSON] = (
+        make_anonymous_storage_announcement
+    )
 
     @property
     def node_type(self) -> str:

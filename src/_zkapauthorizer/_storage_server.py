@@ -560,7 +560,7 @@ class ZKAPAuthorizerStorageServer(Referenceable):
         # We're not exactly sure what to do with mutable container truncations
         # and the official client doesn't ever use that feature so just
         # disable it by rejecting all attempts here.
-        for (testv, writev, new_length) in tw_vectors.values():
+        for testv, writev, new_length in tw_vectors.values():
             if new_length is not None:
                 raise NewLengthRejected(new_length)
 
@@ -976,7 +976,7 @@ def add_leases_for_writev(
     Add a new lease using the given secrets to all shares written by
     ``tw_vectors``.
     """
-    for (sharenum, sharepath) in get_all_share_paths(storage_server, storage_index):
+    for sharenum, sharepath in get_all_share_paths(storage_server, storage_index):
         testv, datav, new_length = tw_vectors.get(sharenum, (None, b"", None))
         if datav or (new_length is not None):
             # It has data or a new length - it is a write.

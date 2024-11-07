@@ -272,7 +272,7 @@ async def stat_shares(
             )
 
         known_stats: dict[int, ShareStat] = {}
-        for (shnum, stat) in stats.items():
+        for shnum, stat in stats.items():
             if not isinstance(shnum, int) or not isinstance(stat, ShareStat):
                 raise ValueError(
                     f"expected stat_share to return list of dict of int:ShareStat, instead got item of {type(shnum)}:{type(stat)}"

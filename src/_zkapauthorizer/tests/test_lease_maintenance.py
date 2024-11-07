@@ -528,7 +528,7 @@ class RenewLeasesTests(TestCase):
         # Make sure that the storage brokers have shares at the storage
         # indexes we're going to operate on.
         for storage_server in storage_broker.get_connected_servers():
-            for (storage_index, shares) in buckets:
+            for storage_index, shares in buckets:
                 for sharenum, expiration_time in shares.items():
                     try:
                         create_share(

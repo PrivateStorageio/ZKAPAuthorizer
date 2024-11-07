@@ -320,7 +320,7 @@ async def list_directory(
             return DirectoryNode(readonly_directory_from_string(entry["ro_uri"]))
 
         r: _DirectoryListing = {}
-        for (name, (entry_kind, entry)) in details["children"].items():
+        for name, (entry_kind, entry) in details["children"].items():
             if entry_kind == "filenode":
                 r[name] = filenode(entry)
             else:

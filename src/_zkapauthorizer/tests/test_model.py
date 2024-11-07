@@ -882,12 +882,12 @@ class LeaseMaintenanceTests(TestCase):
         ).store
 
         expected = None
-        for (start_delay, sizes, finish_delay) in activity:
+        for start_delay, sizes, finish_delay in activity:
             now += start_delay
             started = now
             x = store.start_lease_maintenance()
             passes_required = 0
-            for (num_passes, trim_size) in sizes:
+            for num_passes, trim_size in sizes:
                 passes_required += num_passes
                 trim_size %= store.pass_value
                 x.observe(
