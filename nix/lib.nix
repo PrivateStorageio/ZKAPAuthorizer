@@ -69,6 +69,9 @@ rec {
           # tokenize-rt = null;
         });
 
+        # Something wants ipython - it breaks Python39 though, so we turn it off.
+        ipython = null;
+
         tqdm = dontCheck super.tqdm;
 
         isort = dontCheck super.isort;
