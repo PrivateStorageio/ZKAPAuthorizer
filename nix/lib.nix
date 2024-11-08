@@ -101,6 +101,11 @@ rec {
         # eliot 1.15 upgrades its bundled versioneer and works with Python 3.12
         eliot = self.callPackage ./eliot.nix {};
         eliot-tree = self.callPackage ./eliot-tree.nix {};
+
+        # Twisted runtimeDeps check fails to find zope-interface on Python 3.9
+        twisted = super.twisted.overrideAttrs (old: {
+          dontCheckRuntimeDeps = true;
+        });
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
