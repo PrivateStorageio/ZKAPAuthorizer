@@ -69,6 +69,9 @@ rec {
           # tokenize-rt = null;
         });
 
+        # Something wants ipython - it breaks Python39 though, so we turn it off.
+        ipython = null;
+
         tqdm = dontCheck super.tqdm;
 
         isort = dontCheck super.isort;
@@ -84,11 +87,25 @@ rec {
         mypy-zope = self.callPackage ./mypy-zope.nix {};
         types-PyYAML = self.callPackage ./types-pyyaml.nix {};
 
-        # Hypothesis 6.54-ish has a bug that causes our test suite to fail.
-        # Get a newer one.
-        hypothesis = self.callPackage ./hypothesis.nix {
-          inherit (super) hypothesis;
-        };
+        # Only the current master tip is Python 3.12 ready.
+        magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
+        magic-wormhole-mailbox-server = self.callPackage ./magic-wormhole-mailbox-server.nix {};
+        # Magic Wormhole tests break with the updated version of transit-relay from above.
+        magic-wormhole = self.callPackage ./magic-wormhole.nix {};
+        # Latest magic-wormhole requires latest spake2
+        spake2 = self.callPackage ./spake2.nix {};
+
+        # collections-extended isn't maintained anymore.
+        collections-extended = self.callPackage ./collections-extended.nix {};
+
+        # eliot 1.15 upgrades its bundled versioneer and works with Python 3.12
+        eliot = self.callPackage ./eliot.nix {};
+        eliot-tree = self.callPackage ./eliot-tree.nix {};
+
+        # Twisted runtimeDeps check fails to find zope-interface on Python 3.9
+        twisted = super.twisted.overrideAttrs (old: {
+          dontCheckRuntimeDeps = true;
+        });
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
@@ -109,7 +126,7 @@ rec {
         testresources
         hypothesis
         openapi-spec-validator
-        (toPythonModule (pkgs.eliot-tree.override { python3Packages = python.pkgs; }))
+        (toPythonModule (eliot-tree.override { python3Packages = python.pkgs; }))
       ];
 
       postFixup = ''

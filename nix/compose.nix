@@ -2,11 +2,11 @@
 
 buildPythonPackage rec {
   pname = "compose";
-  version = "1.4.8";
+  version = "1.6.2";
 
   src = fetchPypi {
     inherit pname version;
-    sha256 = "sha256-mpRabfC4LE6xYlHmQbHb1yXxLDtH5idwN4GbUnCPGTo=";
+    sha256 = "sha256-yUP6goTByziSklOIhi4gPJiISE5M4/1RcVBnaWkNi00=";
   };
 
   meta = with lib; {

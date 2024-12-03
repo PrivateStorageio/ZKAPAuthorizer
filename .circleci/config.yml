@@ -30,7 +30,7 @@ aliases:
 
   - nix_docker: &NIX_DOCKER
       # Run in a highly Nix-capable environment.
-      - image: "nixos/nix:2.15.0"
+      - image: "nixos/nix:2.18.9"
 
   - nix_environ: &NIX_ENVIRON
       # Let us use features marked "experimental".  For example, most/all of
@@ -490,6 +490,8 @@ workflows:
             py-version:
               - "39"
               - "310"
+              - "311"
+              - "312"
             tahoe-lafs:
               - "1_18_0"
               # This is usually not master@HEAD because it is still pinned to
