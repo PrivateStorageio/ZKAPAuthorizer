@@ -40,8 +40,6 @@ rec {
       # our override recursively to the package set until the return value is
       # the same as the input.
       packageOverrides = self: super: {
-        pycddl = self.callPackage ./pycddl.nix {};
-
         # The foolscap test suite has one failing test when run against the
         # new version of Twisted, so disable the test suite for now.  XXX
         # Maybe we could just disable the one failing test,
@@ -51,15 +49,6 @@ rec {
         compose = self.callPackage ./compose.nix {};
         tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
 
-        pyopenssl = self.callPackage ./pyopenssl.nix {
-          inherit (super) pyopenssl;
-        };
-
-        # The klein test suite is a little broken so ... don't run it.
-        klein = dontCheck (self.callPackage ./klein.nix {
-          inherit (super) klein;
-        });
-
         # Disable some expensive dependencies that we don't care about.
         black = dontCheck (super.black.override {
           aiohttp = null;
@@ -68,6 +57,9 @@ rec {
           uvloop = null;
           # tokenize-rt = null;
         });
+
+        # Something wants ipython - it breaks Python39 though, so we turn it off.
+        ipython = null;
 
         tqdm = dontCheck super.tqdm;
 
@@ -79,16 +71,8 @@ rec {
           postPatch = tahoe-lafs.buildArgs.postPatch or null;
         };
 
-        flake8-isort = self.callPackage ./flake8-isort.nix {};
-        flake8-black = self.callPackage ./flake8-black.nix {};
-        mypy-zope = self.callPackage ./mypy-zope.nix {};
-        types-PyYAML = self.callPackage ./types-pyyaml.nix {};
-
-        # Hypothesis 6.54-ish has a bug that causes our test suite to fail.
-        # Get a newer one.
-        hypothesis = self.callPackage ./hypothesis.nix {
-          inherit (super) hypothesis;
-        };
+        # collections-extended isn't maintained anymore.
+        collections-extended = self.callPackage ./collections-extended.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
@@ -96,8 +80,8 @@ rec {
       pname = "ZKAPAuthorizer";
       # Don't forget to bump the version number in
       # src/_zkapauthorizer/__init__.py too.
-      version = "2022.8.21";
-      format = "setuptools";
+      version = "2025.5.15";
+      # format = "setuptools";
 
       # Should this be nativeCheckInputs?  It might matter for
       # cross-compilation.  It's not clear cross-compilation works for Python

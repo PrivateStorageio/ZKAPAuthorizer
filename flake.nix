@@ -1,7 +1,7 @@
 {
   description = "A Tahoe-LAFS storage-system plugin which authorizes storage operations based on privacy-respecting tokens.";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-24.05";
+    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
     challenge-bypass-ristretto.url = github:LeastAuthority/python-challenge-bypass-ristretto;
     challenge-bypass-ristretto.inputs.nixpkgs.follows = "nixpkgs";
@@ -31,7 +31,7 @@
 
       # The names of the nixpkgs Python derivations for which we will expose
       # packages.
-      pyVersions = [ "python310" "python39" ];
+      pyVersions = [ "python312" "python311" "python310" "python39" ];
 
       # All of the versions our Tahoe-LAFS dependency for which we will expose
       # packages.
