@@ -3,16 +3,17 @@ buildPythonPackage {
   pname = "tahoe-lafs";
   version = tahoe-lafs-version;
   src = tahoe-lafs-src;
+  pyproject = true;
 
-  postPatch =
-    (if postPatch == null then "" else postPatch) +
-    # This < is really trying to be a !=.  We provide a new-enough Autobahn
-    # that it actually works, so remove the constraint from the Python metadata.
-    ''
-      sed -i -e "s/autobahn < 22.4.1/autobahn/" setup.py
-    '';
+  # postPatch =
+  #   (if postPatch == null then "" else postPatch) +
+  #   # This < is really trying to be a !=.  We provide a new-enough Autobahn
+  #   # that it actually works, so remove the constraint from the Python metadata.
+  #   ''
+  #     sed -i -e "s/autobahn < 22.4.1/autobahn/" setup.py
+  #   '';
 
-  dontUseSetuptoolsCheck = true;
+  # dontUseSetuptoolsCheck = true;
   propagatedBuildInputs = with pythonPackages; [
     zfec
     zope_interface
@@ -30,6 +31,8 @@ buildPythonPackage {
     netifaces
     pyutil
     collections-extended
+    hatchling
+    hatch-vcs
     klein
     werkzeug
     treq
