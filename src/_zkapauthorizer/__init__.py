@@ -28,4 +28,4 @@ stats.eventually = lambda f: f()
 NAME = "privatestorageio-zkapauthz-v2"
 
 # Don't forget to bump the version number in nix/lib.nix too.
-__version__ = "2022.8.21"
+__version__ = "2025.5.15"
