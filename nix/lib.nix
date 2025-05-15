@@ -40,7 +40,7 @@ rec {
       # our override recursively to the package set until the return value is
       # the same as the input.
       packageOverrides = self: super: {
-        pycddl = self.callPackage ./pycddl.nix {};
+        # pycddl = self.callPackage ./pycddl.nix {};
 
         # The foolscap test suite has one failing test when run against the
         # new version of Twisted, so disable the test suite for now.  XXX
@@ -51,14 +51,14 @@ rec {
         compose = self.callPackage ./compose.nix {};
         tahoe-capabilities = self.callPackage ./tahoe-capabilities.nix {};
 
-        pyopenssl = self.callPackage ./pyopenssl.nix {
-          inherit (super) pyopenssl;
-        };
+        # pyopenssl = self.callPackage ./pyopenssl.nix {
+        #   inherit (super) pyopenssl;
+        # };
 
         # The klein test suite is a little broken so ... don't run it.
-        klein = dontCheck (self.callPackage ./klein.nix {
-          inherit (super) klein;
-        });
+        # klein = dontCheck (self.callPackage ./klein.nix {
+        #   inherit (super) klein;
+        # });
 
         # Disable some expensive dependencies that we don't care about.
         black = dontCheck (super.black.override {
@@ -82,24 +82,24 @@ rec {
           postPatch = tahoe-lafs.buildArgs.postPatch or null;
         };
 
-        flake8-isort = self.callPackage ./flake8-isort.nix {};
-        flake8-black = self.callPackage ./flake8-black.nix {};
-        mypy-zope = self.callPackage ./mypy-zope.nix {};
-        types-PyYAML = self.callPackage ./types-pyyaml.nix {};
+        # flake8-isort = self.callPackage ./flake8-isort.nix {};
+        # flake8-black = self.callPackage ./flake8-black.nix {};
+        # mypy-zope = self.callPackage ./mypy-zope.nix {};
+        # types-PyYAML = self.callPackage ./types-pyyaml.nix {};
 
         # Only the current master tip is Python 3.12 ready.
-        magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
-        magic-wormhole-mailbox-server = self.callPackage ./magic-wormhole-mailbox-server.nix {};
+        # magic-wormhole-transit-relay = self.callPackage ./magic-wormhole-transit-relay.nix {};
+        # magic-wormhole-mailbox-server = self.callPackage ./magic-wormhole-mailbox-server.nix {};
         # Magic Wormhole tests break with the updated version of transit-relay from above.
-        magic-wormhole = self.callPackage ./magic-wormhole.nix {};
+        # magic-wormhole = self.callPackage ./magic-wormhole.nix {};
         # Latest magic-wormhole requires latest spake2
-        spake2 = self.callPackage ./spake2.nix {};
+        # spake2 = self.callPackage ./spake2.nix {};
 
         # collections-extended isn't maintained anymore.
         collections-extended = self.callPackage ./collections-extended.nix {};
 
         # eliot 1.15 upgrades its bundled versioneer and works with Python 3.12
-        eliot = self.callPackage ./eliot.nix {};
+        # eliot = self.callPackage ./eliot.nix {};
         eliot-tree = self.callPackage ./eliot-tree.nix {};
 
         # Twisted runtimeDeps check fails to find zope-interface on Python 3.9
@@ -113,8 +113,8 @@ rec {
       pname = "ZKAPAuthorizer";
       # Don't forget to bump the version number in
       # src/_zkapauthorizer/__init__.py too.
-      version = "2022.8.21";
-      format = "setuptools";
+      version = "2025.5.15";
+      # format = "setuptools";
 
       # Should this be nativeCheckInputs?  It might matter for
       # cross-compilation.  It's not clear cross-compilation works for Python
