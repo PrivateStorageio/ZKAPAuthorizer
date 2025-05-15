@@ -8,9 +8,9 @@ let
     sha256 = "sha256-cXpHDfNO3TGta5RGfauqHK7dfy9SM7BLidjP6TbjF/4=";
   };
   v1_20_0 = fetchPypi {
-    pname = "tahoe-lafs";
+    pname = "tahoe_lafs";
     version = "1.20.0";
-    sha256 = "sha256-cXpHDFNO3TGta5RGfauqHK7dfy9SM7BLidjP6TbjF/4=";
+    sha256 = "sha256-0SH6t4TIraiV10Y++A5laX4pWqbET1CaPc5AE8pvV2g=";
   };
 in
 [
