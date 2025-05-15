@@ -73,8 +73,6 @@ rec {
 
         # collections-extended isn't maintained anymore.
         collections-extended = self.callPackage ./collections-extended.nix {};
-
-        eliot-tree = self.callPackage ./eliot-tree.nix {};
       };
     }); in with python.pkgs;
     buildPythonPackage rec {
@@ -95,7 +93,7 @@ rec {
         testresources
         hypothesis
         openapi-spec-validator
-        (toPythonModule (eliot-tree.override { python3Packages = python.pkgs; }))
+        (toPythonModule (pkgs.eliot-tree.override { python3Packages = python.pkgs; }))
       ];
 
       postFixup = ''
